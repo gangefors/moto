@@ -1,0 +1,9 @@
+[package]
+name = "moto-regionbuild"
+version = "0.1.0"
+description = "Builds a routing region file from an OSM extract (runs on desktop/CI)."
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+moto-core.workspace = true

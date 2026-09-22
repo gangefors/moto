@@ -1,0 +1,9 @@
+[package]
+name = "moto-core"
+version = "0.1.0"
+description = "Platform-independent routing core: snapping, scoring, routing, round trips."
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true

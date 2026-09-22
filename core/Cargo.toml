@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = ["moto-core", "moto-ffi", "moto-regionbuild"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+moto-core = { path = "moto-core" }
+thiserror = "2"
+uniffi = "0.32"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "debuginfo"
