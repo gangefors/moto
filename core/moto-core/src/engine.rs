@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
 //! The routing engine: loads a region file and answers snap/route queries.
 //!
 //! This is the M0 skeleton. The public API is the one agreed in ADR-0001;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
 //! UniFFI bindings for `moto-core`.
 //!
 //! This is the only crate with FFI attributes. It mirrors the core types as

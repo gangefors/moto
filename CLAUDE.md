@@ -32,6 +32,16 @@ docs/adr/               architecture decision records
 - Sections carry a `rider_id` (always the local user in v1) so community ratings can be added later.
 - Record significant new decisions as an ADR in `docs/adr/`.
 
+## License
+
+AGPL-3.0-only with a CLA for outside contributions ([ADR-0004](docs/adr/0004-license-agpl-cla.md)).
+
+- Every new source file starts with the SPDX header, in the file's comment syntax:
+  `SPDX-License-Identifier: AGPL-3.0-only` and `Copyright (C) 2026 Stefan Gangefors`.
+- Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (crates in `core/` use `license.workspace = true`).
+- Never copy in third-party GPL/AGPL code — it can't be CLA-covered and blocks relicensing.
+- Dependencies must be AGPL-compatible (MIT, Apache-2.0, BSD, MPL-2.0, …). Check new ones before adding.
+
 ## Commands
 
 ```sh

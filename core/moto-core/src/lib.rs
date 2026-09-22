@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
 //! Platform-independent core of the moto routing app.
 //!
 //! Everything here is pure logic with no platform APIs, so the same crate
