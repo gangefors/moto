@@ -4,6 +4,7 @@ members = ["moto-core", "moto-ffi", "moto-regionbuild"]
 
 [workspace.package]
 edition = "2024"
+license = "AGPL-3.0-only"
 publish = false
 
 [workspace.dependencies]

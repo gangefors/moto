@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Error)]

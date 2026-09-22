@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
 //! `moto-regionbuild`: OSM extract → routing region file (ADR-0001, PRD R12).
 //!
 //! Runs on desktop/CI, never on the phone. Skeleton only: the region file
