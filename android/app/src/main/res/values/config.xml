@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+
+  Map configuration (ADR-0002, ADR-0003). Switching tile provider is a change
+  here, not in code. The style carries the required attribution (OpenFreeMap,
+  OpenMapTiles, © OpenStreetMap contributors), shown by MapLibre's attribution
+  control.
+-->
+<resources>
+    <string name="map_style_url" translatable="false">https://tiles.openfreemap.org/styles/liberty</string>
+    <!-- Initial camera before a GPS fix: centre of Skåne. -->
+    <string name="map_initial_lat" translatable="false">55.85</string>
+    <string name="map_initial_lon" translatable="false">13.55</string>
+    <integer name="map_initial_zoom">8</integer>
+</resources>

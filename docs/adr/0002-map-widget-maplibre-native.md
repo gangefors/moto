@@ -76,4 +76,4 @@ The key trade-off is **polish and place search (Google)** against **data consist
 - [ ] GeoJSON line layers for route / alternatives / favourites with distinct styling.
 - [ ] Tap → Rust `snap()` → marker, measured < 500 ms (R11).
 - [ ] Section hit-testing via rendered-feature query on the favourites layer.
-- [ ] Map style URL in config; attribution control visible.
+- [x] Map style URL in config; attribution control visible.

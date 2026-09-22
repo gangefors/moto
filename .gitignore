@@ -5,8 +5,9 @@
 *.osm.pbf
 *.region
 
-# Android (added in the next M0 step)
+# Android
 /android/.gradle/
+/android/.kotlin/
 /android/build/
 /android/app/build/
 /android/local.properties

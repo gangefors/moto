@@ -53,7 +53,11 @@ pub struct Route {
     pub curvy_share: f64,
 }
 
+/// Crosses the FFI as a flat error: each variant becomes an exception class
+/// whose message is the `Display` text. (A field named `message` would clash
+/// with `Throwable.message` in the generated Kotlin.)
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi(flat_error)]
 pub enum MotoError {
     #[error("{message}")]
     InvalidInput { message: String },

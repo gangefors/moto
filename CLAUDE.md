@@ -21,7 +21,7 @@ core/                   cargo workspace
   moto-core/            pure logic + tests; no FFI attributes, no platform APIs
   moto-ffi/             UniFFI wrapper — the only crate with FFI attributes
   moto-regionbuild/     CLI: OSM extract → region file (never runs on the phone)
-android/                Gradle project (not yet created — next M0 step)
+android/                Gradle project (AGP 9, Compose); app/ builds the core via cargo-ndk
 docs/prd.md             product requirements (v1)
 docs/decisions.md       decisions log
 docs/adr/               architecture decision records (index in README.md)
@@ -34,7 +34,8 @@ docs/adr/               architecture decision records (index in README.md)
 - Keep the FFI surface coarse (whole request in, whole result out). Errors cross as the typed `MotoError`; never let a panic cross the boundary.
 - Favourites are applied at query time as a **capped bonus** on edge costs; the base graph is never rebuilt when favourites change.
 - Sections carry a `rider_id` (always the local user in v1) so community ratings can be added later.
-- Record significant new decisions as an ADR in `docs/adr/`.
+- Record significant new decisions as an ADR in `docs/adr/`, and add new rules and decisions to the Notion decisions log as well as `docs/decisions.md`.
+- Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping.
 
 ## License
 
@@ -59,10 +60,16 @@ cargo build -p moto-ffi
 cargo run -p moto-ffi --features cli --bin uniffi-bindgen -- \
   generate --library target/debug/libmoto_ffi.so --language kotlin --out-dir <dir>
 
-# Android libs (needs cargo-ndk + ANDROID_NDK_HOME)
+# Android libs (needs cargo-ndk + ANDROID_NDK_HOME); Gradle runs this for you
 cargo ndk -t arm64-v8a -t x86_64 -o ../android/app/src/main/jniLibs build --release -p moto-ffi
+
+# Android app (needs ANDROID_HOME or android/local.properties, cargo-ndk,
+# and the aarch64/x86_64-linux-android Rust targets). preBuild runs cargo-ndk
+# and generates the UniFFI bindings into app/build/generated/.
+cd ../android
+./gradlew assembleDebug lintDebug
 ```
 
 ## Status
 
-M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation). Next: Android shell with MapLibre + OpenFreeMap, then the region file format (the PRD's blocking open question), then tap → snap → shortest path end-to-end.
+M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation); Android shell (MapLibre + OpenFreeMap Liberty, GPS position, Rust core loaded via UniFFI; not yet verified on the phone). Next: the region file format (the PRD's blocking open question), then tap → snap → shortest path end-to-end.
