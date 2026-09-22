@@ -36,6 +36,7 @@ docs/adr/               architecture decision records (index in README.md)
 - Sections carry a `rider_id` (always the local user in v1) so community ratings can be added later.
 - Record significant new decisions as an ADR in `docs/adr/`, and add new rules and decisions to the Notion decisions log as well as `docs/decisions.md`.
 - Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping.
+- Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, `docs/decisions.md`, ADRs) go in their own commits, separate from code changes.
 
 ## License
 
