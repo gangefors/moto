@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+-->
+<resources>
+    <string name="app_name">moto</string>
+    <string name="my_location">My location</string>
+</resources>

@@ -54,6 +54,6 @@ For a single-user v1, setup time matters more than an SLA. OpenFreeMap costs not
 
 ## Action Items
 
-- [ ] Pick the OpenFreeMap style (start with Liberty) and put its URL in config.
-- [ ] Attribution visible on the map screen.
+- [x] Pick the OpenFreeMap style (start with Liberty) and put its URL in config.
+- [x] Attribution visible on the map screen.
 - [ ] (P1) Spike: build a Skåne PMTiles file and load it offline in MapLibre.
