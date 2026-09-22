@@ -1,6 +1,6 @@
 # ADR-0004: License — AGPL-3.0-only + CLA + trademark
 
-**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan
+**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan · **Repo path:** `docs/adr/0004-license-agpl-cla.md`
 
 ## Context
 

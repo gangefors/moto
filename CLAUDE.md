@@ -2,13 +2,15 @@
 
 Personal Android app (single rider, southern Sweden) that captures favourite road sections and generates one-way and round-trip routes that deliberately pass through favourites and curvy roads, within a detour budget. Routes export as GPX to an existing nav app — no built-in turn-by-turn.
 
-Source of truth for scope: the PRD "Moto routing app — v1 (personal MVP)" in Notion. Decisions: `docs/adr/`. Read both before proposing architecture.
+Read [`docs/prd.md`](docs/prd.md) and [`docs/adr/`](docs/adr/) before changing architecture; new architecture decisions need a new ADR. The running log of decisions is [`docs/decisions.md`](docs/decisions.md).
 
-## Architecture (accepted ADRs)
+## Decisions
 
-- **Routing engine:** custom Rust, on-device, offline ([ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)). The cost function (curvature + favourites) is the product.
-- **Map widget:** MapLibre Native Android ([ADR-0002](docs/adr/0002-map-widget-maplibre-native.md)). The map only picks, draws and hit-tests; it never routes or snaps.
-- **Map tiles:** OpenFreeMap, Liberty style, URL in config ([ADR-0003](docs/adr/0003-map-tiles-openfreemap.md)). Attribution must be visible.
+- **App:** native Android in Kotlin; iOS deferred ([decisions log](docs/decisions.md), [PRD](docs/prd.md)).
+- **Shared core:** Rust, bound to Kotlin via UniFFI and built with cargo-ndk; kept free of Android types for a later iOS port ([decisions log](docs/decisions.md), [ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
+- **Routing and snapping:** custom Rust engine, on-device and offline; the cost function (curvature + favourites) is the product ([ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
+- **Map:** MapLibre Native Android ([ADR-0002](docs/adr/0002-map-widget-maplibre-native.md)) with OpenFreeMap tiles, style URL in config, attribution visible ([ADR-0003](docs/adr/0003-map-tiles-openfreemap.md)). The map only picks, draws and hit-tests; it never routes or snaps.
+- **License:** AGPL-3.0-only with a CLA for outside contributions ([ADR-0004](docs/adr/0004-license-agpl-cla.md)); see the License rules below.
 
 Data flow: OSM extract (Geofabrik, Skåne first) → `moto-regionbuild` (desktop/CI) → region file → loaded by the Rust core on the phone → `snap` / `route` / `round_trip` via UniFFI → GeoJSON → MapLibre line layers.
 
@@ -20,7 +22,9 @@ core/                   cargo workspace
   moto-ffi/             UniFFI wrapper — the only crate with FFI attributes
   moto-regionbuild/     CLI: OSM extract → region file (never runs on the phone)
 android/                Gradle project (not yet created — next M0 step)
-docs/adr/               architecture decision records
+docs/prd.md             product requirements (v1)
+docs/decisions.md       decisions log
+docs/adr/               architecture decision records (index in README.md)
 ```
 
 ## Rules
@@ -61,4 +65,4 @@ cargo ndk -t arm64-v8a -t x86_64 -o ../android/app/src/main/jniLibs build --rele
 
 ## Status
 
-M0 (Foundations) in progress. Done: ADRs committed, Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation). Next: Android shell with MapLibre + OpenFreeMap, then the region file format (the PRD's blocking open question), then tap → snap → shortest path end-to-end.
+M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation). Next: Android shell with MapLibre + OpenFreeMap, then the region file format (the PRD's blocking open question), then tap → snap → shortest path end-to-end.

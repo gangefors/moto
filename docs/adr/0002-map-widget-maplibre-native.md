@@ -1,6 +1,6 @@
 # ADR-0002: Map widget — MapLibre Native Android
 
-**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan
+**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan · **Repo path:** `docs/adr/0002-map-widget-maplibre-native.md`
 
 ## Context
 
@@ -27,12 +27,14 @@ Use **MapLibre Native for Android** as the only map widget. It renders vector ti
 
 ### Option A: MapLibre Native (chosen)
 
-- **Complexity:** Low–Med
-- **Cost:** Free, open source (BSD-2-Clause); no API key
-- **Offline:** Offline regions / local tile packages supported
-- **Data alignment:** Renders OSM-based tiles, so it matches the routing graph
-- **Styling:** Full vector styling (can emphasise curvy roads, fade motorways)
-- **iOS:** MapLibre Native iOS uses the same style spec
+| Dimension | Assessment |
+| --- | --- |
+| Complexity | Low–Med |
+| Cost | Free, open source (BSD-2-Clause); no API key |
+| Offline | Offline regions / local tile packages supported |
+| Data alignment | Renders OSM-based tiles, so it matches the routing graph |
+| Styling | Full vector styling (can emphasise curvy roads, fade motorways) |
+| iOS | MapLibre Native iOS uses the same style spec |
 
 **Pros:** no vendor lock-in or billing; fully stylable; offline capable; the same approach works on iOS.
 
@@ -40,11 +42,13 @@ Use **MapLibre Native for Android** as the only map widget. It renders vector ti
 
 ### Option B: Google Maps SDK for Android
 
-- **Complexity:** Low
-- **Cost:** API key and billing account; terms of service apply
-- **Offline:** No developer-controlled offline maps
-- **Data alignment:** Google road geometry ≠ OSM geometry; lines may sit beside roads, and roads missing from OSM still show
-- **Styling:** Limited (cloud styling)
+| Dimension | Assessment |
+| --- | --- |
+| Complexity | Low |
+| Cost | API key and billing account; terms of service apply |
+| Offline | No developer-controlled offline maps |
+| Data alignment | Google road geometry ≠ OSM geometry; lines may sit beside roads, and roads missing from OSM still show |
+| Styling | Limited (cloud styling) |
 
 **Pros:** polished, familiar map; excellent places and address data.
 

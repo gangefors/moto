@@ -1,6 +1,6 @@
 # ADR-0003: Map tiles — OpenFreeMap
 
-**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan
+**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan · **Repo path:** `docs/adr/0003-map-tiles-openfreemap.md`
 
 ## Context
 
@@ -18,11 +18,13 @@ Use **OpenFreeMap** hosted vector tiles and one of its OSM-based styles for v1.
 
 ### Option A: OpenFreeMap (chosen)
 
-- **Complexity:** Very low: a style URL
-- **Cost:** Free, no API key or registration
-- **Reliability:** Community/donation-run, no SLA
-- **Styles:** A few ready styles (e.g. Liberty, Bright, Positron)
-- **Offline:** Online only; offline needs a separate solution
+| Dimension | Assessment |
+| --- | --- |
+| Complexity | Very low: a style URL |
+| Cost | Free, no API key or registration |
+| Reliability | Community/donation-run, no SLA |
+| Styles | A few ready styles (e.g. Liberty, Bright, Positron) |
+| Offline | Online only; offline needs a separate solution |
 
 **Pros:** zero setup; OSM data; no key to leak or quota to hit.
 

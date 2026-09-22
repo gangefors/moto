@@ -1,6 +1,6 @@
 # ADR-0001: Routing engine — custom Rust, on-device
 
-**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan
+**Status:** Accepted · **Date:** 2026-09-22 · **Deciders:** Stefan · **Repo path:** `docs/adr/0001-routing-engine-custom-rust-on-device.md`
 
 ## Context
 
@@ -27,11 +27,13 @@ Build our own routing engine in **Rust**, in the shared core, running **on the p
 
 ### Option A: Custom Rust engine, on-device (chosen)
 
-- **Complexity:** High: OSM import, graph build, search and round-trip algorithms are ours to write
-- **Cost:** Free to run; no server
-- **Offline:** Full, once the region file is installed
-- **Cost-function control:** Total; favourites and curvature are first-class
-- **iOS reuse:** Yes; the same Rust core
+| Dimension | Assessment |
+| --- | --- |
+| Complexity | High: OSM import, graph build, search and round-trip algorithms are ours to write |
+| Cost | Free to run; no server |
+| Offline | Full, once the region file is installed |
+| Cost-function control | Total; favourites and curvature are first-class |
+| iOS reuse | Yes; the same Rust core |
 
 **Pros:** full control of the scoring; offline; shared with iOS; no server to run; the region file and golden-route tests are fully reproducible.
 
@@ -39,11 +41,13 @@ Build our own routing engine in **Rust**, in the shared core, running **on the p
 
 ### Option B: GraphHopper, self-hosted server
 
-- **Complexity:** Low–Med: mature Java server with custom models and a built-in round-trip algorithm
-- **Cost:** A VPS or home server, kept up and updated
-- **Offline:** None
-- **Cost-function control:** Good through custom models; per-user favourite weights need flexible mode or custom code
-- **iOS reuse:** Yes, via HTTP, but the logic is not in our core
+| Dimension | Assessment |
+| --- | --- |
+| Complexity | Low–Med: mature Java server with custom models and a built-in round-trip algorithm |
+| Cost | A VPS or home server, kept up and updated |
+| Offline | None |
+| Cost-function control | Good through custom models; per-user favourite weights need flexible mode or custom code |
+| iOS reuse | Yes, via HTTP, but the logic is not in our core |
 
 **Pros:** real routes working quickly; curvature and round trips come ready-made.
 
@@ -51,10 +55,12 @@ Build our own routing engine in **Rust**, in the shared core, running **on the p
 
 ### Option C: BRouter, on-device
 
-- **Complexity:** Medium: embed or talk to the BRouter Android service
-- **Offline:** Yes (own segment data format)
-- **Cost-function control:** Scriptable profiles, but injecting per-user favourite sections is awkward
-- **iOS reuse:** No (Java/Android)
+| Dimension | Assessment |
+| --- | --- |
+| Complexity | Medium: embed or talk to the BRouter Android service |
+| Offline | Yes (own segment data format) |
+| Cost-function control | Scriptable profiles, but injecting per-user favourite sections is awkward |
+| iOS reuse | No (Java/Android) |
 
 **Pros:** proven offline routing on Android; profiles are expressive.
 
