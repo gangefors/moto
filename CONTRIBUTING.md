@@ -27,7 +27,7 @@ Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (directly or via `license.wo
 ## Tests, performance and security
 
 - Every change comes with tests for what it adds or fixes; bug fixes start with a test that reproduces the bug. CI must be green.
-- CI compares benchmark results with the last `main` build. A significant regression (more than 25 % slower for snapping and routing; more than 50 % and 5 ms for opening the region) fails the build: look for a faster approach first, and accept the regression only with a `Perf-Accepted: <reason>` trailer in the commit message when it buys something worth it.
+- CI benchmarks each build against the last `main` build's benchmark binary on the same machine. A significant regression (more than 25 % slower for snapping and routing; more than 50 % and 5 ms for opening the region) fails the build: look for a faster approach first, and accept the regression only with a `Perf-Accepted: <reason>` trailer in the commit message when it buys something worth it.
 - Security comes before performance and convenience. Treat all external input (downloads, imports, other apps, network responses) as hostile. The full rules are in the Security section of [`CLAUDE.md`](CLAUDE.md); report vulnerabilities as described in [`SECURITY.md`](SECURITY.md).
 
 ## Development
