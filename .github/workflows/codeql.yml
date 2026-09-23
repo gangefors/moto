@@ -7,7 +7,7 @@
 # is on, so every language is analysed here:
 # - java-kotlin: built by hand, the same way as the build job in
 #   android.yml (Android SDK packages, Rust and its Android targets,
-#   cargo-ndk, then Gradle).
+#   cargo-ndk, then Gradle). Parked until CodeQL supports Kotlin 2.4.20.
 # - rust, python (CI scripts) and actions (workflows): no build needed.
 #
 # Versions follow the versions policy in CLAUDE.md. Actions are pinned by
@@ -52,8 +52,12 @@ jobs:
         include:
           - language: actions
             build-mode: none
-          - language: java-kotlin
-            build-mode: manual
+          # Parked: the CodeQL 2.27.0 bundle rejects Kotlin 2.4.20 ("Kotlin
+          # version too new", github/codeql#22381). Put it back once a
+          # bundle that supports it is at least a week old; the build steps
+          # below are kept for it.
+          # - language: java-kotlin
+          #   build-mode: manual
           - language: python
             build-mode: none
           - language: rust
