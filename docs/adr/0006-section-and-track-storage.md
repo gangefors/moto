@@ -82,7 +82,7 @@ The section data is small (hundreds to thousands of sections, a few hundred ride
 
 ## Action Items
 
-- [ ] Add `rusqlite` (newest release at least a week old, bundled SQLite) to `moto-core`; measure APK size and build time impact.
-- [ ] Section/tag/track schema with `user_version` migrations; tests for every migration and for crash-in-the-middle (transaction rollback).
-- [ ] Coarse FFI calls for sections, tags and tracks; Kotlin passes the database path in app-private storage.
+- [x] Add `rusqlite` (newest release at least a week old, bundled SQLite) to `moto-core`; measure APK size and build time impact. rusqlite 0.40.2; with the store linked, `libmoto_ffi.so` grows from 0.5 to 2.45 MB per ABI (native libraries are stored uncompressed), so the debug APK with both ABIs grows by about 6 MB; the phone uses the arm64 library only. Build time impact is small (SQLite compiles once per ABI, then comes from the cache).
+- [ ] Section/tag/track schema with `user_version` migrations; tests for every migration and for crash-in-the-middle (transaction rollback). Sections done (schema 1); tags and tracks come with their milestone steps.
+- [ ] Coarse FFI calls for sections, tags and tracks; Kotlin passes the database path in app-private storage. Sections done (`SectionStore`, `Engine.sectionBetween`).
 - [ ] GeoJSON export/import in the core with limits and corruption tests (R10).
