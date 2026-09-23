@@ -128,10 +128,39 @@ Storing curvature **metrics** rather than a score keeps the product's core (the 
 - **Skåne extract:** Geofabrik offers Sweden but no Skåne sub-extract. Decided: `moto-regionbuild` takes the Sweden PBF plus a Skåne boundary (bounding box for M0, polygon later) and cuts it itself.
 - **Direction-dependent sections** (PRD open question) don't affect the file: edges are directed either way.
 
+## Implementation notes (format v1.0)
+
+Details settled while implementing the decision (`core/moto-core/src/region/`):
+
+- **Layout:** a 256-byte header (magic `MOTOREG\0`, version, OSM timestamp, bounding box in 1e-7°, builder version, source name) followed by the section table in the first 4 KiB page. Sections: node positions, forward and backward CSR offsets, backward edge list, edges, geometry offsets, shape points, curvature metrics, grid meta/cells/edges, OSM way refs. Records are `#[repr(C)]` `bytemuck` types; the file is little-endian and big-endian targets refuse to compile.
+- **Edges** (20 bytes: tail, head, length in dm, geometry id, speed, class, surface, flags) are sorted by tail, so the forward CSR offsets index the edge array directly and there is no separate forward edge list. The backward CSR indexes a list of edge ids sorted by head.
+- **Geometry** is shared by both directions of a two-way road; the reverse edge carries a `REVERSED` flag. Shape points include both endpoints. One-way-backward roads store their geometry in travel direction.
+- **Curvature metrics** per edge: total absolute heading change (0.1°) and metres of road in six turn-radius bins (≤30, 60, 100, 175, 300, 500 m), measured on points at least 5 m apart.
+- **Snapping grid** lists only edges that run along their geometry (one per road). Cells are about 280 m; snapping scans cells in rings until nothing closer can remain, up to 500 m.
+- **Validation on open is full**, not only header and lengths: CSR offsets monotonic and complete, every edge and grid entry in range, edge geometry joining its nodes, coordinates in range. Query code can then index without panicking. It costs one pass over the file (measurements below). CRC32 is checked separately by `verify_file` at install.
+- **Builder:** keeps `highway=motorway…service` (not parking aisles or driveways), tracks and ferries only when open to motor vehicles, the most specific access tag wins; maxspeed with Swedish defaults. Ways are cut at the bounding box, routing nodes are way ends and shared nodes, self-loops are split in the middle, nodes are Hilbert-ordered.
+- **M0 region:** Skåne plus the southern half of Halland, southern Småland and western Blekinge: `55.28,12.20,56.72,15.05`.
+
+## Measurements (2026-09-23)
+
+Sweden extract from OSM data of 2026-09-23 (same data as Geofabrik's, via download.openstreetmap.fr), built on a 4-core cloud VM; open, verify and snap timed warm (file in page cache).
+
+| | M0 region (Skåne +) | Sweden |
+| --- | --- | --- |
+| Routing nodes / edges | 182 k / 411 k | 1.53 M / 3.39 M |
+| File size | 38.1 MiB | 398 MiB |
+| Largest sections | shape points 9.6, edges 7.8, curvature 6.3, way refs 6.3 MiB | shape points 107, grid cells 65, edges 65, curvature 52, way refs 52 MiB |
+| Build time / peak memory | 12 s / 0.7 GiB | 59 s / 5.2 GiB |
+| Verify (CRC + structure) | 17 ms | 210 ms |
+| Open (map + structure) | 12 ms | 150–200 ms |
+| Snap, mean of 10 k random points | 4–7 µs (13 µs in Lund, all land) | 3–4 µs (mostly empty cells) |
+
+Consequences for the "revisit if" list: the M0 file is comfortably small. For all of Sweden, full validation on open touches the whole 400 MiB, which will be slow on a phone with a cold cache, and the uniform grid is 65 MiB of mostly empty cells; both point at lazy (per-section or per-query) validation and a sparse grid or packed R-tree before Sweden ships.
+
 ## Action Items
 
 - [x] Copy this ADR to `docs/adr/0005-region-file-format.md` and add it to the index.
-- [ ] `moto-core`: region reader (header, section table, typed slices, validation) with tests on a tiny hand-made fixture.
-- [ ] `moto-regionbuild`: OSM PBF → filtered motorcycle graph → region file v1, with a Skåne bounding-box cut.
-- [ ] `Engine::open` and `snap` on the real file; tap → snap → marker on the map.
-- [ ] Measure the Skåne and Sweden files: size, open time, peak memory, snap time.
+- [x] `moto-core`: region reader (header, section table, typed slices, validation) with tests on a tiny hand-made fixture.
+- [x] `moto-regionbuild`: OSM PBF → filtered motorcycle graph → region file v1, with a Skåne bounding-box cut.
+- [ ] `Engine::open` and `snap` on the real file (done); tap → snap → marker on the map.
+- [x] Measure the Skåne and Sweden files: size, open time, peak memory, snap time (peak memory on the phone still to measure).
