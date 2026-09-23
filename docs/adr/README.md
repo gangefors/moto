@@ -9,3 +9,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0003](0003-map-tiles-openfreemap.md) | Map tiles — OpenFreeMap | Accepted | 2026-09-22 |
 | [0004](0004-license-agpl-cla.md) | License — AGPL-3.0-only + CLA + trademark | Accepted | 2026-09-22 |
 | [0005](0005-region-file-format.md) | Region file format — memory-mapped binary sections | Accepted | 2026-09-23 |
+| [0006](0006-section-and-track-storage.md) | Sections and tracks — stored by the Rust core in SQLite | Accepted | 2026-09-23 |
