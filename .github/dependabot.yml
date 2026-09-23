@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Dependabot version and security updates (see Versions and Security in
+# CLAUDE.md). Version updates wait for a release to be at least a week old
+# (cooldown); security updates skip the cooldown, and CLAUDE.md lets a
+# reviewed security fix in once it is a day old. One grouped pull request
+# per ecosystem keeps the noise down. Pull requests are reviewed (release
+# date, changelog, licence), checked locally and merged only on green CI,
+# squashed so the commit title and body can follow our commit style.
+#
+# Not covered here: the Rust toolchain, cargo-ndk and the Android SDK
+# packages pinned in .github/workflows/android.yml; bump those by hand.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: /core
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      cargo:
+        applies-to: version-updates
+        patterns: ["*"]
+      cargo-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      gradle:
+        applies-to: version-updates
+        patterns: ["*"]
+      gradle-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+      github-actions-security:
+        applies-to: security-updates
+        patterns: ["*"]

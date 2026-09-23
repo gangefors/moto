@@ -57,8 +57,7 @@ jobs:
     outputs:
       region-key: ${{ steps.region-key.outputs.key }}
     steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -67,8 +66,7 @@ jobs:
           rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy,rustfmt
           rustup default "$RUST_VERSION"
 
-      # v2.9.2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: core
 
@@ -96,8 +94,7 @@ jobs:
         run: |
           echo "key=region-m0-$(date -u +%G-W%V)-${{ hashFiles('core/moto-regionbuild/src/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}" >> "$GITHUB_OUTPUT"
 
-      # v6.1.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: region-cache
         with:
           path: ${{ runner.temp }}/moto-region
@@ -116,8 +113,7 @@ jobs:
       # binaries run alternately on this machine, so differences between CI
       # machines cancel out. Only main builds write this cache; pull requests
       # can read it but not replace it.
-      # v6.1.0
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/bench-baseline
           key: bench-bin-main-${{ github.run_id }}
@@ -152,8 +148,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bench-baseline"
           cp core/target/release/moto-regionbuild "$RUNNER_TEMP/bench-baseline/moto-regionbuild"
 
-      # v6.1.0
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           path: ${{ runner.temp }}/bench-baseline
@@ -165,13 +160,11 @@ jobs:
     permissions:
       contents: write # to publish the debug-latest release
     steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # v6.0.1
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "21"
@@ -187,16 +180,14 @@ jobs:
             --target aarch64-linux-android --target x86_64-linux-android
           rustup default "$RUST_VERSION"
 
-      # v2.9.2
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: core
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
 
-      # v6.3.0
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       # A stable debug key lets each new APK install over the previous one.
       # Without the secret, AGP generates a fresh key on every run.
@@ -219,8 +210,7 @@ jobs:
           fi
 
       # The M0 region file built and benchmarked by the core job.
-      # v6.1.0
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/moto-region
           key: ${{ needs.core.outputs.region-key }}
