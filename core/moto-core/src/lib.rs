@@ -17,6 +17,7 @@ mod error;
 mod fixture;
 pub mod geo;
 pub mod region;
+mod route;
 mod snap;
 mod types;
 

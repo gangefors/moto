@@ -3,12 +3,13 @@
 
 //! The routing engine: loads a region file and answers snap/route queries.
 //!
-//! The public API is the one agreed in ADR-0001. Opening and snapping work
-//! on the ADR-0005 region file; routing returns `NotImplemented` for now.
+//! The public API is the one agreed in ADR-0001, on the ADR-0005 region
+//! file. `route` is the M0 fastest route; round trips come in M3.
 
 use std::path::Path;
 
 use crate::region::Region;
+use crate::region::format::COORD_SCALE;
 use crate::{CoreError, LatLon, RoadPoint, RoundTripTarget, Route, RouteOptions};
 
 /// How far from a road a point may be and still snap to it.
@@ -17,6 +18,8 @@ pub const SNAP_MAX_DISTANCE_M: f64 = 500.0;
 #[derive(Debug)]
 pub struct Engine {
     region: Region,
+    /// Highest edge speed in the region, for the A* estimate.
+    max_speed_kmh: f64,
 }
 
 impl Engine {
@@ -34,25 +37,57 @@ impl Engine {
 
     /// Wraps an already opened region.
     pub fn from_region(region: Region) -> Self {
-        Self { region }
+        let max_speed_kmh = region
+            .edges()
+            .iter()
+            .map(|e| f64::from(e.speed_kmh))
+            .fold(1.0, f64::max);
+        Self {
+            region,
+            max_speed_kmh,
+        }
     }
 
     pub fn region(&self) -> &Region {
         &self.region
     }
 
-    /// Snaps a point to the nearest routable road.
+    /// The region's bounding box as (south-west, north-east) corners.
+    pub fn bounds(&self) -> (LatLon, LatLon) {
+        let b = self.region.info().bbox;
+        let ll = |lat: i32, lon: i32| LatLon {
+            lat: f64::from(lat) / COORD_SCALE,
+            lon: f64::from(lon) / COORD_SCALE,
+        };
+        (ll(b.min_lat, b.min_lon), ll(b.max_lat, b.max_lon))
+    }
+
+    /// Snaps a point to the nearest routable road. Points outside the
+    /// region's bounding box are refused with `OutsideRegion`.
     pub fn snap(&self, point: LatLon) -> Result<RoadPoint, CoreError> {
         point.validate()?;
+        let (sw, ne) = self.bounds();
+        let inside =
+            (sw.lat..=ne.lat).contains(&point.lat) && (sw.lon..=ne.lon).contains(&point.lon);
+        if !inside {
+            return Err(CoreError::OutsideRegion {
+                lat: point.lat,
+                lon: point.lon,
+            });
+        }
         crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M)
     }
 
-    /// One-way route from `from` to `to` (PRD R6).
+    /// Fastest route from `from` to `to` (PRD R6, M0: travel time only;
+    /// curvature and favourites join in M2, `max_detour` is not used yet).
+    /// Both points are snapped to the nearest road first.
     pub fn route(&self, from: LatLon, to: LatLon, opts: &RouteOptions) -> Result<Route, CoreError> {
         from.validate()?;
         to.validate()?;
         opts.validate()?;
-        Err(CoreError::NotImplemented("route"))
+        let start = self.snap(from)?;
+        let end = self.snap(to)?;
+        crate::route::fastest(&self.region, &start, &end, &opts.avoid, self.max_speed_kmh)
     }
 
     /// Alternative loops starting and ending at `start` (PRD R7).
@@ -182,13 +217,62 @@ mod tests {
     }
 
     #[test]
-    fn far_away_points_have_no_road() {
+    fn points_outside_the_region_are_refused() {
         let engine = engine();
-        for far in [ll(55.8, 13.2), ll(10.0, -70.0), ll(-90.0, 180.0)] {
+        for far in [
+            ll(55.8, 13.2),
+            ll(10.0, -70.0),
+            ll(-90.0, 180.0),
+            ll(55.705, 13.19),
+            ll(55.72, 13.21),
+        ] {
             assert!(
-                matches!(engine.snap(far), Err(CoreError::NoRoadNearby { .. })),
+                matches!(engine.snap(far), Err(CoreError::OutsideRegion { .. })),
                 "{far:?}"
             );
         }
+        let (sw, ne) = engine.bounds();
+        assert_eq!((sw, ne), (ll(55.695, 13.195), ll(55.715, 13.225)));
+    }
+
+    #[test]
+    fn never_snaps_onto_ferries() {
+        use crate::fixture::{Road, build};
+        use crate::region::format::{RoadClass, edge_flags};
+        // A ferry across the water and a road 300 m beyond its far end.
+        let ferry = Road {
+            flags: edge_flags::FERRY,
+            ..Road::new(0, 1, RoadClass::Ferry, 15, 1)
+        };
+        let road = Road::new(2, 3, RoadClass::Tertiary, 70, 2);
+        let nodes = [
+            (55.50, 13.00),
+            (55.50, 13.05),
+            (55.5027, 13.05),
+            (55.5027, 13.07),
+        ];
+        let e = Engine::from_region(
+            Region::from_bytes(&build(&nodes, &[ferry, road], 50_000).to_bytes().unwrap()).unwrap(),
+        );
+        // Right on the ferry line: the road 300 m north wins.
+        let p = e.snap(ll(55.5001, 13.0495)).unwrap();
+        assert_eq!(
+            e.region().edges()[p.edge as usize].class,
+            RoadClass::Tertiary as u8
+        );
+        // Mid-crossing, far from the road: nothing.
+        assert!(matches!(
+            e.snap(ll(55.5, 13.02)),
+            Err(CoreError::NoRoadNearby { .. })
+        ));
+    }
+
+    #[test]
+    fn points_in_the_region_far_from_roads_have_no_road() {
+        // North-east corner of the box: over 800 m from C and B–D.
+        assert!(matches!(
+            engine().snap(ll(55.7145, 13.2245)),
+            Err(CoreError::NoRoadNearby { .. })
+        ));
     }
 }
