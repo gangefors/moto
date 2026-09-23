@@ -33,6 +33,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +61,9 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.LocationComponentActivationOptions
@@ -66,11 +72,14 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.MotoException
 
 /**
  * The single map screen (ADR-0002): OpenFreeMap tiles (ADR-0003), attribution
- * visible, and the rider's GPS position. The map only picks, draws and
- * hit-tests; routing and snapping belong to the Rust core.
+ * visible, and the rider's GPS position. Tapping the map snaps the point to
+ * the nearest road through the Rust core and marks it. The map only picks,
+ * draws and hit-tests; routing and snapping belong to the Rust core.
  */
 @Composable
 fun MapScreen() {
@@ -80,6 +89,13 @@ fun MapScreen() {
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
     var hasLocation by remember { mutableStateOf(hasLocationPermission(context)) }
+    var region by remember { mutableStateOf<RegionState>(RegionState.Loading) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    // Install (first start only) and open the bundled region off the main thread.
+    LaunchedEffect(Unit) {
+        region = withContext(Dispatchers.IO) { BundledRegion.open(context.applicationContext) }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -130,6 +146,20 @@ fun MapScreen() {
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
 
+    // Tap → snap → marker.
+    DisposableEffect(map, style, region) {
+        val m = map
+        val s = style
+        if (m == null || s == null) return@DisposableEffect onDispose {}
+        val marker = SnapMarker(s)
+        val onClick = MapLibreMap.OnMapClickListener { tap ->
+            message = snapAndMark(resources, region, tap, marker)
+            true
+        }
+        m.addOnMapClickListener(onClick)
+        onDispose { m.removeOnMapClickListener(onClick) }
+    }
+
     // Show the GPS position as soon as both the style and the permission are there.
     LaunchedEffect(map, style, hasLocation) {
         val m = map ?: return@LaunchedEffect
@@ -141,7 +171,8 @@ fun MapScreen() {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         // Theme-coloured scrim keeps the navigation bar icons readable over any
         // part of the map; the icons follow the same theme (MainActivity). The
-        // status bar has no scrim: its icons are chosen to suit the map style.
+        // status bar has no scrim: its icons switch to contrast with the map
+        // pixels sampled behind it (StatusBarIconsFollowMap).
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
@@ -149,6 +180,19 @@ fun MapScreen() {
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
                 .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
         )
+        message?.let { text ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .safeDrawingPadding()
+                    .padding(top = 8.dp, start = 64.dp, end = 64.dp),
+                shape = MaterialTheme.shapes.medium,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+            ) {
+                Text(text, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            }
+        }
         if (hasLocation) {
             FloatingActionButton(
                 onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING },
@@ -165,6 +209,29 @@ fun MapScreen() {
         }
     }
 }
+
+/** Snaps [tap] with the region's engine, draws the result and returns a line to show. */
+private fun snapAndMark(res: Resources, region: RegionState, tap: LatLng, marker: SnapMarker): String =
+    when (region) {
+        RegionState.Loading -> res.getString(R.string.region_loading)
+        RegionState.Missing -> res.getString(R.string.region_missing)
+        is RegionState.Failed -> res.getString(R.string.region_failed, region.message)
+        is RegionState.Ready -> try {
+            val p = region.engine.snap(LatLon(tap.latitude, tap.longitude))
+            marker.show(tap, LatLng(p.position.lat, p.position.lon))
+            res.getString(
+                R.string.snap_result,
+                p.distanceM.roundToInt(),
+                p.edge.toLong(),
+                (p.offset * 100).roundToInt(),
+            )
+        } catch (e: MotoException.NoRoadNearby) {
+            marker.show(tap, null)
+            e.message ?: res.getString(R.string.snap_error, e.toString())
+        } catch (e: MotoException) {
+            res.getString(R.string.snap_error, e.message)
+        }
+    }
 
 /**
  * Samples the map pixels behind the status bar and switches the status bar

@@ -6,4 +6,9 @@
 <resources>
     <string name="app_name">moto</string>
     <string name="my_location">My location</string>
+    <string name="snap_result">Road %1$d m away · edge %2$d · %3$d%% along</string>
+    <string name="snap_error">Snap failed: %1$s</string>
+    <string name="region_loading">Loading the region…</string>
+    <string name="region_missing">This build has no region file</string>
+    <string name="region_failed">Region failed to load: %1$s</string>
 </resources>
