@@ -56,6 +56,9 @@ pub struct Road {
     pub speed_kmh: u8,
     pub flags: u8,
     pub way_id: i64,
+    /// Index of the road's first node in its OSM way, for ways split into
+    /// several roads.
+    pub way_start: u32,
 }
 
 impl Road {
@@ -70,6 +73,7 @@ impl Road {
             speed_kmh,
             flags: 0,
             way_id,
+            way_start: 0,
         }
     }
 }
@@ -113,9 +117,18 @@ pub fn build(nodes: &[(f64, f64)], roads: &[Road], cell: i32) -> RegionData {
             from_idx,
             to_idx,
         };
-        drafts.push((edge(road.from, road.to, false), curvature, way_ref(0, n)));
+        let (first, last) = (road.way_start, road.way_start + n);
+        drafts.push((
+            edge(road.from, road.to, false),
+            curvature,
+            way_ref(first, last),
+        ));
         if !road.oneway {
-            drafts.push((edge(road.to, road.from, true), curvature, way_ref(n, 0)));
+            drafts.push((
+                edge(road.to, road.from, true),
+                curvature,
+                way_ref(last, first),
+            ));
         }
     }
     drafts.sort_by_key(|d| d.0.tail); // stable: keeps road order per tail
@@ -203,7 +216,10 @@ pub fn ladder(north_surface: Surface) -> RegionData {
     };
     let roads = [
         north(L_NW, L_N, 1),
-        north(L_N, L_NE, 1),
+        Road {
+            way_start: 1,
+            ..north(L_N, L_NE, 1)
+        },
         Road::new(L_SW, L_S, RoadClass::Motorway, 110, 2),
         Road::new(L_S, L_SE, RoadClass::Motorway, 110, 2),
         Road::new(L_NW, L_SW, RoadClass::Unclassified, 50, 3),

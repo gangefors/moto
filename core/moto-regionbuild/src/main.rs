@@ -339,6 +339,94 @@ mod tests {
     }
 
     #[test]
+    fn section_way_spans_point_at_the_right_osm_nodes() {
+        // A section across the fixture: every span's end nodes, looked up in
+        // the OSM data, must lie on the section's geometry.
+        let file = built_fixture("spans");
+        let engine = Engine::open(file.path()).unwrap();
+        let draft = engine
+            .section_between(
+                LatLon {
+                    lat: 55.7043,
+                    lon: 13.1905,
+                },
+                LatLon {
+                    lat: 55.7057,
+                    lon: 13.1935,
+                },
+            )
+            .unwrap();
+        assert!(!draft.ways.is_empty());
+        let b = FIXTURE_BBOX;
+        let osm = pbf::read(Path::new(FIXTURE), &graph::bbox_e7(b[0], b[1], b[2], b[3])).unwrap();
+        let pos: std::collections::HashMap<i64, LatLon> = osm
+            .nodes
+            .iter()
+            .map(|&(id, p)| {
+                (
+                    id,
+                    LatLon {
+                        lat: f64::from(p.lat) / 1e7,
+                        lon: f64::from(p.lon) / 1e7,
+                    },
+                )
+            })
+            .collect();
+        for span in &draft.ways {
+            let way = osm.ways.iter().find(|w| w.id == span.way_id).unwrap();
+            for idx in [span.from_idx, span.to_idx] {
+                let node = pos[&way.refs[idx as usize]];
+                let near = draft
+                    .geometry
+                    .iter()
+                    .map(|&g| moto_core::geo::haversine_m(g, node))
+                    .fold(f64::INFINITY, f64::min);
+                // Span ends are rounded outwards to whole nodes, so they can
+                // lie just past the section's ends.
+                assert!(
+                    near < 60.0,
+                    "way {} node {idx} is {near:.1} m off",
+                    span.way_id
+                );
+            }
+        }
+        // Nodes strictly inside a span are on the section itself.
+        let mut inner = 0;
+        for span in &draft.ways {
+            let way = osm.ways.iter().find(|w| w.id == span.way_id).unwrap();
+            let (lo, hi) = (
+                span.from_idx.min(span.to_idx),
+                span.from_idx.max(span.to_idx),
+            );
+            for idx in lo + 1..hi {
+                let node = pos[&way.refs[idx as usize]];
+                let near = draft
+                    .geometry
+                    .iter()
+                    .map(|&g| moto_core::geo::haversine_m(g, node))
+                    .fold(f64::INFINITY, f64::min);
+                assert!(
+                    near < 1.0,
+                    "way {} inner node {idx} is {near:.2} m off",
+                    span.way_id
+                );
+                inner += 1;
+            }
+        }
+        assert!(
+            inner > 5,
+            "the test should cover real shape nodes, got {inner}"
+        );
+        // Consecutive spans of one way were merged.
+        assert!(
+            draft
+                .ways
+                .windows(2)
+                .all(|w| w[0].way_id != w[1].way_id || w[0].to_idx != w[1].from_idx)
+        );
+    }
+
+    #[test]
     fn cuts_ways_at_the_bounding_box() {
         let (whole, whole_stats) = build_region(Path::new(FIXTURE), FIXTURE_BBOX).unwrap();
         let (half, half_stats) =

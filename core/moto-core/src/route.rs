@@ -35,14 +35,50 @@ fn time_s(e: &Edge) -> f64 {
     f64::from(e.length_dm) / 10.0 / (f64::from(e.speed_kmh) / 3.6)
 }
 
-/// Routing cost of a whole edge: travel time, times [`AVOID_PENALTY`] if
-/// the options ask to avoid this kind of road.
-fn cost_s(e: &Edge, avoid: &Avoid) -> f64 {
-    let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
-    let unpaved = Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved());
-    let ferry = e.flags & edge_flags::FERRY != 0;
-    let avoided = avoid.motorways && motorway || avoid.unpaved && unpaved || avoid.ferries && ferry;
-    time_s(e) * if avoided { AVOID_PENALTY } else { 1.0 }
+/// What a path search minimises.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Cost {
+    /// Travel time, avoided kinds of road costing [`AVOID_PENALTY`] times
+    /// more.
+    Fastest(Avoid),
+    /// Distance along the road, nothing avoided: the road the rider points
+    /// at, not a faster one nearby (marking sections).
+    Shortest,
+}
+
+impl Cost {
+    /// Cost of a whole edge.
+    fn edge(&self, e: &Edge) -> f64 {
+        match self {
+            Cost::Fastest(avoid) => {
+                let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
+                let unpaved = Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved());
+                let ferry = e.flags & edge_flags::FERRY != 0;
+                let avoided = avoid.motorways && motorway
+                    || avoid.unpaved && unpaved
+                    || avoid.ferries && ferry;
+                time_s(e) * if avoided { AVOID_PENALTY } else { 1.0 }
+            }
+            Cost::Shortest => f64::from(e.length_dm) / 10.0,
+        }
+    }
+
+    /// Cost of a fraction of an edge the path starts or ends on (never
+    /// penalised: the rider chose that road).
+    fn partial(&self, e: &Edge, frac: f64) -> f64 {
+        frac * match self {
+            Cost::Fastest(_) => time_s(e),
+            Cost::Shortest => f64::from(e.length_dm) / 10.0,
+        }
+    }
+
+    /// Lower bound of the cost of `metres` in a straight line.
+    fn estimate(&self, metres: f64, max_mps: f64) -> f64 {
+        match self {
+            Cost::Fastest(_) => metres / max_mps,
+            Cost::Shortest => metres,
+        }
+    }
 }
 
 /// The edge running the other way along the same geometry, if any.
@@ -67,13 +103,13 @@ fn edge_line(region: &Region, e: &Edge) -> Vec<LatLon> {
     line
 }
 
-/// A way onto or off the graph from a point inside an edge: travel along
-/// `edge` between fractions `from` and `to` (in the edge's direction).
-#[derive(Debug, Clone, Copy)]
-struct Partial {
-    edge: u32,
-    from: f64,
-    to: f64,
+/// A piece of a path: travel along `edge` between fractions `from` and
+/// `to` of its length (in the edge's direction). Whole edges are 0.0–1.0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Partial {
+    pub edge: u32,
+    pub from: f64,
+    pub to: f64,
 }
 
 /// Graph nodes paired with the partial edge that links them to a point.
@@ -169,9 +205,7 @@ impl Builder {
 }
 
 /// Fastest route from `from` to `to`, keeping off what `avoid` asks for
-/// where possible (see [`AVOID_PENALTY`]); the stretches of road the two
-/// points lie on count at plain travel time. `max_speed_kmh` bounds every
-/// edge's speed and keeps the A* estimate admissible.
+/// where possible (see [`AVOID_PENALTY`]).
 pub(crate) fn fastest(
     region: &Region,
     from: &RoadPoint,
@@ -179,6 +213,25 @@ pub(crate) fn fastest(
     avoid: &Avoid,
     max_speed_kmh: f64,
 ) -> Result<Route, CoreError> {
+    let parts = path(region, from, to, Cost::Fastest(*avoid), max_speed_kmh)?;
+    let mut route = Builder::default();
+    for p in parts {
+        route.add(region, p.edge, p.from, p.to);
+    }
+    Ok(route.finish())
+}
+
+/// Cheapest path from `from` to `to` under `cost`, as edge pieces in
+/// travel order. The stretches of road the two points lie on count at their
+/// plain cost. `max_speed_kmh` bounds every edge's speed and keeps the A*
+/// estimate admissible.
+pub(crate) fn path(
+    region: &Region,
+    from: &RoadPoint,
+    to: &RoadPoint,
+    cost: Cost,
+    max_speed_kmh: f64,
+) -> Result<Vec<Partial>, CoreError> {
     let (leave, _) = partials(region, from);
     let (_, arrive) = partials(region, to);
 
@@ -189,9 +242,9 @@ pub(crate) fn fastest(
     for &(_, l) in &leave {
         for &(_, a) in &arrive {
             if l.edge == a.edge && a.to >= l.from {
-                let cost = (a.to - l.from) * time_s(&region.edges()[l.edge as usize]);
-                if cost < best_cost {
-                    best_cost = cost;
+                let c = cost.partial(&region.edges()[l.edge as usize], a.to - l.from);
+                if c < best_cost {
+                    best_cost = c;
                     direct = Some(Partial {
                         edge: l.edge,
                         from: l.from,
@@ -208,15 +261,20 @@ pub(crate) fn fastest(
     let mut heap = BinaryHeap::new();
     let target = to.position;
     let max_mps = max_speed_kmh.max(1.0) / 3.6;
-    let h = |v: u32| haversine_m(latlon(region.nodes()[v as usize]), target) / max_mps;
+    let h = |v: u32| {
+        cost.estimate(
+            haversine_m(latlon(region.nodes()[v as usize]), target),
+            max_mps,
+        )
+    };
     // Keys are non-negative f64s, whose bit patterns sort like the values.
     let key = |cost: f64| cost.to_bits();
 
     for &(node, l) in &leave {
-        let cost = (l.to - l.from) * time_s(&region.edges()[l.edge as usize]);
-        if cost < dist[node as usize] {
-            dist[node as usize] = cost;
-            heap.push(Reverse((key(cost + h(node)), node)));
+        let c = cost.partial(&region.edges()[l.edge as usize], l.to - l.from);
+        if c < dist[node as usize] {
+            dist[node as usize] = c;
+            heap.push(Reverse((key(c + h(node)), node)));
         }
     }
     while let Some(Reverse((k, v))) = heap.pop() {
@@ -229,9 +287,9 @@ pub(crate) fn fastest(
         }
         for &(node, a) in &arrive {
             if node == v {
-                let cost = g + (a.to - a.from) * time_s(&region.edges()[a.edge as usize]);
-                if cost < best_cost {
-                    best_cost = cost;
+                let c = g + cost.partial(&region.edges()[a.edge as usize], a.to - a.from);
+                if c < best_cost {
+                    best_cost = c;
                     best = Some((v, a));
                     direct = None;
                 }
@@ -239,20 +297,18 @@ pub(crate) fn fastest(
         }
         for id in region.out_edges(v) {
             let e = region.edges()[id as usize];
-            let cost = g + cost_s(&e, avoid);
+            let c = g + cost.edge(&e);
             let w = e.head as usize;
-            if cost < dist[w] {
-                dist[w] = cost;
+            if c < dist[w] {
+                dist[w] = c;
                 parent[w] = id;
-                heap.push(Reverse((key(cost + h(e.head)), e.head)));
+                heap.push(Reverse((key(c + h(e.head)), e.head)));
             }
         }
     }
 
-    let mut route = Builder::default();
     if let Some(d) = direct {
-        route.add(region, d.edge, d.from, d.to);
-        return Ok(route.finish());
+        return Ok(vec![d]);
     }
     let Some((entry, last)) = best else {
         return Err(CoreError::NoRoute(
@@ -273,12 +329,14 @@ pub(crate) fn fastest(
         .find(|(node, _)| *node == v)
         .map(|&(_, l)| l)
         .ok_or_else(|| CoreError::NoRoute("internal: route has no start".into()))?;
-    route.add(region, first.edge, first.from, first.to);
-    for id in path {
-        route.add(region, id, 0.0, 1.0);
-    }
-    route.add(region, last.edge, last.from, last.to);
-    Ok(route.finish())
+    let mut parts = vec![first];
+    parts.extend(path.into_iter().map(|edge| Partial {
+        edge,
+        from: 0.0,
+        to: 1.0,
+    }));
+    parts.push(last);
+    Ok(parts)
 }
 
 #[cfg(test)]
