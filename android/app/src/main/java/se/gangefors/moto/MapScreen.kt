@@ -21,7 +21,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,15 +34,19 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,15 +83,25 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
+import se.gangefors.moto.core.NewSection
+import se.gangefors.moto.core.Rating
+import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionDraft
+import se.gangefors.moto.core.SectionSource
+import se.gangefors.moto.core.SectionStore
+import se.gangefors.moto.core.SectionUpdate
 import se.gangefors.moto.core.defaultRouteOptions
 
 /**
  * The single map screen (ADR-0002): OpenFreeMap tiles (ADR-0003), attribution
  * visible, and the rider's GPS position, with the loaded region outlined.
- * Tapping the map snaps the point to the nearest road and marks it; two
- * long-presses pick a start and an end and draw the fastest route between
- * them. The map only picks, draws and hit-tests; routing and snapping belong
- * to the Rust core.
+ * The rider's saved sections are drawn coloured by rating; tapping one opens
+ * a sheet to change or delete it, and "mark section" mode proposes a new one
+ * between two tapped points. Otherwise tapping the map snaps the point to
+ * the nearest road and marks it; two long-presses pick a start and an end
+ * and draw the fastest route between them. The map only picks, draws and
+ * hit-tests; routing, snapping and proposing sections belong to the Rust
+ * core.
  */
 @Composable
 fun MapScreen() {
@@ -155,23 +172,130 @@ fun MapScreen() {
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
 
-    // Tap → snap → marker, as a debugging aid. Long-press → route start;
-    // the next long-press → route end, and the route is computed and drawn.
+    // The rider's saved sections (ADR-0006), opened off the main thread.
+    var store by remember { mutableStateOf<StoreState>(StoreState.Loading) }
+    var sections by remember { mutableStateOf<List<Section>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        store = withContext(Dispatchers.IO) { SavedSections.open(context.applicationContext) }
+        when (val s = store) {
+            is StoreState.Ready -> withContext(Dispatchers.IO) { runCatching { s.store.list(null) } }
+                .onSuccess { sections = it }
+                .onFailure { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) }
+            is StoreState.Failed -> message = resources.getString(R.string.sections_failed, s.message)
+            StoreState.Loading -> Unit
+        }
+    }
+
     val scope = rememberCoroutineScope()
+
+    // "Mark section" mode: tap start, tap end, adjust, save.
+    val marker = remember { SectionMarker<LatLng> { a, b -> approxDistanceM(a.toLatLon(), b.toLatLon()) } }
+    var marking by remember { mutableStateOf(false) }
+    // Counts marking sessions, so a slow proposal from a cancelled one is dropped.
+    var markSession by remember { mutableIntStateOf(0) }
+    var draft by remember { mutableStateOf<SectionDraft?>(null) }
+    var proposing by remember { mutableStateOf(false) }
+    var savingDraft by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Section?>(null) }
+
+    // Layers in drawing order: saved sections, a proposed section, the
+    // route, the snap marker.
+    val overlays = remember(style) {
+        style?.let { s ->
+            Overlays(SectionOverlay(s, density.density), SectionDraftOverlay(s), RouteOverlay(s), SnapMarker(s))
+        }
+    }
+    LaunchedEffect(overlays, sections) { overlays?.sections?.show(sections) }
+
+    fun showDraft() {
+        val o = overlays ?: return
+        when (val st = marker.state) {
+            SectionMarker.State.Off, SectionMarker.State.PickStart -> o.draft.show(null, null, null)
+            is SectionMarker.State.PickEnd -> o.draft.show(st.start, null, null)
+            is SectionMarker.State.Proposed -> o.draft.show(st.start, st.end, draft?.geometry)
+        }
+    }
+
+    fun stopMarking() {
+        marker.cancel()
+        marking = false
+        draft = null
+        savingDraft = false
+        showDraft()
+    }
+
+    fun draftMessage(d: SectionDraft) = resources.getString(R.string.section_proposed, sectionKm(d.distanceM))
+
+    /** A tap in "mark section" mode: set the start, the end, or move the nearer end. */
+    fun onMarkTap(ready: RegionState.Ready, point: LatLng) {
+        if (proposing) return
+        when (val st = marker.onTap(point)) {
+            is SectionMarker.State.PickEnd -> {
+                // Check the start lies on a road before keeping it.
+                val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
+                if (problem != null) {
+                    marker.rejectLast()
+                    message = coreErrorMessage(resources, problem)
+                } else {
+                    message = resources.getString(R.string.section_pick_end)
+                }
+                showDraft()
+            }
+            is SectionMarker.State.Proposed -> {
+                proposing = true
+                overlays?.draft?.show(st.start, st.end, draft?.geometry)
+                message = resources.getString(R.string.section_proposing)
+                val session = markSession
+                scope.launch {
+                    val result = withContext(Dispatchers.Default) {
+                        runCatching { ready.engine.sectionBetween(st.start.toLatLon(), st.end.toLatLon()) }
+                    }
+                    proposing = false
+                    if (!marking || session != markSession) return@launch
+                    result.fold(
+                        onSuccess = { d ->
+                            draft = d
+                            message = draftMessage(d)
+                        },
+                        onFailure = { e ->
+                            marker.rejectLast()
+                            message = coreErrorMessage(resources, e)
+                        },
+                    )
+                    showDraft()
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    // Tap → snap → marker, as a debugging aid; a tap on a saved section opens
+    // its sheet. Long-press → route start; the next long-press → route end,
+    // and the route is computed and drawn. In "mark section" mode, taps pick
+    // the section instead.
     val picker = remember { RoutePicker<LatLng>() }
-    DisposableEffect(map, style, region) {
+    DisposableEffect(map, overlays, region) {
         val m = map
+        val o = overlays
         val s = style
-        if (m == null || s == null) return@DisposableEffect onDispose {}
+        if (m == null || o == null || s == null) return@DisposableEffect onDispose {}
         val ready = region as? RegionState.Ready
         ready?.let { showRegionOutline(s, it.engine.info()) }
-        val routeOverlay = RouteOverlay(s)
-        val marker = SnapMarker(s)
         val onClick = MapLibreMap.OnMapClickListener { tap ->
-            message = snapAndMark(resources, region, tap, marker)
+            if (marking) {
+                if (ready == null) message = regionStatus(resources, region) else onMarkTap(ready, tap)
+                return@OnMapClickListener true
+            }
+            val hit = o.sections.sectionAt(m, tap)?.let { id -> sections.firstOrNull { it.id == id } }
+            if (hit != null) {
+                editing = hit
+            } else {
+                message = snapAndMark(resources, region, tap, o.snap)
+            }
             true
         }
         val onLongClick = MapLibreMap.OnMapLongClickListener { point ->
+            if (marking) return@OnMapLongClickListener false
             if (ready == null) {
                 message = regionStatus(resources, region)
                 return@OnMapLongClickListener true
@@ -184,13 +308,13 @@ fun MapScreen() {
                         picker.reset()
                         message = coreErrorMessage(resources, problem)
                     } else {
-                        routeOverlay.show(point, null, null)
+                        o.route.show(point, null, null)
                         message = resources.getString(R.string.route_pick_end)
                     }
                 }
                 is RoutePicker.Step.Complete -> {
                     val start = step.start
-                    routeOverlay.show(start, point, null)
+                    o.route.show(start, point, null)
                     message = resources.getString(R.string.route_computing)
                     scope.launch {
                         val began = SystemClock.elapsedRealtime()
@@ -202,7 +326,7 @@ fun MapScreen() {
                         val ms = SystemClock.elapsedRealtime() - began
                         message = result.fold(
                             onSuccess = { r ->
-                                routeOverlay.show(start, point, r.geometry)
+                                o.route.show(start, point, r.geometry)
                                 val summary = summarize(r.distanceM, r.durationS)
                                 resources.getString(R.string.route_result, summary.km, summary.minutes, ms)
                             },
@@ -228,6 +352,26 @@ fun MapScreen() {
         if (hasLocation) enableLocation(context, m, s)
     }
 
+    /** Runs [action] on the store off the main thread, then reloads the sections. */
+    fun changeSections(done: String, action: (SectionStore) -> Unit) {
+        val ready = store as? StoreState.Ready ?: return
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    action(ready.store)
+                    ready.store.list(null)
+                }
+            }
+            result.fold(
+                onSuccess = {
+                    sections = it
+                    message = done
+                },
+                onFailure = { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) },
+            )
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         // Theme-coloured scrim keeps the navigation bar icons readable over any
@@ -241,35 +385,127 @@ fun MapScreen() {
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
                 .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
         )
-        message?.let { text ->
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .safeDrawingPadding()
-                    .padding(top = 8.dp, start = 64.dp, end = 64.dp),
-                shape = MaterialTheme.shapes.medium,
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
-            ) {
-                Text(text, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        if (message != null || marking) Surface(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .safeDrawingPadding()
+                .padding(top = 8.dp, start = 64.dp, end = 64.dp),
+            shape = MaterialTheme.shapes.medium,
+            tonalElevation = 3.dp,
+            shadowElevation = 3.dp,
+        ) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                message?.let { Text(it) }
+                if (marking) {
+                    Row(
+                        Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(onClick = {
+                            stopMarking()
+                            message = resources.getString(R.string.map_hint)
+                        }) { Text(stringResource(R.string.cancel)) }
+                        Button(
+                            onClick = { savingDraft = true },
+                            enabled = draft != null && !proposing,
+                        ) { Text(stringResource(R.string.section_save_ellipsis)) }
+                    }
+                }
             }
         }
-        if (hasLocation) {
-            FloatingActionButton(
-                onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING },
+        if (!marking) {
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .safeDrawingPadding()
                     .padding(16.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_my_location),
-                    contentDescription = stringResource(R.string.my_location),
-                )
+                if (store is StoreState.Ready && region is RegionState.Ready) {
+                    ExtendedFloatingActionButton(onClick = {
+                        marker.begin()
+                        markSession++
+                        marking = true
+                        draft = null
+                        showDraft()
+                        message = resources.getString(R.string.section_pick_start)
+                    }) { Text(stringResource(R.string.section_mark)) }
+                }
+                if (hasLocation) {
+                    FloatingActionButton(onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_my_location),
+                            contentDescription = stringResource(R.string.my_location),
+                        )
+                    }
+                }
             }
         }
     }
+
+    // Name, rate and save the proposed section.
+    val proposed = draft
+    if (savingDraft && proposed != null) {
+        val fallback = stringResource(R.string.section_default_name, sectionKm(proposed.distanceM))
+        SectionSheet(
+            title = stringResource(R.string.section_new_title),
+            initial = SectionChoice(name = "", rating = Rating.GOOD, oneWay = false),
+            fallbackName = fallback,
+            saveLabel = stringResource(R.string.section_save),
+            onDismiss = { savingDraft = false },
+            onSave = { choice ->
+                stopMarking()
+                changeSections(resources.getString(R.string.section_saved, choice.name)) { st ->
+                    st.add(
+                        NewSection(
+                            name = choice.name,
+                            rating = choice.rating,
+                            direction = directionOf(choice.oneWay),
+                            source = SectionSource.MAP,
+                            ways = proposed.ways,
+                            geometry = proposed.geometry,
+                        ),
+                    )
+                }
+            },
+        )
+    }
+
+    // Change or delete a saved section.
+    editing?.let { section ->
+        SectionSheet(
+            title = stringResource(R.string.section_edit_title, sectionKm(lengthM(section.geometry))),
+            initial = SectionChoice(section.name, section.rating, isOneWay(section.direction)),
+            fallbackName = section.name,
+            saveLabel = stringResource(R.string.section_update),
+            onDismiss = { editing = null },
+            onSave = { choice ->
+                editing = null
+                changeSections(resources.getString(R.string.section_updated, choice.name)) { st ->
+                    st.update(
+                        section.id,
+                        SectionUpdate(name = choice.name, rating = choice.rating, direction = directionOf(choice.oneWay)),
+                    )
+                }
+            },
+            onDelete = {
+                editing = null
+                changeSections(resources.getString(R.string.section_deleted, section.name)) { st ->
+                    st.delete(section.id)
+                }
+            },
+        )
+    }
 }
+
+/** The map layers the screen draws into, created once per style. */
+private class Overlays(
+    val sections: SectionOverlay,
+    val draft: SectionDraftOverlay,
+    val route: RouteOverlay,
+    val snap: SnapMarker,
+)
 
 /** Snaps [tap] with the region's engine, draws the result and returns a line to show. */
 private fun snapAndMark(res: Resources, region: RegionState, tap: LatLng, marker: SnapMarker): String =
