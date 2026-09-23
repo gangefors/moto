@@ -4,6 +4,7 @@
 package se.gangefors.moto
 
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -16,11 +17,14 @@ import se.gangefors.moto.core.defaultRouteOptions
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The map style is always light, so the status bar always needs dark
-        // icons, whatever the system theme. MapScreen adds a scrim behind them.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-        )
+        // Both bars are transparent with icons that follow the system theme.
+        // MapScreen draws a matching theme-coloured scrim behind each bar.
+        val transparentBars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = transparentBars, navigationBarStyle = transparentBars)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Otherwise the system adds its own navigation bar scrim on top of ours.
+            window.isNavigationBarContrastEnforced = false
+        }
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(this)
         checkCoreLoads()

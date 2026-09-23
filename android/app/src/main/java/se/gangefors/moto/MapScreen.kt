@@ -11,14 +11,17 @@ import android.content.res.Resources
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -123,12 +126,22 @@ fun MapScreen() {
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-        // Keeps the dark status bar icons readable over any part of the map.
+        // Theme-coloured scrims keep the system bar icons readable over any
+        // part of the map; the icons follow the same theme (MainActivity).
+        val scrim = if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM
         Box(
             Modifier
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .windowInsetsTopHeight(WindowInsets.statusBars)
-                .background(STATUS_BAR_SCRIM),
+                .background(scrim),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .windowInsetsBottomHeight(WindowInsets.navigationBars)
+                .background(scrim),
         )
         if (hasLocation) {
             FloatingActionButton(
@@ -150,8 +163,9 @@ fun MapScreen() {
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
-/** Translucent white behind the status bar; the map style is light. */
-private val STATUS_BAR_SCRIM = Color.White.copy(alpha = 0.7f)
+/** Translucent scrims behind the system bars, per system theme. */
+private val LIGHT_SCRIM = Color.White.copy(alpha = 0.7f)
+private val DARK_SCRIM = Color.Black.copy(alpha = 0.7f)
 
 /** MapLibre's default control margin. */
 private val CONTROL_MARGIN: Dp = 4.dp
