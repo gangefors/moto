@@ -158,7 +158,7 @@ fun MapScreen() {
     // Tap → snap → marker, as a debugging aid. Long-press → route start;
     // the next long-press → route end, and the route is computed and drawn.
     val scope = rememberCoroutineScope()
-    var routeStart by remember { mutableStateOf<LatLng?>(null) }
+    val picker = remember { RoutePicker<LatLng>() }
     DisposableEffect(map, style, region) {
         val m = map
         val s = style
@@ -176,41 +176,39 @@ fun MapScreen() {
                 message = regionStatus(resources, region)
                 return@OnMapLongClickListener true
             }
-            val start = routeStart
-            if (start == null) {
-                // New start: check it lies on a road before keeping it.
-                val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
-                if (problem != null) {
-                    message = coreErrorMessage(resources, problem)
-                } else {
-                    routeStart = point
-                    routeOverlay.show(point, null, null)
-                    message = resources.getString(R.string.route_pick_end)
-                }
-            } else {
-                routeStart = null
-                routeOverlay.show(start, point, null)
-                message = resources.getString(R.string.route_computing)
-                scope.launch {
-                    val began = SystemClock.elapsedRealtime()
-                    val result = withContext(Dispatchers.Default) {
-                        runCatching {
-                            ready.engine.route(start.toLatLon(), point.toLatLon(), defaultRouteOptions())
-                        }
+            when (val step = picker.onLongPress(point)) {
+                is RoutePicker.Step.StartSet -> {
+                    // New start: check it lies on a road before keeping it.
+                    val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
+                    if (problem != null) {
+                        picker.reset()
+                        message = coreErrorMessage(resources, problem)
+                    } else {
+                        routeOverlay.show(point, null, null)
+                        message = resources.getString(R.string.route_pick_end)
                     }
-                    val ms = SystemClock.elapsedRealtime() - began
-                    message = result.fold(
-                        onSuccess = { r ->
-                            routeOverlay.show(start, point, r.geometry)
-                            resources.getString(
-                                R.string.route_result,
-                                r.distanceM / 1000,
-                                (r.durationS / 60).roundToInt(),
-                                ms,
-                            )
-                        },
-                        onFailure = { coreErrorMessage(resources, it) },
-                    )
+                }
+                is RoutePicker.Step.Complete -> {
+                    val start = step.start
+                    routeOverlay.show(start, point, null)
+                    message = resources.getString(R.string.route_computing)
+                    scope.launch {
+                        val began = SystemClock.elapsedRealtime()
+                        val result = withContext(Dispatchers.Default) {
+                            runCatching {
+                                ready.engine.route(start.toLatLon(), point.toLatLon(), defaultRouteOptions())
+                            }
+                        }
+                        val ms = SystemClock.elapsedRealtime() - began
+                        message = result.fold(
+                            onSuccess = { r ->
+                                routeOverlay.show(start, point, r.geometry)
+                                val summary = summarize(r.distanceM, r.durationS)
+                                resources.getString(R.string.route_result, summary.km, summary.minutes, ms)
+                            },
+                            onFailure = { coreErrorMessage(resources, it) },
+                        )
+                    }
                 }
             }
             true
@@ -301,11 +299,11 @@ private fun regionStatus(res: Resources, region: RegionState): String = when (re
 }
 
 /** A short message for an error from the core. */
-private fun coreErrorMessage(res: Resources, e: Throwable): String = when (e) {
-    is MotoException.OutsideRegion -> res.getString(R.string.region_outside)
-    is MotoException.NoRoute -> res.getString(R.string.route_none)
-    is MotoException.NoRoadNearby -> e.message ?: e.toString()
-    else -> res.getString(R.string.snap_error, e.message ?: e.toString())
+private fun coreErrorMessage(res: Resources, e: Throwable): String = when (classify(e)) {
+    CoreProblem.OUTSIDE_REGION -> res.getString(R.string.region_outside)
+    CoreProblem.NO_ROUTE -> res.getString(R.string.route_none)
+    CoreProblem.NO_ROAD_NEARBY -> e.message ?: e.toString()
+    CoreProblem.OTHER -> res.getString(R.string.snap_error, e.message ?: e.toString())
 }
 
 private fun LatLng.toLatLon() = LatLon(latitude, longitude)
