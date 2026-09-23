@@ -6,14 +6,16 @@ package se.gangefors.moto
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.Resources
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -26,9 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -86,6 +91,24 @@ fun MapScreen() {
         }
     }
 
+    // The map draws edge to edge, but its controls must never sit under the
+    // status bar, navigation bar or a display cutout.
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val safe = WindowInsets.safeDrawing
+    val insets = SafeInsets(
+        left = safe.getLeft(density, layoutDirection),
+        top = safe.getTop(density),
+        right = safe.getRight(density, layoutDirection),
+        bottom = safe.getBottom(density),
+    )
+    LaunchedEffect(map, insets) {
+        val m = map ?: return@LaunchedEffect
+        with(density) {
+            applyControlMargins(m, insets, CONTROL_MARGIN.roundToPx(), ATTRIBUTION_OFFSET.roundToPx())
+        }
+    }
+
     // Show the GPS position as soon as both the style and the permission are there.
     LaunchedEffect(map, style, hasLocation) {
         val m = map ?: return@LaunchedEffect
@@ -100,7 +123,7 @@ fun MapScreen() {
                 onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
+                    .safeDrawingPadding()
                     .padding(16.dp),
             ) {
                 Icon(
@@ -109,6 +132,24 @@ fun MapScreen() {
                 )
             }
         }
+    }
+}
+
+/** System-bar and cutout insets in pixels. */
+private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
+
+/** MapLibre's default control margin. */
+private val CONTROL_MARGIN: Dp = 4.dp
+
+/** MapLibre's default attribution offset from the left, which keeps it clear of the logo. */
+private val ATTRIBUTION_OFFSET: Dp = 92.dp
+
+/** Moves the compass, logo and attribution inside the safe area; px arguments. */
+private fun applyControlMargins(map: MapLibreMap, insets: SafeInsets, margin: Int, attributionOffset: Int) {
+    map.uiSettings.apply {
+        setCompassMargins(0, insets.top + margin, insets.right + margin, 0)
+        setLogoMargins(insets.left + margin, 0, 0, insets.bottom + margin)
+        setAttributionMargins(insets.left + attributionOffset, 0, 0, insets.bottom + margin)
     }
 }
 
