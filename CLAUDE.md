@@ -42,7 +42,7 @@ docs/adr/               architecture decision records (index in README.md)
 - Favourites are applied at query time as a **capped bonus** on edge costs; the base graph is never rebuilt when favourites change.
 - Sections carry a `rider_id` (always the local user in v1) so community ratings can be added later.
 - Record significant new architecture decisions as an ADR in `docs/adr/`. Add every new rule or decision (ADR or not) to the Notion decisions log; don't keep a decisions log or progress notes in the repo.
-- Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping.
+- Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping. One exception: a release that fixes a published vulnerability (GitHub, RustSec or CVE advisory) in a version we use may be adopted once it is at least a day old and has been reviewed (changelog, scope of the diff, licence) and CI is green.
 - Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, ADRs) go in their own commits, separate from code changes.
 - UI draws edge to edge, but interactive or informational elements (buttons, map controls, attribution, text) must never sit under the status bar, navigation bar or a display cutout; offset them by `WindowInsets.safeDrawing`. System bar icons must stay readable: keep the status bar fully transparent and switch its icons between light and dark to contrast with whatever is behind them, whatever the map style or overlay (like Google Maps); give the navigation bar a translucent scrim in the system theme's colour, with icons that follow that theme.
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
@@ -56,7 +56,7 @@ Security comes first: before performance, features and convenience. Never choose
 - Rust: no `unsafe` beyond what is unavoidable (today only creating the memory map). Every `unsafe` block carries a `SAFETY:` comment that says why it is sound. Data read zero-copy is validated before any code indexes it; use checked arithmetic and `get` on untrusted numbers.
 - Android: least privilege. Request only the permissions a feature needs, export no components except the launcher activity, allow no cleartext traffic, keep personal data (rides, locations, favourites) in app-private storage and on the device unless the rider opts in. No secrets in the repository or the APK.
 - Downloads go over HTTPS only and are verified (checksum or signature, then structure) before they are installed or opened.
-- Supply chain: keep dependencies few, AGPL-compatible and at least a week old (see Versions); check a new dependency's maintenance and `unsafe` use before adding it; pin GitHub Actions by commit SHA; CI tokens get the least permissions they need.
+- Supply chain: keep dependencies few, AGPL-compatible and at least a week old (security fixes: a day, see Versions); check a new dependency's maintenance and `unsafe` use before adding it; pin GitHub Actions by commit SHA; CI tokens get the least permissions they need.
 - Vulnerability reports follow [`SECURITY.md`](SECURITY.md).
 
 ## Testing and performance
