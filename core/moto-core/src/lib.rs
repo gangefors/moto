@@ -18,7 +18,9 @@ pub mod fixture;
 pub mod geo;
 pub mod region;
 mod route;
+pub mod section;
 mod snap;
+pub mod store;
 mod types;
 
 pub use engine::{Engine, SNAP_MAX_DISTANCE_M};

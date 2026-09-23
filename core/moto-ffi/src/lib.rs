@@ -64,6 +64,8 @@ pub enum MotoError {
     #[error("{message}")]
     Region { message: String },
     #[error("{message}")]
+    Storage { message: String },
+    #[error("{message}")]
     OutsideRegion { message: String },
     #[error("{message}")]
     NoRoadNearby { message: String },
@@ -246,6 +248,7 @@ impl From<moto_core::CoreError> for MotoError {
         match e {
             C::InvalidCoordinate { .. } | C::InvalidArgument(_) => Self::InvalidInput { message },
             C::Region(_) => Self::Region { message },
+            C::Storage(_) => Self::Storage { message },
             C::OutsideRegion { .. } => Self::OutsideRegion { message },
             C::NoRoadNearby { .. } => Self::NoRoadNearby { message },
             C::NoRoute(_) => Self::NoRoute { message },
