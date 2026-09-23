@@ -61,7 +61,7 @@ Security comes first: before performance, features and convenience. Never choose
 ## Testing and performance
 
 - **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
-- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally.
+- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints.
 - **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the M0 region: region open and verify, snapping, routing), scales the timings by a CPU calibration run, and compares them with the last `main` run. The job summary shows the table.
 - A metric more than 25 % slower is a significant regression and fails CI. Re-evaluate the implementation and try to recover the loss first. Accept a regression only when it buys something worth it (correctness, security, a feature), with a `Perf-Accepted: <reason>` trailer in the commit message and an entry in the decisions log. Improvements of more than 10 % are reported too; note them in the commit message.
 - Security beats performance: never accept an insecure change to win back speed.
