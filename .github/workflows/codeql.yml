@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# CodeQL code scanning (advanced setup). Default setup couldn't build the
+# Kotlin app, whose native Rust library comes from a Gradle step with
+# cargo-ndk, and GitHub rejects advanced-setup results while default setup
+# is on, so every language is analysed here:
+# - java-kotlin: built by hand, the same way as the build job in
+#   android.yml (Android SDK packages, Rust and its Android targets,
+#   cargo-ndk, then Gradle).
+# - rust, python (CI scripts) and actions (workflows): no build needed.
+#
+# Versions follow the versions policy in CLAUDE.md. Actions are pinned by
+# commit SHA.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so new queries also look at code that hasn't changed.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_VERSION: "1.98.1"
+  CARGO_NDK_VERSION: "4.1.2"
+  # Must match android/app/build.gradle.kts.
+  ANDROID_PACKAGES: >-
+    platforms;android-37.2
+    build-tools;37.0.0
+    ndk;30.0.16248370
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # to upload the results
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+          - language: python
+            build-mode: none
+          - language: rust
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        if: matrix.build-mode == 'manual'
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK packages
+        if: matrix.build-mode == 'manual'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" $ANDROID_PACKAGES > /dev/null
+
+      - name: Install Rust
+        if: matrix.build-mode == 'manual'
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal \
+            --target aarch64-linux-android --target x86_64-linux-android
+          rustup default "$RUST_VERSION"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: matrix.build-mode == 'manual'
+        with:
+          workspaces: core
+
+      - name: Install cargo-ndk
+        if: matrix.build-mode == 'manual'
+        run: cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
+
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        if: matrix.build-mode == 'manual'
+        with:
+          # The CI workflow owns the Gradle cache.
+          cache-read-only: true
+
+      # No region file: the app builds without one, and CodeQL only needs
+      # the Kotlin compilation.
+      - name: Build the app
+        if: matrix.build-mode == 'manual'
+        working-directory: android
+        run: ./gradlew --no-build-cache assembleDebug
+
+      - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: /language:${{ matrix.language }}
