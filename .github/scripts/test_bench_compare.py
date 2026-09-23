@@ -103,7 +103,8 @@ class MainTest(unittest.TestCase):
                         f.write(data if isinstance(data, str) else json.dumps(data))
                 paths.append(path)
             summary = os.path.join(d, "summary.md")
-            code = bc.main([*paths, "--summary", summary, *extra])
+            args = ["--baseline", paths[0], "--current", paths[1], "--summary", summary]
+            code = bc.main([*args, *extra])
             with open(summary, encoding="utf-8") as f:
                 return code, f.read()
 
@@ -124,8 +125,26 @@ class MainTest(unittest.TestCase):
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f)
                 files.append(path)
-            self.assertEqual(bc.main(files), 0)
-            self.assertEqual(bc.main(files[:2]), 1)
+            self.assertEqual(bc.main(["--baseline", files[0], "--current", *files[1:]]), 0)
+            self.assertEqual(bc.main(["--baseline", files[0], "--current", files[1]]), 1)
+
+    def test_baseline_runs_are_merged_too(self):
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for name, data in (("b1", with_(route_ms_p95=90.0)), ("b2", BASE), ("c", with_(route_ms_p95=60.0))):
+                path = os.path.join(d, name)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+                files.append(path)
+            # The faster baseline run (40 ms) counts, so 60 ms regresses.
+            self.assertEqual(bc.main(["--baseline", *files[:2], "--current", files[2]]), 1)
+
+    def test_no_baseline_at_all_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "c")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(BASE, f)
+            self.assertEqual(bc.main(["--current", path]), 0)
 
     def test_missing_or_broken_baseline_passes(self):
         self.assertEqual(self.run_main(None, BASE)[0], 0)
@@ -134,7 +153,7 @@ class MainTest(unittest.TestCase):
 
     def test_unreadable_current_is_an_error(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(bc.main([os.path.join(d, "b"), os.path.join(d, "c")]), 2)
+            self.assertEqual(bc.main(["--baseline", os.path.join(d, "b"), "--current", os.path.join(d, "c")]), 2)
 
 
 if __name__ == "__main__":

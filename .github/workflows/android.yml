@@ -4,8 +4,9 @@
 # CI for every push and pull request (see "Testing and performance" in
 # CLAUDE.md):
 # - core: rustfmt, clippy and the Rust tests; builds the M0 region file from
-#   the OSM Sweden extract (cached); benchmarks it and compares the result
-#   with the last main build, failing on a significant regression.
+#   the OSM Sweden extract (cached); benchmarks it against the last main
+#   build's benchmark binary on the same machine, failing on a significant
+#   regression.
 # - build: the Android app (Rust core via cargo-ndk, then Gradle) with the
 #   region bundled, lint and unit tests. On main, the debug APK is published
 #   as the rolling `debug-latest` pre-release for the phone.
@@ -111,47 +112,52 @@ jobs:
           core/target/release/moto-regionbuild "$pbf" "$RUNNER_TEMP/moto-region/m0.region"
           rm "$pbf"
 
-      # Two runs; the comparison keeps each metric's faster result.
-      - name: Benchmark
-        run: |
-          mkdir -p "$RUNNER_TEMP/bench"
-          for run in 1 2; do
-            core/target/release/moto-regionbuild --check "$RUNNER_TEMP/moto-region/m0.region" \
-              --json "$RUNNER_TEMP/bench/run$run.json"
-          done
-
-      # The latest main result is the baseline (caches from main are also
-      # visible to pull requests).
+      # The benchmark binary of the last main build is the baseline: both
+      # binaries run alternately on this machine, so differences between CI
+      # machines cancel out. Only main builds write this cache; pull requests
+      # can read it but not replace it.
       # v6.1.0
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/bench-baseline
-          key: bench-main-${{ github.run_id }}
-          restore-keys: bench-main-
+          key: bench-bin-main-${{ github.run_id }}
+          restore-keys: bench-bin-main-
 
-      - name: Compare with the last main build
+      - name: Benchmark this build against the last main build
         env:
           # A Perf-Accepted trailer accepts a significant regression.
           ACCEPTED: ${{ contains(github.event.head_commit.message, 'Perf-Accepted:') || contains(github.event.pull_request.body, 'Perf-Accepted:') }}
         run: |
-          python3 .github/scripts/bench_compare.py \
-            "$RUNNER_TEMP/bench-baseline/baseline.json" "$RUNNER_TEMP"/bench/run*.json \
-            --summary "$GITHUB_STEP_SUMMARY" $([ "$ACCEPTED" = true ] && echo --accepted)
+          region="$RUNNER_TEMP/moto-region/m0.region"
+          out="$RUNNER_TEMP/bench"
+          old="$RUNNER_TEMP/bench-baseline/moto-regionbuild"
+          mkdir -p "$out"
+          for run in 1 2; do
+            # The old binary may not read a newer region format; then there
+            # is no baseline this time.
+            if [ -x "$old" ]; then
+              "$old" --check "$region" --json "$out/base$run.json" > /dev/null || rm -f "$out/base$run.json"
+            fi
+            core/target/release/moto-regionbuild --check "$region" --json "$out/run$run.json"
+          done
+          args=(--current "$out"/run*.json --summary "$GITHUB_STEP_SUMMARY")
+          baseline=("$out"/base*.json)
+          [ -e "${baseline[0]}" ] && args+=(--baseline "${baseline[@]}")
+          [ "$ACCEPTED" = true ] && args+=(--accepted)
+          python3 .github/scripts/bench_compare.py "${args[@]}"
 
-      - name: Store the new baseline
+      - name: Keep this build's benchmark binary as the next baseline
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p "$RUNNER_TEMP/bench-baseline"
-          python3 -c 'import json, sys; sys.path.insert(0, ".github/scripts"); import bench_compare as bc; \
-            print(json.dumps(bc.fastest(bc.load(p) for p in sys.argv[1:]), indent=2))' \
-            "$RUNNER_TEMP"/bench/run*.json > "$RUNNER_TEMP/bench-baseline/baseline.json"
+          cp core/target/release/moto-regionbuild "$RUNNER_TEMP/bench-baseline/moto-regionbuild"
 
       # v6.1.0
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           path: ${{ runner.temp }}/bench-baseline
-          key: bench-main-${{ github.run_id }}
+          key: bench-bin-main-${{ github.run_id }}
 
   build:
     needs: core
