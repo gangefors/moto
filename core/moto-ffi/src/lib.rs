@@ -77,6 +77,13 @@ pub fn default_route_options() -> RouteOptions {
     moto_core::RouteOptions::default().into()
 }
 
+/// Checks a downloaded region file before it is installed: every section's
+/// checksum, then the structure `Engine.open` relies on.
+#[uniffi::export]
+pub fn verify_region_file(path: String) -> Result<(), MotoError> {
+    Ok(moto_core::region::verify_file(path)?)
+}
+
 /// A loaded routing region. Thread-safe; share one instance per region.
 #[derive(Debug, uniffi::Object)]
 pub struct Engine {
@@ -226,6 +233,12 @@ mod tests {
     #[test]
     fn open_missing_region_is_a_typed_error() {
         let err = Engine::open("/definitely/not/here.region".into()).unwrap_err();
+        assert!(matches!(err, MotoError::Region { .. }), "got {err:?}");
+    }
+
+    #[test]
+    fn verify_missing_region_is_a_typed_error() {
+        let err = verify_region_file("/definitely/not/here.region".into()).unwrap_err();
         assert!(matches!(err, MotoError::Region { .. }), "got {err:?}");
     }
 
