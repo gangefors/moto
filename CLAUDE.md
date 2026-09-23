@@ -84,6 +84,13 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 
+# Region file and benchmark (CI compares --json output between builds)
+cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf m0.region
+cargo run --release -p moto-regionbuild -- --check m0.region --json bench.json
+python3 ../.github/scripts/bench_compare.py old.json bench.json
+python3 -m unittest discover -s ../.github/scripts -p 'test_*.py'
+cargo llvm-cov --workspace --summary-only   # coverage (needs cargo-llvm-cov)
+
 # Kotlin bindings (package se.gangefors.moto.core, see moto-ffi/uniffi.toml)
 cargo build -p moto-ffi
 cargo run -p moto-ffi --features cli --bin uniffi-bindgen -- \
