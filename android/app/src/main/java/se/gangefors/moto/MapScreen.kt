@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Rect
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -43,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -178,7 +180,11 @@ fun MapScreen() {
     LaunchedEffect(Unit) {
         store = withContext(Dispatchers.IO) { SavedSections.open(context.applicationContext) }
         when (val s = store) {
-            is StoreState.Ready -> withContext(Dispatchers.IO) { runCatching { s.store.list(null) } }
+            is StoreState.Ready -> withContext(Dispatchers.IO) {
+                // Save a ride the app died in the middle of.
+                Recording.recover(context.applicationContext, s.store)
+                runCatching { s.store.list(null) }
+            }
                 .onSuccess { sections = it }
                 .onFailure { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) }
             is StoreState.Failed -> message = resources.getString(R.string.sections_failed, s.message)
@@ -198,14 +204,43 @@ fun MapScreen() {
     var savingDraft by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Section?>(null) }
 
-    // Layers in drawing order: saved sections, a proposed section, the
-    // route, the snap marker.
+    // Layers in drawing order: saved sections, the ride being recorded, a
+    // proposed section, the route, the snap marker.
     val overlays = remember(style) {
         style?.let { s ->
-            Overlays(SectionOverlay(s, density.density), SectionDraftOverlay(s), RouteOverlay(s), SnapMarker(s))
+            Overlays(SectionOverlay(s, density.density), RideOverlay(s), SectionDraftOverlay(s), RouteOverlay(s), SnapMarker(s))
         }
     }
     LaunchedEffect(overlays, sections) { overlays?.sections?.show(sections) }
+
+    // Ride recording (RecordingService): the line so far, and what to say.
+    val recording by Recording.state.collectAsState()
+    LaunchedEffect(overlays, recording) {
+        overlays?.ride?.show((recording as? Recording.State.Active)?.line)
+    }
+    LaunchedEffect(recording) {
+        when (val r = recording) {
+            is Recording.State.Finished -> {
+                val km = sectionKm(r.track.distanceM)
+                val time = formatDuration(((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) * 1000)
+                message = r.batteryPerHour?.let { resources.getString(R.string.recording_saved_battery, km, time, it) }
+                    ?: resources.getString(R.string.recording_saved, km, time)
+            }
+            is Recording.State.Failed -> message = resources.getString(R.string.recording_failed, r.message)
+            else -> Unit
+        }
+    }
+    val recordPermissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            hasLocation = true
+            RecordingService.start(context)
+            message = resources.getString(R.string.recording_started)
+        } else {
+            message = resources.getString(R.string.recording_no_permission)
+        }
+    }
 
     fun showDraft() {
         val o = overlays ?: return
@@ -432,6 +467,22 @@ fun MapScreen() {
                         message = resources.getString(R.string.section_pick_start)
                     }) { Text(stringResource(R.string.section_mark)) }
                 }
+                val active = recording as? Recording.State.Active
+                ExtendedFloatingActionButton(onClick = {
+                    if (active != null) {
+                        RecordingService.stop(context)
+                    } else {
+                        recordPermissions.launch(recordingPermissions())
+                    }
+                }) {
+                    Text(
+                        if (active != null) {
+                            stringResource(R.string.record_stop, sectionKm(active.distanceM))
+                        } else {
+                            stringResource(R.string.record_start)
+                        },
+                    )
+                }
                 if (hasLocation) {
                     FloatingActionButton(onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING }) {
                         Icon(
@@ -502,6 +553,7 @@ fun MapScreen() {
 /** The map layers the screen draws into, created once per style. */
 private class Overlays(
     val sections: SectionOverlay,
+    val ride: RideOverlay,
     val draft: SectionDraftOverlay,
     val route: RouteOverlay,
     val snap: SnapMarker,
@@ -660,6 +712,15 @@ private fun initialCamera(res: Resources): CameraPosition =
         )
         .zoom(res.getInteger(R.integer.map_initial_zoom).toDouble())
         .build()
+
+/** What recording a ride asks for: precise location, and on Android 13+
+ * permission to show the recording notification. */
+private fun recordingPermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
 
 private fun hasLocationPermission(context: Context): Boolean =
     listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
