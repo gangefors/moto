@@ -8,6 +8,15 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
+import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.PixelCopy
+import android.view.SurfaceView
+import android.view.View
+import android.view.ViewGroup
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -20,6 +29,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -43,6 +53,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -115,6 +127,9 @@ fun MapScreen() {
         }
     }
 
+    // Status bar icons follow the brightness of the map behind them.
+    StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
+
     // Show the GPS position as soon as both the style and the permission are there.
     LaunchedEffect(map, style, hasLocation) {
         val m = map ?: return@LaunchedEffect
@@ -150,6 +165,65 @@ fun MapScreen() {
         }
     }
 }
+
+/**
+ * Samples the map pixels behind the status bar and switches the status bar
+ * icons between light and dark to contrast with them: whenever the map
+ * becomes idle, and at most every [SAMPLE_INTERVAL_MS] while the camera moves.
+ */
+@Composable
+private fun StatusBarIconsFollowMap(mapView: MapView, map: MapLibreMap?, statusBarHeight: Int) {
+    val window = LocalActivity.current?.window ?: return
+    DisposableEffect(mapView, map, statusBarHeight) {
+        if (map == null || statusBarHeight <= 0) return@DisposableEffect onDispose {}
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        val handler = Handler(Looper.getMainLooper())
+        val sample = createBitmap(SAMPLE_WIDTH, SAMPLE_HEIGHT)
+        val pixels = IntArray(SAMPLE_WIDTH * SAMPLE_HEIGHT)
+        var lastSampleAt = 0L
+
+        fun update() {
+            val surface = mapView.findSurfaceView() ?: return
+            if (surface.width <= 0 || !surface.holder.surface.isValid) return
+            lastSampleAt = SystemClock.uptimeMillis()
+            // PixelCopy scales the status bar strip down into the small bitmap.
+            val strip = Rect(0, 0, surface.width, statusBarHeight.coerceAtMost(surface.height))
+            PixelCopy.request(surface, strip, sample, { result ->
+                if (result != PixelCopy.SUCCESS) return@request
+                sample.getPixels(pixels, 0, SAMPLE_WIDTH, 0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT)
+                controller.isAppearanceLightStatusBars =
+                    wantsDarkIcons(averageLuma(pixels), controller.isAppearanceLightStatusBars)
+            }, handler)
+        }
+
+        val onIdle = MapView.OnDidBecomeIdleListener { update() }
+        val onMove = MapLibreMap.OnCameraMoveListener {
+            if (SystemClock.uptimeMillis() - lastSampleAt >= SAMPLE_INTERVAL_MS) update()
+        }
+        mapView.addOnDidBecomeIdleListener(onIdle)
+        map.addOnCameraMoveListener(onMove)
+        update()
+        onDispose {
+            mapView.removeOnDidBecomeIdleListener(onIdle)
+            map.removeOnCameraMoveListener(onMove)
+            handler.removeCallbacksAndMessages(null)
+        }
+    }
+}
+
+/** The SurfaceView MapLibre renders into, if it uses one. */
+private fun View.findSurfaceView(): SurfaceView? = when (this) {
+    is SurfaceView -> this
+    is ViewGroup -> (0 until childCount).firstNotNullOfOrNull { getChildAt(it).findSurfaceView() }
+    else -> null
+}
+
+/** Size of the downscaled status bar sample, in pixels. */
+private const val SAMPLE_WIDTH = 64
+private const val SAMPLE_HEIGHT = 8
+
+/** Minimum time between samples while the camera moves. */
+private const val SAMPLE_INTERVAL_MS = 500L
 
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)

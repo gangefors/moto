@@ -132,4 +132,6 @@ dependencies {
     implementation(libs.maplibre.android)
     // UniFFI's Kotlin bindings load the native library through JNA.
     implementation("${libs.jna.get()}@aar")
+
+    testImplementation(libs.junit)
 }

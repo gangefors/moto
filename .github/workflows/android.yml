@@ -96,9 +96,9 @@ jobs:
             echo "::warning::DEBUG_KEYSTORE_BASE64 not set; APK signed with a one-off debug key"
           fi
 
-      - name: Build and lint
+      - name: Build, lint and test
         working-directory: android
-        run: ./gradlew assembleDebug lintDebug
+        run: ./gradlew assembleDebug lintDebug testDebugUnitTest
 
       - name: Check APK signer
         run: |

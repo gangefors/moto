@@ -17,14 +17,12 @@ import se.gangefors.moto.core.defaultRouteOptions
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Status bar: fully transparent over the map, with icons that suit the
-        // map style (always light, so dark icons), as Google Maps does.
+        // Status bar: fully transparent; MapScreen switches its icons between
+        // light and dark to contrast with the map behind them.
         // Navigation bar: icons follow the system theme, over a matching
         // theme-coloured scrim drawn by MapScreen.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
-        )
+        val transparentBars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = transparentBars, navigationBarStyle = transparentBars)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Otherwise the system adds its own navigation bar scrim on top of ours.
             window.isNavigationBarContrastEnforced = false
