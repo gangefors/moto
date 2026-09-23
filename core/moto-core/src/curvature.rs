@@ -66,7 +66,9 @@ pub const MIN_SPACING_M: f64 = 5.0;
 fn thin(points: &[LatLon]) -> Vec<LatLon> {
     let mut out: Vec<LatLon> = Vec::with_capacity(points.len());
     for (i, &p) in points.iter().enumerate() {
-        let far = out.last().is_none_or(|q| haversine_m(*q, p) >= MIN_SPACING_M);
+        let far = out
+            .last()
+            .is_none_or(|q| haversine_m(*q, p) >= MIN_SPACING_M);
         if far {
             out.push(p);
         } else if i == points.len() - 1 && out.len() > 1 {
