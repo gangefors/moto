@@ -17,3 +17,6 @@
 .idea/
 *.iml
 .DS_Store
+
+# Python bytecode (CI scripts)
+__pycache__/
