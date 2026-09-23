@@ -62,7 +62,7 @@ Security comes first: before performance, features and convenience. Never choose
 ## Testing and performance
 
 - **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
-- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints.
+- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints.
 - **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the M0 region: region open and verify, snapping, routing) with this build's binary and with the last `main` build's binary, alternately on the same machine, and compares them. The job summary shows the table.
 - A significant regression fails CI: more than 25 % slower for snapping and routing, or more than 50 % and 5 ms slower for the short, memory- and disk-bound region verify and open timings (each binary runs twice; each metric keeps its faster result). Re-evaluate the implementation and try to recover the loss first. Accept a regression only when it buys something worth it (correctness, security, a feature), with a `Perf-Accepted: <reason>` trailer in the commit message and an entry in the decisions log. Improvements of more than 10 % are reported too; note them in the commit message.
 - Security beats performance: never accept an insecure change to win back speed.
@@ -84,6 +84,7 @@ cd core
 cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
+cargo deny --locked check   # advisories, licences, sources (deny.toml; cargo-deny 0.20.2)
 
 # Region file and benchmark (CI compares --json output between builds)
 cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf m0.region
