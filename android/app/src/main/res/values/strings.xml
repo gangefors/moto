@@ -41,4 +41,18 @@
     <string name="rating_good">Good</string>
     <string name="rating_great">Great</string>
     <string name="rating_epic">Epic</string>
+    <string name="record_start">Record ride</string>
+    <string name="record_stop">Stop · %1$.1f km</string>
+    <string name="recording_channel">Ride recording</string>
+    <string name="recording_title">Recording ride</string>
+    <string name="recording_waiting">Waiting for GPS…</string>
+    <string name="recording_progress">%1$.1f km · %2$s</string>
+    <string name="recording_stop">Stop</string>
+    <string name="recording_started">Recording. Stop from here or the notification.</string>
+    <string name="recording_saved">Ride saved · %1$.1f km · %2$s</string>
+    <string name="recording_saved_battery">Ride saved · %1$.1f km · %2$s · battery %3$.1f %%/h</string>
+    <string name="recording_saved_later">Some fixes couldn’t be saved yet; they will be on the next start.</string>
+    <string name="recording_failed">Recording stopped: %1$s</string>
+    <string name="recording_no_permission">Recording needs precise location.</string>
+    <string name="recording_no_store">the ride database can’t be opened</string>
 </resources>

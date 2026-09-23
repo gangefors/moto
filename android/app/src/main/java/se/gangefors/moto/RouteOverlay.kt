@@ -123,3 +123,41 @@ class RouteOverlay(style: Style) {
 
 private const val OUTLINE_SOURCE = "moto-region-outline"
 private const val OUTLINE_LAYER = "moto-region-outline"
+
+/**
+ * Draws the ride being recorded as it grows. The line comes from the
+ * recording service; the map only draws it.
+ */
+class RideOverlay(style: Style) {
+    private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
+
+    init {
+        if (style.getLayer(LAYER) == null) {
+            style.addLayer(
+                LineLayer(LAYER, SOURCE).withProperties(
+                    PropertyFactory.lineColor(COLOR),
+                    PropertyFactory.lineWidth(4f),
+                    PropertyFactory.lineOpacity(0.85f),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                ),
+            )
+        }
+    }
+
+    /** Shows [line], or nothing when it is null or a single point. */
+    fun show(line: List<LatLon>?) {
+        val features = if (line != null && line.size >= 2) {
+            listOf(Feature.fromGeometry(LineString.fromLngLats(line.map { Point.fromLngLat(it.lon, it.lat) })))
+        } else {
+            emptyList()
+        }
+        source.setGeoJson(FeatureCollection.fromFeatures(features))
+    }
+
+    private companion object {
+        const val SOURCE = "moto-ride"
+        const val LAYER = "moto-ride-line"
+        const val COLOR = "#e52b50"
+    }
+}
