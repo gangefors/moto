@@ -11,4 +11,10 @@
     <string name="region_loading">Loading the region…</string>
     <string name="region_missing">This build has no region file</string>
     <string name="region_failed">Region failed to load: %1$s</string>
+    <string name="region_outside">Outside the region (the dashed box)</string>
+    <string name="map_hint">Tap to snap to a road. Long-press twice for a route.</string>
+    <string name="route_pick_end">Start set. Long-press where you want to go.</string>
+    <string name="route_computing">Finding a route…</string>
+    <string name="route_result">%1$.1f km · %2$d min · found in %3$d ms</string>
+    <string name="route_none">No route between these points</string>
 </resources>

@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
@@ -74,12 +76,15 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
+import se.gangefors.moto.core.defaultRouteOptions
 
 /**
  * The single map screen (ADR-0002): OpenFreeMap tiles (ADR-0003), attribution
- * visible, and the rider's GPS position. Tapping the map snaps the point to
- * the nearest road through the Rust core and marks it. The map only picks,
- * draws and hit-tests; routing and snapping belong to the Rust core.
+ * visible, and the rider's GPS position, with the loaded region outlined.
+ * Tapping the map snaps the point to the nearest road and marks it; two
+ * long-presses pick a start and an end and draw the fastest route between
+ * them. The map only picks, draws and hit-tests; routing and snapping belong
+ * to the Rust core.
  */
 @Composable
 fun MapScreen() {
@@ -95,6 +100,10 @@ fun MapScreen() {
     // Install (first start only) and open the bundled region off the main thread.
     LaunchedEffect(Unit) {
         region = withContext(Dispatchers.IO) { BundledRegion.open(context.applicationContext) }
+        message = when (val r = region) {
+            is RegionState.Ready -> resources.getString(R.string.map_hint)
+            else -> regionStatus(resources, r)
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -146,18 +155,72 @@ fun MapScreen() {
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
 
-    // Tap → snap → marker.
+    // Tap → snap → marker, as a debugging aid. Long-press → route start;
+    // the next long-press → route end, and the route is computed and drawn.
+    val scope = rememberCoroutineScope()
+    var routeStart by remember { mutableStateOf<LatLng?>(null) }
     DisposableEffect(map, style, region) {
         val m = map
         val s = style
         if (m == null || s == null) return@DisposableEffect onDispose {}
+        val ready = region as? RegionState.Ready
+        ready?.let { showRegionOutline(s, it.engine.info()) }
+        val routeOverlay = RouteOverlay(s)
         val marker = SnapMarker(s)
         val onClick = MapLibreMap.OnMapClickListener { tap ->
             message = snapAndMark(resources, region, tap, marker)
             true
         }
+        val onLongClick = MapLibreMap.OnMapLongClickListener { point ->
+            if (ready == null) {
+                message = regionStatus(resources, region)
+                return@OnMapLongClickListener true
+            }
+            val start = routeStart
+            if (start == null) {
+                // New start: check it lies on a road before keeping it.
+                val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
+                if (problem != null) {
+                    message = coreErrorMessage(resources, problem)
+                } else {
+                    routeStart = point
+                    routeOverlay.show(point, null, null)
+                    message = resources.getString(R.string.route_pick_end)
+                }
+            } else {
+                routeStart = null
+                routeOverlay.show(start, point, null)
+                message = resources.getString(R.string.route_computing)
+                scope.launch {
+                    val began = SystemClock.elapsedRealtime()
+                    val result = withContext(Dispatchers.Default) {
+                        runCatching {
+                            ready.engine.route(start.toLatLon(), point.toLatLon(), defaultRouteOptions())
+                        }
+                    }
+                    val ms = SystemClock.elapsedRealtime() - began
+                    message = result.fold(
+                        onSuccess = { r ->
+                            routeOverlay.show(start, point, r.geometry)
+                            resources.getString(
+                                R.string.route_result,
+                                r.distanceM / 1000,
+                                (r.durationS / 60).roundToInt(),
+                                ms,
+                            )
+                        },
+                        onFailure = { coreErrorMessage(resources, it) },
+                    )
+                }
+            }
+            true
+        }
         m.addOnMapClickListener(onClick)
-        onDispose { m.removeOnMapClickListener(onClick) }
+        m.addOnMapLongClickListener(onLongClick)
+        onDispose {
+            m.removeOnMapClickListener(onClick)
+            m.removeOnMapLongClickListener(onLongClick)
+        }
     }
 
     // Show the GPS position as soon as both the style and the permission are there.
@@ -213,9 +276,6 @@ fun MapScreen() {
 /** Snaps [tap] with the region's engine, draws the result and returns a line to show. */
 private fun snapAndMark(res: Resources, region: RegionState, tap: LatLng, marker: SnapMarker): String =
     when (region) {
-        RegionState.Loading -> res.getString(R.string.region_loading)
-        RegionState.Missing -> res.getString(R.string.region_missing)
-        is RegionState.Failed -> res.getString(R.string.region_failed, region.message)
         is RegionState.Ready -> try {
             val p = region.engine.snap(LatLon(tap.latitude, tap.longitude))
             marker.show(tap, LatLng(p.position.lat, p.position.lon))
@@ -225,13 +285,30 @@ private fun snapAndMark(res: Resources, region: RegionState, tap: LatLng, marker
                 p.edge.toLong(),
                 (p.offset * 100).roundToInt(),
             )
-        } catch (e: MotoException.NoRoadNearby) {
-            marker.show(tap, null)
-            e.message ?: res.getString(R.string.snap_error, e.toString())
         } catch (e: MotoException) {
-            res.getString(R.string.snap_error, e.message)
+            marker.show(tap, null)
+            coreErrorMessage(res, e)
         }
+        else -> regionStatus(res, region)
     }
+
+/** What to say while the region is not ready to use. */
+private fun regionStatus(res: Resources, region: RegionState): String = when (region) {
+    RegionState.Loading -> res.getString(R.string.region_loading)
+    RegionState.Missing -> res.getString(R.string.region_missing)
+    is RegionState.Failed -> res.getString(R.string.region_failed, region.message)
+    is RegionState.Ready -> res.getString(R.string.map_hint)
+}
+
+/** A short message for an error from the core. */
+private fun coreErrorMessage(res: Resources, e: Throwable): String = when (e) {
+    is MotoException.OutsideRegion -> res.getString(R.string.region_outside)
+    is MotoException.NoRoute -> res.getString(R.string.route_none)
+    is MotoException.NoRoadNearby -> e.message ?: e.toString()
+    else -> res.getString(R.string.snap_error, e.message ?: e.toString())
+}
+
+private fun LatLng.toLatLon() = LatLon(latitude, longitude)
 
 /**
  * Samples the map pixels behind the status bar and switches the status bar
