@@ -75,4 +75,4 @@ cd ../android
 
 ## Status
 
-M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation); Android shell (MapLibre + OpenFreeMap Liberty, GPS position, Rust core loaded via UniFFI; not yet verified on the phone). Next: the region file format (the PRD's blocking open question), then tap → snap → shortest path end-to-end.
+M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation); Android shell (MapLibre + OpenFreeMap Liberty, GPS position, Rust core loaded via UniFFI; verified on Stefan's phone); CI builds every push and publishes the debug APK as the `debug-latest` release. Next: the region file format (ADR-0005, proposed in Notion), then tap → snap → shortest path end-to-end.
