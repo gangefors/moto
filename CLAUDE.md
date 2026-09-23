@@ -46,6 +46,26 @@ docs/adr/               architecture decision records (index in README.md)
 - UI draws edge to edge, but interactive or informational elements (buttons, map controls, attribution, text) must never sit under the status bar, navigation bar or a display cutout; offset them by `WindowInsets.safeDrawing`. System bar icons must stay readable: keep the status bar fully transparent and switch its icons between light and dark to contrast with whatever is behind them, whatever the map style or overlay (like Google Maps); give the navigation bar a translucent scrim in the system theme's colour, with icons that follow that theme.
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
 
+## Security
+
+Security comes first: before performance, features and convenience. Never choose an insecure implementation because it is faster, simpler or quicker to ship; find a secure one or stop and raise it with Stefan.
+
+- Treat every input from outside the code as hostile: region files and other downloads, OSM data, GPX and other imports, network responses, intents and other apps, and user input. Validate it before use and reject it with a typed error. Malformed input must never crash, panic, read out of bounds or cause undefined behaviour.
+- Nothing may let an attacker run code or act as the app: no dynamic code loading, no eval or scripting of external data, no deserialising into arbitrary types, no shell commands built from input, no WebView JavaScript bridges, no file paths taken from input without normalising them against app storage (no path traversal).
+- Rust: no `unsafe` beyond what is unavoidable (today only creating the memory map). Every `unsafe` block carries a `SAFETY:` comment that says why it is sound. Data read zero-copy is validated before any code indexes it; use checked arithmetic and `get` on untrusted numbers.
+- Android: least privilege. Request only the permissions a feature needs, export no components except the launcher activity, allow no cleartext traffic, keep personal data (rides, locations, favourites) in app-private storage and on the device unless the rider opts in. No secrets in the repository or the APK.
+- Downloads go over HTTPS only and are verified (checksum or signature, then structure) before they are installed or opened.
+- Supply chain: keep dependencies few, AGPL-compatible and at least a week old (see Versions); check a new dependency's maintenance and `unsafe` use before adding it; pin GitHub Actions by commit SHA; CI tokens get the least permissions they need.
+- Vulnerability reports follow [`SECURITY.md`](SECURITY.md).
+
+## Testing and performance
+
+- **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
+- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally.
+- **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the M0 region: region open and verify, snapping, routing), scales the timings by a CPU calibration run, and compares them with the last `main` run. The job summary shows the table.
+- A metric more than 25 % slower is a significant regression and fails CI. Re-evaluate the implementation and try to recover the loss first. Accept a regression only when it buys something worth it (correctness, security, a feature), with a `Perf-Accepted: <reason>` trailer in the commit message and an entry in the decisions log. Improvements of more than 10 % are reported too; note them in the commit message.
+- Security beats performance: never accept an insecure change to win back speed.
+
 ## License
 
 AGPL-3.0-only with a CLA for outside contributions ([ADR-0004](docs/adr/0004-license-agpl-cla.md)).
