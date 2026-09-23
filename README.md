@@ -3,7 +3,7 @@
 General-purpose navigation apps optimise for speed and send motorcyclists onto motorways and straight arterials. moto is an Android route planner that prefers fun roads instead: capture your favourite road sections with a few taps (on the map, while riding, or from a recorded ride), and generate one-way and round-trip routes that deliberately pass through them and through curvy roads, within a detour budget you set. Routing runs offline on the phone in a Rust core, and routes export as GPX to your usual nav app.
 
 - Product requirements: [`docs/prd.md`](docs/prd.md)
-- Architecture decisions: [`docs/adr/`](docs/adr/) (log: [`docs/decisions.md`](docs/decisions.md))
+- Architecture decisions: [`docs/adr/`](docs/adr/)
 - Rust core: [`core/`](core/) — `cargo test --workspace`
 - Android app: [`android/`](android/) — `./gradlew assembleDebug` (builds the Rust core with cargo-ndk)
 - Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)

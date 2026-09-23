@@ -2,12 +2,18 @@
 
 Personal Android app (single rider, southern Sweden) that captures favourite road sections and generates one-way and round-trip routes that deliberately pass through favourites and curvy roads, within a detour budget. Routes export as GPX to an existing nav app — no built-in turn-by-turn.
 
-Read [`docs/prd.md`](docs/prd.md) and [`docs/adr/`](docs/adr/) before changing architecture; new architecture decisions need a new ADR. The running log of decisions is [`docs/decisions.md`](docs/decisions.md).
+Read [`docs/prd.md`](docs/prd.md) and [`docs/adr/`](docs/adr/) before changing architecture; new architecture decisions need a new ADR.
+
+Things that change often live in Notion, not in the repo (use the Notion tools; the pages are private to Stefan):
+
+- **Decisions log** ([Moto — Decisions log](https://app.notion.com/p/3e314874ab0481ef90accad5adb6da90)): every product, architecture and process decision, newest last. It is the only log; there is no copy in `docs/`.
+- **Milestones & status** ([Moto — Milestones & status](https://app.notion.com/p/3e414874ab0481a694dbcb4edd13fbcb)): M0–M4 progress, the next task, and small carry-over items. Read it at the start of a task; update it when work lands (tick items, add commit links, set **Next**).
+- **Handoff queue** ([Moto — Handoff to Claude Code](https://app.notion.com/p/3e314874ab0481bc9ca8f9e0d56acc52)): work decided in Cowork. Do the items under Pending and move them to Done with their commit links.
 
 ## Decisions
 
-- **App:** native Android in Kotlin; iOS deferred ([decisions log](docs/decisions.md), [PRD](docs/prd.md)).
-- **Shared core:** Rust, bound to Kotlin via UniFFI and built with cargo-ndk; kept free of Android types for a later iOS port ([decisions log](docs/decisions.md), [ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
+- **App:** native Android in Kotlin; iOS deferred ([decisions log](https://app.notion.com/p/3e314874ab0481ef90accad5adb6da90), [PRD](docs/prd.md)).
+- **Shared core:** Rust, bound to Kotlin via UniFFI and built with cargo-ndk; kept free of Android types for a later iOS port ([decisions log](https://app.notion.com/p/3e314874ab0481ef90accad5adb6da90), [ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
 - **Routing and snapping:** custom Rust engine, on-device and offline; the cost function (curvature + favourites) is the product ([ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
 - **Region file:** 4 KiB-aligned binary sections, memory-mapped and read zero-copy (`memmap2` + `bytemuck`); curvature stored as metrics and scored at query time; grid index for snapping; OSM way ids kept for saved sections ([ADR-0005](docs/adr/0005-region-file-format.md)).
 - **Map:** MapLibre Native Android ([ADR-0002](docs/adr/0002-map-widget-maplibre-native.md)) with OpenFreeMap tiles, style URL in config, attribution visible ([ADR-0003](docs/adr/0003-map-tiles-openfreemap.md)). The map only picks, draws and hit-tests; it never routes or snaps.
@@ -24,7 +30,6 @@ core/                   cargo workspace
   moto-regionbuild/     CLI: OSM extract → region file (never runs on the phone)
 android/                Gradle project (AGP 9, Compose); app/ builds the core via cargo-ndk
 docs/prd.md             product requirements (v1)
-docs/decisions.md       decisions log
 docs/adr/               architecture decision records (index in README.md)
 ```
 
@@ -35,9 +40,9 @@ docs/adr/               architecture decision records (index in README.md)
 - Keep the FFI surface coarse (whole request in, whole result out). Errors cross as the typed `MotoError`; never let a panic cross the boundary.
 - Favourites are applied at query time as a **capped bonus** on edge costs; the base graph is never rebuilt when favourites change.
 - Sections carry a `rider_id` (always the local user in v1) so community ratings can be added later.
-- Record significant new decisions as an ADR in `docs/adr/`, and add new rules and decisions to the Notion decisions log as well as `docs/decisions.md`.
+- Record significant new architecture decisions as an ADR in `docs/adr/`. Add every new rule or decision (ADR or not) to the Notion decisions log; don't keep a decisions log or progress notes in the repo.
 - Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping.
-- Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, `docs/decisions.md`, ADRs) go in their own commits, separate from code changes.
+- Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, ADRs) go in their own commits, separate from code changes.
 - UI draws edge to edge, but interactive or informational elements (buttons, map controls, attribution, text) must never sit under the status bar, navigation bar or a display cutout; offset them by `WindowInsets.safeDrawing`. System bar icons must stay readable: keep the status bar fully transparent and switch its icons between light and dark to contrast with whatever is behind them, whatever the map style or overlay (like Google Maps); give the navigation bar a translucent scrim in the system theme's colour, with icons that follow that theme.
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
 
@@ -73,7 +78,3 @@ cargo ndk -t arm64-v8a -t x86_64 -o ../android/app/src/main/jniLibs build --rele
 cd ../android
 ./gradlew assembleDebug lintDebug testDebugUnitTest
 ```
-
-## Status
-
-M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation); Android shell (MapLibre + OpenFreeMap Liberty, GPS position, Rust core loaded via UniFFI; verified on Stefan's phone); CI builds every push and publishes the debug APK as the `debug-latest` release. Region file format decided ([ADR-0005](docs/adr/0005-region-file-format.md)). Next: region reader in `moto-core`, then `moto-regionbuild` on the Sweden extract (Skåne bounding box), then tap → snap → shortest path end-to-end.
