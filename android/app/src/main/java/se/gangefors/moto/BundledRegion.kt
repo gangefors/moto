@@ -44,7 +44,7 @@ object BundledRegion {
         val installed = File(dir, FILE)
         val stamp = File(dir, "$FILE.stamp")
         val version = appVersionStamp(context)
-        if (!installed.isFile || stamp.takeIf { it.isFile }?.readText() != version) {
+        if (needsInstall(installed.isFile, stamp.takeIf { it.isFile }?.readText(), version)) {
             install(context, installed)
             stamp.writeText(version)
         }
