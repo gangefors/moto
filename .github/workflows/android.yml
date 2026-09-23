@@ -111,11 +111,14 @@ jobs:
           core/target/release/moto-regionbuild "$pbf" "$RUNNER_TEMP/moto-region/m0.region"
           rm "$pbf"
 
+      # Two runs; the comparison keeps each metric's faster result.
       - name: Benchmark
         run: |
           mkdir -p "$RUNNER_TEMP/bench"
-          core/target/release/moto-regionbuild --check "$RUNNER_TEMP/moto-region/m0.region" \
-            --json "$RUNNER_TEMP/bench/current.json"
+          for run in 1 2; do
+            core/target/release/moto-regionbuild --check "$RUNNER_TEMP/moto-region/m0.region" \
+              --json "$RUNNER_TEMP/bench/run$run.json"
+          done
 
       # The latest main result is the baseline (caches from main are also
       # visible to pull requests).
@@ -132,14 +135,16 @@ jobs:
           ACCEPTED: ${{ contains(github.event.head_commit.message, 'Perf-Accepted:') || contains(github.event.pull_request.body, 'Perf-Accepted:') }}
         run: |
           python3 .github/scripts/bench_compare.py \
-            "$RUNNER_TEMP/bench-baseline/baseline.json" "$RUNNER_TEMP/bench/current.json" \
+            "$RUNNER_TEMP/bench-baseline/baseline.json" "$RUNNER_TEMP"/bench/run*.json \
             --summary "$GITHUB_STEP_SUMMARY" $([ "$ACCEPTED" = true ] && echo --accepted)
 
       - name: Store the new baseline
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p "$RUNNER_TEMP/bench-baseline"
-          cp "$RUNNER_TEMP/bench/current.json" "$RUNNER_TEMP/bench-baseline/baseline.json"
+          python3 -c 'import json, sys; sys.path.insert(0, ".github/scripts"); import bench_compare as bc; \
+            print(json.dumps(bc.fastest(bc.load(p) for p in sys.argv[1:]), indent=2))' \
+            "$RUNNER_TEMP"/bench/run*.json > "$RUNNER_TEMP/bench-baseline/baseline.json"
 
       # v6.1.0
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
