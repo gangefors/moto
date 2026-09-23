@@ -9,10 +9,11 @@ Read [`docs/prd.md`](docs/prd.md) and [`docs/adr/`](docs/adr/) before changing a
 - **App:** native Android in Kotlin; iOS deferred ([decisions log](docs/decisions.md), [PRD](docs/prd.md)).
 - **Shared core:** Rust, bound to Kotlin via UniFFI and built with cargo-ndk; kept free of Android types for a later iOS port ([decisions log](docs/decisions.md), [ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
 - **Routing and snapping:** custom Rust engine, on-device and offline; the cost function (curvature + favourites) is the product ([ADR-0001](docs/adr/0001-routing-engine-custom-rust-on-device.md)).
+- **Region file:** 4 KiB-aligned binary sections, memory-mapped and read zero-copy (`memmap2` + `bytemuck`); curvature stored as metrics and scored at query time; grid index for snapping; OSM way ids kept for saved sections ([ADR-0005](docs/adr/0005-region-file-format.md)).
 - **Map:** MapLibre Native Android ([ADR-0002](docs/adr/0002-map-widget-maplibre-native.md)) with OpenFreeMap tiles, style URL in config, attribution visible ([ADR-0003](docs/adr/0003-map-tiles-openfreemap.md)). The map only picks, draws and hit-tests; it never routes or snaps.
 - **License:** AGPL-3.0-only with a CLA for outside contributions ([ADR-0004](docs/adr/0004-license-agpl-cla.md)); see the License rules below.
 
-Data flow: OSM extract (Geofabrik, Skåne first) → `moto-regionbuild` (desktop/CI) → region file → loaded by the Rust core on the phone → `snap` / `route` / `round_trip` via UniFFI → GeoJSON → MapLibre line layers.
+Data flow: OSM extract (Geofabrik Sweden, Skåne cut out first) → `moto-regionbuild` (desktop/CI) → region file → loaded by the Rust core on the phone → `snap` / `route` / `round_trip` via UniFFI → GeoJSON → MapLibre line layers.
 
 ## Layout
 
@@ -75,4 +76,4 @@ cd ../android
 
 ## Status
 
-M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation); Android shell (MapLibre + OpenFreeMap Liberty, GPS position, Rust core loaded via UniFFI; verified on Stefan's phone); CI builds every push and publishes the debug APK as the `debug-latest` release. Next: the region file format (ADR-0005, proposed in Notion), then tap → snap → shortest path end-to-end.
+M0 (Foundations) in progress. Done: PRD, decisions log and ADR-0001–0004 in `docs/`; AGPL-3.0-only license + CLA setup; Rust workspace skeleton with the ADR-0001 API (`Engine::open/snap/route/round_trip` return `NotImplemented` after input validation); Android shell (MapLibre + OpenFreeMap Liberty, GPS position, Rust core loaded via UniFFI; verified on Stefan's phone); CI builds every push and publishes the debug APK as the `debug-latest` release. Region file format decided ([ADR-0005](docs/adr/0005-region-file-format.md)). Next: region reader in `moto-core`, then `moto-regionbuild` on the Sweden extract (Skåne bounding box), then tap → snap → shortest path end-to-end.
