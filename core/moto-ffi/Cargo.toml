@@ -22,3 +22,6 @@ cli = ["uniffi/cli"]
 moto-core.workspace = true
 thiserror.workspace = true
 uniffi.workspace = true
+
+[dev-dependencies]
+moto-core = { workspace = true, features = ["fixtures"] }

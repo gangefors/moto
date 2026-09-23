@@ -11,3 +11,7 @@ bytemuck.workspace = true
 crc32fast.workspace = true
 memmap2.workspace = true
 thiserror.workspace = true
+
+[features]
+# Hand-made test regions (`moto_core::fixture`), for other crates' tests.
+fixtures = []

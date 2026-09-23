@@ -6,34 +6,34 @@
 //!
 //! Reads a `.osm.pbf` (e.g. Geofabrik's Sweden extract), keeps the
 //! motorcycle-routable ways inside a bounding box (Skåne and its
-//! neighbourhood by default), builds
-//! the routing graph and writes the region file. `--check` opens an existing
-//! file and measures verification, open and snap times.
+//! neighbourhood by default), builds the routing graph and writes the region
+//! file. `--check` verifies an existing file and benchmarks it; CI compares
+//! its `--json` output between builds.
 
+mod bench;
 mod graph;
 mod hilbert;
+mod pbf;
 mod tags;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use moto_core::region::format::{BBoxE7, PointE7, RoadClass, Surface};
-use moto_core::region::{Region, RegionInfo};
+use moto_core::region::format::{RoadClass, Surface};
+use moto_core::region::{RegionData, RegionInfo};
 use moto_core::{Engine, LatLon};
-use osmpbf::{BlobDecode, BlobReader, Element};
-use rayon::prelude::*;
 
-use graph::{NodeIndex, RawWay};
+use graph::{GraphStats, NodeIndex};
 
 const USAGE: &str = "\
 usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
-       moto-regionbuild --check <file.region> [LAT,LON ...]
+       moto-regionbuild --check <file.region> [--json <out.json>] [LAT,LON ...]
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
-  --check  verify checksums, time opening and snapping, and snap the
-           given points";
+  --check  verify checksums, benchmark opening, snapping and routing, and
+           snap the given points; --json also writes the numbers as JSON";
 
 /// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
 /// half of Halland, southern Småland and western Blekinge, from Trelleborg
@@ -44,9 +44,6 @@ const SKANE_BBOX: [f64; 4] = [55.28, 12.20, 56.72, 15.05];
 /// the cells of a 550 m grid add 1 MiB and make snapping in towns 3× faster.
 const GRID_CELL_E7: (i32, i32) = (25_000, 45_000);
 
-/// Random start/end pairs timed by `--check`.
-const ROUTE_PAIRS: usize = 100;
-
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "-h" || a == "--help") {
@@ -54,10 +51,15 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let result = match args.as_slice() {
-        [flag, file, probes @ ..] if flag == "--check" => check(Path::new(file), probes),
-        [input, output] => build(input.into(), output.into(), SKANE_BBOX),
+        [flag, file, rest @ ..] if flag == "--check" => match rest {
+            [json, out, probes @ ..] if json == "--json" => {
+                check(Path::new(file), Some(Path::new(out)), probes)
+            }
+            probes => check(Path::new(file), None, probes),
+        },
+        [input, output] => build(Path::new(input), Path::new(output), SKANE_BBOX),
         [input, output, flag, bbox] if flag == "--bbox" => match parse_bbox(bbox) {
-            Some(b) => build(input.into(), output.into(), b),
+            Some(b) => build(Path::new(input), Path::new(output), b),
             None => Err(format!("bad --bbox '{bbox}', expected S,W,N,E in degrees")),
         },
         _ => {
@@ -89,77 +91,14 @@ fn parse_bbox(s: &str) -> Option<[f64; 4]> {
     ok.then_some(b)
 }
 
-/// What one PBF blob contributes.
-#[derive(Default)]
-struct BlobOut {
-    nodes: Vec<(i64, PointE7)>,
-    ways: Vec<RawWay>,
-    timestamp: Option<i64>,
-}
-
-fn read_pbf(path: &Path, bbox: &BBoxE7) -> Result<BlobOut, String> {
-    let reader = BlobReader::from_path(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let inside = |lat: i32, lon: i32| {
-        (bbox.min_lat..=bbox.max_lat).contains(&lat) && (bbox.min_lon..=bbox.max_lon).contains(&lon)
-    };
-    let parts: Vec<BlobOut> = reader
-        .par_bridge()
-        .map(|blob| -> Result<BlobOut, String> {
-            let blob = blob.map_err(|e| e.to_string())?;
-            let mut out = BlobOut::default();
-            match blob.decode().map_err(|e| e.to_string())? {
-                BlobDecode::OsmHeader(h) => out.timestamp = h.osmosis_replication_timestamp(),
-                BlobDecode::OsmData(block) => block.for_each_element(|el| match el {
-                    Element::DenseNode(n) => {
-                        let (lat, lon) = (n.decimicro_lat(), n.decimicro_lon());
-                        if inside(lat, lon) {
-                            out.nodes.push((n.id(), PointE7 { lat, lon }));
-                        }
-                    }
-                    Element::Node(n) => {
-                        let (lat, lon) = (n.decimicro_lat(), n.decimicro_lon());
-                        if inside(lat, lon) {
-                            out.nodes.push((n.id(), PointE7 { lat, lon }));
-                        }
-                    }
-                    Element::Way(w) => {
-                        let tags: Vec<(&str, &str)> = w.tags().collect();
-                        if let Some(attrs) = tags::classify(&tags) {
-                            out.ways.push(RawWay {
-                                id: w.id(),
-                                refs: w.refs().collect(),
-                                attrs,
-                            });
-                        }
-                    }
-                    Element::Relation(_) => {}
-                }),
-                BlobDecode::Unknown(_) => {}
-            }
-            Ok(out)
-        })
-        .collect::<Result<_, _>>()?;
-
-    let mut all = BlobOut::default();
-    for mut p in parts {
-        all.nodes.append(&mut p.nodes);
-        all.ways.append(&mut p.ways);
-        all.timestamp = all.timestamp.or(p.timestamp);
-    }
-    // Blob order is lost in parallel; keep the output deterministic.
-    all.ways.sort_unstable_by_key(|w| w.id);
-    Ok(all)
-}
-
-fn build(input: PathBuf, output: PathBuf, b: [f64; 4]) -> Result<(), String> {
+/// Reads the extract and builds the region content for bounding box `b`.
+fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), String> {
     if !input.is_file() {
         return Err(format!("input not found: {}", input.display()));
     }
-    let start = Instant::now();
     let bbox = graph::bbox_e7(b[0], b[1], b[2], b[3]);
-
     let t = Instant::now();
-    let osm = read_pbf(&input, &bbox)?;
+    let osm = pbf::read(input, &bbox)?;
     eprintln!(
         "read      {:>7.1} s  {} nodes in bbox, {} routable ways (whole file)",
         t.elapsed().as_secs_f64(),
@@ -180,7 +119,6 @@ fn build(input: PathBuf, output: PathBuf, b: [f64; 4]) -> Result<(), String> {
     };
     let index = NodeIndex::new(osm.nodes);
     let (data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7);
-    drop(index);
     eprintln!(
         "graph     {:>7.1} s  {} ways in bbox → {} nodes, {} edges, {} geometries, {} shape points",
         t.elapsed().as_secs_f64(),
@@ -190,10 +128,15 @@ fn build(input: PathBuf, output: PathBuf, b: [f64; 4]) -> Result<(), String> {
         stats.segments,
         stats.shape_points
     );
+    Ok((data, stats))
+}
 
+fn build(input: &Path, output: &Path, b: [f64; 4]) -> Result<(), String> {
+    let start = Instant::now();
+    let (data, _) = build_region(input, b)?;
     let t = Instant::now();
     let bytes = data.to_bytes().map_err(|e| e.to_string())?;
-    std::fs::write(&output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
+    std::fs::write(output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
     eprintln!(
         "write     {:>7.1} s  {} ({:.1} MiB)",
         t.elapsed().as_secs_f64(),
@@ -208,148 +151,53 @@ fn build(input: PathBuf, output: PathBuf, b: [f64; 4]) -> Result<(), String> {
     Ok(())
 }
 
-/// Opens a region file and reports what the phone will care about.
-fn check(path: &Path, probes: &[String]) -> Result<(), String> {
-    let size = std::fs::metadata(path)
-        .map_err(|e| format!("{}: {e}", path.display()))?
-        .len();
-    let t = Instant::now();
-    moto_core::region::verify_file(path).map_err(|e| e.to_string())?;
-    let verify = t.elapsed();
-
-    let t = Instant::now();
-    let region = Region::open(path).map_err(|e| e.to_string())?;
-    let open = t.elapsed();
-
-    let info = region.info().clone();
-    let (nodes, edges) = (region.node_count(), region.edge_count());
-    let grid = *region.grid_meta();
-    let engine = Engine::from_region(region);
-
-    // Snap pseudo-random points spread over the bounding box.
-    let b = info.bbox;
-    let mut state = 0x9e37_79b9_7f4a_7c15u64;
-    let mut rnd = move || {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        (state >> 11) as f64 / (1u64 << 53) as f64
-    };
-    let points: Vec<LatLon> = (0..10_000)
-        .map(|_| LatLon {
-            lat: (f64::from(b.min_lat) + rnd() * f64::from(b.max_lat - b.min_lat)) / 1e7,
-            lon: (f64::from(b.min_lon) + rnd() * f64::from(b.max_lon - b.min_lon)) / 1e7,
-        })
-        .collect();
-    let t = Instant::now();
-    let snapped = points.iter().filter(|&&p| engine.snap(p).is_ok()).count();
-    let snap = t.elapsed();
-
-    println!(
-        "file      {} ({:.1} MiB)",
-        path.display(),
-        size as f64 / (1024.0 * 1024.0)
-    );
-    println!(
-        "source    {} (OSM timestamp {})",
-        info.source_name, info.osm_timestamp
-    );
-    println!("builder   {}", info.builder_version);
-    println!(
-        "graph     {nodes} nodes, {edges} edges; grid {}×{} cells",
-        grid.rows, grid.cols
-    );
-    println!(
-        "verify    {:.1} ms (CRC32 + structure)",
-        verify.as_secs_f64() * 1e3
-    );
-    println!(
-        "open      {:.1} ms (map + structure)",
-        open.as_secs_f64() * 1e3
-    );
-    println!(
-        "snap      {:.1} µs mean over {} random points, {} within {} m of a road",
-        snap.as_secs_f64() * 1e6 / points.len() as f64,
-        points.len(),
-        snapped,
-        moto_core::SNAP_MAX_DISTANCE_M
-    );
-
-    // Route between pairs of the random points that are on roads.
-    let on_road: Vec<LatLon> = points
+/// Verifies and benchmarks a region file, optionally writes the numbers as
+/// JSON, and snaps the given points.
+fn check(path: &Path, json: Option<&Path>, probes: &[String]) -> Result<(), String> {
+    let points: Vec<LatLon> = probes
         .iter()
-        .copied()
-        .filter(|&p| engine.snap(p).is_ok())
-        .take(2 * ROUTE_PAIRS)
-        .collect();
-    let opts = moto_core::RouteOptions::default();
-    let anything = moto_core::RouteOptions {
-        avoid: moto_core::Avoid {
-            motorways: false,
-            unpaved: false,
-            ferries: false,
-        },
-        ..opts.clone()
-    };
-    let mut times = Vec::new();
-    let (mut found, mut found_any) = (0, 0);
-    let mut km = 0.0;
-    for pair in on_road.chunks_exact(2) {
-        let t = Instant::now();
-        if let Ok(r) = engine.route(pair[0], pair[1], &opts) {
-            found += 1;
-            km += r.distance_m / 1000.0;
-        }
-        times.push(t.elapsed().as_secs_f64() * 1e3);
-        match engine.route(pair[0], pair[1], &anything) {
-            Ok(_) => found_any += 1,
-            Err(e) => println!(
-                "no route  {:.5},{:.5} → {:.5},{:.5}: {e}",
-                pair[0].lat, pair[0].lon, pair[1].lat, pair[1].lon
-            ),
-        }
+        .map(|p| parse_point(p).ok_or_else(|| format!("bad point '{p}', expected LAT,LON")))
+        .collect::<Result<_, _>>()?;
+    let report = bench::run(path)?;
+    for line in report.lines() {
+        println!("{line}");
     }
-    if !times.is_empty() {
-        times.sort_by(f64::total_cmp);
-        println!(
-            "route     {:.1} ms mean, {:.1} ms median, {:.1} ms max over {} random pairs; \
-             {found} found with the default options ({found_any} avoiding nothing), \
-             mean {:.1} km",
-            times.iter().sum::<f64>() / times.len() as f64,
-            times[times.len() / 2],
-            times[times.len() - 1],
-            times.len(),
-            km / f64::from(found.max(1)),
-        );
+    if let Some(out) = json {
+        std::fs::write(out, report.to_json()).map_err(|e| format!("{}: {e}", out.display()))?;
     }
-
-    for probe in probes {
-        let p =
-            parse_point(probe).ok_or_else(|| format!("bad point '{probe}', expected LAT,LON"))?;
-        match engine.snap(p) {
-            Ok(r) => {
-                let region = engine.region();
-                let e = region.edges()[r.edge as usize];
-                let w = region.way_refs()[r.edge as usize];
-                println!(
-                    "snap {probe}: {:.6},{:.6} ({:.1} m) edge {} offset {:.3}, way {} [{}..{}], {:?} {:?} {} km/h",
-                    r.position.lat,
-                    r.position.lon,
-                    r.distance_m,
-                    r.edge,
-                    r.offset,
-                    w.way_id,
-                    w.from_idx,
-                    w.to_idx,
-                    RoadClass::from_u8(e.class),
-                    Surface::from_u8(e.surface),
-                    e.speed_kmh
-                );
-            }
-            Err(e) => println!("snap {probe}: {e}"),
+    if !points.is_empty() {
+        let engine = Engine::open(path).map_err(|e| e.to_string())?;
+        for (probe, p) in probes.iter().zip(points) {
+            println!("snap {probe}: {}", describe_snap(&engine, p));
         }
     }
     Ok(())
+}
+
+/// Where `p` snaps to, with the road's OSM way and attributes.
+fn describe_snap(engine: &Engine, p: LatLon) -> String {
+    match engine.snap(p) {
+        Ok(r) => {
+            let region = engine.region();
+            let e = region.edges()[r.edge as usize];
+            let w = region.way_refs()[r.edge as usize];
+            format!(
+                "{:.6},{:.6} ({:.1} m) edge {} offset {:.3}, way {} [{}..{}], {:?} {:?} {} km/h",
+                r.position.lat,
+                r.position.lon,
+                r.distance_m,
+                r.edge,
+                r.offset,
+                w.way_id,
+                w.from_idx,
+                w.to_idx,
+                RoadClass::from_u8(e.class),
+                Surface::from_u8(e.surface),
+                e.speed_kmh
+            )
+        }
+        Err(e) => e.to_string(),
+    }
 }
 
 fn parse_point(s: &str) -> Option<LatLon> {
@@ -365,9 +213,50 @@ fn peak_memory() -> Option<String> {
     Some(format!("{:.0} MiB", kb / 1024.0))
 }
 
+/// Shared test helpers: the committed PBF fixture and a region built from it.
+#[cfg(test)]
+mod test_support {
+    use std::path::{Path, PathBuf};
+
+    /// A tiny extract of central Lund (see tests/fixtures/README.md).
+    pub const FIXTURE: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/lund-centre.osm.pbf"
+    );
+    /// The box the fixture was cut to.
+    pub const FIXTURE_BBOX: [f64; 4] = [55.7040, 13.1900, 55.7060, 13.1940];
+
+    /// A file removed when dropped.
+    pub struct TempFile(PathBuf);
+
+    impl TempFile {
+        pub fn new(name: &str) -> Self {
+            Self(std::env::temp_dir().join(format!("moto-rb-{name}-{}", std::process::id())))
+        }
+
+        pub fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    /// The fixture built into a region file.
+    pub fn built_fixture(name: &str) -> TempFile {
+        let file = TempFile::new(name);
+        super::build(Path::new(FIXTURE), file.path(), FIXTURE_BBOX).unwrap();
+        file
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_support::{FIXTURE, FIXTURE_BBOX, TempFile, built_fixture};
 
     #[test]
     fn parses_bbox() {
@@ -379,5 +268,120 @@ mod tests {
         assert_eq!(parse_bbox("1,2,3"), None);
         assert_eq!(parse_bbox("a,b,c,d"), None);
         assert_eq!(parse_bbox("0,-200,1,0"), None);
+    }
+
+    #[test]
+    fn parses_points() {
+        let p = parse_point(" 55.7, 13.19 ").unwrap();
+        assert_eq!((p.lat, p.lon), (55.7, 13.19));
+        assert!(parse_point("55.7").is_none());
+        assert!(parse_point("91,0").is_none());
+        assert!(parse_point("x,y").is_none());
+    }
+
+    #[test]
+    fn builds_a_working_region_from_osm_data() {
+        let file = built_fixture("e2e");
+        moto_core::region::verify_file(file.path()).unwrap();
+        let engine = Engine::open(file.path()).unwrap();
+        let info = engine.region().info();
+        assert_eq!(info.osm_timestamp, 1_790_108_579);
+        assert!(
+            info.source_name.starts_with("lund-centre.osm.pbf ["),
+            "{}",
+            info.source_name
+        );
+        assert!(info.builder_version.starts_with("moto-regionbuild "));
+        assert_eq!(
+            (engine.region().node_count(), engine.region().edge_count()),
+            (10, 16)
+        );
+
+        // A residential street with sett paving in the fixture.
+        let snapped = describe_snap(
+            &engine,
+            LatLon {
+                lat: 55.7050,
+                lon: 13.1920,
+            },
+        );
+        assert!(snapped.contains("way 79664841"), "{snapped}");
+        assert!(
+            snapped.contains("Residential") && snapped.contains("Sett"),
+            "{snapped}"
+        );
+        let outside = describe_snap(
+            &engine,
+            LatLon {
+                lat: 55.8,
+                lon: 13.3,
+            },
+        );
+        assert!(outside.contains("outside the loaded region"), "{outside}");
+
+        let route = engine
+            .route(
+                LatLon {
+                    lat: 55.7043,
+                    lon: 13.1905,
+                },
+                LatLon {
+                    lat: 55.7057,
+                    lon: 13.1935,
+                },
+                &moto_core::RouteOptions::default(),
+            )
+            .unwrap();
+        assert!(
+            route.distance_m > 150.0 && route.distance_m < 1_000.0,
+            "{route:?}"
+        );
+    }
+
+    #[test]
+    fn cuts_ways_at_the_bounding_box() {
+        let (whole, whole_stats) = build_region(Path::new(FIXTURE), FIXTURE_BBOX).unwrap();
+        let (half, half_stats) =
+            build_region(Path::new(FIXTURE), [55.7040, 13.1900, 55.7050, 13.1940]).unwrap();
+        assert!(half_stats.edges < whole_stats.edges);
+        let north = |d: &RegionData| d.shape_points.iter().map(|p| p.lat).max().unwrap();
+        assert!(north(&half) <= 557_050_000 && north(&whole) > 557_050_000);
+    }
+
+    #[test]
+    fn build_errors_are_reported() {
+        let out = TempFile::new("never");
+        let err = build(
+            Path::new("/definitely/not/here.osm.pbf"),
+            out.path(),
+            FIXTURE_BBOX,
+        )
+        .unwrap_err();
+        assert!(err.contains("input not found"), "{err}");
+        let err = build(
+            Path::new(FIXTURE),
+            Path::new("/definitely/not/a/dir/x.region"),
+            FIXTURE_BBOX,
+        )
+        .unwrap_err();
+        assert!(err.contains("x.region"), "{err}");
+    }
+
+    #[test]
+    fn check_writes_json_and_rejects_bad_points() {
+        let file = built_fixture("check");
+        let json = TempFile::new("check.json");
+        check(file.path(), Some(json.path()), &["55.705,13.192".into()]).unwrap();
+        let text = std::fs::read_to_string(json.path()).unwrap();
+        assert!(text.contains("\"route_ms_p95\""), "{text}");
+        assert!(check(file.path(), None, &["nonsense".into()]).is_err());
+        assert!(check(Path::new("/definitely/not/here.region"), None, &[]).is_err());
+    }
+
+    #[test]
+    fn reports_peak_memory_on_linux() {
+        if cfg!(target_os = "linux") {
+            assert!(peak_memory().unwrap().ends_with("MiB"));
+        }
     }
 }

@@ -13,8 +13,8 @@
 pub mod curvature;
 mod engine;
 mod error;
-#[cfg(test)]
-mod fixture;
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixture;
 pub mod geo;
 pub mod region;
 mod route;

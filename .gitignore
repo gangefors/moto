@@ -4,6 +4,8 @@
 # Region files and OSM extracts are build outputs / large downloads
 *.osm.pbf
 *.region
+# except the tiny committed test extract
+!/core/moto-regionbuild/tests/fixtures/*.osm.pbf
 
 # Android
 /android/.gradle/
