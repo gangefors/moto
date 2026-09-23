@@ -8,3 +8,5 @@ publish.workspace = true
 
 [dependencies]
 moto-core.workspace = true
+osmpbf.workspace = true
+rayon.workspace = true

@@ -8,12 +8,19 @@
 //! Bindings live in the separate `moto-ffi` crate; this crate has no FFI
 //! attributes.
 
+#![deny(unsafe_code)]
+
+pub mod curvature;
 mod engine;
 mod error;
+#[cfg(test)]
+mod fixture;
 pub mod geo;
+pub mod region;
+mod snap;
 mod types;
 
-pub use engine::Engine;
+pub use engine::{Engine, SNAP_MAX_DISTANCE_M};
 pub use error::CoreError;
 pub use geo::LatLon;
 pub use types::{Avoid, RoadPoint, RoundTripTarget, Route, RouteOptions};

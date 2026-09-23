@@ -8,7 +8,12 @@ license = "AGPL-3.0-only"
 publish = false
 
 [workspace.dependencies]
+bytemuck = { version = "1.25.2", features = ["derive", "min_const_generics"] }
+crc32fast = "1.5.2"
+memmap2 = "0.9.11"
 moto-core = { path = "moto-core" }
+osmpbf = "0.3.8"
+rayon = "1.12.0"
 thiserror = "2"
 uniffi = "0.32"
 
