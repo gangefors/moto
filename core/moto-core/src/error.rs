@@ -14,6 +14,9 @@ pub enum CoreError {
     #[error("region file error: {0}")]
     Region(String),
 
+    #[error("storage error: {0}")]
+    Storage(String),
+
     #[error("{lat:.5}, {lon:.5} is outside the loaded region")]
     OutsideRegion { lat: f64, lon: f64 },
 
