@@ -66,8 +66,25 @@ fn point_index(line: &[LatLon], frac: f64, round_up: bool) -> usize {
     line.len().saturating_sub(1)
 }
 
-/// Builds a draft from path pieces (in travel order).
+/// Builds a draft from path pieces (in travel order), refusing one too
+/// small or too big to save as a section.
 pub(crate) fn from_path(region: &Region, parts: &[Partial]) -> Result<SectionDraft, CoreError> {
+    let draft = trace(region, parts);
+    if draft.geometry.len() < 2 || draft.distance_m <= 0.0 {
+        return Err(CoreError::InvalidArgument(
+            "pick two different points along the road".into(),
+        ));
+    }
+    if draft.geometry.len() > MAX_SECTION_POINTS || draft.ways.len() > MAX_SECTION_WAYS {
+        return Err(CoreError::InvalidArgument(
+            "that stretch is too long for one section".into(),
+        ));
+    }
+    Ok(draft)
+}
+
+/// The OSM way spans, geometry and length of path pieces (in travel order).
+pub(crate) fn trace(region: &Region, parts: &[Partial]) -> SectionDraft {
     let mut ways: Vec<WaySpan> = Vec::new();
     let mut geometry: Vec<LatLon> = Vec::new();
     let mut distance_m = 0.0;
@@ -117,21 +134,11 @@ pub(crate) fn from_path(region: &Region, parts: &[Partial]) -> Result<SectionDra
             _ => ways.push(span),
         }
     }
-    if geometry.len() < 2 || distance_m <= 0.0 {
-        return Err(CoreError::InvalidArgument(
-            "pick two different points along the road".into(),
-        ));
-    }
-    if geometry.len() > MAX_SECTION_POINTS || ways.len() > MAX_SECTION_WAYS {
-        return Err(CoreError::InvalidArgument(
-            "that stretch is too long for one section".into(),
-        ));
-    }
-    Ok(SectionDraft {
+    SectionDraft {
         ways,
         geometry,
         distance_m,
-    })
+    }
 }
 
 #[cfg(test)]

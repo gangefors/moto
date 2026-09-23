@@ -12,7 +12,8 @@ fastest.
 
 A significant regression makes the script exit with status 1, unless
 --accepted is given (the commit carries a `Perf-Accepted:` trailer):
-more than 25 % slower for the CPU-bound snapping and routing, and more
+more than 25 % slower for the CPU-bound snapping, routing and map
+matching, and more
 than 50 % and 5 ms slower for the short verify and open timings, which
 depend on memory and disk and vary more between CI machines. See
 "Testing and performance" in CLAUDE.md.
@@ -32,6 +33,7 @@ METRICS = [
     ("snap_us_mean", "Snap, mean", 1.25, 0.0),
     ("route_ms_mean", "Route, mean", 1.25, 0.0),
     ("route_ms_p95", "Route, p95", 1.25, 0.0),
+    ("match_ms_per_km", "Map matching, per km", 1.25, 0.0),
 ]
 WARNING = 1.10
 IMPROVEMENT = 0.90

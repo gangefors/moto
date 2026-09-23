@@ -3,7 +3,8 @@
 
 //! Snapping a point to the nearest road through the region's grid index.
 
-use std::collections::HashSet;
+use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
 
 use crate::geo::{EARTH_RADIUS_M, haversine_m};
 use crate::region::Region;
@@ -27,17 +28,19 @@ struct Best {
     t: f64,
 }
 
-/// Nearest point on any edge within `max_distance_m`, ferries excluded.
-///
-/// Scans grid cells in square rings around the point's cell and stops once
-/// no unscanned cell can hold anything closer than the best match so far.
-pub(crate) fn snap(
+/// Scans grid cells in square rings around `point` out to `max_distance_m`
+/// and calls `visit` with the nearest point of every segment of every
+/// non-ferry edge found (edge, segment, position along it, distance in
+/// metres), each edge once. `done` gets the distance no unscanned cell can
+/// be closer than, and stops the scan early when it returns true.
+fn scan(
     region: &Region,
     point: LatLon,
     max_distance_m: f64,
-) -> Result<RoadPoint, CoreError> {
+    mut visit: impl FnMut(u32, usize, f64, f64),
+    done: impl Fn(f64) -> bool,
+) {
     let meta = *region.grid_meta();
-    let none = || CoreError::NoRoadNearby { max_distance_m };
 
     // Smallest cell side in metres, taking the narrowest longitude span in
     // the grid, so ring distances are lower bounds.
@@ -64,12 +67,11 @@ pub(crate) fn snap(
         )
     };
 
-    let mut best: Option<Best> = None;
     let mut seen: HashSet<u32> = HashSet::new();
     for ring in 0i64.. {
         // Any cell in this ring is at least (ring - 1) cells away.
         let bound = (ring - 1).max(0) as f64 * cell_m;
-        if bound > max_distance_m || best.as_ref().is_some_and(|b| b.dist_m <= bound) {
+        if bound > max_distance_m || done(bound) {
             break;
         }
         if row0 - ring < 0 && row0 + ring >= rows && col0 - ring < 0 && col0 + ring >= cols {
@@ -103,18 +105,7 @@ pub(crate) fn snap(
                                 0.0
                             };
                             let d = (a.0 + t * dx).hypot(a.1 + t * dy);
-                            let better = match &best {
-                                None => true,
-                                Some(b) => d < b.dist_m || (d == b.dist_m && edge < b.edge),
-                            };
-                            if better {
-                                best = Some(Best {
-                                    dist_m: d,
-                                    edge,
-                                    segment,
-                                    t,
-                                });
-                            }
+                            visit(edge, segment, t, d);
                         }
                     }
                 }
@@ -122,10 +113,87 @@ pub(crate) fn snap(
             }
         }
     }
+}
 
-    let best = best
+/// Nearest point on any edge within `max_distance_m`, ferries excluded.
+///
+/// Stops scanning once no unscanned cell can hold anything closer than the
+/// best match so far.
+pub(crate) fn snap(
+    region: &Region,
+    point: LatLon,
+    max_distance_m: f64,
+) -> Result<RoadPoint, CoreError> {
+    let none = || CoreError::NoRoadNearby { max_distance_m };
+    // The best distance so far, read by the stop test while `visit` updates it.
+    let best_m = Cell::new(f64::INFINITY);
+    let mut found: Option<Best> = None;
+    scan(
+        region,
+        point,
+        max_distance_m,
+        |edge, segment, t, d| {
+            let better = match &found {
+                None => true,
+                Some(b) => d < b.dist_m || (d == b.dist_m && edge < b.edge),
+            };
+            if better {
+                found = Some(Best {
+                    dist_m: d,
+                    edge,
+                    segment,
+                    t,
+                });
+                best_m.set(d);
+            }
+        },
+        |bound| best_m.get() <= bound,
+    );
+    let best = found
         .filter(|b| b.dist_m <= max_distance_m)
         .ok_or_else(none)?;
+    Ok(road_point(region, point, &best))
+}
+
+/// The nearest point of each road within `radius_m` of `point`, nearest
+/// first, at most `max` of them (ferries excluded). The two directions of a
+/// road share a geometry and count once, as the lower edge id.
+pub(crate) fn nearby(region: &Region, point: LatLon, radius_m: f64, max: usize) -> Vec<RoadPoint> {
+    let mut per_geometry: HashMap<u32, Best> = HashMap::new();
+    scan(
+        region,
+        point,
+        radius_m,
+        |edge, segment, t, d| {
+            if d > radius_m {
+                return;
+            }
+            let g = region.edges()[edge as usize].geometry;
+            let better = per_geometry
+                .get(&g)
+                .is_none_or(|b| d < b.dist_m || (d == b.dist_m && edge < b.edge));
+            if better {
+                per_geometry.insert(
+                    g,
+                    Best {
+                        dist_m: d,
+                        edge,
+                        segment,
+                        t,
+                    },
+                );
+            }
+        },
+        |_| false,
+    );
+    let mut found: Vec<Best> = per_geometry.into_values().collect();
+    found.sort_by(|a, b| a.dist_m.total_cmp(&b.dist_m).then(a.edge.cmp(&b.edge)));
+    found.truncate(max);
+    found.iter().map(|b| road_point(region, point, b)).collect()
+}
+
+/// The road point for a scan result.
+fn road_point(region: &Region, point: LatLon, best: &Best) -> RoadPoint {
     let e = region.edges()[best.edge as usize];
     let line: Vec<LatLon> = region
         .geometry(e.geometry)
@@ -148,10 +216,10 @@ pub(crate) fn snap(
     if e.flags & edge_flags::REVERSED != 0 {
         offset = 1.0 - offset;
     }
-    Ok(RoadPoint {
+    RoadPoint {
         position,
         distance_m: haversine_m(point, position),
         edge: best.edge,
         offset,
-    })
+    }
 }
