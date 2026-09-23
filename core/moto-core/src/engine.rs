@@ -8,6 +8,7 @@
 
 use std::path::Path;
 
+use crate::draft::SectionDraft;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
 use crate::{CoreError, LatLon, RoadPoint, RoundTripTarget, Route, RouteOptions};
@@ -88,6 +89,24 @@ impl Engine {
         let start = self.snap(from)?;
         let end = self.snap(to)?;
         crate::route::fastest(&self.region, &start, &end, &opts.avoid, self.max_speed_kmh)
+    }
+
+    /// Proposes a section along the road between two points the rider picked
+    /// on the map (PRD R2): the shortest road connection between them, with
+    /// nothing avoided, as OSM way spans plus geometry.
+    pub fn section_between(&self, from: LatLon, to: LatLon) -> Result<SectionDraft, CoreError> {
+        from.validate()?;
+        to.validate()?;
+        let start = self.snap(from)?;
+        let end = self.snap(to)?;
+        let parts = crate::route::path(
+            &self.region,
+            &start,
+            &end,
+            crate::route::Cost::Shortest,
+            self.max_speed_kmh,
+        )?;
+        crate::draft::from_path(&self.region, &parts)
     }
 
     /// Alternative loops starting and ending at `start` (PRD R7).

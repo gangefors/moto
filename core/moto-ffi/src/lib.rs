@@ -9,6 +9,9 @@
 
 use std::sync::Arc;
 
+mod sections;
+pub use sections::*;
+
 uniffi::setup_scaffolding!();
 
 #[derive(Debug, Clone, Copy, uniffi::Record)]

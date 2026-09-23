@@ -11,6 +11,7 @@
 #![deny(unsafe_code)]
 
 pub mod curvature;
+mod draft;
 mod engine;
 mod error;
 #[cfg(any(test, feature = "fixtures"))]
@@ -23,6 +24,7 @@ mod snap;
 pub mod store;
 mod types;
 
+pub use draft::SectionDraft;
 pub use engine::{Engine, SNAP_MAX_DISTANCE_M};
 pub use error::CoreError;
 pub use geo::LatLon;
