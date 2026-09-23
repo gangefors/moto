@@ -16,7 +16,7 @@ pub use tracks::*;
 
 uniffi::setup_scaffolding!();
 
-#[derive(Debug, Clone, Copy, uniffi::Record)]
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
 pub struct LatLon {
     pub lat: f64,
     pub lon: f64,
