@@ -209,7 +209,7 @@ Single-user v1, so metrics are personal and measured with local app logs + ride 
 - **[Engineering]** Offline basemap: MapLibre offline regions from OpenFreeMap vs a bundled PMTiles file for the region (P1).
 - **[Engineering]** Round-trip algorithm: heuristic loop generation vs scoring many candidate loops; how to guarantee variety.
 - **[Design]** Quick-tag UX with gloves and a mounted phone — screen button size, confirmation feedback (sound/vibration), accidental taps.
-- **[Product]** Is a section direction-dependent (some roads are better one way)? Default no, but decide before R1 is locked.
+- ~~**[Product]** Is a section direction-dependent (some roads are better one way)?~~ → decided 2026-09-23: good in both directions by default, optionally marked one-way; rated good / great / epic; stored by the Rust core in SQLite ([ADR-0006](adr/0006-section-and-track-storage.md)).
 - **[Product]** How to express the detour budget — % time, absolute minutes, or "fun level" slider?
 
 ## Timeline Considerations
