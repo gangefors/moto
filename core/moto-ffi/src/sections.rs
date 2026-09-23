@@ -114,7 +114,7 @@ pub struct SectionStore {
     inner: Mutex<moto_core::store::Store>,
 }
 
-fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
@@ -124,7 +124,7 @@ fn now() -> i64 {
 impl SectionStore {
     /// The store, even if another thread panicked while holding it: the
     /// database itself stays consistent through its transactions.
-    fn store(&self) -> MutexGuard<'_, moto_core::store::Store> {
+    pub(crate) fn store(&self) -> MutexGuard<'_, moto_core::store::Store> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
