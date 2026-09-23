@@ -64,11 +64,26 @@ pub enum MotoError {
     #[error("{message}")]
     Region { message: String },
     #[error("{message}")]
+    OutsideRegion { message: String },
+    #[error("{message}")]
     NoRoadNearby { message: String },
     #[error("{message}")]
     NoRoute { message: String },
     #[error("{message}")]
     NotImplemented { message: String },
+}
+
+/// What a loaded region covers.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RegionInfo {
+    /// South-west corner of the region's bounding box.
+    pub south_west: LatLon,
+    /// North-east corner of the region's bounding box.
+    pub north_east: LatLon,
+    /// Timestamp of the OSM data, seconds since the Unix epoch (0 if unknown).
+    pub osm_timestamp: i64,
+    /// Where the data came from, e.g. the extract name and bounding box.
+    pub source_name: String,
 }
 
 /// Default route options, so the app does not duplicate the core's defaults.
@@ -96,6 +111,18 @@ impl Engine {
     pub fn open(path: String) -> Result<Arc<Self>, MotoError> {
         let inner = moto_core::Engine::open(path)?;
         Ok(Arc::new(Self { inner }))
+    }
+
+    /// The region's bounds and data source.
+    pub fn info(&self) -> RegionInfo {
+        let (sw, ne) = self.inner.bounds();
+        let info = self.inner.region().info();
+        RegionInfo {
+            south_west: sw.into(),
+            north_east: ne.into(),
+            osm_timestamp: info.osm_timestamp,
+            source_name: info.source_name.clone(),
+        }
     }
 
     pub fn snap(&self, point: LatLon) -> Result<RoadPoint, MotoError> {
@@ -219,6 +246,7 @@ impl From<moto_core::CoreError> for MotoError {
         match e {
             C::InvalidCoordinate { .. } | C::InvalidArgument(_) => Self::InvalidInput { message },
             C::Region(_) => Self::Region { message },
+            C::OutsideRegion { .. } => Self::OutsideRegion { message },
             C::NoRoadNearby { .. } => Self::NoRoadNearby { message },
             C::NoRoute(_) => Self::NoRoute { message },
             C::NotImplemented(_) => Self::NotImplemented { message },

@@ -44,6 +44,9 @@ const SKANE_BBOX: [f64; 4] = [55.28, 12.20, 56.72, 15.05];
 /// the cells of a 550 m grid add 1 MiB and make snapping in towns 3× faster.
 const GRID_CELL_E7: (i32, i32) = (25_000, 45_000);
 
+/// Random start/end pairs timed by `--check`.
+const ROUTE_PAIRS: usize = 100;
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "-h" || a == "--help") {
@@ -271,6 +274,54 @@ fn check(path: &Path, probes: &[String]) -> Result<(), String> {
         snapped,
         moto_core::SNAP_MAX_DISTANCE_M
     );
+
+    // Route between pairs of the random points that are on roads.
+    let on_road: Vec<LatLon> = points
+        .iter()
+        .copied()
+        .filter(|&p| engine.snap(p).is_ok())
+        .take(2 * ROUTE_PAIRS)
+        .collect();
+    let opts = moto_core::RouteOptions::default();
+    let anything = moto_core::RouteOptions {
+        avoid: moto_core::Avoid {
+            motorways: false,
+            unpaved: false,
+            ferries: false,
+        },
+        ..opts.clone()
+    };
+    let mut times = Vec::new();
+    let (mut found, mut found_any) = (0, 0);
+    let mut km = 0.0;
+    for pair in on_road.chunks_exact(2) {
+        let t = Instant::now();
+        if let Ok(r) = engine.route(pair[0], pair[1], &opts) {
+            found += 1;
+            km += r.distance_m / 1000.0;
+        }
+        times.push(t.elapsed().as_secs_f64() * 1e3);
+        match engine.route(pair[0], pair[1], &anything) {
+            Ok(_) => found_any += 1,
+            Err(e) => println!(
+                "no route  {:.5},{:.5} → {:.5},{:.5}: {e}",
+                pair[0].lat, pair[0].lon, pair[1].lat, pair[1].lon
+            ),
+        }
+    }
+    if !times.is_empty() {
+        times.sort_by(f64::total_cmp);
+        println!(
+            "route     {:.1} ms mean, {:.1} ms median, {:.1} ms max over {} random pairs; \
+             {found} found with the default options ({found_any} avoiding nothing), \
+             mean {:.1} km",
+            times.iter().sum::<f64>() / times.len() as f64,
+            times[times.len() / 2],
+            times[times.len() - 1],
+            times.len(),
+            km / f64::from(found.max(1)),
+        );
+    }
 
     for probe in probes {
         let p =

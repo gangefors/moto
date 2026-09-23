@@ -27,7 +27,7 @@ struct Best {
     t: f64,
 }
 
-/// Nearest point on any edge within `max_distance_m`.
+/// Nearest point on any edge within `max_distance_m`, ferries excluded.
 ///
 /// Scans grid cells in square rings around the point's cell and stops once
 /// no unscanned cell can hold anything closer than the best match so far.
@@ -88,6 +88,10 @@ pub(crate) fn snap(
                         let Some(e) = region.edges().get(edge as usize) else {
                             continue;
                         };
+                        // A tap at sea must not land on a ferry line.
+                        if e.flags & edge_flags::FERRY != 0 {
+                            continue;
+                        }
                         let line = region.geometry(e.geometry);
                         for (segment, w) in line.windows(2).enumerate() {
                             let (a, b) = (xy(w[0]), xy(w[1]));

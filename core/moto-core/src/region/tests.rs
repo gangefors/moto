@@ -370,7 +370,7 @@ fn writes_an_empty_region() {
             lat: 55.7,
             lon: 13.2
         }),
-        Err(CoreError::NoRoadNearby { .. })
+        Err(CoreError::OutsideRegion { .. })
     ));
 }
 
