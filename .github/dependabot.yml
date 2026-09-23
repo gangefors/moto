@@ -61,3 +61,13 @@ updates:
       github-actions-security:
         applies-to: security-updates
         patterns: ["*"]
+
+  # zizmor, the workflow linter (hash-pinned requirements file).
+  - package-ecosystem: pip
+    directory: /.github/zizmor
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5

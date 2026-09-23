@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Lints the GitHub Actions workflows with zizmor: template injection,
+# excessive permissions, unpinned actions, credential persistence and more.
+# Accepted findings are listed with their reasons in .github/zizmor.yml.
+name: Workflow lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/**"
+  pull_request:
+    paths:
+      - ".github/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zizmor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zizmor
+        run: |
+          pip install --no-deps --only-binary :all: --require-hashes \
+            -r .github/zizmor/requirements.txt
+
+      - name: Lint workflows
+        env:
+          # Read-only token for the online audits (impostor commits,
+          # known-vulnerable actions, ref confusion).
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --persona=auditor --format=github .github/

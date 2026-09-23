@@ -53,6 +53,7 @@ env:
 
 jobs:
   core:
+    name: Core
     runs-on: ubuntu-latest
     outputs:
       region-key: ${{ steps.region-key.outputs.key }}
@@ -91,8 +92,9 @@ jobs:
       # keep the ~800 MB download to about once a week.
       - name: Region cache key
         id: region-key
-        run: |
-          echo "key=region-m0-$(date -u +%G-W%V)-${{ hashFiles('core/moto-regionbuild/src/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}" >> "$GITHUB_OUTPUT"
+        env:
+          SOURCES_HASH: ${{ hashFiles('core/moto-regionbuild/src/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}
+        run: echo "key=region-m0-$(date -u +%G-W%V)-$SOURCES_HASH" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: region-cache
@@ -155,6 +157,7 @@ jobs:
           key: bench-bin-main-${{ github.run_id }}
 
   build:
+    name: Android app
     needs: core
     runs-on: ubuntu-latest
     permissions:

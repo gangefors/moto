@@ -12,15 +12,23 @@ on:
   pull_request_target:
     types: [opened, closed, synchronize]
 
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+# pull_request_target runs with write access, which is why this workflow
+# never checks out or runs code from the pull request; the action only
+# reads comments and writes signatures.
+permissions: {}
+
+concurrency:
+  group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
 
 jobs:
   cla:
+    name: CLA
     runs-on: ubuntu-latest
+    permissions:
+      actions: write # to re-run the check after a signature
+      contents: write # to store signatures on the cla-signatures branch
+      pull-requests: write # to comment on the pull request
+      statuses: write # to set the CLA status
     steps:
       - name: CLA Assistant
         if: >-
