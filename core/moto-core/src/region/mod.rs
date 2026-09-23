@@ -253,9 +253,11 @@ fn parse_header(bytes: &[u8]) -> Result<(Header, Vec<SectionEntry>), CoreError> 
         return Err(err(format_args!("section table too large ({count})")));
     }
     let table_end = SECTION_TABLE_OFFSET + count * size_of::<SectionEntry>();
-    let table = bytes[SECTION_TABLE_OFFSET..table_end]
-        .chunks_exact(size_of::<SectionEntry>())
-        .map(bytemuck::pod_read_unaligned)
+    let (entries, _) =
+        bytes[SECTION_TABLE_OFFSET..table_end].as_chunks::<{ size_of::<SectionEntry>() }>();
+    let table = entries
+        .iter()
+        .map(|e| bytemuck::pod_read_unaligned(e))
         .collect();
     Ok((header, table))
 }
