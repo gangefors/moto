@@ -24,6 +24,12 @@ Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (directly or via `license.wo
 - Don't copy in code from other projects under GPL or AGPL licenses; it can't be covered by the CLA and would limit relicensing.
 - New dependencies must have AGPL-compatible licenses (e.g. MIT, Apache-2.0, BSD, MPL-2.0).
 
+## Tests, performance and security
+
+- Every change comes with tests for what it adds or fixes; bug fixes start with a test that reproduces the bug. CI must be green.
+- CI compares benchmark results with the last `main` build. A metric more than 25 % slower fails the build: look for a faster approach first, and accept the regression only with a `Perf-Accepted: <reason>` trailer in the commit message when it buys something worth it.
+- Security comes before performance and convenience. Treat all external input (downloads, imports, other apps, network responses) as hostile. The full rules are in the Security section of [`CLAUDE.md`](CLAUDE.md); report vulnerabilities as described in [`SECURITY.md`](SECURITY.md).
+
 ## Development
 
-See [`CLAUDE.md`](CLAUDE.md) for the architecture, layout and commands (`cargo test --workspace`, `cargo clippy`, `cargo fmt`).
+See [`CLAUDE.md`](CLAUDE.md) for the architecture, layout, rules and commands (`cargo test --workspace`, `cargo clippy`, `cargo fmt`).

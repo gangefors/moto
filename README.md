@@ -6,7 +6,7 @@ General-purpose navigation apps optimise for speed and send motorcyclists onto m
 - Architecture decisions: [`docs/adr/`](docs/adr/)
 - Rust core: [`core/`](core/) — `cargo test --workspace`
 - Android app: [`android/`](android/) — `./gradlew assembleDebug` (builds the Rust core with cargo-ndk)
-- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Security: [`SECURITY.md`](SECURITY.md)
 
 ## License
 
