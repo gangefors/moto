@@ -91,6 +91,9 @@ pub fn run(path: &Path) -> Result<Report, String> {
         .len();
     let calibration_ms = calibrate();
 
+    // Untimed warm-up: the first read of the file comes from disk, the
+    // phone-relevant case is the file already in memory.
+    moto_core::region::verify_file(path).map_err(|e| e.to_string())?;
     let mut verify = Vec::new();
     let mut open = Vec::new();
     let mut region = None;

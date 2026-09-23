@@ -38,9 +38,30 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(regressed, ["Route, mean"])
 
     def test_small_slowdown_only_warns(self):
-        lines, regressed = bc.compare(BASE, with_(open_ms=14.0))
+        lines, regressed = bc.compare(BASE, with_(route_ms_mean=17.0))
         self.assertEqual(regressed, [])
         self.assertTrue(any("⚠️" in l for l in lines))
+
+    def test_short_io_timings_need_a_large_absolute_change(self):
+        # +46 % on a 7.6 ms verify (as seen on CI with no code change): noise.
+        noisy = with_(verify_ms=20.0 * 1.46, open_ms=12.0 * 1.37)
+        self.assertEqual(bc.compare(BASE, noisy)[1], [])
+        # Double the open time and more than 5 ms slower: real.
+        self.assertEqual(bc.compare(BASE, with_(open_ms=24.5))[1], ["Open region"])
+        # Over 50 % but under 5 ms: still noise.
+        small = with_(open_ms=3.0)
+        self.assertEqual(bc.compare(small, with_(open_ms=5.0))[1], [])
+
+    def test_repeated_runs_use_the_fastest(self):
+        slow = with_(route_ms_mean=30.0)
+        merged = bc.fastest([slow, dict(BASE), None])
+        self.assertEqual(merged["route_ms_mean"], 15.0)
+        self.assertEqual(bc.compare(BASE, merged)[1], [])
+        self.assertIsNone(bc.fastest([None]))
+        # Runs on machines of different speed are compared after scaling.
+        fast_machine = {k: (v / 2 if isinstance(v, float) else v) for k, v in BASE.items()}
+        merged = bc.fastest([with_(snap_us_mean=9.0), fast_machine])
+        self.assertAlmostEqual(merged["snap_us_mean"] / merged["calibration_ms"], 5.0 / 100.0)
 
     def test_improvement_is_reported(self):
         lines, _ = bc.compare(BASE, with_(snap_us_mean=3.0))
@@ -88,12 +109,23 @@ class MainTest(unittest.TestCase):
 
     def test_exit_codes(self):
         self.assertEqual(self.run_main(BASE, BASE)[0], 0)
-        code, text = self.run_main(BASE, with_(open_ms=30.0))
+        code, text = self.run_main(BASE, with_(route_ms_p95=60.0))
         self.assertEqual(code, 1)
         self.assertIn("Significant regression", text)
-        code, text = self.run_main(BASE, with_(open_ms=30.0), "--accepted")
+        code, text = self.run_main(BASE, with_(route_ms_p95=60.0), "--accepted")
         self.assertEqual(code, 0)
         self.assertIn("accepted", text)
+
+    def test_two_current_runs_keep_the_better_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for name, data in (("b", BASE), ("c1", with_(route_ms_p95=60.0)), ("c2", BASE)):
+                path = os.path.join(d, name)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+                files.append(path)
+            self.assertEqual(bc.main(files), 0)
+            self.assertEqual(bc.main(files[:2]), 1)
 
     def test_missing_or_broken_baseline_passes(self):
         self.assertEqual(self.run_main(None, BASE)[0], 0)
