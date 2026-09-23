@@ -85,6 +85,11 @@ jobs:
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
             mkdir -p ~/.android
             echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            # Public certificate fingerprint, used by the signer check below.
+            fp=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android \
+              -alias androiddebugkey | sed -n 's/^\s*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f')
+            echo "Debug key SHA-256: $fp"
+            echo "DEBUG_KEY_SHA256=$fp" >> "$GITHUB_ENV"
           else
             echo "::warning::DEBUG_KEYSTORE_BASE64 not set; APK signed with a one-off debug key"
           fi
@@ -92,6 +97,17 @@ jobs:
       - name: Build and lint
         working-directory: android
         run: ./gradlew assembleDebug lintDebug
+
+      - name: Check APK signer
+        run: |
+          signer=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p;s/^V[0-9.]* Signer: certificate SHA-256 digest: //p' | head -1)
+          echo "APK signer SHA-256: $signer"
+          if [ -n "${DEBUG_KEY_SHA256:-}" ] && [ "$signer" != "$DEBUG_KEY_SHA256" ]; then
+            echo "::error::APK is not signed with the key from DEBUG_KEYSTORE_BASE64"
+            exit 1
+          fi
 
       - name: Publish debug-latest release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
