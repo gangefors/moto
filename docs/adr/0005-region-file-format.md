@@ -162,5 +162,5 @@ Consequences for the "revisit if" list: the M0 file is comfortably small. For al
 - [x] Copy this ADR to `docs/adr/0005-region-file-format.md` and add it to the index.
 - [x] `moto-core`: region reader (header, section table, typed slices, validation) with tests on a tiny hand-made fixture.
 - [x] `moto-regionbuild`: OSM PBF → filtered motorcycle graph → region file v1, with a Skåne bounding-box cut.
-- [ ] `Engine::open` and `snap` on the real file (done); tap → snap → marker on the map.
+- [x] `Engine::open` and `snap` on the real file; tap → snap → marker on the map (verified on the phone, region bundled in the debug APK).
 - [x] Measure the Skåne and Sweden files: size, open time, peak memory, snap time (peak memory on the phone still to measure).
