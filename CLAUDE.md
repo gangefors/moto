@@ -37,6 +37,7 @@ docs/adr/               architecture decision records (index in README.md)
 - Record significant new decisions as an ADR in `docs/adr/`, and add new rules and decisions to the Notion decisions log as well as `docs/decisions.md`.
 - Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping.
 - Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, `docs/decisions.md`, ADRs) go in their own commits, separate from code changes.
+- UI draws edge to edge, but interactive or informational elements (buttons, map controls, attribution, text) must never sit under the status bar, navigation bar or a display cutout; offset them by `WindowInsets.safeDrawing`.
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
 
 ## License
