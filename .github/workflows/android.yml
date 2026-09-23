@@ -1,14 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
 #
-# Builds the Android app (Rust core via cargo-ndk, then Gradle) and runs
-# lint. The debug APK bundles the M0 region file, built here from the OSM
-# Sweden extract. On main, the debug APK is published as the rolling
-# `debug-latest` pre-release so it can be downloaded straight to the phone.
+# CI for every push and pull request (see "Testing and performance" in
+# CLAUDE.md):
+# - core: rustfmt, clippy and the Rust tests; builds the M0 region file from
+#   the OSM Sweden extract (cached); benchmarks it and compares the result
+#   with the last main build, failing on a significant regression.
+# - build: the Android app (Rust core via cargo-ndk, then Gradle) with the
+#   region bundled, lint and unit tests. On main, the debug APK is published
+#   as the rolling `debug-latest` pre-release for the phone.
 #
 # Versions follow the versions policy in CLAUDE.md: newest release that is
 # at least a week old. Actions are pinned by commit SHA.
-name: Android
+name: CI
 
 on:
   push:
@@ -17,11 +21,13 @@ on:
       - "android/**"
       - "core/**"
       - ".github/workflows/android.yml"
+      - ".github/scripts/**"
   pull_request:
     paths:
       - "android/**"
       - "core/**"
       - ".github/workflows/android.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -41,13 +47,113 @@ env:
     ndk;30.0.16248370
 
 jobs:
+  core:
+    runs-on: ubuntu-latest
+    outputs:
+      region-key: ${{ steps.region-key.outputs.key }}
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy,rustfmt
+          rustup default "$RUST_VERSION"
+
+      # v2.9.2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: core
+
+      - name: Format, lint and test
+        working-directory: core
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo test --workspace
+
+      - name: Test CI scripts
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+      - name: Build moto-regionbuild
+        working-directory: core
+        run: cargo build --release -p moto-regionbuild
+
+      # The debug APK carries the M0 region file for testing (production will
+      # download regions; ADR-0005). It is built from Geofabrik's Sweden
+      # extract by this commit's moto-regionbuild, so it always matches the
+      # core's format, and cached per ISO week and region/builder source to
+      # keep the ~800 MB download to about once a week.
+      - name: Region cache key
+        id: region-key
+        run: |
+          echo "key=region-m0-$(date -u +%G-W%V)-${{ hashFiles('core/moto-regionbuild/src/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}" >> "$GITHUB_OUTPUT"
+
+      # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        id: region-cache
+        with:
+          path: ${{ runner.temp }}/moto-region
+          key: ${{ steps.region-key.outputs.key }}
+
+      - name: Build region file
+        if: steps.region-cache.outputs.cache-hit != 'true'
+        run: |
+          pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
+          curl -sSfL --proto '=https' --retry 3 -o "$pbf" https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+          mkdir -p "$RUNNER_TEMP/moto-region"
+          core/target/release/moto-regionbuild "$pbf" "$RUNNER_TEMP/moto-region/m0.region"
+          rm "$pbf"
+
+      - name: Benchmark
+        run: |
+          mkdir -p "$RUNNER_TEMP/bench"
+          core/target/release/moto-regionbuild --check "$RUNNER_TEMP/moto-region/m0.region" \
+            --json "$RUNNER_TEMP/bench/current.json"
+
+      # The latest main result is the baseline (caches from main are also
+      # visible to pull requests).
+      # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ runner.temp }}/bench-baseline
+          key: bench-main-${{ github.run_id }}
+          restore-keys: bench-main-
+
+      - name: Compare with the last main build
+        env:
+          # A Perf-Accepted trailer accepts a significant regression.
+          ACCEPTED: ${{ contains(github.event.head_commit.message, 'Perf-Accepted:') || contains(github.event.pull_request.body, 'Perf-Accepted:') }}
+        run: |
+          python3 .github/scripts/bench_compare.py \
+            "$RUNNER_TEMP/bench-baseline/baseline.json" "$RUNNER_TEMP/bench/current.json" \
+            --summary "$GITHUB_STEP_SUMMARY" $([ "$ACCEPTED" = true ] && echo --accepted)
+
+      - name: Store the new baseline
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p "$RUNNER_TEMP/bench-baseline"
+          cp "$RUNNER_TEMP/bench/current.json" "$RUNNER_TEMP/bench-baseline/baseline.json"
+
+      # v6.1.0
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: ${{ runner.temp }}/bench-baseline
+          key: bench-main-${{ github.run_id }}
+
   build:
+    needs: core
     runs-on: ubuntu-latest
     permissions:
       contents: write # to publish the debug-latest release
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       # v6.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
@@ -97,32 +203,13 @@ jobs:
             echo "::warning::DEBUG_KEYSTORE_BASE64 not set; APK signed with a one-off debug key"
           fi
 
-      # The debug APK carries the M0 region file for testing (production will
-      # download regions; ADR-0005). It is built from Geofabrik's Sweden
-      # extract by this commit's moto-regionbuild, so it always matches the
-      # core's format, and cached per ISO week and region/builder source to
-      # keep the ~800 MB download to about once a week.
-      - name: Region cache key
-        id: region-key
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
+      # The M0 region file built and benchmarked by the core job.
       # v6.1.0
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        id: region-cache
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/moto-region
-          key: region-m0-${{ steps.region-key.outputs.week }}-${{ hashFiles('core/moto-regionbuild/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}
-
-      - name: Build region file
-        if: steps.region-cache.outputs.cache-hit != 'true'
-        working-directory: core
-        run: |
-          pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
-          curl -sSfL --retry 3 -o "$pbf" https://download.geofabrik.de/europe/sweden-latest.osm.pbf
-          mkdir -p "$RUNNER_TEMP/moto-region"
-          cargo run --release -p moto-regionbuild -- "$pbf" "$RUNNER_TEMP/moto-region/m0.region"
-          cargo run --release -p moto-regionbuild -- --check "$RUNNER_TEMP/moto-region/m0.region"
-          rm "$pbf"
+          key: ${{ needs.core.outputs.region-key }}
+          fail-on-cache-miss: true
 
       - name: Use region file
         run: echo "MOTO_REGION_FILE=$RUNNER_TEMP/moto-region/m0.region" >> "$GITHUB_ENV"

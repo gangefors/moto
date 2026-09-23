@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+"""Tests for bench_compare.py (python3 -m unittest discover -s .github/scripts)."""
+
+import json
+import os
+import tempfile
+import unittest
+
+import bench_compare as bc
+
+BASE = {
+    "calibration_ms": 100.0,
+    "edges": 411401,
+    "osm_timestamp": 1790126972,
+    "verify_ms": 20.0,
+    "open_ms": 12.0,
+    "snap_us_mean": 5.0,
+    "route_ms_mean": 15.0,
+    "route_ms_p95": 40.0,
+}
+
+
+def with_(**changes):
+    d = dict(BASE)
+    d.update(changes)
+    return d
+
+
+class CompareTest(unittest.TestCase):
+    def test_same_numbers_pass(self):
+        lines, regressed = bc.compare(BASE, dict(BASE))
+        self.assertEqual(regressed, [])
+        self.assertEqual(sum("≈ unchanged" in l for l in lines), len(bc.METRICS))
+
+    def test_significant_regression_is_flagged(self):
+        _, regressed = bc.compare(BASE, with_(route_ms_mean=19.5))
+        self.assertEqual(regressed, ["Route, mean"])
+
+    def test_small_slowdown_only_warns(self):
+        lines, regressed = bc.compare(BASE, with_(open_ms=14.0))
+        self.assertEqual(regressed, [])
+        self.assertTrue(any("⚠️" in l for l in lines))
+
+    def test_improvement_is_reported(self):
+        lines, _ = bc.compare(BASE, with_(snap_us_mean=3.0))
+        self.assertTrue(any("✅ faster" in l and "-40 %" in l for l in lines))
+
+    def test_calibration_scales_timings(self):
+        # A machine twice as slow: everything doubles, nothing regresses.
+        slow = {k: (v * 2 if isinstance(v, float) else v) for k, v in BASE.items()}
+        _, regressed = bc.compare(BASE, slow)
+        self.assertEqual(regressed, [])
+        # Same machine speed but routing twice as slow does regress.
+        _, regressed = bc.compare(BASE, with_(route_ms_p95=80.0))
+        self.assertEqual(regressed, ["Route, p95"])
+
+    def test_no_baseline_passes(self):
+        lines, regressed = bc.compare(None, BASE)
+        self.assertEqual(regressed, [])
+        self.assertTrue(any("No baseline" in l for l in lines))
+
+    def test_changed_region_is_noted(self):
+        lines, _ = bc.compare(BASE, with_(edges=400000))
+        self.assertTrue(any("region data changed" in l for l in lines))
+
+    def test_bad_values_are_not_comparable(self):
+        for bad in ({"calibration_ms": 0}, {"route_ms_mean": "x"}, {"verify_ms": -1.0}, {"open_ms": True}):
+            lines, regressed = bc.compare(BASE, with_(**bad))
+            self.assertEqual(regressed, [])
+            self.assertTrue(any("not comparable" in l for l in lines))
+
+
+class MainTest(unittest.TestCase):
+    def run_main(self, baseline, current, *extra):
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for name, data in (("b.json", baseline), ("c.json", current)):
+                path = os.path.join(d, name)
+                if data is not None:
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(data if isinstance(data, str) else json.dumps(data))
+                paths.append(path)
+            summary = os.path.join(d, "summary.md")
+            code = bc.main([*paths, "--summary", summary, *extra])
+            with open(summary, encoding="utf-8") as f:
+                return code, f.read()
+
+    def test_exit_codes(self):
+        self.assertEqual(self.run_main(BASE, BASE)[0], 0)
+        code, text = self.run_main(BASE, with_(open_ms=30.0))
+        self.assertEqual(code, 1)
+        self.assertIn("Significant regression", text)
+        code, text = self.run_main(BASE, with_(open_ms=30.0), "--accepted")
+        self.assertEqual(code, 0)
+        self.assertIn("accepted", text)
+
+    def test_missing_or_broken_baseline_passes(self):
+        self.assertEqual(self.run_main(None, BASE)[0], 0)
+        self.assertEqual(self.run_main("{not json", BASE)[0], 0)
+        self.assertEqual(self.run_main("[1, 2]", BASE)[0], 0)
+
+    def test_unreadable_current_is_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(bc.main([os.path.join(d, "b"), os.path.join(d, "c")]), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
