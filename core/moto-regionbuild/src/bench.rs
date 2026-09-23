@@ -131,9 +131,11 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let snap_us_mean = fastest(snap_runs);
 
     let pairs: Vec<(LatLon, LatLon)> = on_road
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .take(ROUTE_PAIRS)
-        .map(|c| (c[0], c[1]))
+        .map(|&[a, z]| (a, z))
         .collect();
     let opts = RouteOptions::default();
     let anything = RouteOptions {
