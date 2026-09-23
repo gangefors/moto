@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
-"""Compare two `moto-regionbuild --check --json` results.
+"""Compare `moto-regionbuild --check --json` results of the baseline and
+this build.
 
-Timings are divided by each run's CPU calibration time before comparing,
-so builds on faster or slower CI machines stay comparable. Several current
-results may be given (repeated runs); each metric uses its fastest.
+CI runs the baseline build's benchmark binary and this build's binary
+alternately on the same machine, so machine differences cancel out.
+Timings are also divided by each run's CPU calibration time. Several
+results may be given per side (repeated runs); each metric uses its
+fastest.
 
 A significant regression makes the script exit with status 1, unless
 --accepted is given (the commit carries a `Perf-Accepted:` trailer):
@@ -81,7 +84,11 @@ def compare(baseline, current):
     """Returns (markdown lines, list of regressed metric labels)."""
     lines = ["## Performance", ""]
     if baseline is None:
-        lines += ["No baseline from `main` yet; this run becomes the first one.", ""]
+        lines += [
+            "No baseline to compare with (no earlier main build, or its benchmark "
+            "could not read this region file); this build becomes the baseline.",
+            "",
+        ]
         lines += ["| Metric | This build |", "| --- | ---: |"]
         for key, label, *_ in METRICS:
             lines.append(f"| {label} | {current.get(key, 0):.2f} |")
@@ -126,8 +133,8 @@ def compare(baseline, current):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("baseline")
-    p.add_argument("current", nargs="+", help="one or more results of this build")
+    p.add_argument("--baseline", nargs="+", default=[], help="results of the baseline build")
+    p.add_argument("--current", nargs="+", required=True, help="results of this build")
     p.add_argument("--summary", help="file to append the markdown table to")
     p.add_argument("--accepted", action="store_true", help="a Perf-Accepted trailer is present")
     args = p.parse_args(argv)
@@ -136,7 +143,7 @@ def main(argv=None):
     if current is None:
         print(f"error: cannot read {', '.join(args.current)}", file=sys.stderr)
         return 2
-    lines, regressed = compare(load(args.baseline), current)
+    lines, regressed = compare(fastest(load(b) for b in args.baseline), current)
     if regressed:
         if args.accepted:
             lines += ["", "Regression accepted with a `Perf-Accepted:` trailer: " + ", ".join(regressed) + "."]
