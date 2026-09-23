@@ -3,10 +3,10 @@
 #
 # CI for every push and pull request (see "Testing and performance" in
 # CLAUDE.md):
-# - core: rustfmt, clippy and the Rust tests; builds the M0 region file from
-#   the OSM Sweden extract (cached); benchmarks it against the last main
-#   build's benchmark binary on the same machine, failing on a significant
-#   regression.
+# - core: rustfmt, clippy, the Rust tests and cargo-deny; builds the M0
+#   region file from the OSM Sweden extract (cached); benchmarks it against
+#   the last main build's benchmark binary on the same machine, failing on a
+#   significant regression.
 # - build: the Android app (Rust core via cargo-ndk, then Gradle) with the
 #   region bundled, lint and unit tests. On main, the debug APK is published
 #   as the rolling `debug-latest` pre-release for the phone.
@@ -45,6 +45,7 @@ concurrency:
 env:
   RUST_VERSION: "1.98.1"
   CARGO_NDK_VERSION: "4.1.2"
+  CARGO_DENY_VERSION: "0.20.2"
   # Must match android/app/build.gradle.kts.
   ANDROID_PACKAGES: >-
     platforms;android-37.2
@@ -77,6 +78,15 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets --all-features -- -D warnings
           cargo test --workspace
+
+      # Supply chain: RustSec advisories, AGPL-compatible licences, crates.io
+      # as the only source (core/deny.toml).
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version "$CARGO_DENY_VERSION" --locked
+
+      - name: Check dependencies
+        working-directory: core
+        run: cargo deny --locked check
 
       - name: Test CI scripts
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
