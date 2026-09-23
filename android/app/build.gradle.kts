@@ -39,6 +39,13 @@ android {
         ndk { abiFilters += abis }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // CI passes a stable debug key so each APK installs over the last.
+            providers.environmentVariable("MOTO_DEBUG_KEYSTORE").orNull?.let { storeFile = file(it) }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
