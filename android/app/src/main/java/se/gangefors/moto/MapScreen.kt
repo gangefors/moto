@@ -10,12 +10,16 @@ import android.content.pm.PackageManager
 import android.content.res.Resources
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -27,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -118,6 +123,13 @@ fun MapScreen() {
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        // Keeps the dark status bar icons readable over any part of the map.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(STATUS_BAR_SCRIM),
+        )
         if (hasLocation) {
             FloatingActionButton(
                 onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING },
@@ -137,6 +149,9 @@ fun MapScreen() {
 
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
+
+/** Translucent white behind the status bar; the map style is light. */
+private val STATUS_BAR_SCRIM = Color.White.copy(alpha = 0.7f)
 
 /** MapLibre's default control margin. */
 private val CONTROL_MARGIN: Dp = 4.dp
