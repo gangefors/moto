@@ -5,7 +5,8 @@
 //! ADR-0005, PRD R12). Runs on desktop/CI, never on the phone.
 //!
 //! Reads a `.osm.pbf` (e.g. Geofabrik's Sweden extract), keeps the
-//! motorcycle-routable ways inside a bounding box (Skåne by default), builds
+//! motorcycle-routable ways inside a bounding box (Skåne and its
+//! neighbourhood by default), builds
 //! the routing graph and writes the region file. `--check` opens an existing
 //! file and measures verification, open and snap times.
 
@@ -29,15 +30,19 @@ const USAGE: &str = "\
 usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
        moto-regionbuild --check <file.region> [LAT,LON ...]
 
-  --bbox   cut to this box in degrees (default: Skåne, 55.30,12.40,56.55,14.65)
+  --bbox   cut to this box in degrees (default: Skåne and surroundings,
+           55.28,12.20,56.72,15.05)
   --check  verify checksums, time opening and snapping, and snap the
            given points";
 
-/// M0 region: a bounding box around Skåne (ADR-0005; a polygon comes later).
-const SKANE_BBOX: [f64; 4] = [55.30, 12.40, 56.55, 14.65];
+/// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
+/// half of Halland, southern Småland and western Blekinge, from Trelleborg
+/// to just north of Halmstad and Älmhult, and east to Karlshamn.
+const SKANE_BBOX: [f64; 4] = [55.28, 12.20, 56.72, 15.05];
 
-/// Snapping grid cell: about 550 × 560 m at 56°N.
-const GRID_CELL_E7: (i32, i32) = (50_000, 90_000);
+/// Snapping grid cell: about 280 × 280 m at 56°N. Measured on Skåne: 4×
+/// the cells of a 550 m grid add 1 MiB and make snapping in towns 3× faster.
+const GRID_CELL_E7: (i32, i32) = (25_000, 45_000);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
