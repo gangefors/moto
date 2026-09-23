@@ -20,9 +20,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -126,22 +124,15 @@ fun MapScreen() {
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-        // Theme-coloured scrims keep the system bar icons readable over any
-        // part of the map; the icons follow the same theme (MainActivity).
-        val scrim = if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .windowInsetsTopHeight(WindowInsets.statusBars)
-                .background(scrim),
-        )
+        // Theme-coloured scrim keeps the navigation bar icons readable over any
+        // part of the map; the icons follow the same theme (MainActivity). The
+        // status bar has no scrim: its icons are chosen to suit the map style.
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
-                .background(scrim),
+                .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
         )
         if (hasLocation) {
             FloatingActionButton(
@@ -163,7 +154,7 @@ fun MapScreen() {
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
-/** Translucent scrims behind the system bars, per system theme. */
+/** Translucent scrims behind the navigation bar, per system theme. */
 private val LIGHT_SCRIM = Color.White.copy(alpha = 0.7f)
 private val DARK_SCRIM = Color.Black.copy(alpha = 0.7f)
 
