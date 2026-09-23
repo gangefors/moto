@@ -116,9 +116,47 @@ val uniffiBindings = tasks.register<UniffiBindgen>("uniffiBindings") {
     coreSources.from(rustSources)
 }
 
+/**
+ * Copies a region file into the APK's assets as `regions/m0.region`, for
+ * testing (production will download regions; ADR-0005). The file comes from
+ * the `moto.regionFile` Gradle property or the `MOTO_REGION_FILE` environment
+ * variable (CI builds it with moto-regionbuild); without one the app starts
+ * without a region.
+ */
+abstract class BundleRegion : DefaultTask() {
+    @get:InputFile
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val regionFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        val region = regionFile.orNull?.asFile
+        if (region == null) {
+            logger.warn("No region file bundled; set -Pmoto.regionFile or MOTO_REGION_FILE.")
+            return
+        }
+        region.copyTo(out.resolve("regions/m0.region"))
+    }
+}
+
+val bundleRegion = tasks.register<BundleRegion>("bundleRegion") {
+    group = "moto"
+    val path = providers.gradleProperty("moto.regionFile")
+        .orElse(providers.environmentVariable("MOTO_REGION_FILE"))
+    regionFile.fileProvider(path.map { file(it) })
+}
+
 androidComponents {
     onVariants { variant ->
         variant.sources.kotlin?.addGeneratedSourceDirectory(uniffiBindings, UniffiBindgen::outputDir)
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleRegion, BundleRegion::outputDir)
     }
 }
 

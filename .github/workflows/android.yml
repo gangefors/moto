@@ -2,8 +2,9 @@
 # Copyright (C) 2026 Stefan Gangefors
 #
 # Builds the Android app (Rust core via cargo-ndk, then Gradle) and runs
-# lint. On main, the debug APK is published as the rolling `debug-latest`
-# pre-release so it can be downloaded straight to the phone.
+# lint. The debug APK bundles the M0 region file, built here from the OSM
+# Sweden extract. On main, the debug APK is published as the rolling
+# `debug-latest` pre-release so it can be downloaded straight to the phone.
 #
 # Versions follow the versions policy in CLAUDE.md: newest release that is
 # at least a week old. Actions are pinned by commit SHA.
@@ -96,6 +97,36 @@ jobs:
             echo "::warning::DEBUG_KEYSTORE_BASE64 not set; APK signed with a one-off debug key"
           fi
 
+      # The debug APK carries the M0 region file for testing (production will
+      # download regions; ADR-0005). It is built from Geofabrik's Sweden
+      # extract by this commit's moto-regionbuild, so it always matches the
+      # core's format, and cached per ISO week and region/builder source to
+      # keep the ~800 MB download to about once a week.
+      - name: Region cache key
+        id: region-key
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        id: region-cache
+        with:
+          path: ${{ runner.temp }}/moto-region
+          key: region-m0-${{ steps.region-key.outputs.week }}-${{ hashFiles('core/moto-regionbuild/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}
+
+      - name: Build region file
+        if: steps.region-cache.outputs.cache-hit != 'true'
+        working-directory: core
+        run: |
+          pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
+          curl -sSfL --retry 3 -o "$pbf" https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+          mkdir -p "$RUNNER_TEMP/moto-region"
+          cargo run --release -p moto-regionbuild -- "$pbf" "$RUNNER_TEMP/moto-region/m0.region"
+          cargo run --release -p moto-regionbuild -- --check "$RUNNER_TEMP/moto-region/m0.region"
+          rm "$pbf"
+
+      - name: Use region file
+        run: echo "MOTO_REGION_FILE=$RUNNER_TEMP/moto-region/m0.region" >> "$GITHUB_ENV"
+
       - name: Build, lint and test
         working-directory: android
         run: ./gradlew assembleDebug lintDebug testDebugUnitTest
@@ -123,4 +154,4 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Debug build (latest main)" \
-            --notes "Debug APK built from ${GITHUB_SHA::7} on main. Replaced on every push that touches android/ or core/."
+            --notes "Debug APK built from ${GITHUB_SHA::7} on main, with the M0 region file (Skåne and surroundings) built in. Replaced on every push that touches android/ or core/."
