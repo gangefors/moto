@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# zizmor configuration: findings accepted on purpose, each with its reason.
+rules:
+  dangerous-triggers:
+    ignore:
+      # CLA Assistant needs pull_request_target to comment on pull requests
+      # from forks. The workflow never checks out or runs pull request code.
+      - cla.yml
+  archived-uses:
+    ignore:
+      # contributor-assistant/github-action is archived but still works and
+      # is pinned by SHA. Replacing it is a separate decision (see the
+      # milestones page).
+      - cla.yml
+  secrets-outside-env:
+    ignore:
+      # The debug keystore only signs debug builds so they install over each
+      # other; pull requests from forks never receive it.
+      - android.yml
