@@ -22,12 +22,16 @@ on:
       - "core/**"
       - ".github/workflows/android.yml"
       - ".github/scripts/**"
+      # Documentation alone never needs a build.
+      - "!**/*.md"
   pull_request:
     paths:
       - "android/**"
       - "core/**"
       - ".github/workflows/android.yml"
       - ".github/scripts/**"
+      # Documentation alone never needs a build.
+      - "!**/*.md"
   workflow_dispatch:
 
 permissions:
