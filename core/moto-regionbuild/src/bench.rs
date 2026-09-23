@@ -15,8 +15,10 @@ use moto_core::{Avoid, Engine, LatLon, RouteOptions};
 pub const SNAP_POINTS: usize = 10_000;
 /// Random start/end pairs routed by the benchmark.
 pub const ROUTE_PAIRS: usize = 100;
-/// Timed repetitions of the verify/open and routing runs; the median counts.
+/// Timed repetitions; the fastest run counts, being the one least disturbed
+/// by the rest of the machine. Short timings get more rounds.
 const ROUNDS: usize = 5;
+const SHORT_ROUNDS: usize = 15;
 
 /// Everything `--check` measures.
 #[derive(Debug, Clone, PartialEq)]
@@ -58,12 +60,8 @@ impl Rng {
     }
 }
 
-fn median(mut v: Vec<f64>) -> f64 {
-    if v.is_empty() {
-        return 0.0;
-    }
-    v.sort_by(f64::total_cmp);
-    v[v.len() / 2]
+fn fastest(v: Vec<f64>) -> f64 {
+    v.into_iter().reduce(f64::min).unwrap_or(0.0)
 }
 
 fn ms(t: Instant) -> f64 {
@@ -71,7 +69,7 @@ fn ms(t: Instant) -> f64 {
 }
 
 /// A fixed CPU- and memory-bound workload (sorting 2 M pseudo-random
-/// numbers), timed in milliseconds.
+/// numbers), timed in milliseconds (fastest of [`ROUNDS`]).
 pub fn calibrate() -> f64 {
     let times = (0..ROUNDS)
         .map(|_| {
@@ -83,7 +81,7 @@ pub fn calibrate() -> f64 {
             ms(t)
         })
         .collect();
-    median(times)
+    fastest(times)
 }
 
 /// Runs the benchmark on a region file.
@@ -96,7 +94,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let mut verify = Vec::new();
     let mut open = Vec::new();
     let mut region = None;
-    for _ in 0..ROUNDS {
+    for _ in 0..SHORT_ROUNDS {
         let t = Instant::now();
         moto_core::region::verify_file(path).map_err(|e| e.to_string())?;
         verify.push(ms(t));
@@ -119,13 +117,18 @@ pub fn run(path: &Path) -> Result<Report, String> {
             lon: (f64::from(b.min_lon) + rng.next() * f64::from(b.max_lon - b.min_lon)) / 1e7,
         })
         .collect();
-    let t = Instant::now();
-    let on_road: Vec<LatLon> = points
-        .iter()
-        .copied()
-        .filter(|&p| engine.snap(p).is_ok())
-        .collect();
-    let snap_us_mean = t.elapsed().as_secs_f64() * 1e6 / points.len() as f64;
+    let mut on_road = Vec::new();
+    let mut snap_runs = Vec::new();
+    for _ in 0..ROUNDS {
+        let t = Instant::now();
+        on_road = points
+            .iter()
+            .copied()
+            .filter(|&p| engine.snap(p).is_ok())
+            .collect();
+        snap_runs.push(t.elapsed().as_secs_f64() * 1e6 / points.len() as f64);
+    }
+    let snap_us_mean = fastest(snap_runs);
 
     let pairs: Vec<(LatLon, LatLon)> = on_road
         .chunks_exact(2)
@@ -142,7 +145,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
         ..opts.clone()
     };
 
-    // Per-pair times: the median over the rounds, which damps noise.
+    // Per-pair times: the fastest of the rounds.
     let mut per_pair = vec![Vec::new(); pairs.len()];
     let (mut found, mut km) = (0, 0.0);
     for round in 0..ROUNDS {
@@ -158,7 +161,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
             }
         }
     }
-    let mut times: Vec<f64> = per_pair.into_iter().map(median).collect();
+    let mut times: Vec<f64> = per_pair.into_iter().map(fastest).collect();
     times.sort_by(f64::total_cmp);
     let pick = |q: f64| {
         times
@@ -182,8 +185,8 @@ pub fn run(path: &Path) -> Result<Report, String> {
         edges,
         grid,
         calibration_ms,
-        verify_ms: median(verify),
-        open_ms: median(open),
+        verify_ms: fastest(verify),
+        open_ms: fastest(open),
         snap_us_mean,
         snapped: on_road.len(),
         route_ms_mean: if times.is_empty() {
@@ -349,8 +352,8 @@ mod tests {
     }
 
     #[test]
-    fn median_of_nothing_is_zero() {
-        assert_eq!(median(vec![]), 0.0);
-        assert_eq!(median(vec![3.0, 1.0, 2.0]), 2.0);
+    fn fastest_of_nothing_is_zero() {
+        assert_eq!(fastest(vec![]), 0.0);
+        assert_eq!(fastest(vec![3.0, 1.0, 2.0]), 1.0);
     }
 }
