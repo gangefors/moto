@@ -9,6 +9,7 @@
 use std::path::Path;
 
 use crate::draft::SectionDraft;
+use crate::matching::MatchedTrack;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
 use crate::{CoreError, LatLon, RoadPoint, RoundTripTarget, Route, RouteOptions};
@@ -107,6 +108,14 @@ impl Engine {
             self.max_speed_kmh,
         )?;
         crate::draft::from_path(&self.region, &parts)
+    }
+
+    /// Fits a recorded GPS track (points in recording order) to the roads
+    /// (PRD R4): the matched pieces as OSM way spans plus geometry. Points
+    /// outside the region or far from any road are skipped; where the
+    /// track can't be followed along the roads it splits into pieces.
+    pub fn match_track(&self, points: &[LatLon]) -> Result<MatchedTrack, CoreError> {
+        crate::matching::match_track(&self.region, self.bounds(), points)
     }
 
     /// Alternative loops starting and ending at `start` (PRD R7).

@@ -15,6 +15,12 @@ use moto_core::{Avoid, Engine, LatLon, RouteOptions};
 pub const SNAP_POINTS: usize = 10_000;
 /// Random start/end pairs routed by the benchmark.
 pub const ROUTE_PAIRS: usize = 100;
+/// Routes turned into noisy GPS tracks and map-matched by the benchmark.
+pub const MATCH_TRACKS: usize = 20;
+/// Synthetic tracks: a fix every this many metres along the route...
+const TRACK_STEP_M: f64 = 20.0;
+/// ...moved by up to this many metres north and east.
+const TRACK_NOISE_M: f64 = 8.0;
 /// Timed repetitions; the fastest run counts, being the one least disturbed
 /// by the rest of the machine. Short timings get more rounds.
 const ROUNDS: usize = 5;
@@ -44,6 +50,13 @@ pub struct Report {
     pub routes_found: usize,
     pub routes_found_avoiding_nothing: usize,
     pub route_km_mean: f64,
+    /// Map matching time per km of track (fastest round).
+    pub match_ms_per_km: f64,
+    pub match_tracks: usize,
+    pub match_km: f64,
+    /// Matched length over ridden length, and pieces per track.
+    pub match_share: f64,
+    pub match_pieces: usize,
     /// Pairs that have no route even when avoiding nothing.
     pub unroutable: Vec<(LatLon, LatLon)>,
 }
@@ -153,6 +166,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
     // Per-pair times: the fastest of the rounds.
     let mut per_pair = vec![Vec::new(); pairs.len()];
     let (mut found, mut km) = (0, 0.0);
+    let mut ridden: Vec<Vec<LatLon>> = Vec::new();
     for round in 0..ROUNDS {
         for (i, &(a, z)) in pairs.iter().enumerate() {
             let t = Instant::now();
@@ -163,6 +177,9 @@ pub fn run(path: &Path) -> Result<Report, String> {
             {
                 found += 1;
                 km += r.distance_m / 1000.0;
+                if ridden.len() < MATCH_TRACKS {
+                    ridden.push(r.geometry);
+                }
             }
         }
     }
@@ -174,6 +191,31 @@ pub fn run(path: &Path) -> Result<Report, String> {
             .copied()
             .unwrap_or(0.0)
     };
+
+    // Map matching: noisy synthetic tracks along some of the routes.
+    let mut noise = Rng(0x1234_5678_9abc_def1);
+    let tracks: Vec<Vec<LatLon>> = ridden
+        .iter()
+        .map(|line| synthetic_track(line, &mut noise))
+        .collect();
+    let track_km: f64 = ridden
+        .iter()
+        .map(|l| moto_core::geo::polyline_length_m(l) / 1000.0)
+        .sum();
+    let (mut matched_km, mut match_pieces) = (0.0, 0);
+    let mut match_runs = Vec::new();
+    for round in 0..ROUNDS {
+        let t = Instant::now();
+        for track in &tracks {
+            let m = engine.match_track(track).map_err(|e| e.to_string())?;
+            if round == 0 {
+                match_pieces += m.pieces.len();
+                matched_km += m.pieces.iter().map(|p| p.distance_m / 1000.0).sum::<f64>();
+            }
+        }
+        match_runs.push(ms(t));
+    }
+    let match_ms = fastest(match_runs);
 
     let unroutable: Vec<(LatLon, LatLon)> = pairs
         .iter()
@@ -206,6 +248,19 @@ pub fn run(path: &Path) -> Result<Report, String> {
         routes_found: found,
         routes_found_avoiding_nothing: pairs.len() - unroutable.len(),
         route_km_mean: km / f64::from(u32::try_from(found.max(1)).unwrap_or(u32::MAX)),
+        match_ms_per_km: if track_km > 0.0 {
+            match_ms / track_km
+        } else {
+            0.0
+        },
+        match_tracks: tracks.len(),
+        match_km: track_km,
+        match_share: if track_km > 0.0 {
+            matched_km / track_km
+        } else {
+            0.0
+        },
+        match_pieces,
         unroutable,
     })
 }
@@ -252,6 +307,15 @@ impl Report {
                 self.route_km_mean
             ),
         ];
+        out.push(format!(
+            "match     {:.2} ms per km over {} noisy tracks ({:.0} km, fix every {TRACK_STEP_M} m, \
+             ±{TRACK_NOISE_M} m); {:.1} % of the length matched in {} pieces",
+            self.match_ms_per_km,
+            self.match_tracks,
+            self.match_km,
+            self.match_share * 100.0,
+            self.match_pieces
+        ));
         for (a, z) in &self.unroutable {
             out.push(format!(
                 "no route  {:.5},{:.5} → {:.5},{:.5}",
@@ -290,9 +354,45 @@ impl Report {
                 self.routes_found_avoiding_nothing as f64,
             ),
             num("route_km_mean", self.route_km_mean),
+            num("match_ms_per_km", self.match_ms_per_km),
+            num("match_tracks", self.match_tracks as f64),
+            num("match_km", self.match_km),
+            num("match_share", self.match_share),
+            num("match_pieces", self.match_pieces as f64),
         ];
         format!("{{\n{}\n}}\n", fields.join(",\n"))
     }
+}
+
+/// A GPS track along `line`: a fix every [`TRACK_STEP_M`] metres, each
+/// moved by up to [`TRACK_NOISE_M`] metres north and east.
+fn synthetic_track(line: &[LatLon], rng: &mut Rng) -> Vec<LatLon> {
+    const M_PER_DEG: f64 = 111_195.0;
+    let mut track = Vec::new();
+    let mut carry = 0.0; // metres since the last fix
+    for w in line.windows(2) {
+        let len = w[0].distance_m(&w[1]);
+        let mut at = if track.is_empty() {
+            0.0
+        } else {
+            TRACK_STEP_M - carry
+        };
+        while at <= len {
+            let f = if len > 0.0 { at / len } else { 0.0 };
+            let k = w[0].lat.to_radians().cos().max(0.01);
+            track.push(LatLon {
+                lat: w[0].lat
+                    + f * (w[1].lat - w[0].lat)
+                    + (rng.next() * 2.0 - 1.0) * TRACK_NOISE_M / M_PER_DEG,
+                lon: w[0].lon
+                    + f * (w[1].lon - w[0].lon)
+                    + (rng.next() * 2.0 - 1.0) * TRACK_NOISE_M / (M_PER_DEG * k),
+            });
+            at += TRACK_STEP_M;
+        }
+        carry = len - (at - TRACK_STEP_M);
+    }
+    track
 }
 
 fn json_escape(s: &str) -> String {
@@ -324,7 +424,12 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 9 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 10 + r.unroutable.len());
+        assert!(
+            r.match_tracks > 0 && r.match_km > 0.0 && r.match_ms_per_km > 0.0,
+            "{r:?}"
+        );
+        assert!(r.match_share > 0.8 && r.match_share < 1.2, "{r:?}");
     }
 
     #[test]
@@ -334,6 +439,7 @@ mod tests {
         assert_eq!(a.snapped, b.snapped);
         assert_eq!(a.routes_found, b.routes_found);
         assert_eq!(a.route_km_mean, b.route_km_mean);
+        assert_eq!(a.match_share, b.match_share);
     }
 
     #[test]
@@ -348,7 +454,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 19);
+        assert_eq!(json.matches(':').count(), 24);
     }
 
     #[test]

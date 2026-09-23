@@ -18,6 +18,7 @@ BASE = {
     "snap_us_mean": 5.0,
     "route_ms_mean": 15.0,
     "route_ms_p95": 40.0,
+    "match_ms_per_km": 0.3,
 }
 
 
@@ -84,6 +85,16 @@ class CompareTest(unittest.TestCase):
     def test_changed_region_is_noted(self):
         lines, _ = bc.compare(BASE, with_(edges=400000))
         self.assertTrue(any("region data changed" in l for l in lines))
+
+    def test_map_matching_regressions_are_flagged(self):
+        _, regressed = bc.compare(BASE, with_(match_ms_per_km=0.4))
+        self.assertEqual(regressed, ["Map matching, per km"])
+
+    def test_a_baseline_without_a_new_metric_is_not_comparable_there(self):
+        old = {k: v for k, v in BASE.items() if k != "match_ms_per_km"}
+        lines, regressed = bc.compare(old, dict(BASE))
+        self.assertEqual(regressed, [])
+        self.assertTrue(any("Map matching" in l and "not comparable" in l for l in lines))
 
     def test_bad_values_are_not_comparable(self):
         for bad in ({"calibration_ms": 0}, {"route_ms_mean": "x"}, {"verify_ms": -1.0}, {"open_ms": True}):

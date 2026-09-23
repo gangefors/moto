@@ -5,7 +5,7 @@
 //! the region graph (M0). Curvature and favourites join the cost in M2.
 
 use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashMap};
 
 use crate::geo::{haversine_m, polyline_slice};
 use crate::region::Region;
@@ -337,6 +337,115 @@ pub(crate) fn path(
     }));
     parts.push(last);
     Ok(parts)
+}
+
+/// Shortest paths along the road (in metres, respecting one-way roads)
+/// from `from` to each of `targets`, searching no further than `limit_m`.
+/// For each target: its distance and path pieces in travel order, or `None`
+/// when it is further than the limit or unreachable. One bounded Dijkstra
+/// search serves all targets; its memory grows with the area searched, not
+/// with the region.
+pub(crate) fn shortest_within(
+    region: &Region,
+    from: &RoadPoint,
+    targets: &[RoadPoint],
+    limit_m: f64,
+) -> Vec<Option<(f64, Vec<Partial>)>> {
+    let cost = Cost::Shortest;
+    let (leave, _) = partials(region, from);
+    let edge = |id: u32| region.edges()[id as usize];
+
+    // node -> (distance, edge arrived by, or NONE for a start node)
+    let mut settled: HashMap<u32, (f64, u32)> = HashMap::new();
+    let mut best: HashMap<u32, (f64, u32)> = HashMap::new();
+    let mut heap = BinaryHeap::new();
+    let key = |c: f64| c.to_bits();
+    for &(node, l) in &leave {
+        let c = cost.partial(&edge(l.edge), l.to - l.from);
+        if c <= limit_m && best.get(&node).is_none_or(|&(d, _)| c < d) {
+            best.insert(node, (c, NONE));
+            heap.push(Reverse((key(c), node)));
+        }
+    }
+    while let Some(Reverse((k, v))) = heap.pop() {
+        let g = f64::from_bits(k);
+        if settled.contains_key(&v) {
+            continue;
+        }
+        let Some(&(d, via)) = best.get(&v) else {
+            continue;
+        };
+        if g > d {
+            continue; // stale entry
+        }
+        settled.insert(v, (d, via));
+        for id in region.out_edges(v) {
+            let c = g + cost.edge(&edge(id));
+            let w = edge(id).head;
+            if c <= limit_m && !settled.contains_key(&w) && best.get(&w).is_none_or(|&(d, _)| c < d)
+            {
+                best.insert(w, (c, id));
+                heap.push(Reverse((key(c), w)));
+            }
+        }
+    }
+
+    targets
+        .iter()
+        .map(|to| {
+            let (_, arrive) = partials(region, to);
+            let mut found: Option<(f64, Option<u32>, Partial)> = None;
+            // Straight along the same geometry, the target ahead.
+            for &(_, l) in &leave {
+                for &(_, a) in &arrive {
+                    if l.edge == a.edge && a.to >= l.from {
+                        let c = cost.partial(&edge(l.edge), a.to - l.from);
+                        if c <= limit_m && found.as_ref().is_none_or(|f| c < f.0) {
+                            let direct = Partial {
+                                edge: l.edge,
+                                from: l.from,
+                                to: a.to,
+                            };
+                            found = Some((c, None, direct));
+                        }
+                    }
+                }
+            }
+            for &(node, a) in &arrive {
+                if let Some(&(d, _)) = settled.get(&node) {
+                    let c = d + cost.partial(&edge(a.edge), a.to - a.from);
+                    if c <= limit_m && found.as_ref().is_none_or(|f| c < f.0) {
+                        found = Some((c, Some(node), a));
+                    }
+                }
+            }
+            let (c, entry, last) = found?;
+            let Some(entry) = entry else {
+                return Some((c, vec![last]));
+            };
+            // Walk back from the entry node to a start node.
+            let mut path = Vec::new();
+            let mut v = entry;
+            loop {
+                let &(_, via) = settled.get(&v)?;
+                if via == NONE {
+                    break;
+                }
+                path.push(via);
+                v = edge(via).tail;
+            }
+            path.reverse();
+            let first = leave.iter().find(|(node, _)| *node == v).map(|&(_, l)| l)?;
+            let mut parts = vec![first];
+            parts.extend(path.into_iter().map(|edge| Partial {
+                edge,
+                from: 0.0,
+                to: 1.0,
+            }));
+            parts.push(last);
+            Some((c, parts))
+        })
+        .collect()
 }
 
 #[cfg(test)]
