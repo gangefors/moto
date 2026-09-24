@@ -35,6 +35,12 @@ Decided 2026-09-22. Full records are in [`docs/adr/`](adr/):
 - AD2 → [ADR-0003: Map tiles — OpenFreeMap](adr/0003-map-tiles-openfreemap.md)
 - AD4 → [ADR-0004: License — AGPL-3.0-only + CLA + trademark](adr/0004-license-agpl-cla.md)
 
+Later decisions:
+
+- [ADR-0005: Region file format — memory-mapped binary sections](adr/0005-region-file-format.md) (2026-09-23)
+- [ADR-0006: Sections and tracks — stored by the Rust core in SQLite](adr/0006-section-and-track-storage.md) (2026-09-23)
+- [ADR-0007: Round trips — waypoint loops with a reuse penalty, scored by worth](adr/0007-round-trip-generation.md) (2026-09-24)
+
 **AD4. License: AGPL-3.0-only + CLA + trademark**
 
 - \+ Anyone shipping or hosting a modified version must share their source; Stefan keeps sole relicensing rights (via CLA) for paid apps, App Store publishing and commercial licenses.
@@ -204,13 +210,14 @@ Single-user v1, so metrics are personal and measured with local app logs + ride 
 ## Open Questions
 
 - ~~Routing engine~~ → decided: custom Rust on-device (AD3). ~~Map SDK~~ → decided: MapLibre Native + OpenFreeMap (AD1, AD2).
-- **[Engineering — blocking]** Region file format and graph representation (e.g. CSR arrays + memory-mapped file); speed-up technique if plain A\* is too slow at 300 km (contraction hierarchies don't fit per-user weights well — consider ALT landmarks or a coarse/fine two-level graph).
-- **[Engineering]** OSM refresh cadence and how to re-match saved sections after OSM edits.
+- ~~**[Engineering — blocking]** Region file format and graph representation~~ → decided 2026-09-23: aligned binary sections, memory-mapped ([ADR-0005](adr/0005-region-file-format.md)).
+- **[Engineering]** Speed-up technique if plain A\* is too slow at 300 km (contraction hierarchies don't fit per-user weights well — consider ALT landmarks or a coarse/fine two-level graph). Plain A\* is fast enough on the M0 region; decide after measuring all of Sweden on the phone.
+- ~~**[Engineering]** OSM refresh cadence and how to re-match saved sections after OSM edits.~~ → decided 2026-09-24: CI rebuilds the region weekly; the app re-matches every section to a new region by its own geometry and flags, never drops, the ones that no longer fit.
 - **[Engineering]** Offline basemap: MapLibre offline regions from OpenFreeMap vs a bundled PMTiles file for the region (P1).
-- **[Engineering]** Round-trip algorithm: heuristic loop generation vs scoring many candidate loops; how to guarantee variety.
-- **[Design]** Quick-tag UX with gloves and a mounted phone — screen button size, confirmation feedback (sound/vibration), accidental taps.
+- ~~**[Engineering]** Round-trip algorithm: heuristic loop generation vs scoring many candidate loops; how to guarantee variety.~~ → decided 2026-09-24: loops through two waypoints for 12 headings with a reuse penalty, scored by worth, up to three that overlap less than half ([ADR-0007](adr/0007-round-trip-generation.md)).
+- ~~**[Design]** Quick-tag UX with gloves and a mounted phone — screen button size, confirmation feedback (sound/vibration), accidental taps.~~ → decided 2026-09-24: a 96 dp round button whenever the map is open, one vibration pulse when saved and three when not; tags are reviewed after the ride.
 - ~~**[Product]** Is a section direction-dependent (some roads are better one way)?~~ → decided 2026-09-23: good in both directions by default, optionally marked one-way; rated good / great / epic; stored by the Rust core in SQLite ([ADR-0006](adr/0006-section-and-track-storage.md)).
-- **[Product]** How to express the detour budget — % time, absolute minutes, or "fun level" slider?
+- ~~**[Product]** How to express the detour budget — % time, absolute minutes, or "fun level" slider?~~ → decided 2026-09-24: extra time over the fastest route in % (Fastest / +20 / +40 / +60 %); the core also takes a total time, for "arrive by" routes later. The budget sets how hard favourites and curvy roads pull.
 
 ## Timeline Considerations
 
@@ -220,6 +227,6 @@ No hard deadline; hobby pace, phased by milestones. Nice-to-align: usable for re
 2. **M1 — Capture:** R1–R4 + R10. Ride with recording and quick-tags; build up a real favourites set.
 3. **M2 — Favourite and curvy routing:** R5, R6, R8, R9, in two parts. **M2a:** one-way routes over the rider's favourites within a detour budget, exported to nav app; golden-route regression set established. **M2b:** curvature added to the same cost, so riders without favourites still get curvy routes.
 4. **M3 — Round trips:** R7. First "just go for a ride" loops.
-5. **M4 — Polish / P1s** based on real-ride feedback.
+5. **M4 — Polish / P1s** based on real-ride feedback: fixes from phone tests and rides, then P1s and items noted while building (gravel on the route, "adv" mode, arrive-by routes, region download, all of Sweden, About/Licenses screen).
 
 **Dependencies:** OSM data licensing (ODbL attribution), OpenFreeMap availability (swappable tile source), Android background location permissions (Play policy only matters if later published).
