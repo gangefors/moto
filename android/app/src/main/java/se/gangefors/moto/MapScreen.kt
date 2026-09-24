@@ -92,6 +92,7 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
 import se.gangefors.moto.core.NewSection
@@ -114,9 +115,9 @@ import se.gangefors.moto.core.defaultRouteOptions
  * a sheet to change or delete it, and "mark section" mode proposes a new one
  * between two tapped points. Otherwise tapping the map snaps the point to
  * the nearest road and marks it; two long-presses pick a start and an end
- * and draw the fastest route between them. The map only picks, draws and
- * hit-tests; routing, snapping and proposing sections belong to the Rust
- * core.
+ * and draw the route between them, over favourite sections where the
+ * detour budget allows. The map only picks, draws and hit-tests; routing,
+ * snapping and proposing sections belong to the Rust core.
  */
 @Composable
 fun MapScreen() {
@@ -232,6 +233,18 @@ fun MapScreen() {
             },
             onFailure = { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) },
         )
+    }
+
+    // The saved sections as the router sees them (M2a): rebuilt off the main
+    // thread whenever they change, re-matched ones included. Until the first
+    // build is done, routes are the fastest ones.
+    var favourites by remember { mutableStateOf<Favourites?>(null) }
+    LaunchedEffect(store, region, sections) {
+        val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
+        val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { runCatching { s.favourites(engine) } }
+            .onSuccess { favourites = it }
+            .onFailure { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) }
     }
 
     // "Mark section" mode: tap start, tap end, adjust, save.
@@ -506,19 +519,30 @@ fun MapScreen() {
                     val start = step.start
                     o.route.show(start, point, null)
                     message = resources.getString(R.string.route_computing)
+                    val favs = favourites
                     scope.launch {
                         val began = SystemClock.elapsedRealtime()
                         val result = withContext(Dispatchers.Default) {
                             runCatching {
-                                ready.engine.route(start.toLatLon(), point.toLatLon(), defaultRouteOptions())
+                                ready.engine.route(start.toLatLon(), point.toLatLon(), defaultRouteOptions(), favs)
                             }
                         }
                         val ms = SystemClock.elapsedRealtime() - began
                         message = result.fold(
                             onSuccess = { r ->
                                 o.route.show(start, point, r.geometry)
-                                val summary = summarize(r.distanceM, r.durationS)
-                                resources.getString(R.string.route_result, summary.km, summary.minutes, ms)
+                                val summary = summarize(r.distanceM, r.durationS, r.favouriteShare)
+                                if (summary.favouritePercent > 0) {
+                                    resources.getString(
+                                        R.string.route_result_favourites,
+                                        summary.km,
+                                        summary.minutes,
+                                        summary.favouritePercent,
+                                        ms,
+                                    )
+                                } else {
+                                    resources.getString(R.string.route_result, summary.km, summary.minutes, ms)
+                                }
                             },
                             onFailure = { coreErrorMessage(resources, it) },
                         )

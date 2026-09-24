@@ -46,13 +46,17 @@ fun classify(e: Throwable): CoreProblem = when (e) {
     else -> CoreProblem.OTHER
 }
 
-/** Route summary for the label: distance in km (one decimal) and whole minutes. */
-data class RouteSummary(val km: Double, val minutes: Int)
+/**
+ * Route summary for the label: distance in km (one decimal), whole minutes
+ * and the whole percent of the distance on favourite sections.
+ */
+data class RouteSummary(val km: Double, val minutes: Int, val favouritePercent: Int = 0)
 
-fun summarize(distanceM: Double, durationS: Double): RouteSummary =
+fun summarize(distanceM: Double, durationS: Double, favouriteShare: Double = 0.0): RouteSummary =
     RouteSummary(
         km = Math.round(distanceM / 100.0) / 10.0,
         minutes = Math.round(durationS / 60.0).toInt(),
+        favouritePercent = Math.round(favouriteShare.coerceIn(0.0, 1.0) * 100.0).toInt(),
     )
 
 /**
