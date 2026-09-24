@@ -9,9 +9,14 @@ publish.workspace = true
 [dependencies]
 bytemuck.workspace = true
 crc32fast.workspace = true
+flate2.workspace = true
 memmap2.workspace = true
 rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tar.workspace = true
 thiserror.workspace = true
+zip.workspace = true
 
 [features]
 # Hand-made test regions (`moto_core::fixture`), for other crates' tests.
