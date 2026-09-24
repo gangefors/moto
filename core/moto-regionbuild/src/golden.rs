@@ -47,6 +47,10 @@ pub struct Case {
     /// second must buy (see `RouteOptions::min_gain`); the default if
     /// left out.
     pub min_gain: Option<f64>,
+    /// Gravel (unpaved) roads allowed, like the app's "Allow gravel";
+    /// avoided where possible if left out.
+    #[serde(default)]
+    pub allow_unpaved: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
     pub expect: Expect,
@@ -175,6 +179,7 @@ impl Case {
         if let Some(g) = self.min_gain {
             opts.min_gain = g;
         }
+        opts.avoid.unpaved = !self.allow_unpaved;
         opts
     }
 

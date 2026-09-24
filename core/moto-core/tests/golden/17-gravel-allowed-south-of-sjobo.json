@@ -1,0 +1,11 @@
+{
+  "name": "South of Sjöbo, gravel allowed",
+  "description": "With gravel allowed (the app's Allow gravel), the same trip takes the 12 km gravel shortcut, 10 instead of 18 minutes.",
+  "from": [55.5578, 13.8215],
+  "to": [55.6155, 13.8641],
+  "allow_unpaved": true,
+  "expect": {
+    "pass": [[55.56802, 13.85889]],
+    "max_detour_ratio": 1.0
+  }
+}
