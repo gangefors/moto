@@ -154,6 +154,15 @@ fn the_committed_cases_are_valid() {
 }
 
 #[test]
+fn gravel_can_be_allowed() {
+    let c = Case::parse(&case(r#","allow_unpaved":true"#, "")).unwrap();
+    assert!(!c.options().avoid.unpaved);
+    let c = Case::parse(&case("", "")).unwrap();
+    assert!(c.options().avoid.unpaved);
+    assert!(Case::parse(&case(r#","allow_unpaved":"yes""#, "")).is_err());
+}
+
+#[test]
 fn a_total_time_budget_caps_the_minutes() {
     let file = built_fixture("golden-total");
     let engine = Engine::open(file.path()).unwrap();

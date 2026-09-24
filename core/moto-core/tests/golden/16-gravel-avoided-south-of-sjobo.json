@@ -1,0 +1,10 @@
+{
+  "name": "South of Sjöbo, gravel avoided",
+  "description": "A 12 km gravel shortcut saves 8 of 18 minutes, but gravel roads are avoided by default (counted as ten times slower), so the route stays on paved roads.",
+  "from": [55.5578, 13.8215],
+  "to": [55.6155, 13.8641],
+  "expect": {
+    "avoid": [[55.56802, 13.85889]],
+    "max_detour_ratio": 1.0
+  }
+}
