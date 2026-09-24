@@ -220,3 +220,37 @@ fn densifies_and_measures() {
     assert!(distance_to_line(ll(55.70, 13.2005), &line) < 1e-6);
     assert!((distance_to_line(ll(55.70, 13.2), &[ll(55.7001, 13.2)]) - 11.1).abs() < 0.1);
 }
+
+#[test]
+fn deletes_only_unmatched_sections() {
+    let (mut store, id) = store_with_section();
+    let other = store.get_section(id).unwrap().unwrap();
+    let keep = store
+        .add_section(
+            &NewSection {
+                rider_id: LOCAL_RIDER.into(),
+                name: "B to C".into(),
+                rating: Rating::Good,
+                direction: Direction::Both,
+                source: Source::Map,
+                ways: vec![],
+                geometry: vec![ll(55.70, 13.21), ll(55.705, 13.212), ll(55.71, 13.21)],
+            },
+            T0,
+        )
+        .unwrap();
+    // B–D is gone: A to D no longer fits, B to C does.
+    rematch_store(&mut store, &engine(lund(0.0, 0, false, true))).unwrap();
+    assert_eq!(
+        store.get_section(other.id).unwrap().unwrap().status,
+        Status::Unmatched
+    );
+    assert_eq!(
+        store.get_section(keep.id).unwrap().unwrap().status,
+        Status::Ok
+    );
+    assert_eq!(store.delete_unmatched().unwrap(), 1);
+    assert!(store.get_section(other.id).unwrap().is_none());
+    assert!(store.get_section(keep.id).unwrap().is_some());
+    assert_eq!(store.delete_unmatched().unwrap(), 0);
+}
