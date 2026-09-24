@@ -523,7 +523,7 @@ fun MapScreen() {
                 } else {
                     loops = found
                     loopOpts = opts
-                    o.route.show(start, null, first.geometry, first.favouriteParts)
+                    o.route.show(start, null, first.geometry, first.favouriteParts, first.unpavedParts)
                 }
             },
             onFailure = {
@@ -551,8 +551,8 @@ fun MapScreen() {
         }
         result.fold(
             onSuccess = { r ->
-                o.route.show(start, end, r.geometry, r.favouriteParts)
-                routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare)
+                o.route.show(start, end, r.geometry, r.favouriteParts, r.unpavedParts)
+                routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
                 shownRoute = r to opts
             },
             onFailure = {
@@ -778,14 +778,14 @@ fun MapScreen() {
                 val shown = loops.getOrNull(loopIndex)
                 LoopCard(
                     summary = shown?.let { r ->
-                        summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare)
+                        summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
                     },
                     position = loopIndex,
                     count = loops.size,
                     onNext = {
                         loopIndex = nextLoop(loopIndex, loops.size)
                         loops.getOrNull(loopIndex)?.let { r ->
-                            overlays?.route?.show(it, null, r.geometry, r.favouriteParts)
+                            overlays?.route?.show(it, null, r.geometry, r.favouriteParts, r.unpavedParts)
                         }
                     },
                     choice = loopChoice,

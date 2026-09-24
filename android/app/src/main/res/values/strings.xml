@@ -28,6 +28,7 @@
     <string name="route_extra">+%1$d min over the fastest</string>
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
+    <string name="route_gravel">%1$.1f km gravel</string>
     <string name="route_budget">Extra time for favourites</string>
     <string name="route_budget_fastest">Fastest</string>
     <string name="route_budget_extra">+%1$d %%</string>

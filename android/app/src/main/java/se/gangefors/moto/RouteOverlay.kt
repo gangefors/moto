@@ -83,6 +83,18 @@ class RouteOverlay(style: Style) {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
+            // Gravel dashed over everything else on the route, so it shows
+            // on favourite stretches too.
+            style.addLayer(
+                LineLayer(GRAVEL_LAYER, SOURCE)
+                    .withFilter(Expression.eq(Expression.get(KIND), GRAVEL))
+                    .withProperties(
+                        PropertyFactory.lineColor(GRAVEL_COLOR),
+                        PropertyFactory.lineWidth(4f),
+                        PropertyFactory.lineDasharray(arrayOf(1.5f, 1.2f)),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    ),
+            )
             style.addLayer(
                 CircleLayer(PIN_LAYER, SOURCE)
                     .withFilter(Expression.any(Expression.eq(Expression.get(KIND), START), Expression.eq(Expression.get(KIND), END)))
@@ -103,13 +115,21 @@ class RouteOverlay(style: Style) {
     }
 
     /** Shows the start pin, and the end pin and route when there are any;
-     * [favourites] are the route's stretches on favourite sections. */
-    fun show(start: LatLng?, end: LatLng?, route: List<LatLon>?, favourites: List<List<LatLon>> = emptyList()) {
+     * [favourites] are the route's stretches on favourite sections and
+     * [gravel] those on unpaved roads. */
+    fun show(
+        start: LatLng?,
+        end: LatLng?,
+        route: List<LatLon>?,
+        favourites: List<List<LatLon>> = emptyList(),
+        gravel: List<List<LatLon>> = emptyList(),
+    ) {
         val features = mutableListOf<Feature>()
         fun line(points: List<LatLon>) = LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })
         if (route != null && route.size >= 2) {
             features += feature(line(route), ROUTE)
             favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
+            gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }
         }
         start?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), START) }
         end?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), END) }
@@ -124,15 +144,19 @@ class RouteOverlay(style: Style) {
         const val CASING_LAYER = "moto-route-casing"
         const val LINE_LAYER = "moto-route-line"
         const val FAVOURITE_LAYER = "moto-route-favourites"
+        const val GRAVEL_LAYER = "moto-route-gravel"
         const val PIN_LAYER = "moto-route-pins"
         const val KIND = "kind"
         const val ROUTE = "route"
         const val FAVOURITE = "favourite"
+        const val GRAVEL = "gravel"
         const val START = "start"
         const val END = "end"
         const val ROUTE_COLOR = "#1a73e8"
         // Epic purple, the favourite colour of the section layer.
         const val FAVOURITE_COLOR = "#a142f4"
+        // Brown, dashed: an unpaved road.
+        const val GRAVEL_COLOR = "#795548"
         const val START_COLOR = "#188038"
         const val END_COLOR = "#c5221f"
     }

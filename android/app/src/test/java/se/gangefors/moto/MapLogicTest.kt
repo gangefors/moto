@@ -71,6 +71,13 @@ class MapLogicTest {
         assertEquals(0, summarize(1.0, 900.0, 0.0, 950.0).extraMinutes)
         assertEquals(31, summarize(1.0, 900.0, 0.0, 900.0, 0.305).curvyPercent)
         assertEquals(0, summarize(1.0, 900.0, 0.0, 900.0, Double.NaN).curvyPercent)
+        // Km on gravel, one decimal, never more than the route.
+        assertEquals(4.3, summarize(20_000.0, 900.0, unpavedM = 4_260.0).gravelKm, 1e-9)
+        assertEquals(0.0, summarize(20_000.0, 900.0).gravelKm, 1e-9)
+        assertEquals(0.0, summarize(20_000.0, 900.0, unpavedM = 40.0).gravelKm, 1e-9)
+        assertEquals(1.0, summarize(1_000.0, 90.0, unpavedM = 5_000.0).gravelKm, 1e-9)
+        assertEquals(0.0, summarize(1_000.0, 90.0, unpavedM = Double.NaN).gravelKm, 1e-9)
+        assertEquals(0.0, summarize(1_000.0, 90.0, unpavedM = -5.0).gravelKm, 1e-9)
     }
 
     @Test
