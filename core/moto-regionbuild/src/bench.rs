@@ -1,20 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Stefan Gangefors
 
-//! The region benchmark behind `--check`: verify, open, snap and route
-//! timings on fixed pseudo-random inputs, plus a CPU calibration run so CI
+//! The region benchmark behind `--check`: verify, open, snap, route (with
+//! and without favourites) and map-matching timings on fixed pseudo-random
+//! inputs, plus a CPU calibration run so CI
 //! can compare builds made on different machines.
 
 use std::path::Path;
 use std::time::Instant;
 
 use moto_core::region::Region;
-use moto_core::{Avoid, Engine, LatLon, RouteOptions};
+use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
+use moto_core::{Avoid, Engine, Favourites, LatLon, RouteOptions};
 
 /// Random points snapped by the benchmark.
 pub const SNAP_POINTS: usize = 10_000;
 /// Random start/end pairs routed by the benchmark.
 pub const ROUTE_PAIRS: usize = 100;
+/// Favourite sections made for routing with favourites: from random road
+/// points to the road nearest a point [`FAVOURITE_REACH_DEG`] north (less
+/// in a region under four times that tall).
+pub const FAVOURITE_SECTIONS: usize = 300;
+const FAVOURITE_REACH_DEG: f64 = 0.02;
 /// Routes turned into noisy GPS tracks and map-matched by the benchmark.
 pub const MATCH_TRACKS: usize = 20;
 /// Synthetic tracks: a fix every this many metres along the route...
@@ -50,6 +57,19 @@ pub struct Report {
     pub routes_found: usize,
     pub routes_found_avoiding_nothing: usize,
     pub route_km_mean: f64,
+    /// Building the favourites overlay from [`FAVOURITE_SECTIONS`] sections.
+    pub favourites_build_ms: f64,
+    pub favourite_sections: usize,
+    pub favourite_edges: usize,
+    /// Routing the same pairs with those favourites.
+    pub fav_route_ms_mean: f64,
+    pub fav_route_ms_p95: f64,
+    /// Mean share of the route on favourites, the same for the fastest
+    /// route, and mean time over the fastest route (1.0 = no detour), over
+    /// the pairs routed.
+    pub fav_share_mean: f64,
+    pub fav_share_fastest: f64,
+    pub fav_detour_mean: f64,
     /// Map matching time per km of track (fastest round).
     pub match_ms_per_km: f64,
     pub match_tracks: usize,
@@ -183,14 +203,68 @@ pub fn run(path: &Path) -> Result<Report, String> {
             }
         }
     }
-    let mut times: Vec<f64> = per_pair.into_iter().map(fastest).collect();
-    times.sort_by(f64::total_cmp);
-    let pick = |q: f64| {
-        times
-            .get(((times.len() as f64 - 1.0) * q).round() as usize)
-            .copied()
-            .unwrap_or(0.0)
+    let times = sorted(per_pair);
+
+    // Routing with favourites: sections drawn from road points not used
+    // as route ends.
+    let reach = FAVOURITE_REACH_DEG.min(f64::from(b.max_lat - b.min_lat) / 1e7 / 4.0);
+    let sections: Vec<Section> = on_road
+        .iter()
+        .skip(2 * ROUTE_PAIRS)
+        .take(FAVOURITE_SECTIONS)
+        .enumerate()
+        .filter_map(|(i, &p)| {
+            let north = LatLon {
+                lat: p.lat + reach,
+                lon: p.lon,
+            };
+            let d = engine.section_between(p, north).ok()?;
+            Some(Section {
+                id: i as i64 + 1,
+                rider_id: LOCAL_RIDER.into(),
+                name: String::new(),
+                rating: [Rating::Good, Rating::Great, Rating::Epic][i % 3],
+                direction: [Direction::Both, Direction::Forward][usize::from(i % 5 == 0)],
+                source: Source::Map,
+                status: Status::Ok,
+                created_at: 0,
+                updated_at: 0,
+                ways: d.ways,
+                geometry: d.geometry,
+            })
+        })
+        .collect();
+    let mut build_runs = Vec::new();
+    let mut favourites = Favourites::none();
+    for _ in 0..ROUNDS {
+        let t = Instant::now();
+        favourites = Favourites::build(&engine, &sections);
+        build_runs.push(ms(t));
+    }
+    let mut fav_per_pair = vec![Vec::new(); pairs.len()];
+    let (mut fav_found, mut fav_share, mut fav_detour) = (0u32, 0.0, 0.0);
+    let mut fastest_share = 0.0;
+    let no_detour = RouteOptions {
+        max_detour: 0.0,
+        ..opts.clone()
     };
+    for round in 0..ROUNDS {
+        for (i, &(a, z)) in pairs.iter().enumerate() {
+            let t = Instant::now();
+            let r = engine.route_with(a, z, &opts, &favourites);
+            fav_per_pair[i].push(ms(t));
+            if round == 0
+                && let (Ok(r), Ok(fastest)) = (r, engine.route_with(a, z, &no_detour, &favourites))
+                && fastest.duration_s > 0.0
+            {
+                fastest_share += fastest.favourite_share;
+                fav_found += 1;
+                fav_share += r.favourite_share;
+                fav_detour += r.duration_s / fastest.duration_s;
+            }
+        }
+    }
+    let fav_times = sorted(fav_per_pair);
 
     // Map matching: noisy synthetic tracks along some of the routes.
     let mut noise = Rng(0x1234_5678_9abc_def1);
@@ -236,18 +310,26 @@ pub fn run(path: &Path) -> Result<Report, String> {
         open_ms: fastest(open),
         snap_us_mean,
         snapped: on_road.len(),
-        route_ms_mean: if times.is_empty() {
-            0.0
-        } else {
-            times.iter().sum::<f64>() / times.len() as f64
-        },
-        route_ms_p50: pick(0.5),
-        route_ms_p95: pick(0.95),
-        route_ms_max: pick(1.0),
+        route_ms_mean: mean(&times),
+        route_ms_p50: pick(&times, 0.5),
+        route_ms_p95: pick(&times, 0.95),
+        route_ms_max: pick(&times, 1.0),
         route_pairs: pairs.len(),
         routes_found: found,
         routes_found_avoiding_nothing: pairs.len() - unroutable.len(),
         route_km_mean: km / f64::from(u32::try_from(found.max(1)).unwrap_or(u32::MAX)),
+        favourites_build_ms: fastest(build_runs),
+        favourite_sections: sections.len(),
+        favourite_edges: favourites.edge_count(),
+        fav_route_ms_mean: mean(&fav_times),
+        fav_route_ms_p95: pick(&fav_times, 0.95),
+        fav_share_mean: fav_share / f64::from(fav_found.max(1)),
+        fav_share_fastest: fastest_share / f64::from(fav_found.max(1)),
+        fav_detour_mean: if fav_found > 0 {
+            fav_detour / f64::from(fav_found)
+        } else {
+            0.0
+        },
         match_ms_per_km: if track_km > 0.0 {
             match_ms / track_km
         } else {
@@ -308,6 +390,19 @@ impl Report {
             ),
         ];
         out.push(format!(
+            "favourite {:.1} ms mean, {:.1} ms p95 over the same pairs with {} sections \
+             ({} edges, built in {:.1} ms); {:.1} % of the route on favourites (fastest route: {:.1} %), \
+             {:.2}× the fastest time",
+            self.fav_route_ms_mean,
+            self.fav_route_ms_p95,
+            self.favourite_sections,
+            self.favourite_edges,
+            self.favourites_build_ms,
+            self.fav_share_mean * 100.0,
+            self.fav_share_fastest * 100.0,
+            self.fav_detour_mean
+        ));
+        out.push(format!(
             "match     {:.2} ms per km over {} noisy tracks ({:.0} km, fix every {TRACK_STEP_M} m, \
              ±{TRACK_NOISE_M} m); {:.1} % of the length matched in {} pieces",
             self.match_ms_per_km,
@@ -354,6 +449,14 @@ impl Report {
                 self.routes_found_avoiding_nothing as f64,
             ),
             num("route_km_mean", self.route_km_mean),
+            num("favourites_build_ms", self.favourites_build_ms),
+            num("favourite_sections", self.favourite_sections as f64),
+            num("favourite_edges", self.favourite_edges as f64),
+            num("fav_route_ms_mean", self.fav_route_ms_mean),
+            num("fav_route_ms_p95", self.fav_route_ms_p95),
+            num("fav_share_mean", self.fav_share_mean),
+            num("fav_share_fastest", self.fav_share_fastest),
+            num("fav_detour_mean", self.fav_detour_mean),
             num("match_ms_per_km", self.match_ms_per_km),
             num("match_tracks", self.match_tracks as f64),
             num("match_km", self.match_km),
@@ -362,6 +465,29 @@ impl Report {
         ];
         format!("{{\n{}\n}}\n", fields.join(",\n"))
     }
+}
+
+/// Per-input timings merged to the fastest round each, sorted.
+fn sorted(per_input: Vec<Vec<f64>>) -> Vec<f64> {
+    let mut times: Vec<f64> = per_input.into_iter().map(fastest).collect();
+    times.sort_by(f64::total_cmp);
+    times
+}
+
+fn mean(v: &[f64]) -> f64 {
+    if v.is_empty() {
+        0.0
+    } else {
+        v.iter().sum::<f64>() / v.len() as f64
+    }
+}
+
+/// The `q` quantile of sorted `times` (0 when empty).
+fn pick(times: &[f64], q: f64) -> f64 {
+    times
+        .get(((times.len() as f64 - 1.0) * q).round() as usize)
+        .copied()
+        .unwrap_or(0.0)
 }
 
 /// A GPS track along `line`: a fix every [`TRACK_STEP_M`] metres, each
@@ -424,7 +550,18 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 10 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 11 + r.unroutable.len());
+        assert!(r.favourite_sections > 0 && r.favourite_edges > 0, "{r:?}");
+        assert!(
+            r.fav_route_ms_mean > 0.0 && r.fav_route_ms_p95 > 0.0,
+            "{r:?}"
+        );
+        assert!(r.fav_share_mean > 0.0 && r.fav_share_fastest > 0.0, "{r:?}");
+        let budget = 1.0 + RouteOptions::default().max_detour;
+        assert!(
+            r.fav_detour_mean >= 1.0 - 1e-9 && r.fav_detour_mean <= budget,
+            "{r:?}"
+        );
         assert!(
             r.match_tracks > 0 && r.match_km > 0.0 && r.match_ms_per_km > 0.0,
             "{r:?}"
@@ -440,6 +577,8 @@ mod tests {
         assert_eq!(a.routes_found, b.routes_found);
         assert_eq!(a.route_km_mean, b.route_km_mean);
         assert_eq!(a.match_share, b.match_share);
+        assert_eq!(a.favourite_edges, b.favourite_edges);
+        assert_eq!(a.fav_share_mean, b.fav_share_mean);
     }
 
     #[test]
@@ -454,7 +593,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 24);
+        assert_eq!(json.matches(':').count(), 32);
     }
 
     #[test]
