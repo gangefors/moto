@@ -7,7 +7,7 @@
 //! map-matched to the new road network. A section that no longer fits is
 //! flagged `unmatched`, never dropped: the rider's data outlives any map.
 
-use crate::geo::haversine_m;
+use crate::geo::{densify, distance_to_line, haversine_m};
 use crate::matching::MatchedPiece;
 use crate::section::{MAX_SECTION_POINTS, MAX_SECTION_WAYS, Section, Status, WaySpan};
 use crate::store::Store;
@@ -65,48 +65,6 @@ fn fits(old: &[LatLon], old_len: f64, piece: &MatchedPiece) -> bool {
     }
     old.iter()
         .all(|&p| distance_to_line(p, &piece.geometry) <= MAX_DEVIATION_M)
-}
-
-/// Points along `line` no more than `step_m` apart, its vertices included.
-fn densify(line: &[LatLon], step_m: f64) -> Vec<LatLon> {
-    let mut out = Vec::with_capacity(line.len() * 2);
-    for w in line.windows(2) {
-        let d = haversine_m(w[0], w[1]);
-        let n = (d / step_m).ceil().max(1.0) as usize;
-        for k in 0..n {
-            let f = k as f64 / n as f64;
-            out.push(LatLon {
-                lat: w[0].lat + f * (w[1].lat - w[0].lat),
-                lon: w[0].lon + f * (w[1].lon - w[0].lon),
-            });
-        }
-    }
-    out.extend(line.last().copied());
-    out
-}
-
-/// Distance in metres from `p` to the nearest point of `line` (local flat
-/// approximation, fine over a section).
-fn distance_to_line(p: LatLon, line: &[LatLon]) -> f64 {
-    let k = p.lat.to_radians().cos();
-    let m = 111_195.0;
-    let xy = |q: LatLon| ((q.lon - p.lon) * k * m, (q.lat - p.lat) * m);
-    let mut best = f64::INFINITY;
-    for w in line.windows(2) {
-        let (a, b) = (xy(w[0]), xy(w[1]));
-        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-        let len2 = dx * dx + dy * dy;
-        let t = if len2 > 0.0 {
-            (-(a.0 * dx + a.1 * dy) / len2).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        best = best.min((a.0 + t * dx).hypot(a.1 + t * dy));
-    }
-    if line.len() == 1 {
-        best = xy(line[0]).0.hypot(xy(line[0]).1);
-    }
-    best
 }
 
 /// What [`rematch_store`] did.

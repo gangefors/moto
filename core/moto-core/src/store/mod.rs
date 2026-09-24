@@ -143,30 +143,8 @@ impl Store {
     /// Saves a new section; `now` is seconds since the Unix epoch.
     pub fn add_section(&mut self, s: &NewSection, now: i64) -> Result<Section, CoreError> {
         s.validate()?;
-        let (min, max) = bounds(&s.geometry);
         let tx = self.conn.transaction().map_err(db_err)?;
-        tx.execute(
-            "INSERT INTO sections (rider_id, name, rating, direction, source, status,
-                created_at, updated_at, min_lat, min_lon, max_lat, max_lon, geometry)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)",
-            params![
-                s.rider_id,
-                s.name,
-                s.rating as i64,
-                s.direction as i64,
-                s.source as i64,
-                Status::Ok as i64,
-                now,
-                min.0,
-                min.1,
-                max.0,
-                max.1,
-                encode_geometry(&s.geometry),
-            ],
-        )
-        .map_err(db_err)?;
-        let id = tx.last_insert_rowid();
-        insert_ways(&tx, id, &s.ways)?;
+        let id = insert_section(&tx, s, now, Status::Ok)?;
         tx.commit().map_err(db_err)?;
         Ok(Section {
             id,
@@ -352,6 +330,39 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawSection> {
     })
 }
 
+/// Inserts a validated section with its way spans; returns its id.
+fn insert_section(
+    tx: &Transaction<'_>,
+    s: &NewSection,
+    now: i64,
+    status: Status,
+) -> Result<i64, CoreError> {
+    let (min, max) = bounds(&s.geometry);
+    tx.execute(
+        "INSERT INTO sections (rider_id, name, rating, direction, source, status,
+            created_at, updated_at, min_lat, min_lon, max_lat, max_lon, geometry)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            s.rider_id,
+            s.name,
+            s.rating as i64,
+            s.direction as i64,
+            s.source as i64,
+            status as i64,
+            now,
+            min.0,
+            min.1,
+            max.0,
+            max.1,
+            encode_geometry(&s.geometry),
+        ],
+    )
+    .map_err(db_err)?;
+    let id = tx.last_insert_rowid();
+    insert_ways(tx, id, &s.ways)?;
+    Ok(id)
+}
+
 fn insert_ways(tx: &Transaction<'_>, section_id: i64, ways: &[WaySpan]) -> Result<(), CoreError> {
     let mut stmt = tx
         .prepare(
@@ -445,6 +456,7 @@ fn decode_geometry(bytes: &[u8]) -> Option<Vec<LatLon>> {
         .collect()
 }
 
+mod exchange;
 mod rematch;
 mod tags;
 mod tracks;

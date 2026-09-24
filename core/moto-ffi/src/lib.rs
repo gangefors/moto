@@ -9,9 +9,11 @@
 
 use std::sync::Arc;
 
+mod exchange;
 mod sections;
 mod tags;
 mod tracks;
+pub use exchange::*;
 pub use sections::*;
 pub use tags::*;
 pub use tracks::*;

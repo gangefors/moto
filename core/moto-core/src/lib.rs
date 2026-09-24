@@ -14,6 +14,7 @@ pub mod curvature;
 mod draft;
 mod engine;
 mod error;
+pub mod exchange;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixture;
 pub mod geo;
