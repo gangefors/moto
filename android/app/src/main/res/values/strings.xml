@@ -53,7 +53,7 @@
     <string name="recording_failed">Recording stopped: %1$s</string>
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
-    <string name="rides_open">Rides</string>
+    <string name="rides_open">My data</string>
     <string name="rides_title">Rides</string>
     <string name="rides_loading">Loading…</string>
     <string name="rides_none">No rides recorded yet.</string>
@@ -98,4 +98,16 @@
         <item quantity="other">Tap again to delete %d</item>
     </plurals>
     <string name="unmatched_deleted">Unmatched sections deleted</string>
+    <string name="sections_title">Sections</string>
+    <string name="sections_export">Export…</string>
+    <string name="sections_import">Import…</string>
+    <string name="sections_exported">Sections exported</string>
+    <string name="sections_imported">Import done. Added: %1$d · already there: %2$d · replaced: %3$d · don’t fit the map: %4$d</string>
+    <string name="sections_import_failed">Import failed: %1$s</string>
+    <string name="sections_cannot_read">can’t read the chosen file</string>
+    <string name="sections_file_too_large">the file is larger than %1$d MiB</string>
+    <string name="format_geojson">GeoJSON</string>
+    <string name="format_zip">ZIP (compressed)</string>
+    <string name="format_gzip">GeoJSON .gz (compressed)</string>
+    <string name="format_tar_gz">TAR.GZ (compressed)</string>
 </resources>

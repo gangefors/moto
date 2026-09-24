@@ -206,3 +206,29 @@ fun rideTitle(startedAtSec: Long, zone: java.time.ZoneId): String =
 fun rideFileName(startedAtSec: Long, zone: java.time.ZoneId): String =
     "moto-ride-" + java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm", Locale.ROOT)) + ".gpx"
+
+/** Largest section file read for import; the core's own limit. */
+const val MAX_IMPORT_FILE_BYTES = 32 * 1024 * 1024
+
+/**
+ * Up to [limit] bytes from [input], or null if there are more (the file is
+ * too large). Stops reading at the limit, whatever the file claims.
+ */
+fun readCapped(input: java.io.InputStream, limit: Int): ByteArray? {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val n = input.read(buf)
+        if (n < 0) break
+        total += n
+        if (total > limit) return null
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
+
+/** Suggested export file name: "moto-sections-2026-09-24.zip". */
+fun sectionsFileName(atSec: Long, zone: java.time.ZoneId, extension: String): String =
+    "moto-sections-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT)) + "." + extension

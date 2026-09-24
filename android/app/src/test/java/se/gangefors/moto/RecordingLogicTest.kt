@@ -185,4 +185,23 @@ class RecordingLogicTest {
         assertEquals("moto-ride-2026-09-24-0730.gpx", rideFileName(start, stockholm))
         assertEquals("2026-09-24 05:30", rideTitle(start, java.time.ZoneOffset.UTC))
     }
+
+    @Test
+    fun readsFilesUpToTheLimitOnly() {
+        val small = ByteArray(100) { it.toByte() }
+        assertEquals(small.toList(), readCapped(small.inputStream(), 100)!!.toList())
+        assertNull(readCapped(ByteArray(101).inputStream(), 100))
+        assertEquals(0, readCapped(ByteArray(0).inputStream(), 100)!!.size)
+        // A stream that never ends is cut off at the limit.
+        val endless = object : java.io.InputStream() {
+            override fun read(): Int = 0
+        }
+        assertNull(readCapped(endless, 1_000_000))
+    }
+
+    @Test
+    fun namesSectionExports() {
+        val stockholm = java.time.ZoneId.of("Europe/Stockholm")
+        assertEquals("moto-sections-2026-09-24.tar.gz", sectionsFileName(1_790_227_800L, stockholm, "tar.gz"))
+    }
 }
