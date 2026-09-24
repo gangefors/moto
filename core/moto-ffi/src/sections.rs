@@ -141,7 +141,11 @@ impl SectionStore {
         }))
     }
 
-    pub fn add(&self, section: NewSection) -> Result<Section, MotoError> {
+    /// Saves a new section under the overlap rules: not saved if a saved
+    /// section already covers it (same road, in its directions, rated at
+    /// least as high); otherwise saved, removing the saved sections it
+    /// makes redundant.
+    pub fn add(&self, section: NewSection) -> Result<AddResult, MotoError> {
         let new = core::NewSection {
             rider_id: core::LOCAL_RIDER.into(),
             name: section.name,
@@ -151,7 +155,20 @@ impl SectionStore {
             ways: section.ways.into_iter().map(Into::into).collect(),
             geometry: section.geometry.into_iter().map(Into::into).collect(),
         };
-        Ok(self.store().add_section(&new, now())?.into())
+        Ok(
+            match moto_core::overlap::add_section(&mut self.store(), &new, now())? {
+                moto_core::overlap::Added::Saved { section, replaced } => AddResult {
+                    section: Some(section.into()),
+                    replaced,
+                    covered_by: None,
+                },
+                moto_core::overlap::Added::Covered { by } => AddResult {
+                    section: None,
+                    replaced: Vec::new(),
+                    covered_by: Some(by),
+                },
+            },
+        )
     }
 
     pub fn get(&self, id: i64) -> Result<Option<Section>, MotoError> {
@@ -203,6 +220,16 @@ impl SectionStore {
     pub fn delete_unmatched(&self) -> Result<u64, MotoError> {
         Ok(self.store().delete_unmatched()?)
     }
+}
+
+/// What `SectionStore.add` did: `section` is the saved section, or null
+/// when the saved section `covered_by` already says as much; `replaced`
+/// are the ids of saved sections the new one made redundant (removed).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct AddResult {
+    pub section: Option<Section>,
+    pub replaced: Vec<i64>,
+    pub covered_by: Option<i64>,
 }
 
 /// The rider's favourite sections, ready for routing on one region. Build
@@ -430,6 +457,8 @@ mod tests {
                 ways: draft.ways.clone(),
                 geometry: draft.geometry.clone(),
             })
+            .unwrap()
+            .section
             .unwrap();
         assert_eq!(saved.rider_id, "local");
         assert_eq!(saved.status, SectionStatus::Ok);
@@ -455,8 +484,8 @@ mod tests {
             ways: vec![],
             geometry: vec![ll(lat, 13.0), ll(lat + 0.01, 13.01)],
         };
-        let south = store.add(new(55.4)).unwrap();
-        let north = store.add(new(56.4)).unwrap();
+        let south = store.add(new(55.4)).unwrap().section.unwrap();
+        let north = store.add(new(56.4)).unwrap().section.unwrap();
         let area = Area {
             south_west: ll(56.0, 12.5),
             north_east: ll(57.0, 13.5),
@@ -544,6 +573,8 @@ mod tests {
                 ways: draft.ways,
                 geometry: draft.geometry,
             })
+            .unwrap()
+            .section
             .unwrap();
         // A new database hasn't seen a region: the first run checks all.
         let first = store.rematch(engine.clone()).unwrap();
@@ -644,5 +675,49 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, MotoError::InvalidInput { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn new_sections_follow_the_overlap_rules() {
+        let (engine, region) = engine("overlap");
+        let road = |from: f64, to: f64| {
+            engine
+                .section_between(ll(55.7001, from), ll(55.7001, to))
+                .unwrap()
+        };
+        let (long, short) = (road(13.201, 13.209), road(13.203, 13.207));
+        std::fs::remove_file(region).unwrap();
+        let db = TempDb::new("overlap");
+        let store = SectionStore::open(db.path()).unwrap();
+        let new = |d: &SectionDraft, rating, direction| NewSection {
+            name: String::new(),
+            rating,
+            direction,
+            source: SectionSource::Map,
+            ways: d.ways.clone(),
+            geometry: d.geometry.clone(),
+        };
+        let good = store
+            .add(new(&long, Rating::Good, Direction::Both))
+            .unwrap()
+            .section
+            .unwrap();
+        // A shorter good one inside it: nothing new.
+        let r = store
+            .add(new(&short, Rating::Good, Direction::Both))
+            .unwrap();
+        assert!(r.section.is_none());
+        assert_eq!(r.covered_by, Some(good.id));
+        // A shorter epic one inside it: kept alongside.
+        let r = store
+            .add(new(&short, Rating::Epic, Direction::Forward))
+            .unwrap();
+        assert!(r.section.is_some() && r.replaced.is_empty(), "{r:?}");
+        // The whole road epic both ways replaces both.
+        let r = store
+            .add(new(&long, Rating::Epic, Direction::Both))
+            .unwrap();
+        assert_eq!(r.replaced.len(), 2, "{r:?}");
+        assert_eq!(store.list(None).unwrap().len(), 1);
     }
 }

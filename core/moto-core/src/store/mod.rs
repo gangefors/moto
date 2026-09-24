@@ -140,10 +140,27 @@ impl Store {
         user_version(&self.conn)
     }
 
-    /// Saves a new section; `now` is seconds since the Unix epoch.
+    /// Saves a new section as it is (no overlap rules; see
+    /// [`crate::overlap::add_section`]); `now` is seconds since the Unix
+    /// epoch.
     pub fn add_section(&mut self, s: &NewSection, now: i64) -> Result<Section, CoreError> {
+        self.add_section_replacing(s, &[], now)
+    }
+
+    /// Saves a new section and deletes the sections `replace` in one
+    /// transaction.
+    pub fn add_section_replacing(
+        &mut self,
+        s: &NewSection,
+        replace: &[i64],
+        now: i64,
+    ) -> Result<Section, CoreError> {
         s.validate()?;
         let tx = self.conn.transaction().map_err(db_err)?;
+        for id in replace {
+            tx.execute("DELETE FROM sections WHERE id = ?1", [id])
+                .map_err(db_err)?;
+        }
         let id = insert_section(&tx, s, now, Status::Ok)?;
         tx.commit().map_err(db_err)?;
         Ok(Section {
