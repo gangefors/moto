@@ -115,7 +115,7 @@ pub(crate) fn densify(line: &[LatLon], step_m: f64) -> Vec<LatLon> {
 
 /// Distance in metres from `p` to the nearest point of `line` (local flat
 /// approximation, fine over a section).
-pub(crate) fn distance_to_line(p: LatLon, line: &[LatLon]) -> f64 {
+pub fn distance_to_line(p: LatLon, line: &[LatLon]) -> f64 {
     let k = p.lat.to_radians().cos();
     let m = 111_195.0;
     let xy = |q: LatLon| ((q.lon - p.lon) * k * m, (q.lat - p.lat) * m);

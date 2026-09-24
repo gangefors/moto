@@ -9,9 +9,11 @@
 //! neighbourhood by default), builds the routing graph and writes the region
 //! file. `--check` verifies an existing file and benchmarks it; CI compares
 //! its `--json` output between builds. `--match` map-matches a ride
-//! exported from the app, to check the matcher on real rides.
+//! exported from the app, to check the matcher on real rides. `--golden`
+//! runs the golden-route regression set.
 
 mod bench;
+mod golden;
 mod graph;
 mod hilbert;
 mod pbf;
@@ -32,13 +34,16 @@ const USAGE: &str = "\
 usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
        moto-regionbuild --check <file.region> [--json <out.json>] [LAT,LON ...]
        moto-regionbuild --match <file.region> <ride.gpx> [--geojson <out.geojson>]
+       moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
   --check  verify checksums, benchmark opening, snapping and routing, and
            snap the given points; --json also writes the numbers as JSON
   --match  map-match a ride exported from the app and report how well it
-           fits; --geojson also writes the ride and the matched pieces";
+           fits; --geojson also writes the ride and the matched pieces
+  --golden run the golden routes (core/moto-core/tests/golden/*.json) and
+           check their expectations; --json also writes the figures";
 
 /// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
 /// half of Halland, southern Småland and western Blekinge, from Trelleborg
@@ -67,6 +72,12 @@ fn main() -> ExitCode {
         }
         [flag, region, gpx, out_flag, out] if flag == "--match" && out_flag == "--geojson" => {
             ridecheck::run(Path::new(region), Path::new(gpx), Some(Path::new(out)))
+        }
+        [flag, region, dir] if flag == "--golden" => {
+            golden::run(Path::new(region), Path::new(dir), None)
+        }
+        [flag, region, dir, out_flag, out] if flag == "--golden" && out_flag == "--json" => {
+            golden::run(Path::new(region), Path::new(dir), Some(Path::new(out)))
         }
         [input, output] => build(Path::new(input), Path::new(output), SKANE_BBOX),
         [input, output, flag, bbox] if flag == "--bbox" => match parse_bbox(bbox) {

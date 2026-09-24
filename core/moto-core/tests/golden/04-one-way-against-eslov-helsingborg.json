@@ -1,0 +1,33 @@
+{
+  "name": "Eslöv to Helsingborg, one-way favourite the other way",
+  "description": "The road is marked epic only from Helsingborg towards Eslöv, so riding from Eslöv it gives no bonus and the route stays fast.",
+  "from": [55.839, 13.304],
+  "to": [56.046, 12.694],
+  "favourites": [
+    {"from": [56.03522, 12.70668], "to": [56.03769, 12.73365], "rating": "epic", "one_way": true},
+    {"from": [56.03769, 12.73365], "to": [56.0406, 12.76531], "rating": "epic", "one_way": true},
+    {"from": [56.0406, 12.76531], "to": [56.03431, 12.78074], "rating": "epic", "one_way": true},
+    {"from": [56.03431, 12.78074], "to": [56.0227, 12.79346], "rating": "epic", "one_way": true},
+    {"from": [56.0227, 12.79346], "to": [56.0122, 12.81975], "rating": "epic", "one_way": true},
+    {"from": [56.0122, 12.81975], "to": [56.01372, 12.85102], "rating": "epic", "one_way": true},
+    {"from": [56.01372, 12.85102], "to": [56.01492, 12.883], "rating": "epic", "one_way": true},
+    {"from": [56.01492, 12.883], "to": [56.01083, 12.9142], "rating": "epic", "one_way": true},
+    {"from": [56.01083, 12.9142], "to": [56.01161, 12.94655], "rating": "epic", "one_way": true},
+    {"from": [56.01161, 12.94655], "to": [56.00303, 12.97266], "rating": "epic", "one_way": true},
+    {"from": [56.00303, 12.97266], "to": [55.98875, 12.98062], "rating": "epic", "one_way": true},
+    {"from": [55.98875, 12.98062], "to": [55.98159, 13.00828], "rating": "epic", "one_way": true},
+    {"from": [55.98159, 13.00828], "to": [55.96983, 13.03419], "rating": "epic", "one_way": true},
+    {"from": [55.96983, 13.03419], "to": [55.9557, 13.04605], "rating": "epic", "one_way": true},
+    {"from": [55.9557, 13.04605], "to": [55.93931, 13.05473], "rating": "epic", "one_way": true},
+    {"from": [55.93931, 13.05473], "to": [55.9221, 13.04739], "rating": "epic", "one_way": true},
+    {"from": [55.9221, 13.04739], "to": [55.90503, 13.04979], "rating": "epic", "one_way": true},
+    {"from": [55.90503, 13.04979], "to": [55.8941, 13.07214], "rating": "epic", "one_way": true},
+    {"from": [55.8941, 13.07214], "to": [55.87787, 13.07453], "rating": "epic", "one_way": true},
+    {"from": [55.87787, 13.07453], "to": [55.87665, 13.07385], "rating": "epic", "one_way": true}
+  ],
+  "expect": {
+    "avoid": [[56.00303, 12.97266]],
+    "max_favourite_share": 0.05,
+    "max_detour_ratio": 1.0
+  }
+}

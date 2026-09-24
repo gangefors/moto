@@ -1,0 +1,22 @@
+{
+  "name": "Klippan to Helsingborg, the same road only good",
+  "description": "Rated good (20 % bonus), the same parallel road does not repay its detour: the route stays on the fast road.",
+  "from": [56.134, 13.133],
+  "to": [56.046, 12.694],
+  "favourites": [
+    {"from": [56.13504, 13.00886], "to": [56.11903, 12.9975], "rating": "good"},
+    {"from": [56.11903, 12.9975], "to": [56.10695, 12.9745], "rating": "good"},
+    {"from": [56.10695, 12.9745], "to": [56.09132, 12.97399], "rating": "good"},
+    {"from": [56.09132, 12.97399], "to": [56.07648, 12.95988], "rating": "good"},
+    {"from": [56.07648, 12.95988], "to": [56.06258, 12.94091], "rating": "good"},
+    {"from": [56.06258, 12.94091], "to": [56.06864, 12.94029], "rating": "good"},
+    {"from": [56.06864, 12.94029], "to": [56.07553, 12.91005], "rating": "good"},
+    {"from": [56.07553, 12.91005], "to": [56.08434, 12.88167], "rating": "good"},
+    {"from": [56.08434, 12.88167], "to": [56.09662, 12.85833], "rating": "good"},
+    {"from": [56.09662, 12.85833], "to": [56.09866, 12.85277], "rating": "good"}
+  ],
+  "expect": {
+    "avoid": [[56.06258, 12.94091]],
+    "max_favourite_share": 0.05
+  }
+}
