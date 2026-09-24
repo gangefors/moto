@@ -44,8 +44,9 @@ fun showRegionOutline(style: Style, info: RegionInfo) {
 }
 
 /**
- * Draws a route from the Rust core with its start and end pins. The map
- * only draws; the route comes from the core.
+ * Draws a route from the Rust core with its start and end pins, the
+ * stretches on favourite sections highlighted. The map only draws; the
+ * route comes from the core.
  */
 class RouteOverlay(style: Style) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
@@ -73,8 +74,18 @@ class RouteOverlay(style: Style) {
                     ),
             )
             style.addLayer(
+                LineLayer(FAVOURITE_LAYER, SOURCE)
+                    .withFilter(Expression.eq(Expression.get(KIND), FAVOURITE))
+                    .withProperties(
+                        PropertyFactory.lineColor(FAVOURITE_COLOR),
+                        PropertyFactory.lineWidth(6f),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    ),
+            )
+            style.addLayer(
                 CircleLayer(PIN_LAYER, SOURCE)
-                    .withFilter(Expression.neq(Expression.get(KIND), ROUTE))
+                    .withFilter(Expression.any(Expression.eq(Expression.get(KIND), START), Expression.eq(Expression.get(KIND), END)))
                     .withProperties(
                         PropertyFactory.circleRadius(9f),
                         PropertyFactory.circleColor(
@@ -91,12 +102,14 @@ class RouteOverlay(style: Style) {
         }
     }
 
-    /** Shows the start pin, and the end pin and route when there are any. */
-    fun show(start: LatLng?, end: LatLng?, route: List<LatLon>?) {
+    /** Shows the start pin, and the end pin and route when there are any;
+     * [favourites] are the route's stretches on favourite sections. */
+    fun show(start: LatLng?, end: LatLng?, route: List<LatLon>?, favourites: List<List<LatLon>> = emptyList()) {
         val features = mutableListOf<Feature>()
+        fun line(points: List<LatLon>) = LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })
         if (route != null && route.size >= 2) {
-            val line = LineString.fromLngLats(route.map { Point.fromLngLat(it.lon, it.lat) })
-            features += feature(line, ROUTE)
+            features += feature(line(route), ROUTE)
+            favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
         }
         start?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), START) }
         end?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), END) }
@@ -110,12 +123,16 @@ class RouteOverlay(style: Style) {
         const val SOURCE = "moto-route"
         const val CASING_LAYER = "moto-route-casing"
         const val LINE_LAYER = "moto-route-line"
+        const val FAVOURITE_LAYER = "moto-route-favourites"
         const val PIN_LAYER = "moto-route-pins"
         const val KIND = "kind"
         const val ROUTE = "route"
+        const val FAVOURITE = "favourite"
         const val START = "start"
         const val END = "end"
         const val ROUTE_COLOR = "#1a73e8"
+        // Epic purple, the favourite colour of the section layer.
+        const val FAVOURITE_COLOR = "#a142f4"
         const val START_COLOR = "#188038"
         const val END_COLOR = "#c5221f"
     }

@@ -15,8 +15,13 @@
     <string name="map_hint">Tap to snap to a road or open a section. Long-press twice for a route.</string>
     <string name="route_pick_end">Start set. Long-press where you want to go.</string>
     <string name="route_computing">Finding a route…</string>
-    <string name="route_result">%1$.1f km · %2$d min · found in %3$d ms</string>
-    <string name="route_result_favourites">%1$.1f km · %2$d min · %3$d %% on favourites · found in %4$d ms</string>
+    <string name="route_summary">%1$.1f km · %2$d min</string>
+    <string name="route_extra">+%1$d min over the fastest</string>
+    <string name="route_on_favourites">%1$d %% on favourites</string>
+    <string name="route_budget">Extra time for favourites</string>
+    <string name="route_budget_fastest">Fastest</string>
+    <string name="route_budget_extra">+%1$d %%</string>
+    <string name="route_close">Clear the route</string>
     <string name="route_none">No route between these points</string>
     <string name="cancel">Cancel</string>
     <string name="sections_failed">Saved sections unavailable: %1$s</string>
