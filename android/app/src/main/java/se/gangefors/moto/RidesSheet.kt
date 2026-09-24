@@ -25,6 +25,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -54,7 +55,9 @@ import se.gangefors.moto.core.Track
 import se.gangefors.moto.core.exportExtension
 
 /**
- * The rider's data: all saved sections, exported as GeoJSON (plain or
+ * The rider's settings and data: whether routes may use gravel roads
+ * ([allowGravel], the same setting as on the route card), all saved
+ * sections, exported as GeoJSON (plain or
  * compressed) or imported from such a file, and the recorded rides, newest
  * first, each exported as GPX or deleted (tapped twice). Files are written
  * and read only where the rider picks with the system file picker: no
@@ -70,6 +73,8 @@ fun RidesSheet(
     onSectionsChanged: () -> Unit,
     onMessage: (String) -> Unit,
     onDismiss: () -> Unit,
+    allowGravel: Boolean,
+    onAllowGravel: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -162,6 +167,19 @@ fun RidesSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.routing_allow_gravel))
+                    Text(
+                        stringResource(R.string.routing_allow_gravel_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = allowGravel, onCheckedChange = onAllowGravel)
+            }
+            Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

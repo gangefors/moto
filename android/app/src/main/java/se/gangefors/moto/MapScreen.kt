@@ -487,14 +487,15 @@ fun MapScreen() {
     // The route shown and the options it was found with, for sharing.
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
     var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
-    LaunchedEffect(routeEnds, budgetPercent, favourites, overlays) {
+    var allowGravel by remember { mutableStateOf(RoutePrefs.allowGravel(context)) }
+    LaunchedEffect(routeEnds, budgetPercent, allowGravel, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
         routeSummary = null
         shownRoute = null
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), budgetPercent)
+        val opts = routeOptions(defaultRouteOptions(), budgetPercent, allowGravel)
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
             runCatching { ready.engine.route(start.toLatLon(), end.toLatLon(), opts, favs) }
@@ -668,6 +669,11 @@ fun MapScreen() {
                     onBudget = { percent ->
                         budgetPercent = percent
                         RoutePrefs.setBudgetPercent(context, percent)
+                    },
+                    allowGravel = allowGravel,
+                    onAllowGravel = { allow ->
+                        allowGravel = allow
+                        RoutePrefs.setAllowGravel(context, allow)
                     },
                     onClose = {
                         routeEnds = null
@@ -880,6 +886,11 @@ fun MapScreen() {
             },
             onMessage = { message = it },
             onDismiss = { showRides = false },
+            allowGravel = allowGravel,
+            onAllowGravel = { allow ->
+                allowGravel = allow
+                RoutePrefs.setAllowGravel(context, allow)
+            },
         )
     }
 
