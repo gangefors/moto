@@ -25,14 +25,16 @@ import androidx.compose.ui.unit.dp
 /**
  * The route between the two long-pressed points: its figures (or that it
  * is being found), and the extra time the rider gives it for favourites.
- * Choosing another budget finds the route again; Share hands it to a nav
- * app as GPX; the cross clears it.
+ * Choosing another budget, or allowing gravel roads, finds the route
+ * again; Share hands it to a nav app as GPX; the cross clears it.
  */
 @Composable
 fun RouteCard(
     summary: RouteSummary?,
     budgetPercent: Int,
     onBudget: (Int) -> Unit,
+    allowGravel: Boolean,
+    onAllowGravel: (Boolean) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
     modifier: Modifier = Modifier,
@@ -94,11 +96,22 @@ fun RouteCard(
                     )
                 }
             }
-            OutlinedButton(
-                onClick = onShare,
-                enabled = summary != null,
-                modifier = Modifier.padding(top = 4.dp),
-            ) { OneLine(stringResource(R.string.route_share)) }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                // The same setting as in My data: toggling it here routes
+                // again, to see what gravel roads change.
+                FilterChip(
+                    selected = allowGravel,
+                    onClick = { onAllowGravel(!allowGravel) },
+                    label = { OneLine(stringResource(R.string.route_allow_gravel)) },
+                )
+                OutlinedButton(
+                    onClick = onShare,
+                    enabled = summary != null,
+                ) { OneLine(stringResource(R.string.route_share)) }
+            }
         }
     }
 }

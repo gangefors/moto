@@ -13,14 +13,26 @@ import androidx.core.content.edit
 object RoutePrefs {
     private const val FILE = "route"
     private const val BUDGET = "budget_percent"
+    private const val GRAVEL = "allow_gravel"
 
     /** The extra-time budget in percent, or the default. */
     fun budgetPercent(context: Context): Int {
         val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        return budgetPercentOf(if (prefs.contains(BUDGET)) prefs.getInt(BUDGET, DEFAULT_BUDGET_PERCENT) else null)
+        // A value of another type throws; it counts as unset.
+        return budgetPercentOf(runCatching { prefs.getInt(BUDGET, DEFAULT_BUDGET_PERCENT) }.getOrNull())
     }
 
     fun setBudgetPercent(context: Context, percent: Int) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putInt(BUDGET, percent) }
+    }
+
+    /** Whether routes may use gravel (unpaved) roads freely; avoided by
+     * default. */
+    fun allowGravel(context: Context): Boolean =
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(GRAVEL, false) }
+            .getOrDefault(false)
+
+    fun setAllowGravel(context: Context, allow: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(GRAVEL, allow) }
     }
 }

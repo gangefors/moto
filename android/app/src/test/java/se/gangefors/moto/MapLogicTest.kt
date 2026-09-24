@@ -85,6 +85,12 @@ class MapLogicTest {
         assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
         assertEquals(base.avoid, o.avoid)
         assertEquals(1.0, o.minGain, 0.0)
+        // Gravel: avoided unless allowed; the other avoid options stay.
+        assertTrue(routeOptions(base, 40).avoid.unpaved)
+        val gravel = routeOptions(base, 40, allowGravel = true)
+        assertFalse(gravel.avoid.unpaved)
+        assertTrue(gravel.avoid.motorways)
+        assertFalse(gravel.avoid.ferries)
     }
 
     @Test

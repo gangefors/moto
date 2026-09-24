@@ -23,6 +23,10 @@
     <string name="route_budget_extra">+%1$d %%</string>
     <string name="route_close">Clear the route</string>
     <string name="route_share">Share GPX</string>
+    <string name="route_allow_gravel">Allow gravel</string>
+    <string name="routing_title">Routing</string>
+    <string name="routing_allow_gravel">Allow gravel roads</string>
+    <string name="routing_allow_gravel_hint">Otherwise routes keep off gravel and other unpaved roads where they can.</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>

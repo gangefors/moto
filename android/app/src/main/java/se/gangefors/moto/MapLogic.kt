@@ -87,9 +87,16 @@ const val DEFAULT_BUDGET_PERCENT = 40
  * (preferences are read back as untrusted input). */
 fun budgetPercentOf(stored: Int?): Int = stored?.takeIf { it in BUDGET_CHOICES } ?: DEFAULT_BUDGET_PERCENT
 
-/** [base] (the core's defaults) with [percent] extra time allowed. */
-fun routeOptions(base: RouteOptions, percent: Int): RouteOptions =
-    base.copy(budget = TimeBudget.Extra(percent / 100.0))
+/**
+ * [base] (the core's defaults) with [percent] extra time allowed, and
+ * gravel (unpaved) roads allowed or avoided. Avoided means "where
+ * possible": the core counts them as much slower, it doesn't ban them.
+ */
+fun routeOptions(base: RouteOptions, percent: Int, allowGravel: Boolean = false): RouteOptions =
+    base.copy(
+        budget = TimeBudget.Extra(percent / 100.0),
+        avoid = base.avoid.copy(unpaved = !allowGravel),
+    )
 
 /**
  * Whether the bundled region must be (re)installed: when there is no
