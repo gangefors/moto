@@ -29,6 +29,17 @@
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_gravel">%1$.1f km gravel</string>
+    <string name="about_open">About and licences</string>
+    <string name="about_title">About moto</string>
+    <string name="about_close">Close</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>
+    <string name="about_source">Source code: https://github.com/gangefors/moto</string>
+    <string name="about_map_attribution">Map data © OpenStreetMap contributors, available under the Open Database License (ODbL). Map tiles by OpenFreeMap, © OpenMapTiles.</string>
+    <string name="about_notices_title">Open-source licences</string>
+    <string name="about_notices_intro">moto is built on the open-source software listed below, with the licence texts it comes with.</string>
+    <string name="about_notices_loading">Loading…</string>
+    <string name="about_notices_missing">The licence notices are missing from this build.</string>
     <string name="route_budget">Extra time for favourites</string>
     <string name="route_budget_fastest">Fastest</string>
     <string name="route_budget_extra">+%1$d %%</string>
