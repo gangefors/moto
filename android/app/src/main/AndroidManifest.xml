@@ -35,6 +35,18 @@
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+        <!-- Hands an exported route (GPX) to the app the rider picks in the
+             share sheet: not exported; each share grants read access to
+             that one file only (res/xml/shared_files.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_files" />
+        </provider>
     </application>
 
 </manifest>

@@ -12,6 +12,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,7 +25,8 @@ import androidx.compose.ui.unit.dp
 /**
  * The route between the two long-pressed points: its figures (or that it
  * is being found), and the extra time the rider gives it for favourites.
- * Choosing another budget finds the route again; the cross clears it.
+ * Choosing another budget finds the route again; Share hands it to a nav
+ * app as GPX; the cross clears it.
  */
 @Composable
 fun RouteCard(
@@ -32,6 +34,7 @@ fun RouteCard(
     budgetPercent: Int,
     onBudget: (Int) -> Unit,
     onClose: () -> Unit,
+    onShare: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -91,6 +94,11 @@ fun RouteCard(
                     )
                 }
             }
+            OutlinedButton(
+                onClick = onShare,
+                enabled = summary != null,
+                modifier = Modifier.padding(top = 4.dp),
+            ) { OneLine(stringResource(R.string.route_share)) }
         }
     }
 }
