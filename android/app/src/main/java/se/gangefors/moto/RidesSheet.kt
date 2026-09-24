@@ -255,7 +255,6 @@ private val EXPORT_FORMATS = listOf(
     ExportFormat.GEO_JSON to R.string.format_geojson,
     ExportFormat.ZIP to R.string.format_zip,
     ExportFormat.GZIP to R.string.format_gzip,
-    ExportFormat.TAR_GZ to R.string.format_tar_gz,
 )
 
 private fun importSummary(res: android.content.res.Resources, r: ImportReport): String =

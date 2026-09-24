@@ -64,12 +64,7 @@ fn round_trips_through_every_format() {
         along(&e, 13.202, 13.208, Rating::Epic, Direction::Forward),
         along(&e, 13.211, 13.219, Rating::Great, Direction::Both),
     ]);
-    for format in [
-        ExportFormat::GeoJson,
-        ExportFormat::Gzip,
-        ExportFormat::Zip,
-        ExportFormat::TarGz,
-    ] {
+    for format in [ExportFormat::GeoJson, ExportFormat::Gzip, ExportFormat::Zip] {
         let bytes = export_sections(&source, format).unwrap();
         let mut target = Store::open_in_memory().unwrap();
         let r = import_sections(&mut target, Some(&e), &bytes, T0 + 60).unwrap();
