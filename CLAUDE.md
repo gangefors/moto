@@ -65,6 +65,7 @@ Security comes first: before performance, features and convenience. Never choose
 - **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
 - CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints.
 - **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the M0 region: region open and verify, snapping, routing) with this build's binary and with the last `main` build's binary, alternately on the same machine, and compares them. The job summary shows the table.
+- **Route quality is measured on every build.** CI runs the golden routes (`core/moto-core/tests/golden/`) with this build and the last `main` build and shows a before/after table; a route that breaks its expectations fails CI. Change scoring weights only with a stated hypothesis and that before/after table, and add a golden case for every bad route found on a real ride instead of tuning weights to one route.
 - A significant regression fails CI: more than 25 % slower for snapping and routing, or more than 50 % and 5 ms slower for the short, memory- and disk-bound region verify and open timings (each binary runs twice; each metric keeps its faster result). Re-evaluate the implementation and try to recover the loss first. Accept a regression only when it buys something worth it (correctness, security, a feature), with a `Perf-Accepted: <reason>` trailer in the commit message and an entry in the decisions log. Improvements of more than 10 % are reported too; note them in the commit message.
 - Security beats performance: never accept an insecure change to win back speed.
 
@@ -91,6 +92,9 @@ cargo deny --locked check   # advisories, licences, sources (deny.toml; cargo-de
 cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf m0.region
 cargo run --release -p moto-regionbuild -- --check m0.region --json bench.json
 python3 ../.github/scripts/bench_compare.py old.json bench.json
+# Golden routes: route-quality regression set (run before and after every
+# scoring change; see moto-core/tests/golden/README.md)
+cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/golden --json golden.json
 # Map matching on a real ride exported from the app (Rides → Export)
 cargo run --release -p moto-regionbuild -- --match m0.region ride.gpx --geojson ride.geojson
 python3 -m unittest discover -s ../.github/scripts -p 'test_*.py'
