@@ -11,9 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -31,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Rating
@@ -99,19 +95,11 @@ fun SectionSheet(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) {
-                    IconButton(
-                        onClick = { if (confirmDelete) onDelete() else confirmDelete = true },
-                        colors = if (confirmDelete) {
-                            IconButtonDefaults.filledIconButtonColors(containerColor = DELETE_COLOR, contentColor = Color.White)
-                        } else {
-                            IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR)
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_delete),
-                            contentDescription = stringResource(R.string.section_delete),
-                        )
-                    }
+                    DeleteButton(
+                        confirming = confirmDelete,
+                        onArm = { confirmDelete = true },
+                        onDelete = onDelete,
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), maxLines = 1) }
@@ -129,4 +117,3 @@ fun ratingLabel(rating: Rating): Int = when (rating) {
     Rating.EPIC -> R.string.rating_epic
 }
 
-private val DELETE_COLOR = Color(0xFFC5221F)

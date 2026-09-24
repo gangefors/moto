@@ -30,7 +30,8 @@
     <string name="section_edit_title">Section · %1$.1f km</string>
     <string name="section_one_way">One-way</string>
     <string name="section_one_way_hint">Only good in the direction it was marked (arrows)</string>
-    <string name="section_delete">Delete</string>
+    <string name="delete">Delete</string>
+    <string name="delete_confirm">Tap again to delete</string>
     <string name="section_delete_confirm">Tap the bin again to delete this section.</string>
     <string name="section_saved">Section saved</string>
     <string name="section_updated">Section updated</string>
@@ -63,7 +64,6 @@
         <item quantity="other">%d GPS fixes</item>
     </plurals>
     <string name="rides_export">Export</string>
-    <string name="rides_delete_confirm">Tap again</string>
     <string name="rides_exported">Ride exported as GPX</string>
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>
@@ -90,8 +90,8 @@
     </plurals>
     <string name="unmatched_hide">Hide unmatched</string>
     <plurals name="unmatched_delete">
-        <item quantity="one">Delete %d unmatched</item>
-        <item quantity="other">Delete %d unmatched</item>
+        <item quantity="one">%d unmatched</item>
+        <item quantity="other">%d unmatched</item>
     </plurals>
     <plurals name="unmatched_delete_confirm">
         <item quantity="one">Tap again to delete %d</item>

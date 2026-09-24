@@ -636,17 +636,26 @@ fun MapScreen() {
                                 changeSections(resources.getString(R.string.unmatched_deleted)) { it.deleteUnmatched() }
                             }
                         },
-                        containerColor = if (confirmDeleteUnmatched) DELETE_RED else MaterialTheme.colorScheme.primaryContainer,
+                        containerColor = if (confirmDeleteUnmatched) DELETE_COLOR else MaterialTheme.colorScheme.primaryContainer,
                         contentColor = if (confirmDeleteUnmatched) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Text(
-                            if (confirmDeleteUnmatched) {
-                                pluralStringResource(R.plurals.unmatched_delete_confirm, deletable, deletable)
-                            } else {
-                                pluralStringResource(R.plurals.unmatched_delete, deletable, deletable)
-                            },
-                        )
-                    }
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = stringResource(
+                                    if (confirmDeleteUnmatched) R.string.delete_confirm else R.string.delete,
+                                ),
+                            )
+                        },
+                        text = {
+                            Text(
+                                if (confirmDeleteUnmatched) {
+                                    pluralStringResource(R.plurals.unmatched_delete_confirm, deletable, deletable)
+                                } else {
+                                    pluralStringResource(R.plurals.unmatched_delete, deletable, deletable)
+                                },
+                            )
+                        },
+                    )
                 }
                 if (unmatched > 0) {
                     ExtendedFloatingActionButton(onClick = {
@@ -826,9 +835,6 @@ private fun fitTo(map: MapLibreMap, points: List<LatLon>, density: Float) {
 
 /** Quick-tag button: large enough to hit with gloves on. */
 private val TAG_BUTTON_SIZE: Dp = 96.dp
-
-/** Destructive actions. */
-private val DELETE_RED = Color(0xFFC5221F)
 private val TAG_COLOR = Color(0xFFE8710A)
 
 /** The map layers the screen draws into, created once per style. */
