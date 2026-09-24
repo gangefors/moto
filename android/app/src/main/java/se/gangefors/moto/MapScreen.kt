@@ -203,6 +203,7 @@ fun MapScreen() {
     var proposing by remember { mutableStateOf(false) }
     var savingDraft by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Section?>(null) }
+    var showRides by remember { mutableStateOf(false) }
 
     // Layers in drawing order: saved sections, the ride being recorded, a
     // proposed section, the route, the snap marker.
@@ -457,6 +458,11 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                if (store is StoreState.Ready) {
+                    ExtendedFloatingActionButton(onClick = { showRides = true }) {
+                        Text(stringResource(R.string.rides_open))
+                    }
+                }
                 if (store is StoreState.Ready && region is RegionState.Ready) {
                     ExtendedFloatingActionButton(onClick = {
                         marker.begin()
@@ -520,6 +526,16 @@ fun MapScreen() {
                     )
                 }
             },
+        )
+    }
+
+    // Recorded rides: export as GPX or delete.
+    val readyStore = store as? StoreState.Ready
+    if (showRides && readyStore != null) {
+        RidesSheet(
+            store = readyStore.store,
+            onMessage = { message = it },
+            onDismiss = { showRides = false },
         )
     }
 

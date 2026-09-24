@@ -175,4 +175,14 @@ class RecordingLogicTest {
         assertEquals(listOf(10_000, 10_000, 5_000), batches(many).map { it.size })
         assertTrue(batches(emptyList()).isEmpty())
     }
+
+    @Test
+    fun namesRidesByLocalStartTime() {
+        val stockholm = java.time.ZoneId.of("Europe/Stockholm")
+        // 2026-09-24 05:30 UTC is 07:30 in Stockholm (summer time).
+        val start = 1_790_227_800L
+        assertEquals("2026-09-24 07:30", rideTitle(start, stockholm))
+        assertEquals("moto-ride-2026-09-24-0730.gpx", rideFileName(start, stockholm))
+        assertEquals("2026-09-24 05:30", rideTitle(start, java.time.ZoneOffset.UTC))
+    }
 }
