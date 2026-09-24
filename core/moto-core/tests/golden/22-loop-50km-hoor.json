@@ -1,0 +1,9 @@
+{
+  "name": "Loop of 50 km from Höör",
+  "description": "Three different 50 km loops from a town in the middle of the region, each within 15 % and riding at most 10 % of itself twice outside the home zone (the way out of town and home). Curvature on, as in the app: the lakes and ridges around Höör give plenty of curvy road.",
+  "from": [55.937, 13.542],
+  "loop": {"km": 50},
+  "expect": {
+    "min_curvy_share": 0.2
+  }
+}

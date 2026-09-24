@@ -46,6 +46,14 @@ pub struct ScoringParams {
     /// Bisection steps over the pull when full pull gives a route over the
     /// budget or the guard (each one is a route search).
     pub detour_steps: u32,
+    /// Round trips (ADR-0007): cost factor on roads the loop already rides.
+    pub reuse_penalty: f64,
+    /// Road length over straight-line length assumed when sizing a loop.
+    pub loop_detour: f64,
+    /// Pull of favourites and curvature on round-trip legs (0–1).
+    pub loop_pull: f64,
+    /// Speed used to turn a duration target into a distance, m/s.
+    pub loop_speed_mps: f64,
 }
 
 impl ScoringParams {
@@ -92,6 +100,10 @@ pub const PARAMS: ScoringParams = ScoringParams {
     curve_class_weight: [0.0, 0.5, 1.0, 1.0, 1.0, 0.6, 0.2, 0.0, 0.0, 0.0, 0.0],
     curve_weight: 0.8,
     detour_steps: 5,
+    reuse_penalty: 4.0,
+    loop_detour: 1.3,
+    loop_pull: 1.0,
+    loop_speed_mps: 15.0,
 };
 
 #[cfg(test)]

@@ -47,6 +47,25 @@ class CompareTest(unittest.TestCase):
         self.assertIn("new", row)
         self.assertIn("❌ misses x / y", row)
 
+    def test_round_trips_show_loops_and_reuse(self):
+        def loop(n, reuse):
+            return dict(outcome("l", detour=1.0), loops=n, reuse_share=reuse)
+
+        lines, failed = gc.compare([loop(3, 0.02)], [loop(2, 0.06)])
+        self.assertEqual(failed, [])
+        row = next(l for l in lines if l.startswith("| l "))
+        self.assertIn("2 loops, 6 % reuse", row)
+        self.assertIn("⚠️ loops -1", row)
+        self.assertIn("⚠️ reuse +4 pp", row)
+        lines, _ = gc.compare([loop(2, 0.06)], [loop(3, 0.02)])
+        row = next(l for l in lines if l.startswith("| l "))
+        self.assertIn("loops +1", row)
+        self.assertIn("reuse -4 pp", row)
+        self.assertNotIn("⚠️", row)
+        # Junk in place of a count is ignored, not a crash.
+        lines, _ = gc.compare([loop(True, "x")], [loop("3", None)])
+        self.assertTrue(any("1.10×" in l or "1.00×" in l for l in lines))
+
     def test_no_baseline(self):
         lines, failed = gc.compare(None, [outcome("a")])
         self.assertEqual(failed, [])

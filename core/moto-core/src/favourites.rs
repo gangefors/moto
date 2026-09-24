@@ -14,7 +14,7 @@ use crate::region::format::WayRef;
 use crate::route::edge_line;
 use crate::scoring::PARAMS;
 use crate::section::{Direction, Section, Status};
-use crate::{CoreError, Engine};
+use crate::{CoreError, Engine, LatLon};
 
 /// Favourite edges of one region.
 #[derive(Debug, Clone, Default)]
@@ -31,6 +31,9 @@ pub struct Favourites {
     coverage: HashMap<u32, (f32, f32, f32)>,
     /// The largest bonus of any edge.
     max_bonus: f64,
+    /// The middle of each matched section and its rating weight: places
+    /// a round trip may go through (ADR-0007).
+    anchors: Vec<(LatLon, f64)>,
 }
 
 /// A way span of a section, as the build looks it up.
@@ -56,8 +59,12 @@ impl Favourites {
     /// bonus wins.
     pub fn build(engine: &Engine, sections: &[Section]) -> Self {
         let mut by_way: HashMap<i64, Vec<Span>> = HashMap::new();
+        let mut anchors = Vec::new();
         for s in sections.iter().filter(|s| s.status == Status::Ok) {
             let bonus = PARAMS.bonus(s.rating);
+            if let Some(mid) = crate::geo::polyline_slice(&s.geometry, 0.5, 0.5).first() {
+                anchors.push((*mid, bonus / PARAMS.max_pull));
+            }
             for w in &s.ways {
                 let (lo, hi) = (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx));
                 if lo == hi {
@@ -77,6 +84,7 @@ impl Favourites {
         }
         let mut favourites = Self {
             region_key: crate::rematch::region_key(engine),
+            anchors,
             ..Self::default()
         };
         if by_way.is_empty() {
@@ -193,6 +201,11 @@ impl Favourites {
             .get(&id)
             .map_or(0.0, |&(_, _, w)| f64::from(w));
         self.covered_between(id, from, to) * weight
+    }
+
+    /// The middle of each matched section and its rating weight (epic 1).
+    pub(crate) fn anchors(&self) -> &[(LatLon, f64)] {
+        &self.anchors
     }
 
     /// The largest bonus of any edge.

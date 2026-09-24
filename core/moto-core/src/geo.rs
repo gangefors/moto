@@ -113,6 +113,29 @@ pub(crate) fn densify(line: &[LatLon], step_m: f64) -> Vec<LatLon> {
     out
 }
 
+/// The point `dist_m` metres from `p` along the great circle leaving it
+/// at `bearing_deg` (0 north, 90 east).
+pub fn destination(p: LatLon, bearing_deg: f64, dist_m: f64) -> LatLon {
+    let d = dist_m / EARTH_RADIUS_M;
+    let b = bearing_deg.to_radians();
+    let (lat1, lon1) = (p.lat.to_radians(), p.lon.to_radians());
+    let lat2 = (lat1.sin() * d.cos() + lat1.cos() * d.sin() * b.cos()).asin();
+    let lon2 = lon1 + (b.sin() * d.sin() * lat1.cos()).atan2(d.cos() - lat1.sin() * lat2.sin());
+    LatLon {
+        lat: lat2.to_degrees(),
+        lon: (lon2.to_degrees() + 540.0).rem_euclid(360.0) - 180.0,
+    }
+}
+
+/// Initial bearing from `a` to `b` in degrees, 0–360 (0 north, 90 east).
+pub fn bearing_deg(a: LatLon, b: LatLon) -> f64 {
+    let (lat1, lat2) = (a.lat.to_radians(), b.lat.to_radians());
+    let dl = (b.lon - a.lon).to_radians();
+    let y = dl.sin() * lat2.cos();
+    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dl.cos();
+    y.atan2(x).to_degrees().rem_euclid(360.0)
+}
+
 /// Distance in metres from `p` to the nearest point of `line` (local flat
 /// approximation, fine over a section).
 pub fn distance_to_line(p: LatLon, line: &[LatLon]) -> f64 {
@@ -229,5 +252,23 @@ mod tests {
         assert!(LatLon::new(90.1, 0.0).is_err());
         assert!(LatLon::new(0.0, -180.5).is_err());
         assert!(LatLon::new(f64::NAN, 0.0).is_err());
+    }
+
+    #[test]
+    fn destinations_and_bearings_agree() {
+        let lund = LatLon {
+            lat: 55.7,
+            lon: 13.2,
+        };
+        for bearing in [0.0, 45.0, 90.0, 200.0, 359.0] {
+            let p = destination(lund, bearing, 10_000.0);
+            assert!((haversine_m(lund, p) - 10_000.0).abs() < 1.0, "{bearing}");
+            let back = bearing_deg(lund, p);
+            let diff = (back - bearing + 540.0).rem_euclid(360.0) - 180.0;
+            assert!(diff.abs() < 0.1, "{bearing} -> {back}");
+        }
+        let north = destination(lund, 0.0, 111_195.0);
+        assert!((north.lat - 56.7).abs() < 0.01 && (north.lon - 13.2).abs() < 1e-9);
+        assert_eq!(bearing_deg(lund, lund), 0.0);
     }
 }

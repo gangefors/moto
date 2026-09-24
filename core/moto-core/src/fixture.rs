@@ -267,3 +267,80 @@ pub fn fork() -> RegionData {
         50_000,
     )
 }
+
+/// An `n` × `n` grid of tertiary roads at 70 km/h, 1 km apart, south-west
+/// corner at 55.70, 13.40; node `r * n + c` is row `r` (north), column
+/// `c` (east). Each road between neighbours is its own OSM way (id from
+/// 1000).
+pub fn grid(n: u32) -> RegionData {
+    let (nodes, roads) = grid_parts(n);
+    build(&nodes, &roads, 50_000)
+}
+
+fn grid_parts(n: u32) -> (Vec<(f64, f64)>, Vec<Road>) {
+    let nodes: Vec<(f64, f64)> = (0..n * n)
+        .map(|i| {
+            (
+                55.70 + f64::from(i / n) * 0.009,
+                13.40 + f64::from(i % n) * 0.016,
+            )
+        })
+        .collect();
+    let mut roads = Vec::new();
+    for r in 0..n {
+        for c in 0..n {
+            let i = r * n + c;
+            if c + 1 < n {
+                roads.push(Road::new(
+                    i,
+                    i + 1,
+                    RoadClass::Tertiary,
+                    70,
+                    1000 + i64::from(roads.len() as u32),
+                ));
+            }
+            if r + 1 < n {
+                roads.push(Road::new(
+                    i,
+                    i + n,
+                    RoadClass::Tertiary,
+                    70,
+                    1000 + i64::from(roads.len() as u32),
+                ));
+            }
+        }
+    }
+    (nodes, roads)
+}
+
+/// Where [`grid_with_home`]'s home is: the end of a 1.8 km dead-end street
+/// running west from the middle of the grid's west edge.
+pub fn grid_home(n: u32) -> crate::LatLon {
+    crate::LatLon {
+        lat: 55.70 + f64::from(n / 2) * 0.009,
+        lon: 13.40 - 3.0 * 0.0096,
+    }
+}
+
+/// [`grid`] with a home at the end of a 1.8 km residential dead end (three
+/// 600 m pieces, way ids from 900) west of the middle of the west edge, so
+/// every loop from home rides the same street out and back.
+pub fn grid_with_home(n: u32) -> RegionData {
+    let (mut nodes, mut roads) = grid_parts(n);
+    let edge = (n / 2) * n;
+    let lat = nodes[edge as usize].0;
+    let mut prev = edge;
+    for k in 1..=3u32 {
+        nodes.push((lat, 13.40 - f64::from(k) * 0.0096));
+        let next = n * n + k - 1;
+        roads.push(Road::new(
+            prev,
+            next,
+            RoadClass::Residential,
+            50,
+            899 + i64::from(k),
+        ));
+        prev = next;
+    }
+    build(&nodes, &roads, 50_000)
+}

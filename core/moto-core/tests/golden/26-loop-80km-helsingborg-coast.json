@@ -1,0 +1,7 @@
+{
+  "name": "Loop of 80 km from Helsingborg (coast)",
+  "description": "Start on the coast: waypoints in the sea are pulled in to the nearest land, and loops still come back at 80 km ±15 %.",
+  "from": [56.046, 12.694],
+  "loop": {"km": 80},
+  "expect": {}
+}

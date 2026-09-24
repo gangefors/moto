@@ -193,3 +193,112 @@ fn a_total_time_budget_caps_the_minutes() {
     let c = Case::parse(&case(r#","max_minutes":0.01"#, "")).unwrap();
     assert!(c.run(&engine).failures.is_empty());
 }
+
+/// A round trip from the middle of a 13 × 13 km grid (`fixture::grid`).
+fn loop_case(target: &str, expect: &str) -> String {
+    format!(
+        r#"{{"name":"grid loop","from":[55.754,13.496],"loop":{{{target}}},
+            "expect":{{{expect}}}}}"#
+    )
+}
+
+fn grid_engine(name: &str) -> (TempFile, Engine) {
+    let file = TempFile::new(name);
+    let bytes = moto_core::fixture::grid(13).to_bytes().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    let engine = Engine::open(file.path()).unwrap();
+    (file, engine)
+}
+
+#[test]
+fn round_trips_are_checked_loop_by_loop() {
+    let (_f, engine) = grid_engine("golden-loop");
+    let o = Case::parse(&loop_case(r#""km":20"#, ""))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    assert!(o.loops.unwrap() >= 2, "{o:?}");
+    assert!((o.distance_km - 20.0).abs() <= 3.0, "{o:?}");
+    assert!(o.reuse_share.unwrap() <= MAX_REUSE, "{o:?}");
+    assert_eq!(o.detour_ratio, 1.0);
+    // Time targets too.
+    let o = Case::parse(&loop_case(r#""minutes":20"#, ""))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    // More loops than there are, or a point far away, fail.
+    let o = Case::parse(&loop_case(
+        r#""km":20"#,
+        r#""min_loops":3,"pass":[[55.70,13.40]]"#,
+    ))
+    .unwrap()
+    .run(&engine);
+    assert!(o.failures.iter().any(|f| f.starts_with("misses")), "{o:?}");
+    // No loop at all is a failure, not a panic.
+    let o = Case::parse(&loop_case(r#""km":300"#, ""))
+        .unwrap()
+        .run(&engine);
+    assert_eq!(o.loops, None);
+    assert_eq!(o.failures.len(), 1, "{o:?}");
+    // Loop figures are written only for round trips.
+    let json = serde_json::to_string(&o).unwrap();
+    assert!(json.contains("\"loops\"") == o.loops.is_some());
+}
+
+#[test]
+fn bad_round_trip_cases_are_refused() {
+    for bad in [
+        loop_case("", ""),                                    // no target
+        loop_case(r#""km":20,"minutes":30"#, ""),             // two targets
+        loop_case(r#""km":-5"#, ""),                          // negative
+        loop_case(r#""km":20,"miles":3"#, ""),                // unknown field
+        loop_case(r#""km":20"#, r#""min_loops":0"#),          // too few
+        loop_case(r#""km":20"#, r#""min_loops":4"#),          // more than returned
+        loop_case(r#""km":20"#, r#""max_detour_ratio":1.2"#), // no detour on loops
+        loop_case(r#""km":20},"max_detour":0.3,"x":{"#, "").replace(",\"x\":{}", ""),
+        loop_case(r#""km":20},"to":[55.75,13.5],"x":{"#, "").replace(",\"x\":{}", ""),
+        case("", r#""min_loops":2"#), // min_loops on a one-way route
+    ] {
+        assert!(Case::parse(&bad).is_err(), "{bad}");
+    }
+    // Neither an end nor a loop.
+    assert!(Case::parse(r#"{"name":"x","from":[55.7,13.19],"expect":{}}"#).is_err());
+}
+
+#[test]
+fn reuse_is_measured_from_the_line() {
+    let p = |lat: f64, lon: f64| LatLon { lat, lon };
+    // A 4 km square: no reuse.
+    let square = [
+        p(55.7, 13.4),
+        p(55.718, 13.4),
+        p(55.718, 13.432),
+        p(55.7, 13.432),
+        p(55.7, 13.4),
+    ];
+    assert!(
+        reuse_share(&square, 0.0) < 0.01,
+        "{}",
+        reuse_share(&square, 0.0)
+    );
+    // 1 km out and back along the first side before the square: 2 km of
+    // 6 km, half of it ridden twice (1 km, 17 %).
+    let mut spur = vec![p(55.7, 13.4), p(55.709, 13.4), p(55.7, 13.4)];
+    spur.extend_from_slice(&square[1..]);
+    let r = reuse_share(&spur, 0.0);
+    assert!((r - 1.0 / 6.0).abs() < 0.03, "{r}");
+    // The same spur inside the home zone is free.
+    assert!(reuse_share(&spur, 1_100.0) < 0.01);
+    // Crossing its own line costs next to nothing.
+    let figure_eight = [
+        p(55.7, 13.4),
+        p(55.718, 13.432),
+        p(55.718, 13.4),
+        p(55.7, 13.432),
+        p(55.7, 13.4),
+    ];
+    assert!(reuse_share(&figure_eight, 0.0) < 0.01);
+    // Degenerate lines.
+    assert_eq!(reuse_share(&[], 0.0), 0.0);
+    assert_eq!(reuse_share(&[p(55.7, 13.4); 3], 0.0), 0.0);
+}

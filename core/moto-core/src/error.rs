@@ -25,7 +25,4 @@ pub enum CoreError {
 
     #[error("no route satisfies the constraints: {0}")]
     NoRoute(String),
-
-    #[error("not implemented yet: {0}")]
-    NotImplemented(&'static str),
 }

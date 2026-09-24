@@ -37,6 +37,8 @@ METRICS = [
     ("fav_route_ms_p95", "Route with favourites, p95", 1.25, 0.0),
     ("curvy_route_ms_mean", "Curvy route (no favourites), mean", 1.25, 0.0),
     ("curvy_route_ms_p95", "Curvy route (no favourites), p95", 1.25, 0.0),
+    ("loop_ms_mean", "Round trip (with favourites), mean", 1.25, 0.0),
+    ("loop_ms_p95", "Round trip (with favourites), p95", 1.25, 0.0),
     ("match_ms_per_km", "Map matching, per km", 1.25, 0.0),
 ]
 WARNING = 1.10
