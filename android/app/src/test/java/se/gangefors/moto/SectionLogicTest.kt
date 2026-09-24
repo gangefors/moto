@@ -91,26 +91,12 @@ class SectionLogicTest {
     }
 
     @Test
-    fun cleansSectionNames() {
-        assertEquals("Kullaberg", cleanSectionName("  Kullaberg \n", "x"))
-        assertEquals("fallback", cleanSectionName(" \t ", "fallback"))
-        assertEquals("a b", cleanSectionName("a\nb", "x"))
-        assertEquals("ab", cleanSectionName("a\u0000\u007f\u0085b", "x"))
-        assertEquals("Åsa–Ölme", cleanSectionName("Åsa–Ölme", "x"))
-    }
-
-    @Test
-    fun capsNamesAtTheCoresLimitWithoutSplittingCharacters() {
-        val long = "é".repeat(250)
-        assertEquals("é".repeat(MAX_SECTION_NAME_CHARS), cleanSectionName(long, "x"))
-        // Characters outside the BMP count once and are never cut in half.
-        val emoji = "🏍" // motorcycle, two UTF-16 units
-        val capped = cleanSectionName(emoji.repeat(250), "x")
-        assertEquals(MAX_SECTION_NAME_CHARS, capped.codePointCount(0, capped.length))
-        assertEquals(emoji.repeat(MAX_SECTION_NAME_CHARS), capped)
-        assertEquals("ab", takeCodePoints("abc", 2))
-        assertEquals("abc", takeCodePoints("abc", 5))
-        assertEquals(emoji, takeCodePoints(emoji + "a", 1))
+    fun namesSectionsAutomatically() {
+        val stockholm = java.time.ZoneId.of("Europe/Stockholm")
+        // 2026-09-24 12:05 UTC is 14:05 in Stockholm.
+        val at = 1_790_251_500L
+        assertEquals("Tag 2026-09-24 14:05, 1.2 km", autoSectionName(true, at, 1_234.0, stockholm))
+        assertEquals("Map 2026-09-24 14:05, 0.0 km", autoSectionName(false, at, 10.0, stockholm))
     }
 
     @Test

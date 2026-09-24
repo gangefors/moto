@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+
+  A rubbish bin: lid with handle over a tapered can.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M9,3h6l1,1h4v2H4V4h4ZM6,7h12l-1.2,13.2A2,2 0,0 1,14.8 22H9.2A2,2 0,0 1,7.2 20.2Z" />
+</vector>

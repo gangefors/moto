@@ -89,30 +89,19 @@ private const val EARTH_RADIUS_M = 6_371_000.0
 /** Approximate length in metres of a line. */
 fun lengthM(line: List<LatLon>): Double = line.zipWithNext(::approxDistanceM).sum()
 
-/** Longest section name, in characters; the core's limit. */
-const val MAX_SECTION_NAME_CHARS = 200
-
 /**
- * The name to save: [raw] without control characters (the core rejects
- * them), line breaks turned into spaces, trimmed and cut to the core's
- * length limit. A blank name becomes [fallback].
+ * The name a new section is stored under. Riders never see or type names
+ * (sections are found on the map), but the store keeps one: where it came
+ * from, when, and how long, e.g. "Tag 2026-09-24 14:05, 1.2 km".
  */
-fun cleanSectionName(raw: String, fallback: String): String {
-    val cleaned = buildString {
-        raw.codePoints().forEach { cp ->
-            when {
-                cp == '\n'.code || cp == '\r'.code || cp == '\t'.code -> append(' ')
-                Character.isISOControl(cp) -> Unit
-                else -> appendCodePoint(cp)
-            }
-        }
-    }.trim()
-    return takeCodePoints(cleaned.ifEmpty { fallback }, MAX_SECTION_NAME_CHARS).trimEnd()
-}
-
-/** The first [n] characters (code points, never half a surrogate pair) of [s]. */
-fun takeCodePoints(s: String, n: Int): String =
-    if (s.codePointCount(0, s.length) <= n) s else s.substring(0, s.offsetByCodePoints(0, n))
+fun autoSectionName(fromTag: Boolean, savedAtSec: Long, distanceM: Double, zone: java.time.ZoneId): String =
+    String.format(
+        java.util.Locale.ROOT,
+        "%s %s, %.1f km",
+        if (fromTag) "Tag" else "Map",
+        rideTitle(savedAtSec, zone),
+        sectionKm(distanceM),
+    )
 
 /** Length for labels: one decimal in km, e.g. 12.3. */
 fun sectionKm(distanceM: Double): Double = (distanceM / 100.0).roundToInt() / 10.0
