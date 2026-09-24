@@ -18,12 +18,14 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
   "max_detour": 0.4,
   "min_gain": 1.0,
   "allow_unpaved": false,
+  "curvy": true,
   "favourites": [
     {"from": [56.13504, 13.00886], "to": [56.11903, 12.9975], "rating": "great", "one_way": false}
   ],
   "expect": {
     "min_favourite_share": 0.3,
     "max_favourite_share": 1.0,
+    "min_curvy_share": 0.0,
     "max_detour_ratio": 1.4,
     "pass": [[56.09132, 12.97399]],
     "avoid": []
@@ -31,7 +33,7 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 }
 ```
 
-- Points are `[lat, lon]`. The time budget is either `max_detour` (extra over the fastest route, default 0.4 as in the app) or `max_minutes` (the most minutes in all, as when arriving by a set time). The favourites pull as hard as the budget allows. `min_gain` is the guard: seconds of rating-weighted favourite riding (epic 1, great 0.7, good 0.4) each extra second must buy (default 1; 0 spends the whole budget). `max_detour_ratio` defaults to 1 + `max_detour`, and `max_minutes` is checked too. `allow_unpaved` allows gravel and other unpaved roads, like the app's "Allow gravel" (avoided where possible by default).
+- Points are `[lat, lon]`. The time budget is either `max_detour` (extra over the fastest route, default 0.4 as in the app) or `max_minutes` (the most minutes in all, as when arriving by a set time). The favourites pull as hard as the budget allows. `min_gain` is the guard: seconds of rating-weighted favourite riding (epic 1, great 0.7, good 0.4) each extra second must buy (default 1; 0 spends the whole budget). `max_detour_ratio` defaults to 1 + `max_detour`, and `max_minutes` is checked too. `curvy` (default true, as in the app) lets curvy roads pull the route too; cases about favourites or gravel alone turn it off. `min_curvy_share` checks the share of curvy road (each metre counted by how curvy it is). `allow_unpaved` allows gravel and other unpaved roads, like the app's "Allow gravel" (avoided where possible by default).
 - A favourite is marked like in the app: the road between two points, so a long road is a chain of short pieces (about 2 km), each ending where the next starts. `rating` is `good`, `great` or `epic`; `one_way` means only from `from` to `to`.
 - `pass` points must be within 50 m of the route, `avoid` points further away.
 

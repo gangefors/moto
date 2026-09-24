@@ -1,0 +1,10 @@
+{
+  "name": "Höör to Ljungbyhed, curvy roads",
+  "description": "With no favourites, curvature alone takes the curvier road (44 % curvy against 13 % on the fastest) for 3 % more time.",
+  "from": [55.937, 13.542],
+  "to": [56.078, 13.233],
+  "expect": {
+    "pass": [[56.01743, 13.3978]],
+    "min_curvy_share": 0.35
+  }
+}

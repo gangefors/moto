@@ -58,6 +58,8 @@ pub struct RouteOptions {
     /// Seconds of rating-weighted favourite riding each extra second must
     /// buy (0 = spend the whole budget if it adds any favourite road).
     pub min_gain: f64,
+    /// Whether curvy roads pull the route too, besides favourites.
+    pub curvy: bool,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
@@ -263,6 +265,7 @@ impl From<RouteOptions> for moto_core::RouteOptions {
                 TimeBudget::Total { seconds } => moto_core::TimeBudget::Total(seconds),
             },
             min_gain: o.min_gain,
+            curvy: o.curvy,
         }
     }
 }
@@ -276,6 +279,7 @@ impl From<moto_core::RouteOptions> for RouteOptions {
                 moto_core::TimeBudget::Total(seconds) => TimeBudget::Total { seconds },
             },
             min_gain: o.min_gain,
+            curvy: o.curvy,
         }
     }
 }

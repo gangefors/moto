@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Stefan Gangefors
 
 //! Routes between two snapped road points: A* over travel time on the
-//! region graph (M0), with the rider's favourite sections pulling the
-//! route as hard as the time budget allows (M2a). Curvature joins the cost in M2b.
+//! region graph (M0), with the rider's favourite sections (M2a) and curvy
+//! roads (M2b) pulling the route as hard as the time budget allows.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -39,14 +39,66 @@ fn time_cost(avoid: &Avoid, e: &Edge) -> f64 {
     time_s(e) * if avoided { PARAMS.avoid_penalty } else { 1.0 }
 }
 
+/// What makes a road worth riding (R5, R6): the rider's favourites and,
+/// when `curvy`, curvature (see `ScoringParams::curviness`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Fun<'a> {
+    region: &'a Region,
+    favourites: &'a Favourites,
+    curvy: bool,
+}
+
+impl<'a> Fun<'a> {
+    pub(crate) fn new(region: &'a Region, favourites: &'a Favourites, curvy: bool) -> Self {
+        Self {
+            region,
+            favourites,
+            curvy,
+        }
+    }
+
+    /// Whether no road is worth more than another: plain fastest routes.
+    fn is_empty(&self) -> bool {
+        !self.curvy && self.favourites.is_empty()
+    }
+
+    /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
+    fn curviness(&self, id: u32, e: &Edge) -> f64 {
+        let m = self.region.curvature()[id as usize];
+        PARAMS.curviness(&m, e.class, f64::from(e.length_dm) / 10.0)
+    }
+
+    /// What curvature adds to edge `id`'s worth: nothing when it is off.
+    fn curve_worth(&self, id: u32, e: &Edge) -> f64 {
+        if self.curvy {
+            PARAMS.curve_weight * self.curviness(id, e)
+        } else {
+            0.0
+        }
+    }
+
+    /// What riding all of edge `id` is worth per second, 0–1: an epic
+    /// favourite is 1, a fully curvy road `curve_weight`; they add up,
+    /// capped at 1.
+    fn worth(&self, id: u32, e: &Edge) -> f64 {
+        (self.favourites.bonus(id) / PARAMS.max_pull + self.curve_worth(id, e)).min(1.0)
+    }
+
+    /// The most any edge can be worth.
+    fn max_worth(&self) -> f64 {
+        let curve = if self.curvy { PARAMS.curve_weight } else { 0.0 };
+        (self.favourites.max_bonus() / PARAMS.max_pull + curve).min(1.0)
+    }
+}
+
 /// What a path search minimises.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Cost<'a> {
     /// Travel time, with avoided kinds of road costing more.
     Fastest(Avoid),
-    /// As `Fastest`, with favourite edges cheaper by their bonus times the
-    /// pull (0–1).
-    Favoured(Avoid, &'a Favourites, f64),
+    /// As `Fastest`, with roads worth riding cheaper by their worth times
+    /// `max_pull` times the pull (0–1).
+    Favoured(Avoid, Fun<'a>, f64),
     /// Distance along the road, nothing avoided: the road the rider points
     /// at, not a faster one nearby (marking sections).
     Shortest,
@@ -57,8 +109,8 @@ impl Cost<'_> {
     fn edge(&self, id: u32, e: &Edge) -> f64 {
         match self {
             Cost::Fastest(avoid) => time_cost(avoid, e),
-            Cost::Favoured(avoid, fav, weight) => {
-                time_cost(avoid, e) * (1.0 - weight * fav.bonus(id))
+            Cost::Favoured(avoid, fun, pull) => {
+                time_cost(avoid, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e))
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
@@ -77,8 +129,10 @@ impl Cost<'_> {
     fn estimate(&self, metres: f64, max_mps: f64) -> f64 {
         match self {
             Cost::Fastest(_) => metres / max_mps,
-            // The bonus is capped below 1, so the bound stays positive.
-            Cost::Favoured(_, fav, weight) => metres / max_mps * (1.0 - weight * fav.max_bonus()),
+            // `max_pull` is below 1, so the bound stays positive.
+            Cost::Favoured(_, fun, pull) => {
+                metres / max_mps * (1.0 - pull * PARAMS.max_pull * fun.max_worth())
+            }
             Cost::Shortest => metres,
         }
     }
@@ -168,26 +222,28 @@ struct Builder {
     duration_s: f64,
     curvy_m: f64,
     favourite_m: f64,
-    /// Seconds on favourites, weighted by rating (epic 1).
-    favourite_value_s: f64,
+    /// What riding the route is worth: seconds on favourites weighted by
+    /// rating (epic 1) plus seconds on curvy road weighted by curviness
+    /// and `curve_weight`.
+    value_s: f64,
     favourite_parts: Vec<Vec<LatLon>>,
 }
 
 impl Builder {
-    fn add(&mut self, region: &Region, favourites: &Favourites, id: u32, from: f64, to: f64) {
+    fn add(&mut self, fun: &Fun, id: u32, from: f64, to: f64) {
+        let (region, favourites) = (fun.region, fun.favourites);
         let e = region.edges()[id as usize];
         let frac = (to - from).max(0.0);
         let length_m = f64::from(e.length_dm) / 10.0;
         self.distance_m += frac * length_m;
         self.duration_s += frac * time_s(&e);
-        let c = region.curvature()[id as usize];
-        let curvy: f64 = c.radius_len_m[..PARAMS.curvy_bins]
-            .iter()
-            .map(|&m| f64::from(m))
-            .sum();
-        self.curvy_m += frac * curvy.min(length_m);
+        // Curvature is spread evenly over the edge (the metrics are per
+        // edge) and always measured; it adds to what the stretch is worth
+        // only when it pulls. Worth caps at 1 per second, as in the cost.
+        self.curvy_m += frac * length_m * fun.curviness(id, &e);
         self.favourite_m += length_m * favourites.covered_between(id, from, to);
-        self.favourite_value_s += time_s(&e) * favourites.value_between(id, from, to);
+        self.value_s += time_s(&e)
+            * (favourites.value_between(id, from, to) + frac * fun.curve_worth(id, &e)).min(frac);
         let line = edge_line(region, &e);
         if let Some((lo, hi)) = favourites.covered_part(id, from, to) {
             let piece = polyline_slice(&line, lo, hi);
@@ -217,7 +273,7 @@ impl Builder {
             }
         };
         Routed {
-            value_s: self.favourite_value_s,
+            value_s: self.value_s,
             route: Route {
                 curvy_share: share(self.curvy_m),
                 favourite_share: share(self.favourite_m),
@@ -231,18 +287,18 @@ impl Builder {
     }
 }
 
-/// A route and what its favourite riding is worth.
+/// A route and what riding it is worth.
 struct Routed {
     route: Route,
-    /// Seconds on favourites, weighted by rating (epic 1).
+    /// Seconds on favourites and curvy road, weighted (see `Fun::worth`).
     value_s: f64,
 }
 
 /// The route with the path pieces `parts`.
-fn build(region: &Region, favourites: &Favourites, parts: &[Partial]) -> Routed {
+fn build(fun: &Fun, parts: &[Partial]) -> Routed {
     let mut route = Builder::default();
     for p in parts {
-        route.add(region, favourites, p.edge, p.from, p.to);
+        route.add(fun, p.edge, p.from, p.to);
     }
     route.finish()
 }
@@ -264,9 +320,10 @@ pub(crate) fn route(
     max_speed_kmh: f64,
 ) -> Result<Route, CoreError> {
     let avoid = opts.avoid;
+    let fun = Fun::new(region, favourites, opts.curvy);
     let parts = path(region, from, to, Cost::Fastest(avoid), max_speed_kmh)?;
-    let fastest = build(region, favourites, &parts);
-    if favourites.is_empty() {
+    let fastest = build(&fun, &parts);
+    if fun.is_empty() {
         return Ok(fastest.route);
     }
     let fastest_s = fastest.route.duration_s;
@@ -282,9 +339,9 @@ pub(crate) fn route(
             && (extra_s <= 1e-6 || (r.value_s - base_value_s) >= opts.min_gain * extra_s)
     };
     let pulled = |pull: f64| -> Result<Routed, CoreError> {
-        let cost = Cost::Favoured(avoid, favourites, pull);
+        let cost = Cost::Favoured(avoid, fun, pull);
         let parts = path(region, from, to, cost, max_speed_kmh)?;
-        Ok(build(region, favourites, &parts))
+        Ok(build(&fun, &parts))
     };
     let full = pulled(1.0)?;
     if passes(&full) {
@@ -686,5 +743,86 @@ mod tests {
             e.route(ll(55.7145, 13.2245), ll(55.7001, 13.201), &opts(true, true)),
             Err(CoreError::NoRoadNearby { .. })
         ));
+    }
+
+    /// A straight primary road W–E (5 km at 90 km/h, 200 s) and a winding
+    /// tertiary road beside it (sine bends every 400 m, at 80 km/h), with
+    /// stubs to start and end on.
+    fn twisty() -> Engine {
+        use crate::fixture::{Road, build};
+        use crate::region::format::RoadClass;
+        let nodes = [
+            (55.70, 13.39),
+            (55.70, 13.40),
+            (55.70, 13.48),
+            (55.70, 13.49),
+        ];
+        let bends: Vec<(f64, f64)> = (1..160)
+            .map(|i| {
+                let t = f64::from(i) / 160.0;
+                // Up to about 600 m north, with 60 m wiggles.
+                let lat = 55.70
+                    + 0.0055 * (std::f64::consts::PI * t).sin()
+                    + 0.00055 * (t * 40.0 * std::f64::consts::PI).sin();
+                (lat, 13.40 + 0.08 * t)
+            })
+            .collect();
+        let winding = Road {
+            via: bends,
+            ..Road::new(1, 2, RoadClass::Tertiary, 80, 21)
+        };
+        engine(build(
+            &nodes,
+            &[
+                Road::new(0, 1, RoadClass::Primary, 90, 20),
+                Road::new(1, 2, RoadClass::Primary, 90, 22),
+                winding,
+                Road::new(2, 3, RoadClass::Primary, 90, 23),
+            ],
+            50_000,
+        ))
+    }
+
+    fn winds(r: &crate::Route) -> bool {
+        r.geometry.iter().any(|p| p.lat > 55.703)
+    }
+
+    #[test]
+    fn curvy_roads_pull_within_the_budget() {
+        use crate::favourites::Favourites;
+        let e = twisty();
+        let (from, to) = (ll(55.70, 13.395), ll(55.70, 13.485));
+        let none = Favourites::none();
+        let budget = |ratio: f64, curvy: bool| RouteOptions {
+            budget: crate::TimeBudget::Extra(ratio),
+            min_gain: 0.5,
+            curvy,
+            ..RouteOptions::default()
+        };
+        let fastest = e.route(from, to, &budget(1.0, true)).unwrap();
+        assert!(!winds(&fastest), "{fastest:?}");
+        assert!(fastest.curvy_share < 0.05, "{fastest:?}");
+        // Measured on the winding road even when curvature doesn't pull.
+        let on_it = e
+            .route(ll(55.7055, 13.44), ll(55.7054, 13.442), &budget(0.0, false))
+            .unwrap();
+        assert!(on_it.curvy_share > 0.3, "{on_it:?}");
+
+        let r = e.route_with(from, to, &budget(1.0, true), &none).unwrap();
+        assert!(winds(&r), "{r:?}");
+        assert!(r.curvy_share > 0.5, "{r:?}");
+        assert!(r.duration_s > fastest.duration_s && r.duration_s <= 2.0 * fastest.duration_s);
+        assert_eq!(r.fastest_duration_s, fastest.duration_s);
+        assert_eq!(r.favourite_share, 0.0);
+
+        // No budget, or curvature off: the fastest route.
+        assert_eq!(
+            e.route_with(from, to, &budget(0.0, true), &none).unwrap(),
+            fastest
+        );
+        assert_eq!(
+            e.route_with(from, to, &budget(1.0, false), &none).unwrap(),
+            fastest
+        );
     }
 }

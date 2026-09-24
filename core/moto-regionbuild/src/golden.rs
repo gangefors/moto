@@ -51,6 +51,10 @@ pub struct Case {
     /// avoided where possible if left out.
     #[serde(default)]
     pub allow_unpaved: bool,
+    /// Whether curvy roads pull the route (default true, as in the app);
+    /// false for cases about favourites or gravel alone.
+    #[serde(default = "yes")]
+    pub curvy: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
     pub expect: Expect,
@@ -93,6 +97,9 @@ pub struct Expect {
     /// Share of the distance on favourites, at least / at most.
     pub min_favourite_share: Option<f64>,
     pub max_favourite_share: Option<f64>,
+    /// Share of the distance on curvy roads (see `Route::curvy_share`),
+    /// at least.
+    pub min_curvy_share: Option<f64>,
     /// Time over the fastest route as a ratio (1.0 = none), at most.
     /// Defaults to 1 + the detour budget.
     pub max_detour_ratio: Option<f64>,
@@ -156,6 +163,7 @@ impl Case {
         }
         share(e.min_favourite_share, "min_favourite_share")?;
         share(e.max_favourite_share, "max_favourite_share")?;
+        share(e.min_curvy_share, "min_curvy_share")?;
         if let Some(r) = e.max_detour_ratio
             && !(r.is_finite() && r >= 1.0)
         {
@@ -180,6 +188,7 @@ impl Case {
             opts.min_gain = g;
         }
         opts.avoid.unpaved = !self.allow_unpaved;
+        opts.curvy = self.curvy;
         opts
     }
 
@@ -290,6 +299,15 @@ impl Case {
                 max * 100.0
             ));
         }
+        if let Some(min) = e.min_curvy_share
+            && route.curvy_share < min
+        {
+            out.failures.push(format!(
+                "{:.0} % curvy, expected at least {:.0} %",
+                route.curvy_share * 100.0,
+                min * 100.0
+            ));
+        }
         for p in &e.pass {
             let d = ll(*p).map_or(f64::INFINITY, |p| distance_to_line(p, &route.geometry));
             if d > PASS_RADIUS_M {
@@ -305,6 +323,10 @@ impl Case {
         }
         out
     }
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Reads every `*.json` case in `dir`, sorted by file name.

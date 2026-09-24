@@ -82,14 +82,20 @@ impl Engine {
         crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M)
     }
 
-    /// Fastest route from `from` to `to`, with no favourites.
+    /// Fastest route from `from` to `to` under `opts.avoid`: no
+    /// favourites, no curvature, the budget unused. The reference that
+    /// fun routes are measured against.
     pub fn route(&self, from: LatLon, to: LatLon, opts: &RouteOptions) -> Result<Route, CoreError> {
-        self.route_with(from, to, opts, &Favourites::none())
+        let fastest = RouteOptions {
+            curvy: false,
+            ..opts.clone()
+        };
+        self.route_with(from, to, &fastest, &Favourites::none())
     }
 
     /// Route from `from` to `to` over as much of the rider's `favourites`
-    /// as the time budget `opts.budget` buys (PRD R6; curvature joins in
-    /// M2b).
+    /// and curvy roads (unless `opts.curvy` is off) as the time budget
+    /// `opts.budget` buys (PRD R5, R6).
     /// Both points are snapped to the nearest road first. Favourites built
     /// for another region are refused.
     pub fn route_with(

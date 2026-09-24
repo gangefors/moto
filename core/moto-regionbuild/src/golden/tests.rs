@@ -154,6 +154,25 @@ fn the_committed_cases_are_valid() {
 }
 
 #[test]
+fn curvature_is_on_unless_turned_off() {
+    assert!(Case::parse(&case("", "")).unwrap().options().curvy);
+    assert!(
+        !Case::parse(&case(r#","curvy":false"#, ""))
+            .unwrap()
+            .options()
+            .curvy
+    );
+    assert!(Case::parse(&case("", r#""min_curvy_share":2"#)).is_err());
+    // The fixture route is not curvy: a demand for curvy road fails.
+    let file = built_fixture("golden-curvy");
+    let engine = Engine::open(file.path()).unwrap();
+    let o = Case::parse(&case("", r#""min_curvy_share":0.99"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures[0].contains("curvy"), "{o:?}");
+}
+
+#[test]
 fn gravel_can_be_allowed() {
     let c = Case::parse(&case(r#","allow_unpaved":true"#, "")).unwrap();
     assert!(!c.options().avoid.unpaved);

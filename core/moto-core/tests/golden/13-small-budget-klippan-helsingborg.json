@@ -1,6 +1,6 @@
 {
   "name": "Klippan to Helsingborg, good road but a 5 % budget",
-  "description": "The good road costs about 10 % more time; with only 5 % to spend the route stays on the fast road.",
+  "description": "The good road costs about 10 % more time; with only 5 % to spend the route stays on the fast road (curvature off: the road is also curvy, and this case is about favourites alone).",
   "from": [56.134, 13.133],
   "to": [56.046, 12.694],
   "max_detour": 0.05,
@@ -16,6 +16,7 @@
     {"from": [56.08434, 12.88167], "to": [56.09662, 12.85833], "rating": "good"},
     {"from": [56.09662, 12.85833], "to": [56.09866, 12.85277], "rating": "good"}
   ],
+  "curvy": false,
   "expect": {
     "avoid": [[56.09132, 12.97399]],
     "max_favourite_share": 0.05,

@@ -1,0 +1,11 @@
+{
+  "name": "Hässleholm to Eslöv, curvy roads, 10 % budget",
+  "description": "The same trip with only 10 % extra time: the curvy detour (12 %) doesn't fit, the route stays near the fast road.",
+  "from": [56.159, 13.766],
+  "to": [55.839, 13.304],
+  "max_detour": 0.1,
+  "expect": {
+    "avoid": [[56.01073, 13.49203]],
+    "max_detour_ratio": 1.1
+  }
+}

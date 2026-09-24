@@ -66,6 +66,8 @@ pub struct RouteOptions {
     /// second. 0 spends the whole budget if that adds any favourite road
     /// (for "arrive by" routes); see `RouteOptions::default`.
     pub min_gain: f64,
+    /// Whether curvy roads pull the route too (R5), besides favourites.
+    pub curvy: bool,
 }
 
 impl Default for RouteOptions {
@@ -74,6 +76,7 @@ impl Default for RouteOptions {
             avoid: Avoid::default(),
             budget: TimeBudget::Extra(0.4),
             min_gain: crate::scoring::PARAMS.min_gain,
+            curvy: true,
         }
     }
 }
@@ -128,7 +131,8 @@ pub struct Route {
     pub duration_s: f64,
     /// Share of the distance on the rider's favourite sections, 0.0–1.0.
     pub favourite_share: f64,
-    /// Share of the distance on high-curvature roads, 0.0–1.0.
+    /// Share of the distance on curvy roads, 0.0–1.0: each metre counts by
+    /// how curvy it is (see `ScoringParams::curviness`).
     pub curvy_share: f64,
     /// Time of the fastest route between the same points, to show what
     /// the favourites cost (equal to `duration_s` for the fastest route).
