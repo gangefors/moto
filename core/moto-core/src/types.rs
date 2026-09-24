@@ -140,6 +140,11 @@ pub struct Route {
     /// The stretches of `geometry` on favourite sections, in order, each
     /// at least two points: for drawing them highlighted.
     pub favourite_parts: Vec<Vec<LatLon>>,
+    /// Metres on gravel and other unpaved roads.
+    pub unpaved_m: f64,
+    /// The stretches of `geometry` on unpaved roads, in order, each at
+    /// least two points: for drawing them marked.
+    pub unpaved_parts: Vec<Vec<LatLon>>,
 }
 
 #[cfg(test)]

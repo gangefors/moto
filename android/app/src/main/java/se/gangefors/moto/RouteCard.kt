@@ -169,6 +169,7 @@ private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Mo
                     add(stringResource(R.string.route_on_favourites, summary.favouritePercent))
                 }
                 if (summary.curvyPercent > 0) add(stringResource(R.string.route_curvy, summary.curvyPercent))
+                if (summary.gravelKm > 0.0) add(stringResource(R.string.route_gravel, summary.gravelKm))
             }
             if (details.isNotEmpty()) {
                 Text(

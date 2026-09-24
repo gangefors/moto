@@ -79,6 +79,10 @@ pub struct Route {
     pub fastest_duration_s: f64,
     /// The stretches of `geometry` on favourite sections, for highlighting.
     pub favourite_parts: Vec<Vec<LatLon>>,
+    /// Metres on gravel and other unpaved roads, and those stretches of
+    /// `geometry`, for marking them.
+    pub unpaved_m: f64,
+    pub unpaved_parts: Vec<Vec<LatLon>>,
 }
 
 /// Crosses the FFI as a flat error: each variant becomes an exception class
@@ -309,6 +313,12 @@ impl From<moto_core::Route> for Route {
             fastest_duration_s: r.fastest_duration_s,
             favourite_parts: r
                 .favourite_parts
+                .into_iter()
+                .map(|p| p.into_iter().map(Into::into).collect())
+                .collect(),
+            unpaved_m: r.unpaved_m,
+            unpaved_parts: r
+                .unpaved_parts
                 .into_iter()
                 .map(|p| p.into_iter().map(Into::into).collect())
                 .collect(),

@@ -29,11 +29,16 @@ fn time_s(e: &Edge) -> f64 {
     f64::from(e.length_dm) / 10.0 / (f64::from(e.speed_kmh) / 3.6)
 }
 
+/// Gravel and other unpaved roads.
+fn is_unpaved(e: &Edge) -> bool {
+    Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved())
+}
+
 /// Travel time of a whole edge, avoided kinds of road costing
 /// `avoid_penalty` times more.
 fn time_cost(avoid: &Avoid, e: &Edge) -> f64 {
     let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
-    let unpaved = Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved());
+    let unpaved = is_unpaved(e);
     let ferry = e.flags & edge_flags::FERRY != 0;
     let avoided = avoid.motorways && motorway || avoid.unpaved && unpaved || avoid.ferries && ferry;
     time_s(e) * if avoided { PARAMS.avoid_penalty } else { 1.0 }
@@ -239,6 +244,18 @@ struct Builder {
     /// and `curve_weight`.
     value_s: f64,
     favourite_parts: Vec<Vec<LatLon>>,
+    unpaved_m: f64,
+    unpaved_parts: Vec<Vec<LatLon>>,
+}
+
+/// Adds `piece` to `parts`, continuing the last part when the piece
+/// starts where it ends (a stretch running on across a junction).
+fn push_part(parts: &mut Vec<Vec<LatLon>>, piece: Vec<LatLon>) {
+    match parts.last_mut() {
+        Some(part) if part.last() == piece.first() => part.extend(piece.into_iter().skip(1)),
+        _ if piece.len() >= 2 => parts.push(piece),
+        _ => {}
+    }
 }
 
 impl Builder {
@@ -258,16 +275,11 @@ impl Builder {
             * (favourites.value_between(id, from, to) + frac * fun.curve_worth(id, &e)).min(frac);
         let line = edge_line(region, &e);
         if let Some((lo, hi)) = favourites.covered_part(id, from, to) {
-            let piece = polyline_slice(&line, lo, hi);
-            // Continue the last part where this piece starts at its end
-            // (favourites running on across a junction).
-            match self.favourite_parts.last_mut() {
-                Some(part) if part.last() == piece.first() => {
-                    part.extend(piece.into_iter().skip(1))
-                }
-                _ if piece.len() >= 2 => self.favourite_parts.push(piece),
-                _ => {}
-            }
+            push_part(&mut self.favourite_parts, polyline_slice(&line, lo, hi));
+        }
+        if is_unpaved(&e) && to > from {
+            self.unpaved_m += frac * length_m;
+            push_part(&mut self.unpaved_parts, polyline_slice(&line, from, to));
         }
         for p in polyline_slice(&line, from, to) {
             if self.geometry.last() != Some(&p) {
@@ -294,6 +306,8 @@ impl Builder {
                 duration_s: self.duration_s,
                 fastest_duration_s: self.duration_s,
                 favourite_parts: self.favourite_parts,
+                unpaved_m: self.unpaved_m,
+                unpaved_parts: self.unpaved_parts,
             },
         }
     }
@@ -731,6 +745,26 @@ mod tests {
         );
         let r = e.route(from, to, &opts(false, false)).unwrap();
         assert!(passes(&r, south), "{r:?}");
+    }
+
+    #[test]
+    fn unpaved_stretches_are_reported() {
+        // Motorways avoided, gravel allowed: the route takes the north road.
+        let (from, to) = (ll(55.71, 13.3995), ll(55.71, 13.4405));
+        let e = engine(fixture::ladder(Surface::Gravel));
+        let r = e.route(from, to, &opts(true, false)).unwrap();
+        // The north road runs 0.04° of longitude along lat 55.72.
+        let north_m = 0.04 * M_PER_DEG_LON;
+        assert!((r.unpaved_m - north_m).abs() < 30.0, "{r:?}");
+        assert!(r.unpaved_m < r.distance_m);
+        assert_eq!(r.unpaved_parts.len(), 1, "one piece across the junction");
+        let part = &r.unpaved_parts[0];
+        assert!(part.len() >= 2 && part.iter().all(|p| (p.lat - 55.72).abs() < 1e-6));
+        // The same route on asphalt has none.
+        let e = engine(fixture::ladder(Surface::Asphalt));
+        let r = e.route(from, to, &opts(true, false)).unwrap();
+        assert_eq!(r.unpaved_m, 0.0);
+        assert!(r.unpaved_parts.is_empty());
     }
 
     #[test]
