@@ -76,6 +76,6 @@ Option A trades the theoretical best loop for predictable, testable work: a fixe
 
 ## Action Items
 
-- [ ] Core: candidates, reuse penalty, size correction, scoring, variety filter; unit tests on fixtures; golden cases; benchmark metric.
-- [ ] FFI + app: "Loop from here", target choice, flip between alternatives, GPX share.
+- [x] Core: candidates, reuse penalty, size correction, scoring, variety filter; unit tests on fixtures; golden cases; benchmark metric. Done in dbc69a9: six golden loop cases; on the M0 region 157 ms mean, 340 ms p95 for 50 and 100 km loops with favourites.
+- [x] FFI + app: "Loop from here", target choice, flip between alternatives, GPX share. Done in acdfe2f.
 - [ ] Ride-check loops on the phone; bad loops become golden cases.
