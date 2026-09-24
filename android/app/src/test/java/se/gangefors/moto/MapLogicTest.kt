@@ -54,6 +54,10 @@ class MapLogicTest {
         assertEquals(0, summarize(1.0, 1.0, 0.004).favouritePercent)
         assertEquals(100, summarize(1.0, 1.0, 1.2).favouritePercent)
         assertEquals(0, summarize(1.0, 1.0, Double.NaN).favouritePercent)
+        // Minutes over the fastest route.
+        assertEquals(5, summarize(57_400.0, 3000.0, 0.65, 2730.0).extraMinutes)
+        assertEquals(0, summarize(1.0, 900.0).extraMinutes)
+        assertEquals(0, summarize(1.0, 900.0, 0.0, 950.0).extraMinutes)
     }
 
     @Test
@@ -62,5 +66,24 @@ class MapLogicTest {
         assertTrue(needsInstall(installedExists = true, installedStamp = null, currentStamp = "1"))
         assertTrue(needsInstall(installedExists = true, installedStamp = "1", currentStamp = "2"))
         assertFalse(needsInstall(installedExists = true, installedStamp = "2", currentStamp = "2"))
+    }
+
+    @Test
+    fun budgetsComeFromTheChoices() {
+        assertEquals(40, budgetPercentOf(null))
+        assertEquals(20, budgetPercentOf(20))
+        assertEquals(0, budgetPercentOf(0))
+        assertEquals(40, budgetPercentOf(35))
+        assertEquals(40, budgetPercentOf(-1))
+        assertTrue(DEFAULT_BUDGET_PERCENT in BUDGET_CHOICES)
+        val base = se.gangefors.moto.core.RouteOptions(
+            se.gangefors.moto.core.Avoid(motorways = true, unpaved = true, ferries = false),
+            se.gangefors.moto.core.TimeBudget.Extra(0.4),
+            1.0,
+        )
+        val o = routeOptions(base, 20)
+        assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
+        assertEquals(base.avoid, o.avoid)
+        assertEquals(1.0, o.minGain, 0.0)
     }
 }

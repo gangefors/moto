@@ -478,6 +478,33 @@ fun MapScreen() {
     // and the route is computed and drawn. In "mark section" mode, taps pick
     // the section instead.
     val picker = remember { RoutePicker<LatLng>() }
+    // The route between the picked points and the extra time the rider gives
+    // it; it is found again when either changes (or the favourites do).
+    var routeEnds by remember { mutableStateOf<Pair<LatLng, LatLng>?>(null) }
+    var routeSummary by remember { mutableStateOf<RouteSummary?>(null) }
+    var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
+    LaunchedEffect(routeEnds, budgetPercent, favourites, overlays) {
+        val (start, end) = routeEnds ?: return@LaunchedEffect
+        val o = overlays ?: return@LaunchedEffect
+        val ready = region as? RegionState.Ready ?: return@LaunchedEffect
+        routeSummary = null
+        val favs = favourites
+        val opts = routeOptions(defaultRouteOptions(), budgetPercent)
+        // A newer request cancels this one; its result is then dropped.
+        val result = withContext(Dispatchers.Default) {
+            runCatching { ready.engine.route(start.toLatLon(), end.toLatLon(), opts, favs) }
+        }
+        result.fold(
+            onSuccess = { r ->
+                o.route.show(start, end, r.geometry, r.favouriteParts)
+                routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS)
+            },
+            onFailure = {
+                routeEnds = null
+                message = coreErrorMessage(resources, it)
+            },
+        )
+    }
     DisposableEffect(map, overlays, region) {
         val m = map
         val o = overlays
@@ -506,6 +533,7 @@ fun MapScreen() {
             }
             when (val step = picker.onLongPress(point)) {
                 is RoutePicker.Step.StartSet -> {
+                    routeEnds = null
                     // New start: check it lies on a road before keeping it.
                     val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
                     if (problem != null) {
@@ -517,37 +545,9 @@ fun MapScreen() {
                     }
                 }
                 is RoutePicker.Step.Complete -> {
-                    val start = step.start
-                    o.route.show(start, point, null)
-                    message = resources.getString(R.string.route_computing)
-                    val favs = favourites
-                    scope.launch {
-                        val began = SystemClock.elapsedRealtime()
-                        val result = withContext(Dispatchers.Default) {
-                            runCatching {
-                                ready.engine.route(start.toLatLon(), point.toLatLon(), defaultRouteOptions(), favs)
-                            }
-                        }
-                        val ms = SystemClock.elapsedRealtime() - began
-                        message = result.fold(
-                            onSuccess = { r ->
-                                o.route.show(start, point, r.geometry)
-                                val summary = summarize(r.distanceM, r.durationS, r.favouriteShare)
-                                if (summary.favouritePercent > 0) {
-                                    resources.getString(
-                                        R.string.route_result_favourites,
-                                        summary.km,
-                                        summary.minutes,
-                                        summary.favouritePercent,
-                                        ms,
-                                    )
-                                } else {
-                                    resources.getString(R.string.route_result, summary.km, summary.minutes, ms)
-                                }
-                            },
-                            onFailure = { coreErrorMessage(resources, it) },
-                        )
-                    }
+                    o.route.show(step.start, step.end, null)
+                    message = null
+                    routeEnds = step.start to step.end
                 }
             }
             true
@@ -609,46 +609,65 @@ fun MapScreen() {
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
                 .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
         )
-        if (message != null || marking) Surface(
+        // Messages and the route card, top centre, clear of the map controls.
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .safeDrawingPadding()
                 .padding(top = 8.dp, start = 64.dp, end = 64.dp),
-            shape = MaterialTheme.shapes.medium,
-            tonalElevation = 3.dp,
-            shadowElevation = 3.dp,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                message?.let { Text(it) }
-                if (marking) {
-                    // The banner is narrow (it keeps clear of the map controls),
-                    // so the buttons wrap onto a second line instead of
-                    // squeezing each other.
-                    FlowRow(
-                        Modifier.padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        if (reviewTag != null) {
-                            OutlinedButton(onClick = { endReview(resources.getString(R.string.map_hint)) }) {
-                                OneLine(stringResource(R.string.tag_review_later))
+            if (message != null || marking) Surface(
+                shape = MaterialTheme.shapes.medium,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    message?.let { Text(it) }
+                    if (marking) {
+                        // The banner is narrow (it keeps clear of the map controls),
+                        // so the buttons wrap onto a second line instead of
+                        // squeezing each other.
+                        FlowRow(
+                            Modifier.padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (reviewTag != null) {
+                                OutlinedButton(onClick = { endReview(resources.getString(R.string.map_hint)) }) {
+                                    OneLine(stringResource(R.string.tag_review_later))
+                                }
+                                OutlinedButton(
+                                    onClick = { finishTag(TagStatus.DISCARDED) },
+                                    enabled = !proposing,
+                                ) { OneLine(stringResource(R.string.tag_review_discard)) }
+                            } else {
+                                OutlinedButton(onClick = {
+                                    stopMarking()
+                                    message = resources.getString(R.string.map_hint)
+                                }) { OneLine(stringResource(R.string.cancel)) }
                             }
-                            OutlinedButton(
-                                onClick = { finishTag(TagStatus.DISCARDED) },
-                                enabled = !proposing,
-                            ) { OneLine(stringResource(R.string.tag_review_discard)) }
-                        } else {
-                            OutlinedButton(onClick = {
-                                stopMarking()
-                                message = resources.getString(R.string.map_hint)
-                            }) { OneLine(stringResource(R.string.cancel)) }
+                            Button(
+                                onClick = { savingDraft = true },
+                                enabled = draft != null && !proposing,
+                            ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
                         }
-                        Button(
-                            onClick = { savingDraft = true },
-                            enabled = draft != null && !proposing,
-                        ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
                     }
                 }
+            }
+            routeEnds?.let {
+                RouteCard(
+                    summary = routeSummary,
+                    budgetPercent = budgetPercent,
+                    onBudget = { percent ->
+                        budgetPercent = percent
+                        RoutePrefs.setBudgetPercent(context, percent)
+                    },
+                    onClose = {
+                        routeEnds = null
+                        overlays?.route?.show(null, null, null)
+                    },
+                )
             }
         }
         if (!marking) {
