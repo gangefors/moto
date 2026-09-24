@@ -37,6 +37,17 @@ class MapLogicTest {
     }
 
     @Test
+    fun aLoopTakesTheStart() {
+        val picker = RoutePicker<String>()
+        assertNull(picker.takeStart())
+        picker.onLongPress("a")
+        assertEquals("a", picker.takeStart())
+        assertNull(picker.start)
+        // The next long-press starts a new pick, not an end.
+        assertEquals(RoutePicker.Step.StartSet("b"), picker.onLongPress("b"))
+    }
+
+    @Test
     fun classifiesCoreErrors() {
         assertEquals(CoreProblem.OUTSIDE_REGION, classify(MotoException.OutsideRegion("x")))
         assertEquals(CoreProblem.NO_ROAD_NEARBY, classify(MotoException.NoRoadNearby("x")))

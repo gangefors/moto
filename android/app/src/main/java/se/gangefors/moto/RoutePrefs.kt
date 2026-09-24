@@ -14,6 +14,7 @@ object RoutePrefs {
     private const val FILE = "route"
     private const val BUDGET = "budget_percent"
     private const val GRAVEL = "allow_gravel"
+    private const val LOOP = "loop_length"
 
     /** The extra-time budget in percent, or the default. */
     fun budgetPercent(context: Context): Int {
@@ -34,5 +35,13 @@ object RoutePrefs {
 
     fun setAllowGravel(context: Context, allow: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(GRAVEL, allow) }
+    }
+
+    /** The round-trip length last picked, or the default. */
+    fun loopChoice(context: Context): LoopChoice =
+        loopChoiceOf(runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(LOOP, null) }.getOrNull())
+
+    fun setLoopChoice(context: Context, choice: LoopChoice) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP, choice.key) }
     }
 }
