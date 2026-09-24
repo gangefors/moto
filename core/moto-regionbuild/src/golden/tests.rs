@@ -87,6 +87,8 @@ fn bad_case_files_are_refused() {
         &case("", r#""min_favourite_share":1.5"#), // not a share
         &case("", r#""max_detour_ratio":0.5"#),    // below 1
         &case(r#","max_detour":-1"#, ""),          // negative budget
+        &case(r#","max_detour":0.2,"max_minutes":30"#, ""), // two budgets
+        &case(r#","min_gain":-1"#, ""),            // negative guard
         &case("", r#""pass":[[91.0,13.0]]"#),      // not a coordinate
         &case(
             r#","favourites":[{"from":[55.7,13.19],"to":[55.7,13.19],"rating":"superb"}]"#,
@@ -149,4 +151,17 @@ fn the_committed_cases_are_valid() {
     names.dedup();
     assert_eq!(names.len(), cases.len(), "case names are unique");
     assert!(cases.iter().all(|c| !c.description.is_empty()));
+}
+
+#[test]
+fn a_total_time_budget_caps_the_minutes() {
+    let file = built_fixture("golden-total");
+    let engine = Engine::open(file.path()).unwrap();
+    let c = Case::parse(&case(r#","max_minutes":10,"min_gain":0"#, "")).unwrap();
+    let o = c.run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    // A total below the fastest route gives the fastest route, which is
+    // not held against it.
+    let c = Case::parse(&case(r#","max_minutes":0.01"#, "")).unwrap();
+    assert!(c.run(&engine).failures.is_empty());
 }

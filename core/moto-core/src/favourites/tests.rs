@@ -88,9 +88,9 @@ fn section(ways: &[(i64, u32, u32)], rating: Rating, direction: Direction) -> Se
     }
 }
 
-fn detour(max_detour: f64) -> RouteOptions {
+fn detour(ratio: f64) -> RouteOptions {
     RouteOptions {
-        max_detour,
+        budget: crate::TimeBudget::Extra(ratio),
         ..RouteOptions::default()
     }
 }
@@ -229,7 +229,7 @@ fn overlapping_sections_give_the_best_bonus() {
     let edges = e.region().edge_count() as u32;
     let best = (0..edges).map(|id| fav.bonus(id)).fold(0.0, f64::max);
     assert!((best - PARAMS.bonus(Rating::Epic)).abs() < 1e-6);
-    assert!((fav.max_bonus() - best).abs() < 1e-9);
+    assert!((fav.max_bonus() - best).abs() < 1e-6); // stored as f32
 }
 
 #[test]
@@ -245,7 +245,10 @@ fn a_section_ending_mid_edge_covers_part_of_it() {
     assert_eq!(fav.edge_count(), 2);
     for id in 0..2 {
         assert!((fav.coverage(id) - 0.5).abs() < 1e-3, "edge {id}");
-        assert!((fav.bonus(id) - 0.25).abs() < 1e-3, "edge {id}");
+        assert!(
+            (fav.bonus(id) - 0.5 * PARAMS.bonus(Rating::Epic)).abs() < 1e-3,
+            "edge {id}"
+        );
     }
     // A span touching the road at one node only covers nothing.
     let fav = Favourites::build(&e, &[section(&[(20, 4, 4)], Rating::Epic, Direction::Both)]);
@@ -332,9 +335,59 @@ fn odd_way_spans_never_panic() {
     let edges = e.region().edge_count() as u32;
     for id in 0..edges + 5 {
         let (b, c) = (fav.bonus(id), fav.coverage(id));
-        assert!((0.0..=PARAMS.max_bonus()).contains(&b), "{b}");
+        assert!((0.0..=PARAMS.max_bonus() + 1e-6).contains(&b), "{b}"); // f32
         assert!((0.0..=1.0).contains(&c), "{c}");
     }
     let r = e.route_with(FROM, TO, &detour(0.4), &fav).unwrap();
     assert!((0.0..=1.0).contains(&r.favourite_share));
+}
+
+#[test]
+fn the_guard_refuses_detours_that_buy_too_little() {
+    // The great north loop: 52 s extra for 152 s of great road, worth
+    // 0.7 × 152 = 106 s, so 2 s of favourite per extra second.
+    let e = fork();
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 0, 3)], Rating::Great, Direction::Both)],
+    );
+    let with_gain = |min_gain| {
+        let opts = RouteOptions {
+            min_gain,
+            ..detour(1.0)
+        };
+        e.route_with(FROM, TO, &opts, &fav).unwrap()
+    };
+    assert!(north_of(&with_gain(0.0)));
+    assert!(north_of(&with_gain(1.9)));
+    let r = with_gain(2.2);
+    assert!(!north_of(&r), "{r:?}");
+    assert_eq!(r, e.route(FROM, TO, &detour(1.0)).unwrap());
+}
+
+#[test]
+fn a_total_time_budget_spends_the_spare_time() {
+    use crate::TimeBudget::Total;
+    let e = fork();
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 0, 3)], Rating::Epic, Direction::Both)],
+    );
+    let fastest = e.route(FROM, TO, &RouteOptions::default()).unwrap();
+    let within = |total_s: f64| {
+        let opts = RouteOptions {
+            budget: Total(total_s),
+            ..RouteOptions::default()
+        };
+        e.route_with(FROM, TO, &opts, &fav).unwrap()
+    };
+    // The north loop takes 52 s more.
+    let r = within(fastest.duration_s + 60.0);
+    assert!(
+        north_of(&r) && r.duration_s <= fastest.duration_s + 60.0,
+        "{r:?}"
+    );
+    assert!(!north_of(&within(fastest.duration_s + 30.0)));
+    // Less time than the fastest route needs: the fastest route.
+    assert_eq!(within(10.0), fastest);
 }

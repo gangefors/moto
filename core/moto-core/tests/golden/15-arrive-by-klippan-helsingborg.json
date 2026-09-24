@@ -1,8 +1,10 @@
 {
-  "name": "Klippan to Helsingborg, the same road only good",
-  "description": "Rated good, the 17 km parallel road still buys about 14 minutes of good riding for 3 extra minutes: worth it with the default 40 % budget and guard (1.75 s of weighted favourite riding per extra second).",
+  "name": "Klippan to Helsingborg, 40 minutes to arrive",
+  "description": "With 40 minutes in all (the fastest route takes 32.5) and no guard, as when arriving by a set time, the spare time goes on the good road.",
   "from": [56.134, 13.133],
   "to": [56.046, 12.694],
+  "max_minutes": 40,
+  "min_gain": 0,
   "favourites": [
     {"from": [56.13504, 13.00886], "to": [56.11903, 12.9975], "rating": "good"},
     {"from": [56.11903, 12.9975], "to": [56.10695, 12.9745], "rating": "good"},

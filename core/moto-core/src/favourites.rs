@@ -22,12 +22,13 @@ pub struct Favourites {
     /// The region the edge ids belong to (see `rematch::region_key`);
     /// empty for [`Favourites::none`], which fits any region.
     region_key: String,
-    /// Bonus of every edge (see `ScoringParams::favourite_bonus`), indexed
-    /// by edge id; empty when no edge is a favourite.
+    /// Bonus of every edge at full pull (see `ScoringParams::bonus`),
+    /// indexed by edge id; empty when no edge is a favourite.
     bonus: Vec<f32>,
     /// The stretch of each favourite edge that lies on a section, as
-    /// fractions of its length in travel order.
-    coverage: HashMap<u32, (f32, f32)>,
+    /// fractions of its length in travel order, and the section's rating
+    /// weight (see `ScoringParams::favourite_weight`).
+    coverage: HashMap<u32, (f32, f32, f32)>,
     /// The largest bonus of any edge.
     max_bonus: f64,
 }
@@ -96,7 +97,7 @@ impl Favourites {
             let Ok(id) = u32::try_from(id) else {
                 break; // the region format caps edge ids below this
             };
-            let mut best = (0.0f64, (0.0f64, 0.0f64)); // (bonus, stretch)
+            let mut best = (0.0f64, (0.0f64, 0.0f64), 0.0f64); // (bonus, stretch, weight)
             for s in spans {
                 if s.along_way.is_some_and(|a| a != along_way) {
                     continue;
@@ -112,7 +113,7 @@ impl Favourites {
                 };
                 let b = (stretch.1 - stretch.0) * s.bonus;
                 if b > best.0 {
-                    best = (b, stretch);
+                    best = (b, stretch, s.bonus / PARAMS.max_pull);
                 }
             }
             if best.0 > 0.0 {
@@ -121,7 +122,7 @@ impl Favourites {
                 bonus[id as usize] = best.0 as f32;
                 favourites
                     .coverage
-                    .insert(id, (best.1.0 as f32, best.1.1 as f32));
+                    .insert(id, (best.1.0 as f32, best.1.1 as f32, best.2 as f32));
                 favourites.max_bonus = favourites.max_bonus.max(best.0);
             }
         }
@@ -171,9 +172,19 @@ impl Favourites {
     /// Share of edge `id`'s length between fractions `from` and `to` (in
     /// travel order) that lies on a favourite section.
     pub(crate) fn covered_between(&self, id: u32, from: f64, to: f64) -> f64 {
-        self.coverage.get(&id).map_or(0.0, |&(a, b)| {
+        self.coverage.get(&id).map_or(0.0, |&(a, b, _)| {
             (to.min(f64::from(b)) - from.max(f64::from(a))).max(0.0)
         })
+    }
+
+    /// As [`Self::covered_between`], weighted by the section's rating
+    /// (epic 1): how much favourite riding the stretch is worth.
+    pub(crate) fn value_between(&self, id: u32, from: f64, to: f64) -> f64 {
+        let weight = self
+            .coverage
+            .get(&id)
+            .map_or(0.0, |&(_, _, w)| f64::from(w));
+        self.covered_between(id, from, to) * weight
     }
 
     /// The largest bonus of any edge.

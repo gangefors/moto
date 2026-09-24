@@ -15,7 +15,7 @@ use std::path::Path;
 
 use moto_core::geo::distance_to_line;
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
-use moto_core::{Engine, Favourites, LatLon, Route, RouteOptions};
+use moto_core::{Engine, Favourites, LatLon, Route, RouteOptions, TimeBudget};
 use serde::{Deserialize, Serialize};
 
 /// Largest case file read.
@@ -38,9 +38,15 @@ pub struct Case {
     /// Start and end as [lat, lon].
     pub from: [f64; 2],
     pub to: [f64; 2],
-    /// Detour budget (see `RouteOptions::max_detour`); the default if
-    /// left out.
+    /// Time budget as extra over the fastest route (0.4 = 40 %, the
+    /// default), or ...
     pub max_detour: Option<f64>,
+    /// ... as the most minutes in all (like arriving by a set time).
+    pub max_minutes: Option<f64>,
+    /// Guard: seconds of rating-weighted favourite riding each extra
+    /// second must buy (see `RouteOptions::min_gain`); the default if
+    /// left out.
+    pub min_gain: Option<f64>,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
     pub expect: Expect,
@@ -151,6 +157,9 @@ impl Case {
         {
             return Err(format!("max_detour_ratio must be at least 1, got {r}"));
         }
+        if case.max_detour.is_some() && case.max_minutes.is_some() {
+            return Err("give max_detour or max_minutes, not both".into());
+        }
         case.options().validate().map_err(|e| e.to_string())?;
         Ok(case)
     }
@@ -158,7 +167,13 @@ impl Case {
     fn options(&self) -> RouteOptions {
         let mut opts = RouteOptions::default();
         if let Some(d) = self.max_detour {
-            opts.max_detour = d;
+            opts.budget = TimeBudget::Extra(d);
+        }
+        if let Some(m) = self.max_minutes {
+            opts.budget = TimeBudget::Total(m * 60.0);
+        }
+        if let Some(g) = self.min_gain {
+            opts.min_gain = g;
         }
         opts
     }
@@ -235,14 +250,22 @@ impl Case {
         out.curvy_share = route.curvy_share;
 
         let e = &self.expect;
-        let cap = e
-            .max_detour_ratio
-            .unwrap_or(1.0 + self.options().max_detour);
+        let cap = e.max_detour_ratio.unwrap_or(match self.options().budget {
+            TimeBudget::Extra(ratio) => 1.0 + ratio,
+            TimeBudget::Total(_) => f64::INFINITY,
+        });
         if out.detour_ratio > cap + 1e-9 {
             out.failures.push(format!(
                 "detour {:.2}× the fastest time, allowed {cap:.2}×",
                 out.detour_ratio
             ));
+        }
+        if let Some(max) = self.max_minutes
+            && out.duration_min > max + 1e-6
+            && out.duration_min > out.fastest_min + 1e-6
+        {
+            out.failures
+                .push(format!("{:.1} min, allowed {max:.1} min", out.duration_min));
         }
         if let Some(min) = e.min_favourite_share
             && route.favourite_share < min

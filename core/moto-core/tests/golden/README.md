@@ -16,6 +16,7 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
   "from": [56.134, 13.133],
   "to": [56.046, 12.694],
   "max_detour": 0.4,
+  "min_gain": 1.0,
   "favourites": [
     {"from": [56.13504, 13.00886], "to": [56.11903, 12.9975], "rating": "great", "one_way": false}
   ],
@@ -29,7 +30,7 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 }
 ```
 
-- Points are `[lat, lon]`. `max_detour` is the detour budget (default 0.4, as in the app); `max_detour_ratio` defaults to 1 + that budget.
+- Points are `[lat, lon]`. The time budget is either `max_detour` (extra over the fastest route, default 0.4 as in the app) or `max_minutes` (the most minutes in all, as when arriving by a set time). The favourites pull as hard as the budget allows. `min_gain` is the guard: seconds of rating-weighted favourite riding (epic 1, great 0.7, good 0.4) each extra second must buy (default 1; 0 spends the whole budget). `max_detour_ratio` defaults to 1 + `max_detour`, and `max_minutes` is checked too.
 - A favourite is marked like in the app: the road between two points, so a long road is a chain of short pieces (about 2 km), each ending where the next starts. `rating` is `good`, `great` or `epic`; `one_way` means only from `from` to `to`.
 - `pass` points must be within 50 m of the route, `avoid` points further away.
 
@@ -39,4 +40,4 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 - Put checkpoints on the road itself, not at junction loops, and write down in `description` why the expectation is right.
 - Change the scoring weights (`moto-core/src/scoring.rs`) only with a one-line hypothesis and a before/after comparison of all cases.
 
-The first twelve cases (2026-09-24) are synthetic: the favourite roads are real roads beside the fastest routes between towns, found by routing via points a few kilometres to the side, not roads anyone rated. Cases from real rides should follow.
+The first cases (2026-09-24) are synthetic: the favourite roads are real roads beside the fastest routes between towns, found by routing via points a few kilometres to the side, not roads anyone rated. Cases from real rides should follow.

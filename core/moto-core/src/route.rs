@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Stefan Gangefors
 
 //! Routes between two snapped road points: A* over travel time on the
-//! region graph (M0), with the rider's favourite sections as a capped
-//! bonus within a detour budget (M2a). Curvature joins the cost in M2b.
+//! region graph (M0), with the rider's favourite sections pulling the
+//! route as hard as the time budget allows (M2a). Curvature joins the cost in M2b.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -13,7 +13,7 @@ use crate::geo::{haversine_m, polyline_slice};
 use crate::region::Region;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, RoadClass, Surface, edge_flags};
 use crate::scoring::PARAMS;
-use crate::{Avoid, CoreError, LatLon, RoadPoint, Route};
+use crate::{Avoid, CoreError, LatLon, RoadPoint, Route, RouteOptions};
 
 const NONE: u32 = u32::MAX;
 
@@ -44,8 +44,8 @@ fn time_cost(avoid: &Avoid, e: &Edge) -> f64 {
 pub(crate) enum Cost<'a> {
     /// Travel time, with avoided kinds of road costing more.
     Fastest(Avoid),
-    /// As `Fastest`, with favourite edges `weight` (0–1) times their bonus
-    /// cheaper.
+    /// As `Fastest`, with favourite edges cheaper by their bonus times the
+    /// pull (0–1).
     Favoured(Avoid, &'a Favourites, f64),
     /// Distance along the road, nothing avoided: the road the rider points
     /// at, not a faster one nearby (marking sections).
@@ -168,6 +168,8 @@ struct Builder {
     duration_s: f64,
     curvy_m: f64,
     favourite_m: f64,
+    /// Seconds on favourites, weighted by rating (epic 1).
+    favourite_value_s: f64,
 }
 
 impl Builder {
@@ -184,6 +186,7 @@ impl Builder {
             .sum();
         self.curvy_m += frac * curvy.min(length_m);
         self.favourite_m += length_m * favourites.covered_between(id, from, to);
+        self.favourite_value_s += time_s(&e) * favourites.value_between(id, from, to);
         for p in polyline_slice(&edge_line(region, &e), from, to) {
             if self.geometry.last() != Some(&p) {
                 self.geometry.push(p);
@@ -191,7 +194,7 @@ impl Builder {
         }
     }
 
-    fn finish(self) -> Route {
+    fn finish(self) -> Routed {
         let share = |m: f64| {
             if self.distance_m > 0.0 {
                 (m / self.distance_m).clamp(0.0, 1.0)
@@ -199,18 +202,28 @@ impl Builder {
                 0.0
             }
         };
-        Route {
-            curvy_share: share(self.curvy_m),
-            favourite_share: share(self.favourite_m),
-            geometry: self.geometry,
-            distance_m: self.distance_m,
-            duration_s: self.duration_s,
+        Routed {
+            value_s: self.favourite_value_s,
+            route: Route {
+                curvy_share: share(self.curvy_m),
+                favourite_share: share(self.favourite_m),
+                geometry: self.geometry,
+                distance_m: self.distance_m,
+                duration_s: self.duration_s,
+            },
         }
     }
 }
 
+/// A route and what its favourite riding is worth.
+struct Routed {
+    route: Route,
+    /// Seconds on favourites, weighted by rating (epic 1).
+    value_s: f64,
+}
+
 /// The route with the path pieces `parts`.
-fn build(region: &Region, favourites: &Favourites, parts: &[Partial]) -> Route {
+fn build(region: &Region, favourites: &Favourites, parts: &[Partial]) -> Routed {
     let mut route = Builder::default();
     for p in parts {
         route.add(region, favourites, p.edge, p.from, p.to);
@@ -218,50 +231,57 @@ fn build(region: &Region, favourites: &Favourites, parts: &[Partial]) -> Route {
     route.finish()
 }
 
-/// Route from `from` to `to`, keeping off what `avoid` asks for where
-/// possible: the fastest one, or with favourites the one that rides most
-/// of them while taking at most `max_detour` (a fraction) longer than the
-/// fastest. The full favourite bonus is tried first; if that route is too
-/// long, the bonus weight is bisected and the route of the largest weight
-/// that fits wins (the fastest route if none does). The same inputs always
-/// give the same route.
+/// Route from `from` to `to`, keeping off what `opts.avoid` asks for where
+/// possible: the fastest one, or with favourites the one that rides as
+/// much of them as the time budget buys. The budget sets how hard
+/// favourites pull: full pull is tried first, and if that route takes
+/// more than the budget allows, or its extra time buys too little
+/// favourite riding (`opts.min_gain`), the pull is bisected and the route
+/// of the strongest pull that passes wins (the fastest route if none
+/// does). The same inputs always give the same route.
 pub(crate) fn route(
     region: &Region,
     from: &RoadPoint,
     to: &RoadPoint,
-    avoid: &Avoid,
-    max_detour: f64,
+    opts: &RouteOptions,
     favourites: &Favourites,
     max_speed_kmh: f64,
 ) -> Result<Route, CoreError> {
-    let parts = path(region, from, to, Cost::Fastest(*avoid), max_speed_kmh)?;
+    let avoid = opts.avoid;
+    let parts = path(region, from, to, Cost::Fastest(avoid), max_speed_kmh)?;
     let fastest = build(region, favourites, &parts);
     if favourites.is_empty() {
-        return Ok(fastest);
+        return Ok(fastest.route);
     }
-    let budget = fastest.duration_s * (1.0 + max_detour) + 1e-6;
-    let favoured = |weight: f64| -> Result<Route, CoreError> {
-        let cost = Cost::Favoured(*avoid, favourites, weight);
+    let (base_s, base_value_s) = (fastest.route.duration_s, fastest.value_s);
+    let limit_s = base_s + opts.budget.extra_s(base_s) + 1e-6;
+    let passes = |r: &Routed| {
+        let extra_s = r.route.duration_s - base_s;
+        r.route.duration_s <= limit_s
+            && (extra_s <= 1e-6 || (r.value_s - base_value_s) >= opts.min_gain * extra_s)
+    };
+    let pulled = |pull: f64| -> Result<Routed, CoreError> {
+        let cost = Cost::Favoured(avoid, favourites, pull);
         let parts = path(region, from, to, cost, max_speed_kmh)?;
         Ok(build(region, favourites, &parts))
     };
-    let full = favoured(1.0)?;
-    if full.duration_s <= budget {
-        return Ok(full);
+    let full = pulled(1.0)?;
+    if passes(&full) {
+        return Ok(full.route);
     }
     let mut best = fastest;
     let (mut lo, mut hi) = (0.0, 1.0);
     for _ in 0..PARAMS.detour_steps {
-        let weight = (lo + hi) / 2.0;
-        let r = favoured(weight)?;
-        if r.duration_s <= budget {
-            lo = weight;
+        let pull = (lo + hi) / 2.0;
+        let r = pulled(pull)?;
+        if passes(&r) {
+            lo = pull;
             best = r;
         } else {
-            hi = weight;
+            hi = pull;
         }
     }
-    Ok(best)
+    Ok(best.route)
 }
 
 /// Cheapest path from `from` to `to` under `cost`, as edge pieces in
