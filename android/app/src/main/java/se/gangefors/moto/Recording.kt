@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.Track
+import se.gangefors.moto.core.TrackPoint
 
 /**
  * Ride recording as the map screen sees it (PRD R4). [RecordingService]
@@ -26,6 +27,8 @@ object Recording {
             /** The line ridden so far, thinned; refreshed every few seconds. */
             val line: List<LatLon>,
             val waitingForGps: Boolean,
+            /** The latest fix, for quick-tags. */
+            val lastFix: TrackPoint?,
         ) : State
         /** The last ride just ended; [batteryPerHour] in percent, if known. */
         data class Finished(val track: Track, val batteryPerHour: Double?) : State

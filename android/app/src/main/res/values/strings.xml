@@ -71,4 +71,17 @@
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>
     <string name="rides_cannot_write">can’t write to the chosen file</string>
+    <string name="tag_button">TAG</string>
+    <string name="tag_button_description">Tag this road</string>
+    <string name="tag_saved">Tagged. Review it after the ride.</string>
+    <string name="tag_no_fix">No GPS position yet; nothing tagged.</string>
+    <string name="tag_failed">Tag not saved: %1$s</string>
+    <string name="tags_review">Review tags (%1$d)</string>
+    <string name="tag_review_suggested">Tag %1$d of %2$d · %3$.1f km. Tap near an end to trim it.</string>
+    <string name="tag_review_none">Tag %1$d of %2$d: no suggestion (%3$s). Tap the start to mark it yourself, or discard it.</string>
+    <string name="tag_review_loading">Tag %1$d of %2$d…</string>
+    <string name="tag_review_done">All tags reviewed.</string>
+    <string name="tag_review_later">Later</string>
+    <string name="tag_review_discard">Discard</string>
+    <string name="tag_default_name">Tagged road, %1$.1f km</string>
 </resources>
