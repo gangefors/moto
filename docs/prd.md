@@ -218,7 +218,7 @@ No hard deadline; hobby pace, phased by milestones. Nice-to-align: usable for re
 
 1. **M0 — Foundations:** ADRs 0001–0003 written (commit to repo); Rust core skeleton with UniFFI + cargo-ndk running on the phone; MapLibre map with OpenFreeMap; Rust CLI builds a Skåne region file; tap → snap → draw a straight shortest path end-to-end (R11, R12).
 2. **M1 — Capture:** R1–R4 + R10. Ride with recording and quick-tags; build up a real favourites set.
-3. **M2 — Curvy routing:** R5, R6, R8, R9. One-way routes using curvature + favourites, exported to nav app. Golden-route regression set established.
+3. **M2 — Favourite and curvy routing:** R5, R6, R8, R9, in two parts. **M2a:** one-way routes over the rider's favourites within a detour budget, exported to nav app; golden-route regression set established. **M2b:** curvature added to the same cost, so riders without favourites still get curvy routes.
 4. **M3 — Round trips:** R7. First "just go for a ride" loops.
 5. **M4 — Polish / P1s** based on real-ride feedback.
 
