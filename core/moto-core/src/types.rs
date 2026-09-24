@@ -36,34 +36,64 @@ impl Default for Avoid {
     }
 }
 
+/// How much time a route may take (PRD R6). The time over the fastest
+/// route is spent on favourites: the more there is, the harder they pull.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TimeBudget {
+    /// Up to this fraction more than the fastest route (0.4 = 40 % longer).
+    Extra(f64),
+    /// At most this many seconds in all, e.g. to arrive by a set time. Less
+    /// than the fastest route gives the fastest route.
+    Total(f64),
+}
+
+impl TimeBudget {
+    /// The extra seconds allowed over a fastest route of `fastest_s`.
+    pub fn extra_s(&self, fastest_s: f64) -> f64 {
+        match *self {
+            TimeBudget::Extra(ratio) => fastest_s * ratio,
+            TimeBudget::Total(total) => (total - fastest_s).max(0.0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RouteOptions {
     pub avoid: Avoid,
-    /// Extra time allowed over the fastest route, as a fraction
-    /// (0.4 = up to 40 % longer). How riders express this is still an open
-    /// product question; the core keeps a plain ratio.
-    pub max_detour: f64,
+    pub budget: TimeBudget,
+    /// Guard against poor trades: a detour must buy at least this many
+    /// seconds of favourite riding (weighted by rating, epic = 1) per extra
+    /// second. 0 spends the whole budget if that adds any favourite road
+    /// (for "arrive by" routes); see `RouteOptions::default`.
+    pub min_gain: f64,
 }
 
 impl Default for RouteOptions {
     fn default() -> Self {
         Self {
             avoid: Avoid::default(),
-            max_detour: 0.4,
+            budget: TimeBudget::Extra(0.4),
+            min_gain: crate::scoring::PARAMS.min_gain,
         }
     }
 }
 
 impl RouteOptions {
     pub fn validate(&self) -> Result<(), CoreError> {
-        if self.max_detour.is_finite() && self.max_detour >= 0.0 {
-            Ok(())
-        } else {
+        let bad = |what: &str, v: f64| {
             Err(CoreError::InvalidArgument(format!(
-                "max_detour must be a non-negative number, got {}",
-                self.max_detour
+                "{what} must be a non-negative number, got {v}"
             )))
+        };
+        match self.budget {
+            TimeBudget::Extra(v) if !(v.is_finite() && v >= 0.0) => return bad("extra time", v),
+            TimeBudget::Total(v) if !(v.is_finite() && v >= 0.0) => return bad("total time", v),
+            _ => {}
         }
+        if !(self.min_gain.is_finite() && self.min_gain >= 0.0) {
+            return bad("min_gain", self.min_gain);
+        }
+        Ok(())
     }
 }
 
@@ -112,14 +142,32 @@ mod tests {
     }
 
     #[test]
-    fn rejects_negative_or_nan_detour() {
+    fn rejects_negative_or_nan_budgets() {
         for bad in [-0.1, f64::NAN, f64::INFINITY] {
+            for budget in [TimeBudget::Extra(bad), TimeBudget::Total(bad)] {
+                let opts = RouteOptions {
+                    budget,
+                    ..RouteOptions::default()
+                };
+                assert!(opts.validate().is_err(), "{budget:?} should be rejected");
+            }
             let opts = RouteOptions {
-                max_detour: bad,
+                min_gain: bad,
                 ..RouteOptions::default()
             };
-            assert!(opts.validate().is_err(), "{bad} should be rejected");
+            assert!(
+                opts.validate().is_err(),
+                "min_gain {bad} should be rejected"
+            );
         }
+    }
+
+    #[test]
+    fn budgets_give_extra_seconds() {
+        assert_eq!(TimeBudget::Extra(0.4).extra_s(1000.0), 400.0);
+        assert_eq!(TimeBudget::Total(1500.0).extra_s(1000.0), 500.0);
+        // Less time than the fastest route: nothing extra.
+        assert_eq!(TimeBudget::Total(600.0).extra_s(1000.0), 0.0);
     }
 
     #[test]

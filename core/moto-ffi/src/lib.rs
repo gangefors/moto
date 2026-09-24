@@ -41,10 +41,23 @@ pub struct Avoid {
     pub ferries: bool,
 }
 
+/// How much time a route may take; the time over the fastest route is
+/// spent on favourites.
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Enum)]
+pub enum TimeBudget {
+    /// Up to this fraction more than the fastest route (0.4 = 40 %).
+    Extra { ratio: f64 },
+    /// At most this many seconds in all (e.g. to arrive by a set time).
+    Total { seconds: f64 },
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RouteOptions {
     pub avoid: Avoid,
-    pub max_detour: f64,
+    pub budget: TimeBudget,
+    /// Seconds of rating-weighted favourite riding each extra second must
+    /// buy (0 = spend the whole budget if it adds any favourite road).
+    pub min_gain: f64,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
@@ -142,7 +155,7 @@ impl Engine {
 
     /// Route from `from` to `to`: the fastest one, or with `favourites`
     /// (from `SectionStore.favourites` for this region) the one over as
-    /// many of them as fits in `opts.max_detour`.
+    /// many of them as `opts.budget` buys.
     pub fn route(
         &self,
         from: LatLon,
@@ -226,7 +239,11 @@ impl From<RouteOptions> for moto_core::RouteOptions {
     fn from(o: RouteOptions) -> Self {
         Self {
             avoid: o.avoid.into(),
-            max_detour: o.max_detour,
+            budget: match o.budget {
+                TimeBudget::Extra { ratio } => moto_core::TimeBudget::Extra(ratio),
+                TimeBudget::Total { seconds } => moto_core::TimeBudget::Total(seconds),
+            },
+            min_gain: o.min_gain,
         }
     }
 }
@@ -235,7 +252,11 @@ impl From<moto_core::RouteOptions> for RouteOptions {
     fn from(o: moto_core::RouteOptions) -> Self {
         Self {
             avoid: o.avoid.into(),
-            max_detour: o.max_detour,
+            budget: match o.budget {
+                moto_core::TimeBudget::Extra(ratio) => TimeBudget::Extra { ratio },
+                moto_core::TimeBudget::Total(seconds) => TimeBudget::Total { seconds },
+            },
+            min_gain: o.min_gain,
         }
     }
 }

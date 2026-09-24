@@ -245,7 +245,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let (mut fav_found, mut fav_share, mut fav_detour) = (0u32, 0.0, 0.0);
     let mut fastest_share = 0.0;
     let no_detour = RouteOptions {
-        max_detour: 0.0,
+        budget: moto_core::TimeBudget::Extra(0.0),
         ..opts.clone()
     };
     for round in 0..ROUNDS {
@@ -557,7 +557,10 @@ mod tests {
             "{r:?}"
         );
         assert!(r.fav_share_mean > 0.0 && r.fav_share_fastest > 0.0, "{r:?}");
-        let budget = 1.0 + RouteOptions::default().max_detour;
+        let moto_core::TimeBudget::Extra(ratio) = RouteOptions::default().budget else {
+            panic!("the default budget is a ratio");
+        };
+        let budget = 1.0 + ratio;
         assert!(
             r.fav_detour_mean >= 1.0 - 1e-9 && r.fav_detour_mean <= budget,
             "{r:?}"

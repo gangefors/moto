@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     private fun checkCoreLoads() {
         try {
             val opts = defaultRouteOptions()
-            Log.i(TAG, "moto core loaded (default max detour ${opts.maxDetour})")
+            Log.i(TAG, "moto core loaded (default budget ${opts.budget})")
         } catch (e: Throwable) {
             Log.e(TAG, "moto core failed to load", e)
         }

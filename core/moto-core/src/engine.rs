@@ -88,7 +88,8 @@ impl Engine {
     }
 
     /// Route from `from` to `to` over as much of the rider's `favourites`
-    /// as fits in `opts.max_detour` (PRD R6; curvature joins in M2b).
+    /// as the time budget `opts.budget` buys (PRD R6; curvature joins in
+    /// M2b).
     /// Both points are snapped to the nearest road first. Favourites built
     /// for another region are refused.
     pub fn route_with(
@@ -108,8 +109,7 @@ impl Engine {
             &self.region,
             &start,
             &end,
-            &opts.avoid,
-            opts.max_detour,
+            opts,
             favourites,
             self.max_speed_kmh,
         )
@@ -220,7 +220,7 @@ mod tests {
 
         let ok = ll(55.6, 13.0);
         let opts = RouteOptions {
-            max_detour: -1.0,
+            budget: crate::TimeBudget::Extra(-1.0),
             ..RouteOptions::default()
         };
         assert!(matches!(
