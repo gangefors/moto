@@ -9,16 +9,17 @@
 //! An import file is untrusted: sizes are capped, the JSON is read into
 //! strict types (never into arbitrary ones), and every value is validated;
 //! any problem rejects the whole file with a typed error. Imported
-//! sections that are already covered by a saved one are skipped; one that
-//! covers a shorter saved section replaces it (the longer section wins);
-//! partial overlaps are both kept. Imported sections are then fitted to the
+//! sections that a saved one makes redundant are skipped, and saved ones
+//! an imported section makes redundant are replaced (see [`crate::overlap`]:
+//! same road, every direction, rating at least as high; the longer wins a
+//! tie); everything else, partial overlaps included, is kept. Imported sections are then fitted to the
 //! current region like after a map update.
 
 pub mod archive;
 
 use serde::{Deserialize, Serialize};
 
-use crate::geo::{densify, distance_to_line, haversine_m};
+use crate::overlap::Shape;
 use crate::rematch::rematch_store;
 use crate::section::{
     Direction, LOCAL_RIDER, MAX_NAME_CHARS, NewSection, Rating, Section, Source, Status, WaySpan,
@@ -32,11 +33,6 @@ pub use archive::ExportFormat;
 pub const MAX_IMPORT_SECTIONS: usize = 10_000;
 /// Version of the `moto` properties in our exports.
 const FORMAT_VERSION: u32 = 1;
-/// A section covers another when every point of the other lies within
-/// this distance of it.
-const COVER_TOLERANCE_M: f64 = 15.0;
-/// Points checked along the covered section, this far apart.
-const COVER_STEP_M: f64 = 10.0;
 
 // --- GeoJSON as written ---
 
@@ -268,108 +264,6 @@ fn feature(f: FeatureIn) -> Result<NewSection, String> {
     Ok(s)
 }
 
-// --- overlap rules ---
-
-/// A section's shape for overlap checks.
-struct Shape {
-    line: Vec<LatLon>,
-    direction: Direction,
-    length_m: f64,
-    /// South-west and north-east corners, widened by the tolerance.
-    bbox: (LatLon, LatLon),
-}
-
-impl Shape {
-    fn new(line: &[LatLon], direction: Direction) -> Self {
-        let pad_lat = COVER_TOLERANCE_M / 111_195.0;
-        let mut sw = LatLon {
-            lat: 90.0,
-            lon: 180.0,
-        };
-        let mut ne = LatLon {
-            lat: -90.0,
-            lon: -180.0,
-        };
-        for p in line {
-            sw = LatLon {
-                lat: sw.lat.min(p.lat),
-                lon: sw.lon.min(p.lon),
-            };
-            ne = LatLon {
-                lat: ne.lat.max(p.lat),
-                lon: ne.lon.max(p.lon),
-            };
-        }
-        let pad_lon = pad_lat / sw.lat.to_radians().cos().max(0.01);
-        Self {
-            line: line.to_vec(),
-            direction,
-            length_m: line.windows(2).map(|w| haversine_m(w[0], w[1])).sum(),
-            bbox: (
-                LatLon {
-                    lat: sw.lat - pad_lat,
-                    lon: sw.lon - pad_lon,
-                },
-                LatLon {
-                    lat: ne.lat + pad_lat,
-                    lon: ne.lon + pad_lon,
-                },
-            ),
-        }
-    }
-
-    fn bbox_overlaps(&self, other: &Shape) -> bool {
-        self.bbox.0.lat <= other.bbox.1.lat
-            && other.bbox.0.lat <= self.bbox.1.lat
-            && self.bbox.0.lon <= other.bbox.1.lon
-            && other.bbox.0.lon <= self.bbox.1.lon
-    }
-
-    /// Whether this section covers all of `other`: every point of `other`
-    /// lies along it, and a one-way section only covers `other` if that is
-    /// one-way the same way (a two-way section also counts the other way).
-    fn covers(&self, other: &Shape) -> bool {
-        if !self.bbox_overlaps(other) {
-            return false;
-        }
-        let points = densify(&other.line, COVER_STEP_M);
-        if !points
-            .iter()
-            .all(|&p| distance_to_line(p, &self.line) <= COVER_TOLERANCE_M)
-        {
-            return false;
-        }
-        match (self.direction, other.direction) {
-            (Direction::Both, _) => true,
-            (Direction::Forward, Direction::Both) => false,
-            (Direction::Forward, Direction::Forward) => {
-                let (Some(&a), Some(&b)) = (other.line.first(), other.line.last()) else {
-                    return false;
-                };
-                position_along(&self.line, a) <= position_along(&self.line, b)
-            }
-        }
-    }
-}
-
-/// Metres along `line` to the point nearest to `p`.
-fn position_along(line: &[LatLon], p: LatLon) -> f64 {
-    let mut best = (f64::INFINITY, 0.0);
-    let mut walked = 0.0;
-    for w in line.windows(2) {
-        let seg = haversine_m(w[0], w[1]);
-        let d = distance_to_line(p, w);
-        if d < best.0 {
-            // Along this segment: the part of the segment before p.
-            let a = haversine_m(w[0], p);
-            let along = (a * a - d * d).max(0.0).sqrt().min(seg);
-            best = (d, walked + along);
-        }
-        walked += seg;
-    }
-    best.1
-}
-
 /// What an import does, before touching the store.
 #[derive(Debug, Default, PartialEq)]
 struct Plan {
@@ -385,31 +279,29 @@ struct Plan {
 /// section at a time, so the file's own duplicates are handled too.
 fn plan(saved: &[Section], imported: &[NewSection]) -> Plan {
     let mut plan = Plan::default();
-    let mut saved: Vec<(i64, Shape)> = saved
-        .iter()
-        .map(|s| (s.id, Shape::new(&s.geometry, s.direction)))
-        .collect();
+    let mut saved: Vec<(i64, Shape)> = saved.iter().map(|s| (s.id, Shape::of_section(s))).collect();
     // Imported sections accepted so far: (index into `imported`, shape).
     let mut accepted: Vec<(usize, Shape)> = Vec::new();
     for (i, s) in imported.iter().enumerate() {
-        let shape = Shape::new(&s.geometry, s.direction);
-        let covered = saved.iter().any(|(_, o)| o.covers(&shape))
-            || accepted.iter().any(|(_, o)| o.covers(&shape));
+        let shape = Shape::of_new(s);
+        let covered = saved.iter().any(|(_, o)| o.beats(&shape))
+            || accepted.iter().any(|(_, o)| o.beats(&shape));
         if covered {
             plan.skipped += 1;
             continue;
         }
-        // It wins over shorter sections it covers.
+        // It replaces the sections it makes redundant.
         saved.retain(|(id, o)| {
-            let replaced = o.length_m <= shape.length_m && shape.covers(o);
+            let replaced = shape.beats(o);
             if replaced {
                 plan.remove.push(*id);
             }
             !replaced
         });
         let before = accepted.len();
-        accepted.retain(|(_, o)| !(o.length_m <= shape.length_m && shape.covers(o)));
-        // A shorter one earlier in the same file counts as skipped.
+        accepted.retain(|(_, o)| !shape.beats(o));
+        // One earlier in the same file that this makes redundant counts as
+        // skipped.
         plan.skipped += (before - accepted.len()) as u64;
         accepted.push((i, shape));
     }
@@ -423,11 +315,11 @@ fn plan(saved: &[Section], imported: &[NewSection]) -> Plan {
 pub struct ImportReport {
     /// Sections added.
     pub added: u64,
-    /// Imported sections skipped: already covered by a saved section (or
-    /// by a longer one in the same file).
+    /// Imported sections skipped: made redundant by a saved section (or
+    /// by another one in the same file).
     pub skipped: u64,
-    /// Saved sections removed because an imported section covers them and
-    /// is longer.
+    /// Saved sections removed because an imported section makes them
+    /// redundant.
     pub replaced: u64,
     /// Added sections that don't fit the current map (kept, hidden as
     /// unmatched until a map they fit).

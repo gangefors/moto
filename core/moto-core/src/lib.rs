@@ -21,6 +21,7 @@ pub mod fixture;
 pub mod geo;
 pub mod gpx;
 pub mod matching;
+pub mod overlap;
 pub mod region;
 pub mod rematch;
 mod route;

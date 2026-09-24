@@ -125,6 +125,8 @@ mod tests {
             ways: draft.ways,
             geometry: draft.geometry,
         })
+        .unwrap()
+        .section
         .unwrap();
         let to = SectionStore::open(b.to_string_lossy().into_owned()).unwrap();
         for format in [ExportFormat::GeoJson, ExportFormat::Gzip, ExportFormat::Zip] {

@@ -132,8 +132,8 @@ fn importing_the_same_file_twice_adds_nothing() {
 #[test]
 fn a_shorter_imported_section_inside_a_saved_one_is_skipped() {
     let e = engine();
-    let mut store = store_with(&[along(&e, 13.201, 13.219, Rating::Good, Direction::Both)]);
-    let file = store_with(&[along(&e, 13.203, 13.207, Rating::Epic, Direction::Both)]);
+    let mut store = store_with(&[along(&e, 13.201, 13.219, Rating::Great, Direction::Both)]);
+    let file = store_with(&[along(&e, 13.203, 13.207, Rating::Great, Direction::Both)]);
     let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
     let r = import_sections(&mut store, Some(&e), &bytes, T0).unwrap();
     assert_eq!((r.added, r.skipped, r.replaced), (0, 1, 0));
@@ -141,10 +141,21 @@ fn a_shorter_imported_section_inside_a_saved_one_is_skipped() {
 }
 
 #[test]
+fn a_shorter_imported_section_rated_higher_is_kept() {
+    let e = engine();
+    let mut store = store_with(&[along(&e, 13.201, 13.219, Rating::Good, Direction::Both)]);
+    let file = store_with(&[along(&e, 13.203, 13.207, Rating::Epic, Direction::Both)]);
+    let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
+    let r = import_sections(&mut store, Some(&e), &bytes, T0).unwrap();
+    assert_eq!((r.added, r.skipped, r.replaced), (1, 0, 0));
+    assert_eq!(names(&store), ["13.201-13.219", "13.203-13.207"]);
+}
+
+#[test]
 fn a_longer_imported_section_replaces_the_shorter_saved_one() {
     let e = engine();
     let mut store = store_with(&[
-        along(&e, 13.203, 13.207, Rating::Epic, Direction::Both),
+        along(&e, 13.203, 13.207, Rating::Good, Direction::Both),
         along(&e, 13.212, 13.218, Rating::Great, Direction::Both),
     ]);
     let file = store_with(&[along(&e, 13.201, 13.209, Rating::Good, Direction::Both)]);
@@ -153,6 +164,44 @@ fn a_longer_imported_section_replaces_the_shorter_saved_one() {
     assert_eq!((r.added, r.skipped, r.replaced), (1, 0, 1));
     // The one on B→D is untouched: the import doesn't reach it.
     assert_eq!(names(&store), ["13.201-13.209", "13.212-13.218"]);
+}
+
+#[test]
+fn a_longer_imported_section_rated_lower_keeps_the_saved_one() {
+    let e = engine();
+    let mut store = store_with(&[along(&e, 13.203, 13.207, Rating::Epic, Direction::Both)]);
+    let file = store_with(&[along(&e, 13.201, 13.209, Rating::Good, Direction::Both)]);
+    let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
+    let r = import_sections(&mut store, Some(&e), &bytes, T0).unwrap();
+    assert_eq!((r.added, r.skipped, r.replaced), (1, 0, 0));
+    assert_eq!(names(&store), ["13.201-13.209", "13.203-13.207"]);
+}
+
+#[test]
+fn directions_and_ratings_decide_between_same_stretches() {
+    let e = engine();
+    // Saved: A–B both ways, great. Imported: the same road one-way east
+    // rated epic (kept: says more one way), one-way west rated good
+    // (skipped: the saved one says as much), and an epic both-ways copy
+    // (replaces the saved one and makes the epic one-way redundant too).
+    let mut store = store_with(&[along(&e, 13.201, 13.209, Rating::Great, Direction::Both)]);
+    let file = store_with(&[
+        along(&e, 13.201, 13.209, Rating::Epic, Direction::Forward),
+        along(&e, 13.209, 13.201, Rating::Good, Direction::Forward),
+    ]);
+    let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
+    let r = import_sections(&mut store, Some(&e), &bytes, T0).unwrap();
+    assert_eq!((r.added, r.skipped, r.replaced), (1, 1, 0), "{r:?}");
+    let file = store_with(&[along(&e, 13.201, 13.209, Rating::Epic, Direction::Both)]);
+    let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
+    let r = import_sections(&mut store, Some(&e), &bytes, T0).unwrap();
+    assert_eq!((r.added, r.skipped, r.replaced), (1, 0, 2), "{r:?}");
+    let left = store.list_sections(None).unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(
+        (left[0].rating, left[0].direction),
+        (Rating::Epic, Direction::Both)
+    );
 }
 
 #[test]
