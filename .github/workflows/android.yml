@@ -4,7 +4,8 @@
 # CI for every push and pull request (see "Testing and performance" in
 # CLAUDE.md):
 # - core: rustfmt, clippy, the Rust tests and cargo-deny; builds the M0
-#   region file from the OSM Sweden extract (cached); benchmarks it against
+#   region file from the OSM Sweden extract (cached); runs the golden routes
+#   (before/after against the last main build); benchmarks it against
 #   the last main build's benchmark binary on the same machine, failing on a
 #   significant regression.
 # - build: the Android app (Rust core via cargo-ndk, then Gradle) with the
@@ -156,6 +157,28 @@ jobs:
           [ -e "${baseline[0]}" ] && args+=(--baseline "${baseline[@]}")
           [ "$ACCEPTED" = true ] && args+=(--accepted)
           python3 .github/scripts/bench_compare.py "${args[@]}"
+
+      # Route quality: the golden routes (core/moto-core/tests/golden) with
+      # this build and, for the before/after table, with the last main
+      # build's binary, on the same case files. A route that breaks its
+      # expectations fails the build.
+      - name: Golden routes
+        run: |
+          region="$RUNNER_TEMP/moto-region/m0.region"
+          cases=core/moto-core/tests/golden
+          out="$RUNNER_TEMP/golden"
+          old="$RUNNER_TEMP/bench-baseline/moto-regionbuild"
+          mkdir -p "$out"
+          args=(--current "$out/current.json" --summary "$GITHUB_STEP_SUMMARY")
+          # The old binary may not have --golden yet or may not read the
+          # region or the cases; then there is no baseline this time.
+          if [ -x "$old" ]; then
+            "$old" --golden "$region" "$cases" --json "$out/base.json" > /dev/null 2>&1 || true
+          fi
+          [ -s "$out/base.json" ] && args+=(--baseline "$out/base.json")
+          # Failed cases still write their figures; the script fails the step.
+          core/target/release/moto-regionbuild --golden "$region" "$cases" --json "$out/current.json" || true
+          python3 .github/scripts/golden_compare.py "${args[@]}"
 
       - name: Keep this build's benchmark binary as the next baseline
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
