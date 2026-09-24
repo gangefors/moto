@@ -24,6 +24,8 @@ mod route;
 pub mod section;
 mod snap;
 pub mod store;
+mod suggest;
+pub mod tag;
 pub mod track;
 mod types;
 
@@ -31,4 +33,5 @@ pub use draft::SectionDraft;
 pub use engine::{Engine, SNAP_MAX_DISTANCE_M};
 pub use error::CoreError;
 pub use geo::LatLon;
+pub use suggest::TAG_REACH_M;
 pub use types::{Avoid, RoadPoint, RoundTripTarget, Route, RouteOptions};

@@ -118,6 +118,18 @@ impl Engine {
         crate::matching::match_track(&self.region, self.bounds(), points)
     }
 
+    /// The section suggested for a quick-tag (PRD R3): about 1 km of road
+    /// on each side of it, from its ride's fixes if `track` is given and
+    /// covers the tag's time, otherwise by following the road in the
+    /// tag's heading.
+    pub fn suggest_from_tag(
+        &self,
+        tag: &crate::tag::Tag,
+        track: Option<&[crate::track::TrackPoint]>,
+    ) -> Result<SectionDraft, CoreError> {
+        crate::suggest::from_tag(self, tag, track)
+    }
+
     /// Alternative loops starting and ending at `start` (PRD R7).
     pub fn round_trip(
         &self,
