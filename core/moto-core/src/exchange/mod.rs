@@ -3,8 +3,8 @@
 
 //! Export and import of the rider's sections as GeoJSON (PRD R10, M1
 //! step 8): for backups, a new phone, sharing with a friend, or looking at
-//! them in other map tools. Plain `.geojson`, `.geojson.gz`, `.zip` or
-//! `.tar.gz` ([`archive`]).
+//! them in other map tools. Plain `.geojson`, `.geojson.gz` or `.zip`
+//! ([`archive`]).
 //!
 //! An import file is untrusted: sizes are capped, the JSON is read into
 //! strict types (never into arbitrary ones), and every value is validated;

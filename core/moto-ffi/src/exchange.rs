@@ -20,8 +20,6 @@ pub enum ExportFormat {
     Gzip,
     /// `.zip` holding one `.geojson`.
     Zip,
-    /// `.tar.gz` holding one `.geojson`.
-    TarGz,
 }
 
 /// What an import did.
@@ -44,12 +42,11 @@ impl From<ExportFormat> for core::ExportFormat {
             ExportFormat::GeoJson => Self::GeoJson,
             ExportFormat::Gzip => Self::Gzip,
             ExportFormat::Zip => Self::Zip,
-            ExportFormat::TarGz => Self::TarGz,
         }
     }
 }
 
-/// The usual file name extension for `format`, e.g. "tar.gz".
+/// The usual file name extension for `format`, e.g. "geojson.gz".
 #[uniffi::export]
 pub fn export_extension(format: ExportFormat) -> String {
     core::ExportFormat::from(format).extension().into()
@@ -130,12 +127,7 @@ mod tests {
         })
         .unwrap();
         let to = SectionStore::open(b.to_string_lossy().into_owned()).unwrap();
-        for format in [
-            ExportFormat::GeoJson,
-            ExportFormat::Gzip,
-            ExportFormat::Zip,
-            ExportFormat::TarGz,
-        ] {
+        for format in [ExportFormat::GeoJson, ExportFormat::Gzip, ExportFormat::Zip] {
             let bytes = from.export_sections(format).unwrap();
             let r = to.import_sections(bytes, Some(engine.clone())).unwrap();
             // The first import adds it; the others find it already there.

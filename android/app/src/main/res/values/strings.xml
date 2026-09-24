@@ -110,5 +110,4 @@
     <string name="format_geojson">GeoJSON</string>
     <string name="format_zip">ZIP (compressed)</string>
     <string name="format_gzip">GeoJSON .gz (compressed)</string>
-    <string name="format_tar_gz">TAR.GZ (compressed)</string>
 </resources>

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Stefan Gangefors
 
-//! The containers an export can come in: plain GeoJSON, gzip, zip or
-//! tar.gz. Everything happens in memory: nothing from an archive is ever
+//! The containers an export can come in: plain GeoJSON, gzip or zip (an
+//! export is always one file, so no tar). Everything happens in memory: nothing from an archive is ever
 //! written to disk, so entry names can't reach the file system (no path
 //! traversal). Sizes are capped before and after decompression, so a
 //! small archive can't expand into a memory bomb.
@@ -21,7 +21,7 @@ pub const MAX_IMPORT_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_JSON_BYTES: usize = 64 * 1024 * 1024;
 /// Most archive entries looked at.
 const MAX_ENTRIES: usize = 1_000;
-/// The GeoJSON file inside zip and tar exports.
+/// The GeoJSON file inside zip exports.
 pub const ENTRY_NAME: &str = "moto-sections.geojson";
 
 /// How an export is packed.
@@ -33,8 +33,6 @@ pub enum ExportFormat {
     Gzip,
     /// `.zip` holding one `.geojson`.
     Zip,
-    /// `.tar.gz` holding one `.geojson`.
-    TarGz,
 }
 
 impl ExportFormat {
@@ -44,7 +42,6 @@ impl ExportFormat {
             Self::GeoJson => "geojson",
             Self::Gzip => "geojson.gz",
             Self::Zip => "zip",
-            Self::TarGz => "tar.gz",
         }
     }
 }
@@ -76,18 +73,6 @@ pub fn pack(json: &[u8], format: ExportFormat) -> Result<Vec<u8>, CoreError> {
                 .map_err(|e| CoreError::Storage(format!("could not pack the export: {e}")))?;
             Ok(cursor.into_inner())
         }
-        ExportFormat::TarGz => {
-            let mut builder = tar::Builder::new(Vec::new());
-            let mut header = tar::Header::new_ustar();
-            header.set_size(json.len() as u64);
-            header.set_mode(0o644);
-            header.set_entry_type(tar::EntryType::Regular);
-            builder
-                .append_data(&mut header, ENTRY_NAME, json)
-                .map_err(pack_err)?;
-            let tar = builder.into_inner().map_err(pack_err)?;
-            gzip(&tar).map_err(pack_err)
-        }
     }
 }
 
@@ -110,15 +95,7 @@ pub fn unpack(bytes: &[u8]) -> Result<Vec<u8>, CoreError> {
         return from_zip(bytes);
     }
     if bytes.starts_with(&[0x1f, 0x8b]) {
-        let inner = read_capped(GzDecoder::new(bytes), MAX_JSON_BYTES)?;
-        return if is_tar(&inner) {
-            from_tar(&inner)
-        } else {
-            Ok(inner)
-        };
-    }
-    if is_tar(bytes) {
-        return from_tar(bytes);
+        return read_capped(GzDecoder::new(bytes), MAX_JSON_BYTES);
     }
     if bytes.len() > MAX_JSON_BYTES {
         return Err(bad("the file is too large"));
@@ -140,10 +117,6 @@ fn read_capped(reader: impl Read, limit: usize) -> Result<Vec<u8>, CoreError> {
         )));
     }
     Ok(out)
-}
-
-fn is_tar(bytes: &[u8]) -> bool {
-    bytes.get(257..262) == Some(b"ustar")
 }
 
 /// Whether an archive entry name looks like our GeoJSON. Names are only
@@ -171,26 +144,6 @@ fn from_zip(bytes: &[u8]) -> Result<Vec<u8>, CoreError> {
     Err(bad("no .geojson or .json file in the zip"))
 }
 
-fn from_tar(bytes: &[u8]) -> Result<Vec<u8>, CoreError> {
-    let mut archive = tar::Archive::new(Cursor::new(bytes));
-    let entries = archive.entries().map_err(io)?;
-    for entry in entries.take(MAX_ENTRIES) {
-        let entry = entry.map_err(io)?;
-        if entry.header().entry_type() != tar::EntryType::Regular {
-            continue;
-        }
-        let name = entry.path_bytes();
-        if !is_json_name(&String::from_utf8_lossy(&name)) {
-            continue;
-        }
-        if entry.size() > MAX_JSON_BYTES as u64 {
-            return Err(bad("the tar entry is too large"));
-        }
-        return read_capped(entry, MAX_JSON_BYTES);
-    }
-    Err(bad("no .geojson or .json file in the archive"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,26 +152,11 @@ mod tests {
 
     #[test]
     fn every_format_round_trips() {
-        for f in [
-            ExportFormat::GeoJson,
-            ExportFormat::Gzip,
-            ExportFormat::Zip,
-            ExportFormat::TarGz,
-        ] {
+        for f in [ExportFormat::GeoJson, ExportFormat::Gzip, ExportFormat::Zip] {
             let packed = pack(JSON, f).unwrap();
             assert_eq!(unpack(&packed).unwrap(), JSON, "{f:?}");
         }
-        assert_eq!(ExportFormat::TarGz.extension(), "tar.gz");
-    }
-
-    #[test]
-    fn a_plain_tar_is_read_too() {
-        let mut b = tar::Builder::new(Vec::new());
-        let mut h = tar::Header::new_ustar();
-        h.set_size(JSON.len() as u64);
-        h.set_entry_type(tar::EntryType::Regular);
-        b.append_data(&mut h, "x/sections.JSON", JSON).unwrap();
-        assert_eq!(unpack(&b.into_inner().unwrap()).unwrap(), JSON);
+        assert_eq!(ExportFormat::Gzip.extension(), "geojson.gz");
     }
 
     #[test]
@@ -267,7 +205,6 @@ mod tests {
         let good = [
             pack(JSON, ExportFormat::Gzip).unwrap(),
             pack(JSON, ExportFormat::Zip).unwrap(),
-            pack(JSON, ExportFormat::TarGz).unwrap(),
         ];
         let mut x: u64 = 0x2545_f491_4f6c_dd1d;
         for base in &good {
