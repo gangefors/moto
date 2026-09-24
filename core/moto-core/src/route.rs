@@ -170,6 +170,7 @@ struct Builder {
     favourite_m: f64,
     /// Seconds on favourites, weighted by rating (epic 1).
     favourite_value_s: f64,
+    favourite_parts: Vec<Vec<LatLon>>,
 }
 
 impl Builder {
@@ -187,7 +188,20 @@ impl Builder {
         self.curvy_m += frac * curvy.min(length_m);
         self.favourite_m += length_m * favourites.covered_between(id, from, to);
         self.favourite_value_s += time_s(&e) * favourites.value_between(id, from, to);
-        for p in polyline_slice(&edge_line(region, &e), from, to) {
+        let line = edge_line(region, &e);
+        if let Some((lo, hi)) = favourites.covered_part(id, from, to) {
+            let piece = polyline_slice(&line, lo, hi);
+            // Continue the last part where this piece starts at its end
+            // (favourites running on across a junction).
+            match self.favourite_parts.last_mut() {
+                Some(part) if part.last() == piece.first() => {
+                    part.extend(piece.into_iter().skip(1))
+                }
+                _ if piece.len() >= 2 => self.favourite_parts.push(piece),
+                _ => {}
+            }
+        }
+        for p in polyline_slice(&line, from, to) {
             if self.geometry.last() != Some(&p) {
                 self.geometry.push(p);
             }
@@ -210,6 +224,8 @@ impl Builder {
                 geometry: self.geometry,
                 distance_m: self.distance_m,
                 duration_s: self.duration_s,
+                fastest_duration_s: self.duration_s,
+                favourite_parts: self.favourite_parts,
             },
         }
     }
@@ -253,6 +269,11 @@ pub(crate) fn route(
     if favourites.is_empty() {
         return Ok(fastest.route);
     }
+    let fastest_s = fastest.route.duration_s;
+    let with_fastest = |mut r: Route| {
+        r.fastest_duration_s = fastest_s;
+        r
+    };
     let (base_s, base_value_s) = (fastest.route.duration_s, fastest.value_s);
     let limit_s = base_s + opts.budget.extra_s(base_s) + 1e-6;
     let passes = |r: &Routed| {
@@ -267,7 +288,7 @@ pub(crate) fn route(
     };
     let full = pulled(1.0)?;
     if passes(&full) {
-        return Ok(full.route);
+        return Ok(with_fastest(full.route));
     }
     let mut best = fastest;
     let (mut lo, mut hi) = (0.0, 1.0);
@@ -281,7 +302,7 @@ pub(crate) fn route(
             hi = pull;
         }
     }
-    Ok(best.route)
+    Ok(with_fastest(best.route))
 }
 
 /// Cheapest path from `from` to `to` under `cost`, as edge pieces in

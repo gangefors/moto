@@ -655,6 +655,8 @@ mod tests {
             .unwrap();
         assert_eq!(plain.favourite_share, 0.0);
         assert!(r.favourite_share > 0.99, "{r:?}");
+        assert_eq!(r.fastest_duration_s, plain.duration_s);
+        assert_eq!(r.favourite_parts.len(), 1, "{r:?}");
 
         // Favourites of another region are refused.
         let other_path = std::env::temp_dir().join(format!(
