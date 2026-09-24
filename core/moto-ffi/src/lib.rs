@@ -175,6 +175,21 @@ impl Engine {
             .into())
     }
 
+    /// A route as GPX for a nav app (PRD R9): route points chosen so
+    /// that a nav app's own routing between them stays on `geometry` (the
+    /// route's line, as `route` returned it), and the line itself as a
+    /// track. `opts` are the options the route was made with.
+    pub fn route_gpx(
+        &self,
+        geometry: Vec<LatLon>,
+        name: String,
+        opts: RouteOptions,
+    ) -> Result<String, MotoError> {
+        let line: Vec<moto_core::LatLon> = geometry.into_iter().map(Into::into).collect();
+        let points = moto_core::handoff::route_points(&self.inner, &line, &opts.into())?;
+        Ok(moto_core::gpx::route_gpx(&name, &points, &line))
+    }
+
     pub fn round_trip(
         &self,
         start: LatLon,
@@ -463,5 +478,25 @@ mod tests {
             (back.motorways, back.unpaved, back.ferries),
             (false, true, true)
         );
+    }
+
+    #[test]
+    fn routes_export_as_gpx() {
+        let file = fixture_file("gpx");
+        let engine = Engine::open(file.path()).unwrap();
+        let opts = default_route_options();
+        let r = engine
+            .route(ll(55.7001, 13.201), ll(55.7001, 13.219), opts.clone(), None)
+            .unwrap();
+        let gpx = engine
+            .route_gpx(r.geometry.clone(), "Lund & back".into(), opts.clone())
+            .unwrap();
+        assert!(gpx.contains("<rte>") && gpx.contains("<trk>"));
+        assert!(gpx.contains("<name>Lund &amp; back</name>"));
+        assert_eq!(gpx.matches("<trkpt ").count(), r.geometry.len());
+        let err = engine
+            .route_gpx(vec![ll(55.7, 13.2)], String::new(), opts)
+            .unwrap_err();
+        assert!(matches!(err, MotoError::InvalidInput { .. }), "{err:?}");
     }
 }

@@ -20,6 +20,7 @@ pub mod favourites;
 pub mod fixture;
 pub mod geo;
 pub mod gpx;
+pub mod handoff;
 pub mod matching;
 pub mod overlap;
 pub mod region;
