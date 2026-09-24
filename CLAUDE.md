@@ -109,8 +109,9 @@ cargo run -p moto-ffi --features cli --bin uniffi-bindgen -- \
 cargo ndk -t arm64-v8a -t x86_64 -o ../android/app/src/main/jniLibs build --release -p moto-ffi
 
 # Android app (needs ANDROID_HOME or android/local.properties, cargo-ndk,
-# and the aarch64/x86_64-linux-android Rust targets). preBuild runs cargo-ndk
-# and generates the UniFFI bindings into app/build/generated/.
+# python3 and the aarch64/x86_64-linux-android Rust targets). preBuild runs
+# cargo-ndk and generates the UniFFI bindings into app/build/generated/; the
+# licence notices (.github/scripts/third_party.py) go into the assets.
 cd ../android
 ./gradlew assembleDebug lintDebug testDebugUnitTest
 ```

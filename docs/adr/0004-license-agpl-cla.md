@@ -48,7 +48,7 @@ A license binds people who receive the code, not the copyright holder. With sole
 - [x] README "License" section (draft below).
 - [x] `CONTRIBUTING.md`: contributions require signing the CLA; set up the CLA Assistant GitHub app. Base the CLA on a standard template (e.g. Apache ICLA style or a Contributor Agreements .org template) with the right to relicense. Done in 22755ed (CLA Assistant Lite workflow, `CLA.md` pending legal review).
 - [x] Add `cargo-deny` license check to CI with an allow-list of AGPL-compatible licenses. Done in 8d3a21e.
-- [ ] Add an in-app "About / Licenses" screen: app license, OSM/ODbL attribution, OpenFreeMap attribution, third-party licenses.
+- [x] Add an in-app "About / Licenses" screen: app license, OSM/ODbL attribution, OpenFreeMap attribution, third-party licenses. Done in 783f8fb: "About and licences" in the My data sheet; the notices are built at every build by `.github/scripts/third_party.py` from what ships (Rust crates, Android libraries), and a dependency without a licence text fails the build.
 - [ ] Later: register the app name as a trademark (Swedish PRV / EUIPO) once the name is settled.
 
 ### README license section (draft)
