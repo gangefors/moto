@@ -9,6 +9,8 @@ import kotlin.math.sqrt
 import se.gangefors.moto.core.Direction
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
+import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionStatus
 
 /**
  * "Mark section" mode (PRD R2): tap the start, tap the end, and the core
@@ -134,3 +136,15 @@ fun sectionIdOf(value: Any?): Long? {
 
 /** Largest integer a double (the map's number type) holds exactly. */
 private const val MAX_EXACT_ID = 9_007_199_254_740_992.0
+
+/**
+ * Whether a section is drawn as fitting the current map's roads. A section
+ * waiting to be re-matched after a map update, or that no longer fits,
+ * is drawn apart until it is re-matched.
+ */
+fun fitsTheMap(status: SectionStatus): Boolean = status == SectionStatus.OK
+
+/** The sections to draw: those that fit the map, and the others only if
+ * the rider chose to see them (hidden by default after a map update). */
+fun visibleSections(sections: List<Section>, showUnmatched: Boolean): List<Section> =
+    if (showUnmatched) sections else sections.filter { fitsTheMap(it.status) }

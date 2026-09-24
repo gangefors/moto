@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -98,6 +99,7 @@ import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.SectionSource
+import se.gangefors.moto.core.SectionStatus
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.SectionUpdate
 import se.gangefors.moto.core.Tag
@@ -205,6 +207,33 @@ fun MapScreen() {
 
     val scope = rememberCoroutineScope()
 
+    // After a map update, fit the saved sections to the new roads (M1 step 7).
+    // Quick when the map hasn't changed; sections that no longer fit are kept
+    // and drawn grey.
+    LaunchedEffect(store, region) {
+        val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
+        val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val report = s.rematch(engine)
+                report to if (report.checked > 0uL) s.list(null) else null
+            }
+        }
+        result.fold(
+            onSuccess = { (report, updated) ->
+                updated?.let { sections = it }
+                if (report.unmatched > 0uL) {
+                    message = resources.getQuantityString(
+                        R.plurals.sections_unmatched,
+                        report.unmatched.toInt(),
+                        report.unmatched.toInt(),
+                    )
+                }
+            },
+            onFailure = { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) },
+        )
+    }
+
     // "Mark section" mode: tap start, tap end, adjust, save.
     val marker = remember { SectionMarker<LatLng> { a, b -> approxDistanceM(a.toLatLon(), b.toLatLon()) } }
     var marking by remember { mutableStateOf(false) }
@@ -215,6 +244,9 @@ fun MapScreen() {
     var savingDraft by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Section?>(null) }
     var showRides by remember { mutableStateOf(false) }
+    // Sections that no longer fit the map are hidden unless the rider asks.
+    var showUnmatched by remember { mutableStateOf(false) }
+    var confirmDeleteUnmatched by remember { mutableStateOf(false) }
     // Quick-tags waiting for review, and the review in progress (it runs in
     // "mark section" mode, starting from each tag's suggested section).
     var pendingTags by remember { mutableIntStateOf(0) }
@@ -228,7 +260,9 @@ fun MapScreen() {
             Overlays(SectionOverlay(s, density.density), RideOverlay(s), SectionDraftOverlay(s), RouteOverlay(s), SnapMarker(s))
         }
     }
-    LaunchedEffect(overlays, sections) { overlays?.sections?.show(sections) }
+    LaunchedEffect(overlays, sections, showUnmatched) {
+        overlays?.sections?.show(visibleSections(sections, showUnmatched))
+    }
 
     // Ride recording (RecordingService): the line so far, and what to say.
     val recording by Recording.state.collectAsState()
@@ -588,6 +622,46 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                val unmatched = sections.count { !fitsTheMap(it.status) }
+                val deletable = sections.count { it.status == SectionStatus.UNMATCHED }
+                if (showUnmatched && deletable > 0) {
+                    // Batch delete, confirmed by a second tap.
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            if (!confirmDeleteUnmatched) {
+                                confirmDeleteUnmatched = true
+                            } else {
+                                confirmDeleteUnmatched = false
+                                showUnmatched = false
+                                changeSections(resources.getString(R.string.unmatched_deleted)) { it.deleteUnmatched() }
+                            }
+                        },
+                        containerColor = if (confirmDeleteUnmatched) DELETE_RED else MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = if (confirmDeleteUnmatched) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Text(
+                            if (confirmDeleteUnmatched) {
+                                pluralStringResource(R.plurals.unmatched_delete_confirm, deletable, deletable)
+                            } else {
+                                pluralStringResource(R.plurals.unmatched_delete, deletable, deletable)
+                            },
+                        )
+                    }
+                }
+                if (unmatched > 0) {
+                    ExtendedFloatingActionButton(onClick = {
+                        showUnmatched = !showUnmatched
+                        confirmDeleteUnmatched = false
+                    }) {
+                        Text(
+                            if (showUnmatched) {
+                                stringResource(R.string.unmatched_hide)
+                            } else {
+                                pluralStringResource(R.plurals.unmatched_show, unmatched, unmatched)
+                            },
+                        )
+                    }
+                }
                 if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
                     ExtendedFloatingActionButton(onClick = { startReview() }) {
                         Text(stringResource(R.string.tags_review, pendingTags))
@@ -752,6 +826,9 @@ private fun fitTo(map: MapLibreMap, points: List<LatLon>, density: Float) {
 
 /** Quick-tag button: large enough to hit with gloves on. */
 private val TAG_BUTTON_SIZE: Dp = 96.dp
+
+/** Destructive actions. */
+private val DELETE_RED = Color(0xFFC5221F)
 private val TAG_COLOR = Color(0xFFE8710A)
 
 /** The map layers the screen draws into, created once per style. */

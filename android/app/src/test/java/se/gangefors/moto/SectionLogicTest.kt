@@ -137,4 +137,26 @@ class SectionLogicTest {
         assertNull(sectionIdOf(Double.POSITIVE_INFINITY))
         assertNull(sectionIdOf(1e300))
     }
+
+    @Test
+    fun onlySectionsThatFitAreDrawnNormally() {
+        assertTrue(fitsTheMap(se.gangefors.moto.core.SectionStatus.OK))
+        assertFalse(fitsTheMap(se.gangefors.moto.core.SectionStatus.NEEDS_REMATCH))
+        assertFalse(fitsTheMap(se.gangefors.moto.core.SectionStatus.UNMATCHED))
+    }
+
+    @Test
+    fun unmatchedSectionsAreHiddenUnlessAskedFor() {
+        fun section(id: Long, status: se.gangefors.moto.core.SectionStatus) = se.gangefors.moto.core.Section(
+            id, "local", "", Rating.GOOD, Direction.BOTH, se.gangefors.moto.core.SectionSource.MAP, status,
+            0, 0, emptyList(), listOf(LatLon(55.7, 13.2), LatLon(55.71, 13.2)),
+        )
+        val all = listOf(
+            section(1, se.gangefors.moto.core.SectionStatus.OK),
+            section(2, se.gangefors.moto.core.SectionStatus.UNMATCHED),
+            section(3, se.gangefors.moto.core.SectionStatus.NEEDS_REMATCH),
+        )
+        assertEquals(listOf(1L), visibleSections(all, showUnmatched = false).map { it.id })
+        assertEquals(listOf(1L, 2L, 3L), visibleSections(all, showUnmatched = true).map { it.id })
+    }
 }
