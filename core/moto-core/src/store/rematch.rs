@@ -114,4 +114,17 @@ impl Store {
         tx.commit().map_err(db_err)?;
         Ok(true)
     }
+
+    /// Deletes every section flagged `unmatched`, in one transaction;
+    /// returns how many. Sections still waiting to be re-matched are kept.
+    pub fn delete_unmatched(&mut self) -> Result<u64, CoreError> {
+        let n = self
+            .conn
+            .execute(
+                "DELETE FROM sections WHERE status = ?1",
+                [Status::Unmatched as i64],
+            )
+            .map_err(db_err)?;
+        Ok(n as u64)
+    }
 }

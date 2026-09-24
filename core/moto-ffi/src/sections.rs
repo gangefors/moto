@@ -197,6 +197,14 @@ impl SectionStore {
     }
 }
 
+#[uniffi::export]
+impl SectionStore {
+    /// Deletes every section flagged `Unmatched`; returns how many.
+    pub fn delete_unmatched(&self) -> Result<u64, MotoError> {
+        Ok(self.store().delete_unmatched()?)
+    }
+}
+
 /// What a re-match did: sections looked at (0 if the region hadn't
 /// changed), that still fit, and that no longer fit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
