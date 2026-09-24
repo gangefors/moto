@@ -227,3 +227,43 @@ pub fn ladder(north_surface: Surface) -> RegionData {
     ];
     build(&nodes, &roads, 50_000)
 }
+
+/// The OSM way of the fork's north loop W–N1–N2–E (way nodes 0–3).
+pub const FORK_NORTH: i64 = 11;
+
+/// A fork: stubs X–W and E–Y along lat 55.70 (lon 13.39–13.40 and
+/// 13.44–13.45), a straight south road W–E (2.5 km, 100 s) and a longer
+/// north loop W–N1–N2–E over lat 55.71 (3.8 km, 152 s), all at 90 km/h.
+pub fn fork() -> RegionData {
+    const X: u32 = 0;
+    const W: u32 = 1;
+    const E: u32 = 2;
+    const Y: u32 = 3;
+    const N1: u32 = 4;
+    const N2: u32 = 5;
+    let nodes = [
+        (55.70, 13.39),
+        (55.70, 13.40),
+        (55.70, 13.44),
+        (55.70, 13.45),
+        (55.71, 13.41),
+        (55.71, 13.43),
+    ];
+    let road = |from, to, way| Road::new(from, to, RoadClass::Primary, 90, way);
+    let north = |from, to, start| Road {
+        way_start: start,
+        ..Road::new(from, to, RoadClass::Tertiary, 90, FORK_NORTH)
+    };
+    build(
+        &nodes,
+        &[
+            road(X, W, 12),
+            road(W, E, 10),
+            north(W, N1, 0),
+            north(N1, N2, 1),
+            north(N2, E, 2),
+            road(E, Y, 13),
+        ],
+        50_000,
+    )
+}

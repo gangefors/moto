@@ -2,23 +2,48 @@
 // Copyright (C) 2026 Stefan Gangefors
 
 //! GPX 1.1 export of recorded rides, for the rider to take a ride out of
-//! the app (backup, other apps, or checking map matching on real data).
+//! the app (backup, other apps, or checking map matching on real data),
+//! and of routes, to hand them to a nav app (PRD R9).
 
 use std::fmt::Write;
 
+use crate::LatLon;
 use crate::track::TrackPoint;
+
+const HEADER: &str = concat!(
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
+    "<gpx version=\"1.1\" creator=\"moto\" xmlns=\"http://www.topografix.com/GPX/1/1\" ",
+    "xmlns:moto=\"https://github.com/gangefors/moto/gpx/1\">\n",
+);
+
+/// A route as a GPX 1.1 document for a nav app: the route points as a
+/// `<rte>` (for apps that route between points; see
+/// [`crate::handoff::route_points`]) and the exact line as a `<trk>` (for
+/// apps that follow a track), both named `name`.
+pub fn route_gpx(name: &str, route_points: &[LatLon], line: &[LatLon]) -> String {
+    let name = escape(name);
+    let mut out = String::with_capacity(300 + (route_points.len() + line.len()) * 60);
+    out.push_str(HEADER);
+    let _ = writeln!(out, "<metadata><name>{name}</name></metadata>");
+    let _ = writeln!(out, "<rte>\n<name>{name}</name>");
+    for p in route_points {
+        let _ = writeln!(out, "<rtept lat=\"{:.7}\" lon=\"{:.7}\"/>", p.lat, p.lon);
+    }
+    let _ = writeln!(out, "</rte>\n<trk>\n<name>{name}</name>\n<trkseg>");
+    for p in line {
+        let _ = writeln!(out, "<trkpt lat=\"{:.7}\" lon=\"{:.7}\"/>", p.lat, p.lon);
+    }
+    out.push_str("</trkseg>\n</trk>\n</gpx>\n");
+    out
+}
 
 /// A ride as a GPX 1.1 document: one track, one segment, a point per fix
 /// with its time. Speed, bearing and accuracy go in a `moto` extension so
 /// the file can be read back without losing them.
 pub fn track_gpx(name: &str, points: &[TrackPoint]) -> String {
     let mut out = String::with_capacity(200 + points.len() * 160);
-    out.push_str(concat!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
-        "<gpx version=\"1.1\" creator=\"moto\" xmlns=\"http://www.topografix.com/GPX/1/1\" ",
-        "xmlns:moto=\"https://github.com/gangefors/moto/gpx/1\">\n",
-        "<trk>\n"
-    ));
+    out.push_str(HEADER);
+    out.push_str("<trk>\n");
     let _ = writeln!(out, "<name>{}</name>", escape(name));
     out.push_str("<trkseg>\n");
     for p in points {
@@ -154,5 +179,26 @@ mod tests {
         assert!(!gpx.contains("<extensions>"));
         assert!(gpx.contains("<name></name>"));
         assert_eq!(track_gpx("x", &[]).matches("<trkpt").count(), 0);
+    }
+
+    #[test]
+    fn writes_a_gpx_route_and_track() {
+        let ll = |lat, lon| LatLon { lat, lon };
+        let line = [ll(55.7, 13.2), ll(55.71, 13.2), ll(55.72, 13.21)];
+        let gpx = route_gpx("Route <1> & more", &[line[0], line[2]], &line);
+        assert!(
+            gpx.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\"")
+        );
+        assert!(gpx.ends_with("</trkseg>\n</trk>\n</gpx>\n"));
+        assert_eq!(
+            gpx.matches("<name>Route &lt;1&gt; &amp; more</name>")
+                .count(),
+            3
+        );
+        assert_eq!(gpx.matches("<rtept ").count(), 2);
+        assert_eq!(gpx.matches("<trkpt ").count(), 3);
+        assert!(gpx.contains("<rtept lat=\"55.7200000\" lon=\"13.2100000\"/>"));
+        // The route points come before the track.
+        assert!(gpx.find("<rte>").unwrap() < gpx.find("<trk>").unwrap());
     }
 }
