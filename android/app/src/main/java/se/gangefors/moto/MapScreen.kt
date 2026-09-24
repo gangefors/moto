@@ -25,6 +25,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -611,28 +612,32 @@ fun MapScreen() {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 message?.let { Text(it) }
                 if (marking) {
-                    Row(
+                    // The banner is narrow (it keeps clear of the map controls),
+                    // so the buttons wrap onto a second line instead of
+                    // squeezing each other.
+                    FlowRow(
                         Modifier.padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         if (reviewTag != null) {
                             OutlinedButton(onClick = { endReview(resources.getString(R.string.map_hint)) }) {
-                                Text(stringResource(R.string.tag_review_later))
+                                OneLine(stringResource(R.string.tag_review_later))
                             }
                             OutlinedButton(
                                 onClick = { finishTag(TagStatus.DISCARDED) },
                                 enabled = !proposing,
-                            ) { Text(stringResource(R.string.tag_review_discard)) }
+                            ) { OneLine(stringResource(R.string.tag_review_discard)) }
                         } else {
                             OutlinedButton(onClick = {
                                 stopMarking()
                                 message = resources.getString(R.string.map_hint)
-                            }) { Text(stringResource(R.string.cancel)) }
+                            }) { OneLine(stringResource(R.string.cancel)) }
                         }
                         Button(
                             onClick = { savingDraft = true },
                             enabled = draft != null && !proposing,
-                        ) { Text(stringResource(R.string.section_save_ellipsis)) }
+                        ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
                     }
                 }
             }
