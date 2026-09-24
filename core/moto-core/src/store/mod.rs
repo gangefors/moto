@@ -86,6 +86,11 @@ const MIGRATIONS: &[&str] = &[
     ) STRICT;
     CREATE INDEX tags_status ON tags (status, time_ms);
     CREATE INDEX tags_track ON tags (track_id);",
+    // 4: small settings, e.g. the region the sections were matched to.
+    "CREATE TABLE meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    ) STRICT, WITHOUT ROWID;",
 ];
 
 /// The schema version this build writes.
@@ -440,6 +445,7 @@ fn decode_geometry(bytes: &[u8]) -> Option<Vec<LatLon>> {
         .collect()
 }
 
+mod rematch;
 mod tags;
 mod tracks;
 
