@@ -90,6 +90,8 @@ cargo deny --locked check   # advisories, licences, sources (deny.toml; cargo-de
 cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf m0.region
 cargo run --release -p moto-regionbuild -- --check m0.region --json bench.json
 python3 ../.github/scripts/bench_compare.py old.json bench.json
+# Map matching on a real ride exported from the app (Rides → Export)
+cargo run --release -p moto-regionbuild -- --match m0.region ride.gpx --geojson ride.geojson
 python3 -m unittest discover -s ../.github/scripts -p 'test_*.py'
 cargo llvm-cov --workspace --summary-only   # coverage (needs cargo-llvm-cov)
 
