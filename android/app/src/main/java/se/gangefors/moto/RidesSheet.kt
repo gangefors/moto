@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +31,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -119,27 +117,18 @@ fun RidesSheet(store: SectionStore, onMessage: (String) -> Unit, onDismiss: () -
                                     },
                                     enabled = t.endedAt != null,
                                 ) { Text(stringResource(R.string.rides_export)) }
-                                TextButton(
-                                    onClick = {
-                                        if (confirmDelete != t.id) {
-                                            confirmDelete = t.id
-                                        } else {
-                                            confirmDelete = 0L
-                                            scope.launch {
-                                                withContext(Dispatchers.IO) { runCatching { store.deleteTrack(t.id) } }
-                                                reload()
-                                            }
+                                DeleteButton(
+                                    confirming = confirmDelete == t.id,
+                                    onArm = { confirmDelete = t.id },
+                                    onDelete = {
+                                        confirmDelete = 0L
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) { runCatching { store.deleteTrack(t.id) } }
+                                            reload()
                                         }
                                     },
                                     enabled = t.endedAt != null,
-                                    colors = ButtonDefaults.textButtonColors(contentColor = DELETE_COLOR),
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (confirmDelete == t.id) R.string.rides_delete_confirm else R.string.section_delete,
-                                        ),
-                                    )
-                                }
+                                )
                             }
                         }
                         HorizontalDivider()
@@ -162,4 +151,3 @@ private fun rideSummary(res: android.content.res.Resources, t: Track): String {
     )
 }
 
-private val DELETE_COLOR = Color(0xFFC5221F)
