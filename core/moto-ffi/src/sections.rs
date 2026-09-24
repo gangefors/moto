@@ -205,6 +205,35 @@ impl SectionStore {
     }
 }
 
+/// The rider's favourite sections, ready for routing on one region. Build
+/// it with `SectionStore.favourites` after the sections are re-matched,
+/// and again whenever they change; it never changes itself.
+#[derive(Debug, uniffi::Object)]
+pub struct Favourites {
+    pub(crate) inner: moto_core::Favourites,
+}
+
+#[uniffi::export]
+impl Favourites {
+    /// How many road stretches (edges, each direction counted) are
+    /// favourites.
+    pub fn edge_count(&self) -> u64 {
+        u64::try_from(self.inner.edge_count()).unwrap_or(u64::MAX)
+    }
+}
+
+#[uniffi::export]
+impl SectionStore {
+    /// The saved sections that fit `engine`'s region, for routing there.
+    /// Call off the main thread.
+    pub fn favourites(&self, engine: Arc<Engine>) -> Result<Arc<Favourites>, MotoError> {
+        let sections = self.store().list_sections(None)?;
+        Ok(Arc::new(Favourites {
+            inner: moto_core::Favourites::build(&engine.inner, &sections),
+        }))
+    }
+}
+
 /// What a re-match did: sections looked at (0 if the region hadn't
 /// changed), that still fit, and that no longer fit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
@@ -563,5 +592,57 @@ mod tests {
             SectionStatus::from(core::Status::NeedsRematch),
             SectionStatus::NeedsRematch
         );
+    }
+
+    #[test]
+    fn routes_over_favourites() {
+        let (engine, region) = engine("favourites");
+        let draft = engine
+            .section_between(ll(55.7001, 13.202), ll(55.7001, 13.219))
+            .unwrap();
+        let db = TempDb::new("favourites");
+        let store = SectionStore::open(db.path()).unwrap();
+        assert_eq!(store.favourites(engine.clone()).unwrap().edge_count(), 0);
+        store
+            .add(NewSection {
+                name: String::new(),
+                rating: Rating::Epic,
+                direction: Direction::Both,
+                source: SectionSource::Map,
+                ways: draft.ways,
+                geometry: draft.geometry,
+            })
+            .unwrap();
+        let fav = store.favourites(engine.clone()).unwrap();
+        assert_eq!(fav.edge_count(), 3, "A–B both ways, the one-way B→D");
+        let (from, to) = (ll(55.7001, 13.203), ll(55.7001, 13.218));
+        let plain = engine
+            .route(from, to, crate::default_route_options(), None)
+            .unwrap();
+        let r = engine
+            .route(from, to, crate::default_route_options(), Some(fav.clone()))
+            .unwrap();
+        assert_eq!(plain.favourite_share, 0.0);
+        assert!(r.favourite_share > 0.99, "{r:?}");
+
+        // Favourites of another region are refused.
+        let other_path = std::env::temp_dir().join(format!(
+            "moto-ffi-favourites-other-{}.region",
+            std::process::id()
+        ));
+        let ladder = moto_core::fixture::ladder(moto_core::region::format::Surface::Asphalt);
+        std::fs::write(&other_path, ladder.to_bytes().unwrap()).unwrap();
+        let other = Engine::open(other_path.to_string_lossy().into_owned()).unwrap();
+        std::fs::remove_file(other_path).unwrap();
+        std::fs::remove_file(region).unwrap();
+        let err = other
+            .route(
+                ll(55.7001, 13.405),
+                ll(55.7001, 13.435),
+                crate::default_route_options(),
+                Some(fav),
+            )
+            .unwrap_err();
+        assert!(matches!(err, MotoError::InvalidInput { .. }), "{err:?}");
     }
 }

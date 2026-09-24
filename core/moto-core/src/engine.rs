@@ -4,11 +4,13 @@
 //! The routing engine: loads a region file and answers snap/route queries.
 //!
 //! The public API is the one agreed in ADR-0001, on the ADR-0005 region
-//! file. `route` is the M0 fastest route; round trips come in M3.
+//! file. Routes take the rider's favourites into account (M2a); round
+//! trips come in M3.
 
 use std::path::Path;
 
 use crate::draft::SectionDraft;
+use crate::favourites::Favourites;
 use crate::matching::MatchedTrack;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
@@ -80,16 +82,37 @@ impl Engine {
         crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M)
     }
 
-    /// Fastest route from `from` to `to` (PRD R6, M0: travel time only;
-    /// curvature and favourites join in M2, `max_detour` is not used yet).
-    /// Both points are snapped to the nearest road first.
+    /// Fastest route from `from` to `to`, with no favourites.
     pub fn route(&self, from: LatLon, to: LatLon, opts: &RouteOptions) -> Result<Route, CoreError> {
+        self.route_with(from, to, opts, &Favourites::none())
+    }
+
+    /// Route from `from` to `to` over as much of the rider's `favourites`
+    /// as fits in `opts.max_detour` (PRD R6; curvature joins in M2b).
+    /// Both points are snapped to the nearest road first. Favourites built
+    /// for another region are refused.
+    pub fn route_with(
+        &self,
+        from: LatLon,
+        to: LatLon,
+        opts: &RouteOptions,
+        favourites: &Favourites,
+    ) -> Result<Route, CoreError> {
         from.validate()?;
         to.validate()?;
         opts.validate()?;
+        favourites.check(self)?;
         let start = self.snap(from)?;
         let end = self.snap(to)?;
-        crate::route::fastest(&self.region, &start, &end, &opts.avoid, self.max_speed_kmh)
+        crate::route::route(
+            &self.region,
+            &start,
+            &end,
+            &opts.avoid,
+            opts.max_detour,
+            favourites,
+            self.max_speed_kmh,
+        )
     }
 
     /// Proposes a section along the road between two points the rider picked

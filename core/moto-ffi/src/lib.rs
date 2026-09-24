@@ -140,10 +140,21 @@ impl Engine {
         Ok(self.inner.snap(point.into())?.into())
     }
 
-    pub fn route(&self, from: LatLon, to: LatLon, opts: RouteOptions) -> Result<Route, MotoError> {
+    /// Route from `from` to `to`: the fastest one, or with `favourites`
+    /// (from `SectionStore.favourites` for this region) the one over as
+    /// many of them as fits in `opts.max_detour`.
+    pub fn route(
+        &self,
+        from: LatLon,
+        to: LatLon,
+        opts: RouteOptions,
+        favourites: Option<Arc<Favourites>>,
+    ) -> Result<Route, MotoError> {
+        let none = moto_core::Favourites::none();
+        let fav = favourites.as_ref().map_or(&none, |f| &f.inner);
         Ok(self
             .inner
-            .route(from.into(), to.into(), &opts.into())?
+            .route_with(from.into(), to.into(), &opts.into(), fav)?
             .into())
     }
 
@@ -355,6 +366,7 @@ mod tests {
                 ll(55.7001, 13.201),
                 ll(55.7001, 13.219),
                 default_route_options(),
+                None,
             )
             .unwrap();
         assert!(
@@ -379,7 +391,7 @@ mod tests {
         let far = engine.snap(ll(55.7145, 13.2245)).unwrap_err();
         assert!(matches!(far, MotoError::NoRoadNearby { .. }), "{far:?}");
         let none = engine
-            .route(ll(55.7001, 13.219), ll(55.7001, 13.201), opts.clone())
+            .route(ll(55.7001, 13.219), ll(55.7001, 13.201), opts.clone(), None)
             .unwrap_err();
         assert!(matches!(none, MotoError::NoRoute { .. }), "{none:?}");
         let bad = engine.snap(ll(91.0, 0.0)).unwrap_err();

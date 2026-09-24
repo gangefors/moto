@@ -18,6 +18,8 @@ BASE = {
     "snap_us_mean": 5.0,
     "route_ms_mean": 15.0,
     "route_ms_p95": 40.0,
+    "fav_route_ms_mean": 30.0,
+    "fav_route_ms_p95": 90.0,
     "match_ms_per_km": 0.3,
 }
 
@@ -33,6 +35,12 @@ class CompareTest(unittest.TestCase):
         lines, regressed = bc.compare(BASE, dict(BASE))
         self.assertEqual(regressed, [])
         self.assertEqual(sum("≈ unchanged" in l for l in lines), len(bc.METRICS))
+
+    def test_a_metric_new_since_the_baseline_is_not_comparable(self):
+        old = {k: v for k, v in BASE.items() if not k.startswith("fav_")}
+        lines, regressed = bc.compare(old, with_(fav_route_ms_mean=500.0))
+        self.assertEqual(regressed, [])
+        self.assertEqual(sum("not comparable" in l for l in lines), 2)
 
     def test_significant_regression_is_flagged(self):
         _, regressed = bc.compare(BASE, with_(route_ms_mean=19.5))

@@ -1,25 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Stefan Gangefors
 
-//! Fastest route between two snapped road points: A* over travel time on
-//! the region graph (M0). Curvature and favourites join the cost in M2.
+//! Routes between two snapped road points: A* over travel time on the
+//! region graph (M0), with the rider's favourite sections as a capped
+//! bonus within a detour budget (M2a). Curvature joins the cost in M2b.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
+use crate::favourites::Favourites;
 use crate::geo::{haversine_m, polyline_slice};
 use crate::region::Region;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, RoadClass, Surface, edge_flags};
+use crate::scoring::PARAMS;
 use crate::{Avoid, CoreError, LatLon, RoadPoint, Route};
-
-/// Radius bins (see `RADIUS_BINS_M`) that count as "curvy" for
-/// [`Route::curvy_share`]: turn radius up to 175 m. Provisional; the real
-/// definition comes with curvature scoring in M2.
-const CURVY_BINS: usize = 4;
-
-/// Cost factor on roads the options ask to avoid. Avoiding is "where
-/// possible", not a ban: a farm on a gravel road must still be reachable.
-const AVOID_PENALTY: f64 = 10.0;
 
 const NONE: u32 = u32::MAX;
 
@@ -35,39 +29,46 @@ fn time_s(e: &Edge) -> f64 {
     f64::from(e.length_dm) / 10.0 / (f64::from(e.speed_kmh) / 3.6)
 }
 
+/// Travel time of a whole edge, avoided kinds of road costing
+/// `avoid_penalty` times more.
+fn time_cost(avoid: &Avoid, e: &Edge) -> f64 {
+    let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
+    let unpaved = Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved());
+    let ferry = e.flags & edge_flags::FERRY != 0;
+    let avoided = avoid.motorways && motorway || avoid.unpaved && unpaved || avoid.ferries && ferry;
+    time_s(e) * if avoided { PARAMS.avoid_penalty } else { 1.0 }
+}
+
 /// What a path search minimises.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Cost {
-    /// Travel time, avoided kinds of road costing [`AVOID_PENALTY`] times
-    /// more.
+pub(crate) enum Cost<'a> {
+    /// Travel time, with avoided kinds of road costing more.
     Fastest(Avoid),
+    /// As `Fastest`, with favourite edges `weight` (0–1) times their bonus
+    /// cheaper.
+    Favoured(Avoid, &'a Favourites, f64),
     /// Distance along the road, nothing avoided: the road the rider points
     /// at, not a faster one nearby (marking sections).
     Shortest,
 }
 
-impl Cost {
-    /// Cost of a whole edge.
-    fn edge(&self, e: &Edge) -> f64 {
+impl Cost<'_> {
+    /// Cost of whole edge `id`.
+    fn edge(&self, id: u32, e: &Edge) -> f64 {
         match self {
-            Cost::Fastest(avoid) => {
-                let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
-                let unpaved = Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved());
-                let ferry = e.flags & edge_flags::FERRY != 0;
-                let avoided = avoid.motorways && motorway
-                    || avoid.unpaved && unpaved
-                    || avoid.ferries && ferry;
-                time_s(e) * if avoided { AVOID_PENALTY } else { 1.0 }
+            Cost::Fastest(avoid) => time_cost(avoid, e),
+            Cost::Favoured(avoid, fav, weight) => {
+                time_cost(avoid, e) * (1.0 - weight * fav.bonus(id))
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
     }
 
-    /// Cost of a fraction of an edge the path starts or ends on (never
-    /// penalised: the rider chose that road).
+    /// Cost of a fraction of an edge the path starts or ends on (neither
+    /// penalised nor favoured: the rider chose that road).
     fn partial(&self, e: &Edge, frac: f64) -> f64 {
         frac * match self {
-            Cost::Fastest(_) => time_s(e),
+            Cost::Fastest(_) | Cost::Favoured(..) => time_s(e),
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
     }
@@ -76,6 +77,8 @@ impl Cost {
     fn estimate(&self, metres: f64, max_mps: f64) -> f64 {
         match self {
             Cost::Fastest(_) => metres / max_mps,
+            // The bonus is capped below 1, so the bound stays positive.
+            Cost::Favoured(_, fav, weight) => metres / max_mps * (1.0 - weight * fav.max_bonus()),
             Cost::Shortest => metres,
         }
     }
@@ -164,21 +167,23 @@ struct Builder {
     distance_m: f64,
     duration_s: f64,
     curvy_m: f64,
+    favourite_m: f64,
 }
 
 impl Builder {
-    fn add(&mut self, region: &Region, id: u32, from: f64, to: f64) {
+    fn add(&mut self, region: &Region, favourites: &Favourites, id: u32, from: f64, to: f64) {
         let e = region.edges()[id as usize];
         let frac = (to - from).max(0.0);
         let length_m = f64::from(e.length_dm) / 10.0;
         self.distance_m += frac * length_m;
         self.duration_s += frac * time_s(&e);
         let c = region.curvature()[id as usize];
-        let curvy: f64 = c.radius_len_m[..CURVY_BINS]
+        let curvy: f64 = c.radius_len_m[..PARAMS.curvy_bins]
             .iter()
             .map(|&m| f64::from(m))
             .sum();
         self.curvy_m += frac * curvy.min(length_m);
+        self.favourite_m += length_m * favourites.covered_between(id, from, to);
         for p in polyline_slice(&edge_line(region, &e), from, to) {
             if self.geometry.last() != Some(&p) {
                 self.geometry.push(p);
@@ -196,7 +201,7 @@ impl Builder {
         };
         Route {
             curvy_share: share(self.curvy_m),
-            favourite_share: 0.0,
+            favourite_share: share(self.favourite_m),
             geometry: self.geometry,
             distance_m: self.distance_m,
             duration_s: self.duration_s,
@@ -204,21 +209,59 @@ impl Builder {
     }
 }
 
-/// Fastest route from `from` to `to`, keeping off what `avoid` asks for
-/// where possible (see [`AVOID_PENALTY`]).
-pub(crate) fn fastest(
+/// The route with the path pieces `parts`.
+fn build(region: &Region, favourites: &Favourites, parts: &[Partial]) -> Route {
+    let mut route = Builder::default();
+    for p in parts {
+        route.add(region, favourites, p.edge, p.from, p.to);
+    }
+    route.finish()
+}
+
+/// Route from `from` to `to`, keeping off what `avoid` asks for where
+/// possible: the fastest one, or with favourites the one that rides most
+/// of them while taking at most `max_detour` (a fraction) longer than the
+/// fastest. The full favourite bonus is tried first; if that route is too
+/// long, the bonus weight is bisected and the route of the largest weight
+/// that fits wins (the fastest route if none does). The same inputs always
+/// give the same route.
+pub(crate) fn route(
     region: &Region,
     from: &RoadPoint,
     to: &RoadPoint,
     avoid: &Avoid,
+    max_detour: f64,
+    favourites: &Favourites,
     max_speed_kmh: f64,
 ) -> Result<Route, CoreError> {
     let parts = path(region, from, to, Cost::Fastest(*avoid), max_speed_kmh)?;
-    let mut route = Builder::default();
-    for p in parts {
-        route.add(region, p.edge, p.from, p.to);
+    let fastest = build(region, favourites, &parts);
+    if favourites.is_empty() {
+        return Ok(fastest);
     }
-    Ok(route.finish())
+    let budget = fastest.duration_s * (1.0 + max_detour) + 1e-6;
+    let favoured = |weight: f64| -> Result<Route, CoreError> {
+        let cost = Cost::Favoured(*avoid, favourites, weight);
+        let parts = path(region, from, to, cost, max_speed_kmh)?;
+        Ok(build(region, favourites, &parts))
+    };
+    let full = favoured(1.0)?;
+    if full.duration_s <= budget {
+        return Ok(full);
+    }
+    let mut best = fastest;
+    let (mut lo, mut hi) = (0.0, 1.0);
+    for _ in 0..PARAMS.detour_steps {
+        let weight = (lo + hi) / 2.0;
+        let r = favoured(weight)?;
+        if r.duration_s <= budget {
+            lo = weight;
+            best = r;
+        } else {
+            hi = weight;
+        }
+    }
+    Ok(best)
 }
 
 /// Cheapest path from `from` to `to` under `cost`, as edge pieces in
@@ -297,7 +340,7 @@ pub(crate) fn path(
         }
         for id in region.out_edges(v) {
             let e = region.edges()[id as usize];
-            let c = g + cost.edge(&e);
+            let c = g + cost.edge(id, &e);
             let w = e.head as usize;
             if c < dist[w] {
                 dist[w] = c;
@@ -380,7 +423,7 @@ pub(crate) fn shortest_within(
         }
         settled.insert(v, (d, via));
         for id in region.out_edges(v) {
-            let c = g + cost.edge(&edge(id));
+            let c = g + cost.edge(id, &edge(id));
             let w = edge(id).head;
             if c <= limit_m && !settled.contains_key(&w) && best.get(&w).is_none_or(|&(d, _)| c < d)
             {
