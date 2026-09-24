@@ -41,6 +41,7 @@ class SectionOverlay(style: Style, private val density: Float) {
             style.addImage(ARROW_IMAGE, arrowBitmap(density))
             style.addLayer(
                 LineLayer(CASING_LAYER, SOURCE).withProperties(
+                    PropertyFactory.lineSortKey(Expression.get(ORDER)),
                     PropertyFactory.lineColor("#ffffff"),
                     PropertyFactory.lineWidth(8f),
                     PropertyFactory.lineOpacity(0.8f),
@@ -52,6 +53,7 @@ class SectionOverlay(style: Style, private val density: Float) {
                 LineLayer(LINE_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(FITS), true))
                     .withProperties(
+                        PropertyFactory.lineSortKey(Expression.get(ORDER)),
                         PropertyFactory.lineColor(Expression.get(COLOR)),
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -64,6 +66,7 @@ class SectionOverlay(style: Style, private val density: Float) {
                 LineLayer(UNMATCHED_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(FITS), false))
                     .withProperties(
+                        PropertyFactory.lineSortKey(Expression.get(ORDER)),
                         PropertyFactory.lineColor(UNMATCHED_COLOR),
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
@@ -90,9 +93,10 @@ class SectionOverlay(style: Style, private val density: Float) {
     }
 
     fun show(sections: List<Section>) {
-        val features = sections.filter { it.geometry.size >= 2 }.map { s ->
+        val features = drawOrder(sections.filter { it.geometry.size >= 2 }).mapIndexed { i, s ->
             Feature.fromGeometry(s.geometry.toLineString()).apply {
                 addNumberProperty(ID, s.id)
+                addNumberProperty(ORDER, i)
                 addStringProperty(COLOR, ratingColor(s.rating))
                 addBooleanProperty(ONE_WAY, isOneWay(s.direction))
                 addBooleanProperty(FITS, fitsTheMap(s.status))
@@ -101,13 +105,15 @@ class SectionOverlay(style: Style, private val density: Float) {
         source.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
-    /** The id of the saved section drawn under [point], if any. */
+    /** The id of the saved section drawn under [point], if any; where
+     * several overlap, the one drawn on top (see [drawOrder]). */
     fun sectionAt(map: MapLibreMap, point: LatLng): Long? {
         val screen: PointF = map.projection.toScreenLocation(point)
         val r = HIT_RADIUS_DP * density
         val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
         return map.queryRenderedFeatures(box, LINE_LAYER, UNMATCHED_LAYER)
-            .firstNotNullOfOrNull { sectionIdOf(it.getNumberProperty(ID)) }
+            .maxByOrNull { it.getNumberProperty(ORDER)?.toInt() ?: -1 }
+            ?.let { sectionIdOf(it.getNumberProperty(ID)) }
     }
 
     private companion object {
@@ -118,6 +124,7 @@ class SectionOverlay(style: Style, private val density: Float) {
         const val ARROW_LAYER = "moto-sections-arrows"
         const val ARROW_IMAGE = "moto-section-arrow"
         const val ID = "id"
+        const val ORDER = "order"
         const val COLOR = "color"
         const val FITS = "fits"
         const val UNMATCHED_COLOR = "#80868b"

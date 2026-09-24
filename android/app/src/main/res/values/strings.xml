@@ -35,6 +35,11 @@
     <string name="delete_confirm">Tap again to delete</string>
     <string name="section_delete_confirm">Tap the bin again to delete this section.</string>
     <string name="section_saved">Section saved</string>
+    <string name="section_covered">Not saved: a section on this road, rated at least as high, already covers it</string>
+    <plurals name="section_saved_replacing">
+        <item quantity="one">Section saved. It replaces %d section it covers.</item>
+        <item quantity="other">Section saved. It replaces %d sections it covers.</item>
+    </plurals>
     <string name="section_updated">Section updated</string>
     <string name="section_deleted">Section deleted</string>
     <string name="rating_good">Good</string>
