@@ -182,6 +182,28 @@ impl SectionStore {
     pub fn delete(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_section(id)?)
     }
+
+    /// Re-matches the sections to `engine`'s region if it changed since
+    /// they were last matched (or a run was cut short); sections that no
+    /// longer fit are flagged `Unmatched`, never removed. Call off the main
+    /// thread after opening both.
+    pub fn rematch(&self, engine: Arc<Engine>) -> Result<RematchReport, MotoError> {
+        let r = moto_core::rematch::rematch_store(&mut self.store(), &engine.inner)?;
+        Ok(RematchReport {
+            checked: r.checked,
+            matched: r.matched,
+            unmatched: r.unmatched,
+        })
+    }
+}
+
+/// What a re-match did: sections looked at (0 if the region hadn't
+/// changed), that still fit, and that no longer fit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct RematchReport {
+    pub checked: u64,
+    pub matched: u64,
+    pub unmatched: u64,
 }
 
 // --- conversions ---
@@ -465,6 +487,48 @@ mod tests {
         let same = engine.section_between(p, p).unwrap_err();
         std::fs::remove_file(region).unwrap();
         assert!(matches!(same, MotoError::InvalidInput { .. }), "{same:?}");
+    }
+
+    #[test]
+    fn rematches_once_per_region() {
+        let (engine, region) = engine("rematch");
+        let draft = engine
+            .section_between(ll(55.7001, 13.202), ll(55.7001, 13.219))
+            .unwrap();
+        std::fs::remove_file(region).unwrap();
+        let db = TempDb::new("rematch");
+        let store = SectionStore::open(db.path()).unwrap();
+        let s = store
+            .add(NewSection {
+                name: String::new(),
+                rating: Rating::Good,
+                direction: Direction::Both,
+                source: SectionSource::Map,
+                ways: draft.ways,
+                geometry: draft.geometry,
+            })
+            .unwrap();
+        // A new database hasn't seen a region: the first run checks all.
+        let first = store.rematch(engine.clone()).unwrap();
+        assert_eq!(
+            first,
+            RematchReport {
+                checked: 1,
+                matched: 1,
+                unmatched: 0
+            }
+        );
+        assert_eq!(store.get(s.id).unwrap().unwrap().status, SectionStatus::Ok);
+        // Same region again: nothing to do.
+        let again = store.rematch(engine).unwrap();
+        assert_eq!(
+            again,
+            RematchReport {
+                checked: 0,
+                matched: 0,
+                unmatched: 0
+            }
+        );
     }
 
     #[test]

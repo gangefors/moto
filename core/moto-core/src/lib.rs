@@ -20,6 +20,7 @@ pub mod geo;
 pub mod gpx;
 pub mod matching;
 pub mod region;
+pub mod rematch;
 mod route;
 pub mod section;
 mod snap;
