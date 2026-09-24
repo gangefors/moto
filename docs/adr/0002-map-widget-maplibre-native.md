@@ -72,8 +72,8 @@ The key trade-off is **polish and place search (Google)** against **data consist
 
 ## Action Items
 
-- [ ] Add the MapLibre Android dependency; a map screen with GPS location on Stefan's phone (M0).
-- [ ] GeoJSON line layers for route / alternatives / favourites with distinct styling.
-- [ ] Tap → Rust `snap()` → marker, measured < 500 ms (R11).
-- [ ] Section hit-testing via rendered-feature query on the favourites layer.
+- [x] Add the MapLibre Android dependency; a map screen with GPS location on Stefan's phone (M0). Done in ae1c82b.
+- [x] GeoJSON line layers for route / alternatives / favourites with distinct styling. Route in d0159ea, favourites in ebb5f79; alternative loops are shown one at a time (acdfe2f).
+- [x] Tap → Rust `snap()` → marker, measured < 500 ms (R11). Done in eb5c101; snapping takes 4–13 µs.
+- [x] Section hit-testing via rendered-feature query on the favourites layer. Done in ebb5f79.
 - [x] Map style URL in config; attribution control visible.

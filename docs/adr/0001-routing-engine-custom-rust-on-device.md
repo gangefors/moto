@@ -97,10 +97,10 @@ Speed-up strategy (decide during M2):
 
 ## Action Items
 
-- [ ] Rust CLI: parse Geofabrik PBF (e.g. the `osmpbf` crate) → filtered motorcycle graph → region file v1 (CSR arrays, memory-mapped, versioned header).
-- [ ] Per-edge curvature score in the build step (R5), unit-tested on known roads.
-- [ ] `snap`, plain bidirectional A\* `route`, and UniFFI bindings; call them from Android (M0 slice).
-- [ ] Favourite overlay: capped bonus per edge, applied at query time.
-- [ ] Golden-route regression set (Skåne) and timing on Stefan's phone.
-- [ ] Measure Sweden region: file size, load time, peak memory, 300 km query time. Decide on ALT vs CCH.
-- [ ] Round-trip algorithm spike (R7).
+- [x] Rust CLI: parse Geofabrik PBF (e.g. the `osmpbf` crate) → filtered motorcycle graph → region file v1 (CSR arrays, memory-mapped, versioned header). Done in 52c2ff8 (format: ADR-0005).
+- [x] Per-edge curvature score in the build step (R5), unit-tested on known roads. Changed by ADR-0005: the build stores curvature metrics and the score is computed at query time, so it can be tuned without a rebuild (07b4bbd).
+- [x] `snap`, plain bidirectional A\* `route`, and UniFFI bindings; call them from Android (M0 slice). Done in bb42a50, d4bc3ee and d0159ea; plain one-directional A\* was fast enough (about 15 ms for 88 km routes on the build machine).
+- [x] Favourite overlay: capped bonus per edge, applied at query time. Done in 47326ef.
+- [ ] Golden-route regression set (Skåne) and timing on Stefan's phone. The set is in c04e043 and runs in CI; timing on the phone is still to do.
+- [ ] Measure Sweden region: file size, load time, peak memory, 300 km query time. Decide on ALT vs CCH. File size measured (398 MiB, 6b5f282); the rest waits for the Sweden region.
+- [x] Round-trip algorithm spike (R7). Decided in ADR-0007, done in dbc69a9.
