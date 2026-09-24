@@ -55,4 +55,20 @@
     <string name="recording_failed">Recording stopped: %1$s</string>
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
+    <string name="rides_open">Rides</string>
+    <string name="rides_title">Rides</string>
+    <string name="rides_loading">Loading…</string>
+    <string name="rides_none">No rides recorded yet.</string>
+    <string name="rides_summary">%1$.1f km · %2$s · %3$s</string>
+    <string name="rides_recording">Recording · %1$s</string>
+    <plurals name="gps_fixes">
+        <item quantity="one">%d GPS fix</item>
+        <item quantity="other">%d GPS fixes</item>
+    </plurals>
+    <string name="rides_export">Export</string>
+    <string name="rides_delete_confirm">Tap again</string>
+    <string name="rides_exported">Ride exported as GPX</string>
+    <string name="rides_export_failed">Export failed: %1$s</string>
+    <string name="rides_gone">the ride no longer exists</string>
+    <string name="rides_cannot_write">can’t write to the chosen file</string>
 </resources>

@@ -196,3 +196,13 @@ const val MIN_BATTERY_SAMPLE_MS = 20 * 60_000L
 
 /** Splits [fixes] into batches the core accepts. */
 fun batches(fixes: List<TrackPoint>): List<List<TrackPoint>> = fixes.chunked(MAX_BATCH_FIXES)
+
+/** "2026-09-24 07:30", a ride's start in local time, for lists and GPX names. */
+fun rideTitle(startedAtSec: Long, zone: java.time.ZoneId): String =
+    java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT))
+
+/** Suggested export file name: "moto-ride-2026-09-24-0730.gpx". */
+fun rideFileName(startedAtSec: Long, zone: java.time.ZoneId): String =
+    "moto-ride-" + java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm", Locale.ROOT)) + ".gpx"
