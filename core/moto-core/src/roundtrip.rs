@@ -1,0 +1,273 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
+//! Round trips (PRD R7, ADR-0007): loops from a start through two
+//! waypoints, routed leg by leg with the one-way cost (favourites and
+//! curvature) plus a penalty on roads the loop already rides, resized once
+//! towards the target, and kept when they are within ±15 % of it and ride
+//! the same road twice for at most 10 % of their length. The best loops by
+//! worth per second that differ from each other are returned.
+//!
+//! Round trips usually start at home, often in a town, where the way out
+//! and the way home share streets. So roads in the home zone around the
+//! start ([`home_radius_m`]) are neither penalised nor counted as reuse.
+
+use std::collections::{HashMap, HashSet};
+
+use crate::favourites::Favourites;
+use crate::geo::{bearing_deg, destination, haversine_m};
+use crate::route::{Cost, Fun, Partial, Routed, build, latlon, path};
+use crate::scoring::PARAMS;
+use crate::{CoreError, Engine, LatLon, RoadPoint, RoundTripTarget, Route, RouteOptions};
+
+/// Headings tried, evenly spread.
+pub const HEADINGS: usize = 12;
+/// Half the angle between the two waypoints, seen from the start.
+const SPREAD_DEG: f64 = 30.0;
+/// A loop may miss its target by this share.
+pub const TOLERANCE: f64 = 0.15;
+/// Most of a loop's length that may ride a road it already rides.
+pub const MAX_REUSE: f64 = 0.10;
+/// Two loops are alternatives when they share less than this share of
+/// the shorter one.
+pub const MAX_OVERLAP: f64 = 0.5;
+/// Most loops returned.
+pub const MAX_LOOPS: usize = 3;
+/// Shortest and longest loop asked for.
+pub const MIN_TARGET_M: f64 = 5_000.0;
+pub const MAX_TARGET_M: f64 = 400_000.0;
+/// Shares of the radius tried for a waypoint, in order, until one lies
+/// near a road.
+const WAYPOINT_PULL_IN: [f64; 3] = [1.0, 0.8, 0.6];
+/// A favourite's middle can be a waypoint when it lies this far from the
+/// start (as a share of the waypoint radius) and within `SPREAD_DEG` of
+/// the waypoint's bearing.
+const ANCHOR_REACH: (f64, f64) = (0.6, 1.4);
+/// The home zone's radius as a share of the target, and its bounds.
+const HOME_SHARE: f64 = 0.05;
+const HOME_MIN_M: f64 = 2_000.0;
+const HOME_MAX_M: f64 = 5_000.0;
+
+/// Radius of the home zone around the start for a loop of `target_m`:
+/// roads wholly inside it may be ridden out and back freely (the way out
+/// of town and the way home).
+pub fn home_radius_m(target_m: f64) -> f64 {
+    (target_m * HOME_SHARE).clamp(HOME_MIN_M, HOME_MAX_M)
+}
+
+/// A loop and how it was judged.
+struct Loop {
+    routed: Routed,
+    /// Metres of each road geometry ridden, for overlap.
+    roads: HashMap<u32, f64>,
+    /// Metres on roads the loop had already ridden (either way).
+    reused_m: f64,
+    heading: usize,
+}
+
+/// Up to [`MAX_LOOPS`] round trips from `start` of about `target`, best
+/// first; see the module docs. At least two when two valid loops exist.
+pub fn round_trip(
+    engine: &Engine,
+    start: LatLon,
+    target: RoundTripTarget,
+    opts: &RouteOptions,
+    favourites: &Favourites,
+) -> Result<Vec<Route>, CoreError> {
+    start.validate()?;
+    target.validate()?;
+    opts.validate()?;
+    favourites.check(engine)?;
+    let target_m = match target {
+        RoundTripTarget::DistanceM(m) => m,
+        RoundTripTarget::DurationS(s) => s * PARAMS.loop_speed_mps,
+    };
+    if !(MIN_TARGET_M..=MAX_TARGET_M).contains(&target_m) {
+        return Err(CoreError::InvalidArgument(format!(
+            "a round trip must be {}–{} km (or about as long in time)",
+            MIN_TARGET_M / 1000.0,
+            MAX_TARGET_M / 1000.0
+        )));
+    }
+    let s = engine.snap(start)?;
+    let fun = Fun::new(engine.region(), favourites, opts.curvy);
+    let fits = |r: &Route| match target {
+        RoundTripTarget::DistanceM(m) => (r.distance_m - m).abs() <= m * TOLERANCE,
+        RoundTripTarget::DurationS(t) => (r.duration_s - t).abs() <= t * TOLERANCE,
+    };
+    let size = |r: &Route| match target {
+        RoundTripTarget::DistanceM(_) => r.distance_m,
+        RoundTripTarget::DurationS(_) => r.duration_s * PARAMS.loop_speed_mps,
+    };
+
+    let mut loops = Vec::new();
+    let radius = target_m / (3.0 * PARAMS.loop_detour);
+    let home = home_radius_m(target_m);
+    for heading in 0..HEADINGS {
+        let bearing = heading as f64 * 360.0 / HEADINGS as f64;
+        let at = |r: f64| loop_at(engine, &fun, opts, &s, bearing, r, home, favourites);
+        let Some(first) = at(radius) else {
+            continue;
+        };
+        // One resize towards the target.
+        let found = if fits(&first.routed.route) {
+            Some(first)
+        } else {
+            let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
+            at(radius * scale).filter(|l| fits(&l.routed.route))
+        };
+        if let Some(mut l) = found {
+            l.heading = heading;
+            if reuse_share(&l) <= MAX_REUSE {
+                loops.push(l);
+            }
+        }
+    }
+    if loops.is_empty() {
+        return Err(CoreError::NoRoute(
+            "no loop of that length from here; try another length or start".into(),
+        ));
+    }
+
+    // Best worth per second first; ties by heading, so results are stable.
+    loops.sort_by(|a, b| {
+        worth_per_s(b)
+            .total_cmp(&worth_per_s(a))
+            .then(a.heading.cmp(&b.heading))
+    });
+    let mut kept: Vec<Loop> = Vec::new();
+    for l in loops {
+        if kept.len() == MAX_LOOPS {
+            break;
+        }
+        if kept.iter().all(|k| overlap(k, &l) < MAX_OVERLAP) {
+            kept.push(l);
+        }
+    }
+    Ok(kept
+        .into_iter()
+        .map(|l| {
+            let mut r = l.routed.route;
+            // A loop has no fastest route to compare with.
+            r.fastest_duration_s = r.duration_s;
+            r
+        })
+        .collect())
+}
+
+fn worth_per_s(l: &Loop) -> f64 {
+    l.routed.value_s / l.routed.route.duration_s.max(1.0)
+}
+
+/// The loop through two waypoints `SPREAD_DEG` either side of `bearing`
+/// at `radius`, or through a favourite near a waypoint; `None` when a
+/// waypoint has no road or a leg no route. Roads within `home` metres of
+/// the start are free to ride twice.
+#[allow(clippy::too_many_arguments)]
+fn loop_at(
+    engine: &Engine,
+    fun: &Fun,
+    opts: &RouteOptions,
+    start: &RoadPoint,
+    bearing: f64,
+    radius: f64,
+    home: f64,
+    favourites: &Favourites,
+) -> Option<Loop> {
+    let region = engine.region();
+    let at_home = |edge: u32| {
+        let e = region.edges()[edge as usize];
+        [e.tail, e.head]
+            .iter()
+            .all(|&n| haversine_m(start.position, latlon(region.nodes()[n as usize])) <= home)
+    };
+    let mut taken: Vec<LatLon> = Vec::new();
+    let mut waypoint = |b: f64| -> Option<RoadPoint> {
+        if let Some(p) = anchor_near(start.position, b, radius, favourites, &taken) {
+            taken.push(p);
+            return engine.snap(p).ok();
+        }
+        // A waypoint with no road near it (the sea, the region's edge) is
+        // pulled in towards the start; the resize makes up the length.
+        WAYPOINT_PULL_IN.iter().find_map(|&f| {
+            let p = destination(start.position, b, radius * f);
+            engine.snap(p).ok().inspect(|_| taken.push(p))
+        })
+    };
+    let w1 = waypoint(bearing - SPREAD_DEG)?;
+    let w2 = waypoint(bearing + SPREAD_DEG)?;
+
+    let mut used: HashSet<u32> = HashSet::new();
+    let mut parts: Vec<Partial> = Vec::new();
+    for (from, to) in [(start, &w1), (&w1, &w2), (&w2, start)] {
+        let cost = Cost::Loop(opts.avoid, *fun, PARAMS.loop_pull, &used);
+        let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
+        for p in leg.iter().filter(|p| !at_home(p.edge)) {
+            used.insert(region.edges()[p.edge as usize].geometry);
+        }
+        parts.extend(leg);
+    }
+    let mut roads: HashMap<u32, f64> = HashMap::new();
+    let mut reused = 0.0;
+    for p in parts.iter().filter(|p| !at_home(p.edge)) {
+        let e = region.edges()[p.edge as usize];
+        let metres = (p.to - p.from).max(0.0) * f64::from(e.length_dm) / 10.0;
+        let seen = roads.entry(e.geometry).or_insert(0.0);
+        if *seen > 0.0 {
+            reused += metres;
+        }
+        *seen += metres;
+    }
+    Some(Loop {
+        routed: build(fun, &parts),
+        roads,
+        reused_m: reused,
+        heading: 0,
+    })
+}
+
+/// Share of the loop's length on roads it had already ridden, outside
+/// the home zone.
+fn reuse_share(l: &Loop) -> f64 {
+    l.reused_m / l.routed.route.distance_m.max(1.0)
+}
+
+/// Share of the shorter loop's roads that the other rides too.
+fn overlap(a: &Loop, b: &Loop) -> f64 {
+    let shared: f64 = a
+        .roads
+        .iter()
+        .filter_map(|(g, m)| b.roads.get(g).map(|n| m.min(*n)))
+        .sum();
+    shared
+        / a.routed
+            .route
+            .distance_m
+            .min(b.routed.route.distance_m)
+            .max(1.0)
+}
+
+/// The best-rated favourite whose middle lies near where a waypoint at
+/// `bearing` and `radius` would go, not yet a waypoint of this loop.
+fn anchor_near(
+    start: LatLon,
+    bearing: f64,
+    radius: f64,
+    favourites: &Favourites,
+    taken: &[LatLon],
+) -> Option<LatLon> {
+    favourites
+        .anchors()
+        .iter()
+        .filter(|(p, _)| !taken.contains(p))
+        .filter(|(p, _)| {
+            let d = haversine_m(start, *p);
+            let off = (bearing_deg(start, *p) - bearing + 540.0).rem_euclid(360.0) - 180.0;
+            d >= radius * ANCHOR_REACH.0 && d <= radius * ANCHOR_REACH.1 && off.abs() <= SPREAD_DEG
+        })
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(p, _)| *p)
+}
+
+#[cfg(test)]
+mod tests;

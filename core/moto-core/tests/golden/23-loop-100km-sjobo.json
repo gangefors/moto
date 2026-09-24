@@ -1,0 +1,7 @@
+{
+  "name": "Loop of 100 km from Sjöbo",
+  "description": "100 km loops from Sjöbo: length, reuse and variety only.",
+  "from": [55.631, 13.707],
+  "loop": {"km": 100},
+  "expect": {}
+}

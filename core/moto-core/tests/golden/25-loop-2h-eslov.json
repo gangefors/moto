@@ -1,0 +1,7 @@
+{
+  "name": "Loop of 2 hours from Eslöv",
+  "description": "A duration target: loops of about 2 hours (±15 % in time), not a distance.",
+  "from": [55.839, 13.304],
+  "loop": {"minutes": 120},
+  "expect": {}
+}

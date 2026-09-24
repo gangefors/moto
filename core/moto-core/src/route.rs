@@ -6,7 +6,7 @@
 //! roads (M2b) pulling the route as hard as the time budget allows.
 
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::favourites::Favourites;
 use crate::geo::{haversine_m, polyline_slice};
@@ -17,7 +17,7 @@ use crate::{Avoid, CoreError, LatLon, RoadPoint, Route, RouteOptions};
 
 const NONE: u32 = u32::MAX;
 
-fn latlon(p: PointE7) -> LatLon {
+pub(crate) fn latlon(p: PointE7) -> LatLon {
     LatLon {
         lat: f64::from(p.lat) / COORD_SCALE,
         lon: f64::from(p.lon) / COORD_SCALE,
@@ -99,6 +99,9 @@ pub(crate) enum Cost<'a> {
     /// As `Fastest`, with roads worth riding cheaper by their worth times
     /// `max_pull` times the pull (0–1).
     Favoured(Avoid, Fun<'a>, f64),
+    /// As `Favoured`, with roads the loop already rides (either way, by
+    /// geometry) costing `reuse_penalty` times more (round trips).
+    Loop(Avoid, Fun<'a>, f64, &'a HashSet<u32>),
     /// Distance along the road, nothing avoided: the road the rider points
     /// at, not a faster one nearby (marking sections).
     Shortest,
@@ -112,6 +115,14 @@ impl Cost<'_> {
             Cost::Favoured(avoid, fun, pull) => {
                 time_cost(avoid, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e))
             }
+            Cost::Loop(avoid, fun, pull, used) => {
+                let reused = if used.contains(&e.geometry) {
+                    PARAMS.reuse_penalty
+                } else {
+                    1.0
+                };
+                time_cost(avoid, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e)) * reused
+            }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
     }
@@ -120,7 +131,7 @@ impl Cost<'_> {
     /// penalised nor favoured: the rider chose that road).
     fn partial(&self, e: &Edge, frac: f64) -> f64 {
         frac * match self {
-            Cost::Fastest(_) | Cost::Favoured(..) => time_s(e),
+            Cost::Fastest(_) | Cost::Favoured(..) | Cost::Loop(..) => time_s(e),
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
     }
@@ -130,7 +141,8 @@ impl Cost<'_> {
         match self {
             Cost::Fastest(_) => metres / max_mps,
             // `max_pull` is below 1, so the bound stays positive.
-            Cost::Favoured(_, fun, pull) => {
+            // The reuse penalty only adds cost, so the bound still holds.
+            Cost::Favoured(_, fun, pull) | Cost::Loop(_, fun, pull, _) => {
                 metres / max_mps * (1.0 - pull * PARAMS.max_pull * fun.max_worth())
             }
             Cost::Shortest => metres,
@@ -288,14 +300,14 @@ impl Builder {
 }
 
 /// A route and what riding it is worth.
-struct Routed {
-    route: Route,
+pub(crate) struct Routed {
+    pub(crate) route: Route,
     /// Seconds on favourites and curvy road, weighted (see `Fun::worth`).
-    value_s: f64,
+    pub(crate) value_s: f64,
 }
 
 /// The route with the path pieces `parts`.
-fn build(fun: &Fun, parts: &[Partial]) -> Routed {
+pub(crate) fn build(fun: &Fun, parts: &[Partial]) -> Routed {
     let mut route = Builder::default();
     for p in parts {
         route.add(fun, p.edge, p.from, p.to);

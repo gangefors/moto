@@ -1,0 +1,7 @@
+{
+  "name": "Loop of 150 km from Kristianstad",
+  "description": "150 km loops from Kristianstad, near the region's north-east: long loops stay within 15 % and do not ride back the way they came.",
+  "from": [56.03, 14.156],
+  "loop": {"km": 150},
+  "expect": {}
+}

@@ -4,8 +4,8 @@
 //! The routing engine: loads a region file and answers snap/route queries.
 //!
 //! The public API is the one agreed in ADR-0001, on the ADR-0005 region
-//! file. Routes take the rider's favourites into account (M2a); round
-//! trips come in M3.
+//! file. Routes and round trips take the rider's favourites and curvy
+//! roads into account (M2, M3).
 
 use std::path::Path;
 
@@ -159,17 +159,33 @@ impl Engine {
         crate::suggest::from_tag(self, tag, track)
     }
 
-    /// Alternative loops starting and ending at `start` (PRD R7).
+    /// Alternative loops starting and ending at `start` (PRD R7), with no
+    /// favourites.
     pub fn round_trip(
         &self,
         start: LatLon,
         target: RoundTripTarget,
         opts: &RouteOptions,
     ) -> Result<Vec<Route>, CoreError> {
-        start.validate()?;
-        target.validate()?;
-        opts.validate()?;
-        Err(CoreError::NotImplemented("round_trip"))
+        self.round_trip_with(start, target, opts, &Favourites::none())
+    }
+
+    /// Up to three different loops from `start` of about `target` (±15 %),
+    /// over the rider's `favourites` and curvy roads, best first (PRD R7,
+    /// ADR-0007). `opts.budget` doesn't apply: the target is the budget.
+    pub fn round_trip_with(
+        &self,
+        start: LatLon,
+        target: RoundTripTarget,
+        opts: &RouteOptions,
+        favourites: &Favourites,
+    ) -> Result<Vec<Route>, CoreError> {
+        crate::roundtrip::round_trip(self, start, target, opts, favourites)
+    }
+
+    /// The highest edge speed, which bounds the A* estimate.
+    pub(crate) fn max_speed_kmh(&self) -> f64 {
+        self.max_speed_kmh
     }
 }
 

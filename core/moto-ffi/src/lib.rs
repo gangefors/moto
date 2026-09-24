@@ -99,8 +99,6 @@ pub enum MotoError {
     NoRoadNearby { message: String },
     #[error("{message}")]
     NoRoute { message: String },
-    #[error("{message}")]
-    NotImplemented { message: String },
 }
 
 /// What a loaded region covers.
@@ -192,15 +190,22 @@ impl Engine {
         Ok(moto_core::gpx::route_gpx(&name, &points, &line))
     }
 
+    /// Up to three round trips from `start` of about `target` (±15 %),
+    /// best first, each riding at most 10 % of its length twice
+    /// (ADR-0007). `opts.budget` does not apply; with `favourites` the
+    /// loops go through and along them where they can.
     pub fn round_trip(
         &self,
         start: LatLon,
         target: RoundTripTarget,
         opts: RouteOptions,
+        favourites: Option<Arc<Favourites>>,
     ) -> Result<Vec<Route>, MotoError> {
+        let none = moto_core::Favourites::none();
+        let fav = favourites.as_ref().map_or(&none, |f| &f.inner);
         let routes = self
             .inner
-            .round_trip(start.into(), target.into(), &opts.into())?;
+            .round_trip_with(start.into(), target.into(), &opts.into(), fav)?;
         Ok(routes.into_iter().map(Into::into).collect())
     }
 }
@@ -322,7 +327,6 @@ impl From<moto_core::CoreError> for MotoError {
             C::OutsideRegion { .. } => Self::OutsideRegion { message },
             C::NoRoadNearby { .. } => Self::NoRoadNearby { message },
             C::NoRoute(_) => Self::NoRoute { message },
-            C::NotImplemented(_) => Self::NotImplemented { message },
         }
     }
 }
@@ -446,19 +450,43 @@ mod tests {
         assert!(matches!(none, MotoError::NoRoute { .. }), "{none:?}");
         let bad = engine.snap(ll(91.0, 0.0)).unwrap_err();
         assert!(matches!(bad, MotoError::InvalidInput { .. }), "{bad:?}");
-        let todo = engine
+        let short = engine
             .round_trip(
                 ll(55.7001, 13.201),
-                RoundTripTarget::DistanceM { meters: 50_000.0 },
+                RoundTripTarget::DistanceM { meters: 1_000.0 },
                 opts,
+                None,
             )
             .unwrap_err();
-        assert!(matches!(todo, MotoError::NotImplemented { .. }), "{todo:?}");
+        assert!(matches!(short, MotoError::InvalidInput { .. }), "{short:?}");
         // Messages are the core's text, so the app can show them.
         assert!(
             outside.to_string().contains("outside the loaded region"),
             "{outside}"
         );
+    }
+
+    #[test]
+    fn round_trips_cross_the_ffi() {
+        let file = TempRegion::new("loops", &moto_core::fixture::grid(13).to_bytes().unwrap());
+        let engine = Engine::open(file.path()).unwrap();
+        let loops = engine
+            .round_trip(
+                ll(55.754, 13.496),
+                RoundTripTarget::DistanceM { meters: 20_000.0 },
+                default_route_options(),
+                None,
+            )
+            .unwrap();
+        assert!(loops.len() >= 2, "{}", loops.len());
+        for l in &loops {
+            assert!(
+                (l.distance_m - 20_000.0).abs() <= 3_000.0,
+                "{}",
+                l.distance_m
+            );
+            assert_eq!(l.geometry.first(), l.geometry.last());
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Stefan Gangefors
 
 //! The region benchmark behind `--check`: verify, open, snap, route (with
-//! and without favourites) and map-matching timings on fixed pseudo-random
+//! and without favourites), round-trip and map-matching timings on fixed pseudo-random
 //! inputs, plus a CPU calibration run so CI
 //! can compare builds made on different machines.
 
@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use moto_core::region::Region;
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
-use moto_core::{Avoid, Engine, Favourites, LatLon, RouteOptions};
+use moto_core::{Avoid, Engine, Favourites, LatLon, RoundTripTarget, RouteOptions};
 
 /// Random points snapped by the benchmark.
 pub const SNAP_POINTS: usize = 10_000;
@@ -22,6 +22,11 @@ pub const ROUTE_PAIRS: usize = 100;
 /// in a region under four times that tall).
 pub const FAVOURITE_SECTIONS: usize = 300;
 const FAVOURITE_REACH_DEG: f64 = 0.02;
+/// Round trips: from the starts of this many route pairs, each of these
+/// lengths, with the favourites; fewer rounds, as each is many routes.
+pub const LOOP_STARTS: usize = 10;
+pub const LOOP_KM: [f64; 2] = [50.0, 100.0];
+const LOOP_ROUNDS: usize = 3;
 /// Routes turned into noisy GPS tracks and map-matched by the benchmark.
 pub const MATCH_TRACKS: usize = 20;
 /// Synthetic tracks: a fix every this many metres along the route...
@@ -76,6 +81,14 @@ pub struct Report {
     pub curvy_route_ms_mean: f64,
     pub curvy_route_ms_p95: f64,
     pub curvy_gain_median: f64,
+    /// Round trips ([`LOOP_STARTS`] × [`LOOP_KM`], with the favourites):
+    /// time per request, requests made, those that got two loops or more,
+    /// and the mean number of loops per request.
+    pub loop_ms_mean: f64,
+    pub loop_ms_p95: f64,
+    pub loop_requests: usize,
+    pub loop_found_two: usize,
+    pub loops_mean: f64,
     /// Map matching time per km of track (fastest round).
     pub match_ms_per_km: f64,
     pub match_tracks: usize,
@@ -292,6 +305,33 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let curvy_times = sorted(curvy_per_pair);
     gains.sort_by(f64::total_cmp);
 
+    // Round trips from some of the starts, with the favourites.
+    let loop_requests: Vec<(LatLon, f64)> = pairs
+        .iter()
+        .take(LOOP_STARTS)
+        .flat_map(|&(a, _)| LOOP_KM.map(|km| (a, km)))
+        .collect();
+    let mut loop_per_request = vec![Vec::new(); loop_requests.len()];
+    let (mut loop_found_two, mut loop_count) = (0, 0);
+    for round in 0..LOOP_ROUNDS {
+        for (i, &(a, km)) in loop_requests.iter().enumerate() {
+            let t = Instant::now();
+            let r = engine.round_trip_with(
+                a,
+                RoundTripTarget::DistanceM(km * 1000.0),
+                &opts,
+                &favourites,
+            );
+            loop_per_request[i].push(ms(t));
+            if round == 0 {
+                let n = r.map_or(0, |l| l.len());
+                loop_count += n;
+                loop_found_two += usize::from(n >= 2);
+            }
+        }
+    }
+    let loop_times = sorted(loop_per_request);
+
     // Map matching: noisy synthetic tracks along some of the routes.
     let mut noise = Rng(0x1234_5678_9abc_def1);
     let tracks: Vec<Vec<LatLon>> = ridden
@@ -359,6 +399,15 @@ pub fn run(path: &Path) -> Result<Report, String> {
         curvy_route_ms_mean: mean(&curvy_times),
         curvy_route_ms_p95: pick(&curvy_times, 0.95),
         curvy_gain_median: pick(&gains, 0.5),
+        loop_ms_mean: mean(&loop_times),
+        loop_ms_p95: pick(&loop_times, 0.95),
+        loop_requests: loop_requests.len(),
+        loop_found_two,
+        loops_mean: if loop_requests.is_empty() {
+            0.0
+        } else {
+            loop_count as f64 / loop_requests.len() as f64
+        },
         match_ms_per_km: if track_km > 0.0 {
             match_ms / track_km
         } else {
@@ -437,6 +486,17 @@ impl Report {
             self.curvy_route_ms_mean, self.curvy_route_ms_p95, self.curvy_gain_median
         ));
         out.push(format!(
+            "loops     {:.1} ms mean, {:.1} ms p95 over {} round trips ({} starts × {:?} km, \
+             with the favourites); {} with 2+ loops, {:.1} loops each on average",
+            self.loop_ms_mean,
+            self.loop_ms_p95,
+            self.loop_requests,
+            LOOP_STARTS,
+            LOOP_KM,
+            self.loop_found_two,
+            self.loops_mean
+        ));
+        out.push(format!(
             "match     {:.2} ms per km over {} noisy tracks ({:.0} km, fix every {TRACK_STEP_M} m, \
              ±{TRACK_NOISE_M} m); {:.1} % of the length matched in {} pieces",
             self.match_ms_per_km,
@@ -494,6 +554,11 @@ impl Report {
             num("curvy_route_ms_mean", self.curvy_route_ms_mean),
             num("curvy_route_ms_p95", self.curvy_route_ms_p95),
             num("curvy_gain_median", self.curvy_gain_median),
+            num("loop_ms_mean", self.loop_ms_mean),
+            num("loop_ms_p95", self.loop_ms_p95),
+            num("loop_requests", self.loop_requests as f64),
+            num("loop_found_two", self.loop_found_two as f64),
+            num("loops_mean", self.loops_mean),
             num("match_ms_per_km", self.match_ms_per_km),
             num("match_tracks", self.match_tracks as f64),
             num("match_km", self.match_km),
@@ -587,7 +652,15 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 12 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 13 + r.unroutable.len());
+        // The fixture is far smaller than a loop: every request is timed
+        // and none finds one.
+        assert_eq!(
+            r.loop_requests,
+            LOOP_STARTS.min(ROUTE_PAIRS) * LOOP_KM.len()
+        );
+        assert!(r.loop_ms_mean > 0.0 && r.loop_ms_p95 >= 0.0, "{r:?}");
+        assert_eq!((r.loop_found_two, r.loops_mean), (0, 0.0));
         assert!(
             r.curvy_route_ms_mean > 0.0 && r.curvy_route_ms_p95 > 0.0,
             "{r:?}"
@@ -623,6 +696,7 @@ mod tests {
         assert_eq!(a.match_share, b.match_share);
         assert_eq!(a.favourite_edges, b.favourite_edges);
         assert_eq!(a.fav_share_mean, b.fav_share_mean);
+        assert_eq!(a.loops_mean, b.loops_mean);
     }
 
     #[test]
@@ -637,7 +711,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 35);
+        assert_eq!(json.matches(':').count(), 40);
     }
 
     #[test]

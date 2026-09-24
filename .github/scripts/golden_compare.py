@@ -6,7 +6,8 @@
 same case files and region.
 
 Flags every route whose favourite or curvy share dropped (by more than
-one percentage point) or that fails its expectations. Exits with status 1
+one percentage point) or that fails its expectations; for round trips
+(outcomes with "loops"), also fewer loops or more reuse. Exits with status 1
 when any route fails its expectations in this build; a drop in share alone
 is reported, not failed (see the route-scoring procedure: judge it).
 """
@@ -34,6 +35,12 @@ def load(path):
 def num(o, key):
     v = o.get(key)
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
+
+
+def count(o, key):
+    """An optional whole number (round trips' loops), or None."""
+    v = o.get(key)
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
 def cell(v):
@@ -67,14 +74,26 @@ def compare(baseline, current):
             dd = num(o, "detour_ratio") - num(b, "detour_ratio")
             if abs(dd) > TOLERANCE:
                 notes.append(f"detour {dd:+.2f}")
+            loops, was = count(o, "loops"), count(b, "loops")
+            if loops is not None and was is not None and loops != was:
+                notes.append(f"{'⚠️ ' if loops < was else ''}loops {loops - was:+d}")
+            dr = num(o, "reuse_share") - num(b, "reuse_share")
+            if loops is not None and abs(dr) > TOLERANCE:
+                notes.append(f"{'⚠️ ' if dr > 0 else ''}reuse {dr * 100:+.0f} pp")
         elif baseline is not None:
             notes.append("new")
         if failures:
             failed.append(name)
         result = "❌ " + "; ".join(cell(f) for f in failures) if failures else "ok"
+        # A round trip has no detour; its loops and reuse show instead.
+        loops = count(o, "loops")
+        if loops is None:
+            detour = f"{num(o, 'detour_ratio'):.2f}×"
+        else:
+            detour = f"{loops} loops, {num(o, 'reuse_share') * 100:.0f} % reuse"
         lines.append(
             f"| {cell(name)} | {num(o, 'distance_km'):.1f} | {num(o, 'duration_min'):.1f} | "
-            f"{num(o, 'detour_ratio'):.2f}× | {num(o, 'favourite_share') * 100:.0f} | "
+            f"{detour} | {num(o, 'favourite_share') * 100:.0f} | "
             f"{num(o, 'curvy_share') * 100:.0f} | {', '.join(notes) or '–'} | {result} |"
         )
     return lines, failed
