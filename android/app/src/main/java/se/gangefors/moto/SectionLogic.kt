@@ -6,6 +6,7 @@ package se.gangefors.moto
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import se.gangefors.moto.core.AddResult
 import se.gangefors.moto.core.Direction
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
@@ -148,3 +149,28 @@ fun fitsTheMap(status: SectionStatus): Boolean = status == SectionStatus.OK
  * the rider chose to see them (hidden by default after a map update). */
 fun visibleSections(sections: List<Section>, showUnmatched: Boolean): List<Section> =
     if (showUnmatched) sections else sections.filter { fitsTheMap(it.status) }
+
+/**
+ * Sections in drawing order, bottom first: longer sections under shorter
+ * ones, so a short section on the same road as a longer one (rated
+ * differently, or another direction) stays visible and tappable; of two
+ * equally long ones the higher rating is on top.
+ */
+fun drawOrder(sections: List<Section>): List<Section> =
+    sections.sortedWith(
+        compareByDescending<Section> { Math.round(lengthM(it.geometry)) }
+            .thenBy { it.rating.ordinal }
+            .thenBy { it.id },
+    )
+
+/** What saving a new section did, for the message to the rider. */
+sealed interface AddOutcome {
+    /** Not saved: a saved section on the same road already says as much. */
+    data object Covered : AddOutcome
+
+    /** Saved, removing [replaced] sections it made redundant. */
+    data class Saved(val replaced: Int) : AddOutcome
+}
+
+fun addOutcome(result: AddResult): AddOutcome =
+    if (result.section == null) AddOutcome.Covered else AddOutcome.Saved(result.replaced.size)

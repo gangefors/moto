@@ -567,24 +567,33 @@ fun MapScreen() {
         if (hasLocation) enableLocation(context, m, s)
     }
 
-    /** Runs [action] on the store off the main thread, then reloads the sections. */
-    fun changeSections(done: String, action: (SectionStore) -> Unit) {
+    /**
+     * Runs [action] on the store off the main thread, then reloads the
+     * sections and shows the message [action] returns.
+     */
+    fun changeSectionsThen(action: (SectionStore) -> String) {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    action(ready.store)
-                    ready.store.list(null)
+                    val done = action(ready.store)
+                    done to ready.store.list(null)
                 }
             }
             result.fold(
-                onSuccess = {
-                    sections = it
+                onSuccess = { (done, list) ->
+                    sections = list
                     message = done
                 },
                 onFailure = { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) },
             )
         }
+    }
+
+    /** Runs [action] on the store off the main thread, then reloads the sections. */
+    fun changeSections(done: String, action: (SectionStore) -> Unit) = changeSectionsThen {
+        action(it)
+        done
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -782,8 +791,8 @@ fun MapScreen() {
                     distanceM = proposed.distanceM,
                     zone = ZoneId.systemDefault(),
                 )
-                changeSections(resources.getString(R.string.section_saved)) { st ->
-                    st.add(
+                changeSectionsThen { st ->
+                    val result = st.add(
                         NewSection(
                             name = name,
                             rating = choice.rating,
@@ -793,6 +802,14 @@ fun MapScreen() {
                             geometry = proposed.geometry,
                         ),
                     )
+                    when (val outcome = addOutcome(result)) {
+                        AddOutcome.Covered -> resources.getString(R.string.section_covered)
+                        is AddOutcome.Saved -> if (outcome.replaced == 0) {
+                            resources.getString(R.string.section_saved)
+                        } else {
+                            resources.getQuantityString(R.plurals.section_saved_replacing, outcome.replaced, outcome.replaced)
+                        }
+                    }
                 }
                 if (tag != null) finishTag(TagStatus.USED)
             },

@@ -159,4 +159,31 @@ class SectionLogicTest {
         assertEquals(listOf(1L), visibleSections(all, showUnmatched = false).map { it.id })
         assertEquals(listOf(1L, 2L, 3L), visibleSections(all, showUnmatched = true).map { it.id })
     }
+
+    @Test
+    fun shorterSectionsAreDrawnOnTop() {
+        fun section(id: Long, rating: Rating, toLat: Double) = se.gangefors.moto.core.Section(
+            id, "local", "", rating, Direction.BOTH, se.gangefors.moto.core.SectionSource.MAP,
+            se.gangefors.moto.core.SectionStatus.OK, 0, 0, emptyList(), listOf(LatLon(55.7, 13.2), LatLon(toLat, 13.2)),
+        )
+        val all = listOf(
+            section(1, Rating.EPIC, 55.72), // long epic
+            section(2, Rating.GOOD, 55.71), // short good, on top of it
+            section(3, Rating.GOOD, 55.72), // as long as 1, rated lower: under it
+            section(4, Rating.GREAT, 55.705), // shortest: on top of all
+        )
+        assertEquals(listOf(3L, 1L, 2L, 4L), drawOrder(all).map { it.id })
+        assertTrue(drawOrder(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun tellsWhetherANewSectionWasSaved() {
+        val saved = se.gangefors.moto.core.Section(
+            7, "local", "", Rating.GOOD, Direction.BOTH, se.gangefors.moto.core.SectionSource.MAP,
+            se.gangefors.moto.core.SectionStatus.OK, 0, 0, emptyList(), listOf(LatLon(55.7, 13.2), LatLon(55.71, 13.2)),
+        )
+        assertEquals(AddOutcome.Covered, addOutcome(se.gangefors.moto.core.AddResult(null, emptyList(), 3)))
+        assertEquals(AddOutcome.Saved(0), addOutcome(se.gangefors.moto.core.AddResult(saved, emptyList(), null)))
+        assertEquals(AddOutcome.Saved(2), addOutcome(se.gangefors.moto.core.AddResult(saved, listOf(1, 2), null)))
+    }
 }
