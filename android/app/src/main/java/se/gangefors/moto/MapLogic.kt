@@ -98,3 +98,22 @@ fun routeOptions(base: RouteOptions, percent: Int): RouteOptions =
  */
 fun needsInstall(installedExists: Boolean, installedStamp: String?, currentStamp: String): Boolean =
     !installedExists || installedStamp != currentStamp
+
+/** Exported route files: "moto-route-2026-09-24-1830.gpx", in local time. */
+fun routeFileName(atSec: Long, zone: java.time.ZoneId): String =
+    "moto-route-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm", java.util.Locale.ROOT)) + ".gpx"
+
+/** Whether [name] is one of our exported route files (only those are
+ * cleaned up from the share folder). */
+fun isRouteFileName(name: String): Boolean = ROUTE_FILE.matches(name)
+
+private val ROUTE_FILE = Regex("moto-route-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}\\.gpx")
+
+/** The name a route carries inside its GPX, shown by the nav app:
+ * "moto 2026-09-24 18:30, 57.4 km". */
+fun routeGpxName(atSec: Long, zone: java.time.ZoneId, km: Double): String =
+    "moto " + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", java.util.Locale.ROOT)) +
+        String.format(java.util.Locale.ROOT, ", %.1f km", km)
+

@@ -98,6 +98,8 @@ import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
 import se.gangefors.moto.core.NewSection
 import se.gangefors.moto.core.Rating
+import se.gangefors.moto.core.RouteOptions
+import se.gangefors.moto.core.Route
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.SectionSource
@@ -482,12 +484,15 @@ fun MapScreen() {
     // it; it is found again when either changes (or the favourites do).
     var routeEnds by remember { mutableStateOf<Pair<LatLng, LatLng>?>(null) }
     var routeSummary by remember { mutableStateOf<RouteSummary?>(null) }
+    // The route shown and the options it was found with, for sharing.
+    var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
     var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
     LaunchedEffect(routeEnds, budgetPercent, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
         routeSummary = null
+        shownRoute = null
         val favs = favourites
         val opts = routeOptions(defaultRouteOptions(), budgetPercent)
         // A newer request cancels this one; its result is then dropped.
@@ -498,6 +503,7 @@ fun MapScreen() {
             onSuccess = { r ->
                 o.route.show(start, end, r.geometry, r.favouriteParts)
                 routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS)
+                shownRoute = r to opts
             },
             onFailure = {
                 routeEnds = null
@@ -666,6 +672,31 @@ fun MapScreen() {
                     onClose = {
                         routeEnds = null
                         overlays?.route?.show(null, null, null)
+                    },
+                    onShare = share@{
+                        val (r, opts) = shownRoute ?: return@share
+                        val engine = (region as? RegionState.Ready)?.engine ?: return@share
+                        scope.launch {
+                            val now = System.currentTimeMillis() / 1000
+                            val zone = ZoneId.systemDefault()
+                            val result = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    val gpx = engine.routeGpx(r.geometry, routeGpxName(now, zone, r.distanceM / 1000.0), opts)
+                                    RouteShare.prepare(
+                                        context,
+                                        gpx,
+                                        routeFileName(now, zone),
+                                        resources.getString(R.string.route_share_title),
+                                    )
+                                }
+                            }
+                            result.fold(
+                                onSuccess = { context.startActivity(it) },
+                                onFailure = {
+                                    message = resources.getString(R.string.route_share_failed, it.message ?: it.toString())
+                                },
+                            )
+                        }
                     },
                 )
             }

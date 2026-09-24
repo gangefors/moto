@@ -86,4 +86,18 @@ class MapLogicTest {
         assertEquals(base.avoid, o.avoid)
         assertEquals(1.0, o.minGain, 0.0)
     }
+
+    @Test
+    fun namesRouteExports() {
+        val stockholm = java.time.ZoneId.of("Europe/Stockholm")
+        // 2026-09-24 16:30 UTC is 18:30 in Stockholm.
+        val at = 1_790_267_400L
+        assertEquals("moto-route-2026-09-24-1830.gpx", routeFileName(at, stockholm))
+        assertEquals("moto 2026-09-24 18:30, 57.4 km", routeGpxName(at, stockholm, 57.44))
+        assertTrue(isRouteFileName(routeFileName(at, stockholm)))
+        for (other in listOf("moto.db", "moto-route-2026-09-24-1830.gpx.tmp", "../moto-route-2026-09-24-1830.gpx", "x.gpx", "")) {
+            assertFalse(other, isRouteFileName(other))
+        }
+    }
 }
+

@@ -22,6 +22,9 @@
     <string name="route_budget_fastest">Fastest</string>
     <string name="route_budget_extra">+%1$d %%</string>
     <string name="route_close">Clear the route</string>
+    <string name="route_share">Share GPX</string>
+    <string name="route_share_title">Open the route in</string>
+    <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
     <string name="cancel">Cancel</string>
     <string name="sections_failed">Saved sections unavailable: %1$s</string>

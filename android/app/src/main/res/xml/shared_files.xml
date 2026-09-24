@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+
+  What the FileProvider may hand out: only the exported route files in the
+  cache's routes folder, never the database or rides.
+-->
+<paths>
+    <cache-path name="routes" path="routes/" />
+</paths>
