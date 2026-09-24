@@ -33,20 +33,23 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +65,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -76,7 +81,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -92,6 +99,9 @@ import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.SectionSource
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.SectionUpdate
+import se.gangefors.moto.core.Tag
+import se.gangefors.moto.core.TagStatus
+import se.gangefors.moto.core.TrackPoint
 import se.gangefors.moto.core.defaultRouteOptions
 
 /**
@@ -204,6 +214,11 @@ fun MapScreen() {
     var savingDraft by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Section?>(null) }
     var showRides by remember { mutableStateOf(false) }
+    // Quick-tags waiting for review, and the review in progress (it runs in
+    // "mark section" mode, starting from each tag's suggested section).
+    var pendingTags by remember { mutableIntStateOf(0) }
+    var review by remember { mutableStateOf<TagReview?>(null) }
+    var reviewTag by remember { mutableStateOf<Tag?>(null) }
 
     // Layers in drawing order: saved sections, the ride being recorded, a
     // proposed section, the route, the snap marker.
@@ -261,6 +276,110 @@ fun MapScreen() {
     }
 
     fun draftMessage(d: SectionDraft) = resources.getString(R.string.section_proposed, sectionKm(d.distanceM))
+
+    fun refreshPendingTags() {
+        val ready = store as? StoreState.Ready ?: return
+        scope.launch {
+            pendingTags = withContext(Dispatchers.IO) {
+                runCatching { ready.store.listTags(TagStatus.PENDING).size }.getOrDefault(0)
+            }
+        }
+    }
+    LaunchedEffect(store) { refreshPendingTags() }
+
+    /** Quick-tag: saves the rider's current fix as a tag and buzzes. */
+    fun quickTag() {
+        val ready = store as? StoreState.Ready ?: return
+        val active = recording as? Recording.State.Active
+        val fix = chooseTagFix(active?.lastFix, mapFix(map), System.currentTimeMillis())
+        if (fix == null) {
+            buzz(context, ok = false)
+            message = resources.getString(R.string.tag_no_fix)
+            return
+        }
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { ready.store.addTag(newTag(fix, active?.trackId)) } }
+            buzz(context, ok = result.isSuccess)
+            message = result.fold(
+                onSuccess = { resources.getString(R.string.tag_saved) },
+                onFailure = { resources.getString(R.string.tag_failed, it.message ?: it.toString()) },
+            )
+            refreshPendingTags()
+        }
+    }
+
+    fun endReview(text: String?) {
+        stopMarking()
+        review = null
+        reviewTag = null
+        text?.let { message = it }
+        refreshPendingTags()
+    }
+
+    /** Shows [tag]'s suggested section in "mark section" mode, ready to trim or save. */
+    fun showTag(tag: Tag?) {
+        val r = review
+        val ready = store as? StoreState.Ready
+        val engine = (region as? RegionState.Ready)?.engine
+        if (tag == null || r == null || ready == null || engine == null) {
+            endReview(resources.getString(R.string.tag_review_done))
+            return
+        }
+        stopMarking()
+        reviewTag = tag
+        marking = true
+        markSession++
+        val session = markSession
+        proposing = true
+        message = resources.getString(R.string.tag_review_loading, r.position, r.size)
+        scope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    val track = tag.trackId?.let { ready.store.trackPoints(it) }
+                    engine.suggestSection(tag, track)
+                }
+            }
+            proposing = false
+            if (session != markSession) return@launch
+            result.fold(
+                onSuccess = { d ->
+                    val first = d.geometry.first()
+                    val last = d.geometry.last()
+                    marker.propose(LatLng(first.lat, first.lon), LatLng(last.lat, last.lon))
+                    draft = d
+                    message = resources.getString(R.string.tag_review_suggested, r.position, r.size, sectionKm(d.distanceM))
+                    map?.let { m -> fitTo(m, d.geometry, density.density) }
+                },
+                onFailure = { e ->
+                    marker.begin()
+                    message = resources.getString(R.string.tag_review_none, r.position, r.size, e.message ?: e.toString())
+                    map?.let { m -> fitTo(m, listOf(tag.position), density.density) }
+                },
+            )
+            showDraft()
+        }
+    }
+
+    fun startReview() {
+        val ready = store as? StoreState.Ready ?: return
+        scope.launch {
+            val tags = withContext(Dispatchers.IO) {
+                runCatching { ready.store.listTags(TagStatus.PENDING) }.getOrDefault(emptyList())
+            }
+            review = TagReview(tags)
+            showTag(review?.current)
+        }
+    }
+
+    /** Marks the tag under review and moves on to the next one. */
+    fun finishTag(status: TagStatus) {
+        val tag = reviewTag ?: return
+        val ready = store as? StoreState.Ready ?: return
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching { ready.store.setTagStatus(tag.id, status) } }
+            showTag(review?.next())
+        }
+    }
 
     /** A tap in "mark section" mode: set the start, the end, or move the nearer end. */
     fun onMarkTap(ready: RegionState.Ready, point: LatLng) {
@@ -437,10 +556,20 @@ fun MapScreen() {
                         Modifier.padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedButton(onClick = {
-                            stopMarking()
-                            message = resources.getString(R.string.map_hint)
-                        }) { Text(stringResource(R.string.cancel)) }
+                        if (reviewTag != null) {
+                            OutlinedButton(onClick = { endReview(resources.getString(R.string.map_hint)) }) {
+                                Text(stringResource(R.string.tag_review_later))
+                            }
+                            OutlinedButton(
+                                onClick = { finishTag(TagStatus.DISCARDED) },
+                                enabled = !proposing,
+                            ) { Text(stringResource(R.string.tag_review_discard)) }
+                        } else {
+                            OutlinedButton(onClick = {
+                                stopMarking()
+                                message = resources.getString(R.string.map_hint)
+                            }) { Text(stringResource(R.string.cancel)) }
+                        }
                         Button(
                             onClick = { savingDraft = true },
                             enabled = draft != null && !proposing,
@@ -458,6 +587,11 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
+                    ExtendedFloatingActionButton(onClick = { startReview() }) {
+                        Text(stringResource(R.string.tags_review, pendingTags))
+                    }
+                }
                 if (store is StoreState.Ready) {
                     ExtendedFloatingActionButton(onClick = { showRides = true }) {
                         Text(stringResource(R.string.rides_open))
@@ -499,32 +633,52 @@ fun MapScreen() {
                 }
             }
         }
+        // Quick-tag (PRD R3): one big button, usable with gloves, whenever the
+        // map is open. Bottom left, above the map's logo and attribution.
+        if (store is StoreState.Ready && !marking) {
+            LargeFloatingActionButton(
+                onClick = { quickTag() },
+                shape = CircleShape,
+                containerColor = TAG_COLOR,
+                contentColor = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .safeDrawingPadding()
+                    .padding(start = 16.dp, bottom = 40.dp)
+                    .size(TAG_BUTTON_SIZE)
+                    .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
+            ) {
+                Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
+            }
+        }
     }
 
     // Name, rate and save the proposed section.
     val proposed = draft
     if (savingDraft && proposed != null) {
         val fallback = stringResource(R.string.section_default_name, sectionKm(proposed.distanceM))
+        val tag = reviewTag
         SectionSheet(
             title = stringResource(R.string.section_new_title),
             initial = SectionChoice(name = "", rating = Rating.GOOD, oneWay = false),
-            fallbackName = fallback,
+            fallbackName = if (tag != null) stringResource(R.string.tag_default_name, sectionKm(proposed.distanceM)) else fallback,
             saveLabel = stringResource(R.string.section_save),
             onDismiss = { savingDraft = false },
             onSave = { choice ->
-                stopMarking()
+                if (tag == null) stopMarking() else savingDraft = false
                 changeSections(resources.getString(R.string.section_saved, choice.name)) { st ->
                     st.add(
                         NewSection(
                             name = choice.name,
                             rating = choice.rating,
                             direction = directionOf(choice.oneWay),
-                            source = SectionSource.MAP,
+                            source = if (tag != null) SectionSource.TAG else SectionSource.MAP,
                             ways = proposed.ways,
                             geometry = proposed.geometry,
                         ),
                     )
                 }
+                if (tag != null) finishTag(TagStatus.USED)
             },
         )
     }
@@ -565,6 +719,38 @@ fun MapScreen() {
         )
     }
 }
+
+/** The map's last known location as a fix, if it has one. */
+private fun mapFix(map: MapLibreMap?): TrackPoint? {
+    val lc = map?.locationComponent ?: return null
+    if (!lc.isLocationComponentActivated) return null
+    val l = lc.lastKnownLocation ?: return null
+    return checkedFix(
+        timeMs = l.time,
+        lat = l.latitude,
+        lon = l.longitude,
+        accuracyM = if (l.hasAccuracy()) l.accuracy.toDouble() else null,
+        speedMps = if (l.hasSpeed()) l.speed.toDouble() else null,
+        bearingDeg = if (l.hasBearing()) l.bearing.toDouble() else null,
+    )
+}
+
+/** Moves the camera to show [points], clear of the panels at the top and bottom. */
+private fun fitTo(map: MapLibreMap, points: List<LatLon>, density: Float) {
+    if (points.isEmpty()) return
+    val update = if (points.size == 1) {
+        CameraUpdateFactory.newLatLngZoom(LatLng(points[0].lat, points[0].lon), 15.0)
+    } else {
+        val bounds = LatLngBounds.Builder().includes(points.map { LatLng(it.lat, it.lon) }).build()
+        val pad = (48 * density).toInt()
+        CameraUpdateFactory.newLatLngBounds(bounds, pad, (160 * density).toInt(), pad, (120 * density).toInt())
+    }
+    map.animateCamera(update)
+}
+
+/** Quick-tag button: large enough to hit with gloves on. */
+private val TAG_BUTTON_SIZE: Dp = 96.dp
+private val TAG_COLOR = Color(0xFFE8710A)
 
 /** The map layers the screen draws into, created once per style. */
 private class Overlays(

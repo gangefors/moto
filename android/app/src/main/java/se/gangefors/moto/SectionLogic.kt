@@ -38,6 +38,10 @@ class SectionMarker<P>(private val distance: (P, P) -> Double) {
 
     fun cancel() = moveTo(State.Off)
 
+    /** Starts with a section already proposed between [start] and [end]
+     * (a quick-tag's suggestion), for the rider to adjust or save. */
+    fun propose(start: P, end: P) = moveTo(State.Proposed(start, end))
+
     /**
      * Handles a tap on the map and returns the new state. A [State.Proposed]
      * result means the section between its points should be (re)proposed.

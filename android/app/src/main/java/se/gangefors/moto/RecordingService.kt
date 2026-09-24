@@ -63,6 +63,7 @@ class RecordingService : Service() {
         var oldestPendingAt = 0L
         var lastPublishAt = 0L
         var gotFix = false
+        var lastFix: TrackPoint? = null
     }
 
     private val policy = FlushPolicy()
@@ -142,6 +143,7 @@ class RecordingService : Service() {
             bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
         ) ?: return
         s.gotFix = true
+        s.lastFix = fix
         try {
             s.buffer.append(fix)
         } catch (e: Exception) {
@@ -221,6 +223,7 @@ class RecordingService : Service() {
                 distanceM = s.progress.distanceM,
                 line = s.progress.line,
                 waitingForGps = !s.gotFix,
+                lastFix = s.lastFix,
             ),
         )
         val text = if (s.gotFix) {
