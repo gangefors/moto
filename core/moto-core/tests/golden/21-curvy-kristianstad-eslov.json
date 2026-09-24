@@ -1,0 +1,10 @@
+{
+  "name": "Kristianstad to Eslöv, curvy roads",
+  "description": "Curvature takes a curvier line 20 km from the fastest one (21 % curvy against 7 %) for 4 % more time.",
+  "from": [56.03, 14.156],
+  "to": [55.839, 13.304],
+  "expect": {
+    "pass": [[55.88438, 13.88315]],
+    "min_curvy_share": 0.18
+  }
+}

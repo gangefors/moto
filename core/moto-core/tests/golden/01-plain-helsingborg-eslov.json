@@ -1,8 +1,9 @@
 {
-  "name": "Helsingborg to Eslöv, no favourites",
-  "description": "With no favourites the route is the fastest one.",
+  "name": "Helsingborg to Eslöv, nothing pulling",
+  "description": "With no favourites and curvature off, the route is the fastest one.",
   "from": [56.046, 12.694],
   "to": [55.839, 13.304],
+  "curvy": false,
   "expect": {
     "max_detour_ratio": 1.0,
     "max_favourite_share": 0.0

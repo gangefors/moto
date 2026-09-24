@@ -1,6 +1,6 @@
 {
   "name": "Sjöbo to Simrishamn, favourite far away",
-  "description": "An epic road near Båstad, 100 km away, must not change a route in Österlen.",
+  "description": "An epic road near Båstad, 100 km away, must not change a route in Österlen (curvature off: this case is about favourites alone).",
   "from": [55.631, 13.707],
   "to": [55.557, 14.35],
   "favourites": [
@@ -19,6 +19,7 @@
     {"from": [56.29204, 12.87472], "to": [56.27467, 12.88469], "rating": "epic"},
     {"from": [56.27467, 12.88469], "to": [56.26058, 12.88608], "rating": "epic"}
   ],
+  "curvy": false,
   "expect": {
     "max_detour_ratio": 1.0,
     "max_favourite_share": 0.0

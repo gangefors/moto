@@ -1,6 +1,6 @@
 {
   "name": "Klippan to Helsingborg, good road but a strict guard",
-  "description": "Asking each extra second to buy 2 s of weighted favourite riding refuses the good road (1.75 s per second).",
+  "description": "Asking each extra second to buy 2 s of weighted favourite riding refuses the good road (1.75 s per second; curvature off, as it would add to the road's worth).",
   "from": [56.134, 13.133],
   "to": [56.046, 12.694],
   "min_gain": 2.0,
@@ -16,6 +16,7 @@
     {"from": [56.08434, 12.88167], "to": [56.09662, 12.85833], "rating": "good"},
     {"from": [56.09662, 12.85833], "to": [56.09866, 12.85277], "rating": "good"}
   ],
+  "curvy": false,
   "expect": {
     "avoid": [[56.09132, 12.97399]],
     "max_favourite_share": 0.05

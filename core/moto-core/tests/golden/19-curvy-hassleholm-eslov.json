@@ -1,0 +1,10 @@
+{
+  "name": "Hässleholm to Eslöv, curvy roads",
+  "description": "With the default 40 % budget, curvature takes a curvy detour 7 km off the fastest route (31 % curvy against 5 %) for 12 % more time.",
+  "from": [56.159, 13.766],
+  "to": [55.839, 13.304],
+  "expect": {
+    "pass": [[56.01073, 13.49203]],
+    "min_curvy_share": 0.25
+  }
+}

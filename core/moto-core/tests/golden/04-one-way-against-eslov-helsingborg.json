@@ -1,6 +1,6 @@
 {
   "name": "Eslöv to Helsingborg, one-way favourite the other way",
-  "description": "The road is marked epic only from Helsingborg towards Eslöv, so riding from Eslöv it gives no bonus and the route stays fast.",
+  "description": "The road is marked epic only from Helsingborg towards Eslöv, so riding from Eslöv it gives no bonus and the route stays fast (curvature off: this case is about favourites alone).",
   "from": [55.839, 13.304],
   "to": [56.046, 12.694],
   "favourites": [
@@ -25,6 +25,7 @@
     {"from": [55.8941, 13.07214], "to": [55.87787, 13.07453], "rating": "epic", "one_way": true},
     {"from": [55.87787, 13.07453], "to": [55.87665, 13.07385], "rating": "epic", "one_way": true}
   ],
+  "curvy": false,
   "expect": {
     "avoid": [[56.00303, 12.97266]],
     "max_favourite_share": 0.05,

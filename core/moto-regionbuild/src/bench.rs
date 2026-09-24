@@ -70,6 +70,12 @@ pub struct Report {
     pub fav_share_mean: f64,
     pub fav_share_fastest: f64,
     pub fav_detour_mean: f64,
+    /// Routing the same pairs with no favourites, curvature pulling (what
+    /// a rider without favourites gets), and the curvy distance it gains
+    /// over the fastest route (median ratio; 1.0 = none).
+    pub curvy_route_ms_mean: f64,
+    pub curvy_route_ms_p95: f64,
+    pub curvy_gain_median: f64,
     /// Map matching time per km of track (fastest round).
     pub match_ms_per_km: f64,
     pub match_tracks: usize,
@@ -266,6 +272,26 @@ pub fn run(path: &Path) -> Result<Report, String> {
     }
     let fav_times = sorted(fav_per_pair);
 
+    // Curvature alone: no favourites.
+    let none = Favourites::none();
+    let mut curvy_per_pair = vec![Vec::new(); pairs.len()];
+    let mut gains = Vec::new();
+    for round in 0..ROUNDS {
+        for (i, &(a, z)) in pairs.iter().enumerate() {
+            let t = Instant::now();
+            let r = engine.route_with(a, z, &opts, &none);
+            curvy_per_pair[i].push(ms(t));
+            if round == 0
+                && let (Ok(r), Ok(f)) = (r, engine.route(a, z, &opts))
+                && f.curvy_share * f.distance_m > 0.0
+            {
+                gains.push(r.curvy_share * r.distance_m / (f.curvy_share * f.distance_m));
+            }
+        }
+    }
+    let curvy_times = sorted(curvy_per_pair);
+    gains.sort_by(f64::total_cmp);
+
     // Map matching: noisy synthetic tracks along some of the routes.
     let mut noise = Rng(0x1234_5678_9abc_def1);
     let tracks: Vec<Vec<LatLon>> = ridden
@@ -330,6 +356,9 @@ pub fn run(path: &Path) -> Result<Report, String> {
         } else {
             0.0
         },
+        curvy_route_ms_mean: mean(&curvy_times),
+        curvy_route_ms_p95: pick(&curvy_times, 0.95),
+        curvy_gain_median: pick(&gains, 0.5),
         match_ms_per_km: if track_km > 0.0 {
             match_ms / track_km
         } else {
@@ -403,6 +432,11 @@ impl Report {
             self.fav_detour_mean
         ));
         out.push(format!(
+            "curvy     {:.1} ms mean, {:.1} ms p95 over the same pairs with no favourites; \
+             median {:.2}× the fastest route's curvy distance",
+            self.curvy_route_ms_mean, self.curvy_route_ms_p95, self.curvy_gain_median
+        ));
+        out.push(format!(
             "match     {:.2} ms per km over {} noisy tracks ({:.0} km, fix every {TRACK_STEP_M} m, \
              ±{TRACK_NOISE_M} m); {:.1} % of the length matched in {} pieces",
             self.match_ms_per_km,
@@ -457,6 +491,9 @@ impl Report {
             num("fav_share_mean", self.fav_share_mean),
             num("fav_share_fastest", self.fav_share_fastest),
             num("fav_detour_mean", self.fav_detour_mean),
+            num("curvy_route_ms_mean", self.curvy_route_ms_mean),
+            num("curvy_route_ms_p95", self.curvy_route_ms_p95),
+            num("curvy_gain_median", self.curvy_gain_median),
             num("match_ms_per_km", self.match_ms_per_km),
             num("match_tracks", self.match_tracks as f64),
             num("match_km", self.match_km),
@@ -550,7 +587,11 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 11 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 12 + r.unroutable.len());
+        assert!(
+            r.curvy_route_ms_mean > 0.0 && r.curvy_route_ms_p95 > 0.0,
+            "{r:?}"
+        );
         assert!(r.favourite_sections > 0 && r.favourite_edges > 0, "{r:?}");
         assert!(
             r.fav_route_ms_mean > 0.0 && r.fav_route_ms_p95 > 0.0,
@@ -596,7 +637,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 32);
+        assert_eq!(json.matches(':').count(), 35);
     }
 
     #[test]
