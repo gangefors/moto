@@ -503,7 +503,7 @@ fun MapScreen() {
         result.fold(
             onSuccess = { r ->
                 o.route.show(start, end, r.geometry, r.favouriteParts)
-                routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS)
+                routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare)
                 shownRoute = r to opts
             },
             onFailure = {

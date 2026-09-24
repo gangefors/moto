@@ -50,14 +50,15 @@ fun classify(e: Throwable): CoreProblem = when (e) {
 
 /**
  * Route summary for the route card: distance in km (one decimal), whole
- * minutes, whole minutes over the fastest route (never negative) and the
- * whole percent of the distance on favourite sections.
+ * minutes, whole minutes over the fastest route (never negative), and the
+ * whole percent of the distance on favourite sections and on curvy roads.
  */
 data class RouteSummary(
     val km: Double,
     val minutes: Int,
     val favouritePercent: Int = 0,
     val extraMinutes: Int = 0,
+    val curvyPercent: Int = 0,
 )
 
 fun summarize(
@@ -65,13 +66,17 @@ fun summarize(
     durationS: Double,
     favouriteShare: Double = 0.0,
     fastestDurationS: Double = durationS,
+    curvyShare: Double = 0.0,
 ): RouteSummary =
     RouteSummary(
         km = Math.round(distanceM / 100.0) / 10.0,
         minutes = Math.round(durationS / 60.0).toInt(),
-        favouritePercent = Math.round(favouriteShare.coerceIn(0.0, 1.0) * 100.0).toInt(),
+        favouritePercent = percent(favouriteShare),
         extraMinutes = Math.round(((durationS - fastestDurationS) / 60.0).coerceAtLeast(0.0)).toInt(),
+        curvyPercent = percent(curvyShare),
     )
+
+private fun percent(share: Double): Int = Math.round(share.coerceIn(0.0, 1.0) * 100.0).toInt()
 
 /**
  * Extra time over the fastest route the rider can give a route, in

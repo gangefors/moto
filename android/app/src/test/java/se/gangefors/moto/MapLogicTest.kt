@@ -58,6 +58,8 @@ class MapLogicTest {
         assertEquals(5, summarize(57_400.0, 3000.0, 0.65, 2730.0).extraMinutes)
         assertEquals(0, summarize(1.0, 900.0).extraMinutes)
         assertEquals(0, summarize(1.0, 900.0, 0.0, 950.0).extraMinutes)
+        assertEquals(31, summarize(1.0, 900.0, 0.0, 900.0, 0.305).curvyPercent)
+        assertEquals(0, summarize(1.0, 900.0, 0.0, 900.0, Double.NaN).curvyPercent)
     }
 
     @Test
@@ -80,11 +82,13 @@ class MapLogicTest {
             se.gangefors.moto.core.Avoid(motorways = true, unpaved = true, ferries = false),
             se.gangefors.moto.core.TimeBudget.Extra(0.4),
             1.0,
+            true,
         )
         val o = routeOptions(base, 20)
         assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
         assertEquals(base.avoid, o.avoid)
         assertEquals(1.0, o.minGain, 0.0)
+        assertTrue(o.curvy)
         // Gravel: avoided unless allowed; the other avoid options stay.
         assertTrue(routeOptions(base, 40).avoid.unpaved)
         val gravel = routeOptions(base, 40, allowGravel = true)

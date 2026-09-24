@@ -60,6 +60,7 @@ fun RouteCard(
                             if (summary.favouritePercent > 0) {
                                 add(stringResource(R.string.route_on_favourites, summary.favouritePercent))
                             }
+                            if (summary.curvyPercent > 0) add(stringResource(R.string.route_curvy, summary.curvyPercent))
                         }
                         if (details.isNotEmpty()) {
                             Text(
