@@ -130,6 +130,12 @@ pub struct Route {
     pub favourite_share: f64,
     /// Share of the distance on high-curvature roads, 0.0–1.0.
     pub curvy_share: f64,
+    /// Time of the fastest route between the same points, to show what
+    /// the favourites cost (equal to `duration_s` for the fastest route).
+    pub fastest_duration_s: f64,
+    /// The stretches of `geometry` on favourite sections, in order, each
+    /// at least two points: for drawing them highlighted.
+    pub favourite_parts: Vec<Vec<LatLon>>,
 }
 
 #[cfg(test)]

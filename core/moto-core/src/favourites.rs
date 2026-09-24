@@ -177,6 +177,14 @@ impl Favourites {
         })
     }
 
+    /// The part of the stretch between fractions `from` and `to` (in
+    /// travel order) of edge `id` that lies on a favourite section.
+    pub(crate) fn covered_part(&self, id: u32, from: f64, to: f64) -> Option<(f64, f64)> {
+        let &(a, b, _) = self.coverage.get(&id)?;
+        let (lo, hi) = (from.max(f64::from(a)), to.min(f64::from(b)));
+        (hi > lo).then_some((lo, hi))
+    }
+
     /// As [`Self::covered_between`], weighted by the section's rating
     /// (epic 1): how much favourite riding the stretch is worth.
     pub(crate) fn value_between(&self, id: u32, from: f64, to: f64) -> f64 {

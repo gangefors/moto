@@ -391,3 +391,45 @@ fn a_total_time_budget_spends_the_spare_time() {
     // Less time than the fastest route needs: the fastest route.
     assert_eq!(within(10.0), fastest);
 }
+
+#[test]
+fn routes_report_the_fastest_time_and_their_favourite_parts() {
+    let e = fork();
+    let fastest = e.route(FROM, TO, &detour(0.5)).unwrap();
+    assert_eq!(fastest.fastest_duration_s, fastest.duration_s);
+    assert!(fastest.favourite_parts.is_empty());
+
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 0, 3)], Rating::Epic, Direction::Both)],
+    );
+    let r = e.route_with(FROM, TO, &detour(0.5), &fav).unwrap();
+    assert!(north_of(&r));
+    assert_eq!(r.fastest_duration_s, fastest.duration_s);
+    // The whole north loop, W to E across both junctions, as one part.
+    assert_eq!(r.favourite_parts.len(), 1, "{:?}", r.favourite_parts);
+    let part = &r.favourite_parts[0];
+    let close = |p: LatLon, q: LatLon| p.distance_m(&q) < 1.0;
+    assert!(close(part[0], ll(55.70, 13.40)) && close(*part.last().unwrap(), ll(55.70, 13.44)));
+    assert_eq!(part.len(), 4, "W, N1, N2, E");
+    let len: f64 = part.windows(2).map(|w| w[0].distance_m(&w[1])).sum();
+    assert!((len / r.distance_m - r.favourite_share).abs() < 0.01);
+
+    // A section ending mid-edge: the part ends there too.
+    let nodes = [(55.70, 13.40), (55.70, 13.44)];
+    let road = Road {
+        via: vec![(55.70, 13.41), (55.70, 13.42), (55.70, 13.43)],
+        ..Road::new(0, 1, RoadClass::Tertiary, 70, 20)
+    };
+    let e = engine(build(&nodes, &[road], 50_000));
+    let fav = Favourites::build(&e, &[section(&[(20, 1, 3)], Rating::Good, Direction::Both)]);
+    let r = e
+        .route_with(ll(55.70, 13.405), ll(55.70, 13.435), &detour(0.4), &fav)
+        .unwrap();
+    assert_eq!(r.favourite_parts.len(), 1);
+    let part = &r.favourite_parts[0];
+    assert!(
+        close(part[0], ll(55.70, 13.41)) && close(*part.last().unwrap(), ll(55.70, 13.43)),
+        "{part:?}"
+    );
+}

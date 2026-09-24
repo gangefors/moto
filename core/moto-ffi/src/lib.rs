@@ -73,6 +73,10 @@ pub struct Route {
     pub duration_s: f64,
     pub favourite_share: f64,
     pub curvy_share: f64,
+    /// Time of the fastest route between the same points.
+    pub fastest_duration_s: f64,
+    /// The stretches of `geometry` on favourite sections, for highlighting.
+    pub favourite_parts: Vec<Vec<LatLon>>,
 }
 
 /// Crosses the FFI as a flat error: each variant becomes an exception class
@@ -278,6 +282,12 @@ impl From<moto_core::Route> for Route {
             duration_s: r.duration_s,
             favourite_share: r.favourite_share,
             curvy_share: r.curvy_share,
+            fastest_duration_s: r.fastest_duration_s,
+            favourite_parts: r
+                .favourite_parts
+                .into_iter()
+                .map(|p| p.into_iter().map(Into::into).collect())
+                .collect(),
         }
     }
 }
