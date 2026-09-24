@@ -775,6 +775,13 @@ fun MapScreen() {
     if (showRides && readyStore != null) {
         RidesSheet(
             store = readyStore.store,
+            engine = (region as? RegionState.Ready)?.engine,
+            onSectionsChanged = {
+                scope.launch {
+                    withContext(Dispatchers.IO) { runCatching { readyStore.store.list(null) } }
+                        .onSuccess { sections = it }
+                }
+            },
             onMessage = { message = it },
             onDismiss = { showRides = false },
         )

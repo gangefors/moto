@@ -7,17 +7,23 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -39,18 +45,31 @@ import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import se.gangefors.moto.core.Engine
+import se.gangefors.moto.core.ExportFormat
+import se.gangefors.moto.core.ImportReport
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.Track
+import se.gangefors.moto.core.exportExtension
 
 /**
- * The rider's recorded rides, newest first, each with Export (a GPX file
- * saved wherever the rider picks with the system file picker: no storage
- * permission, and nothing leaves the phone unless the rider sends it) and
- * Delete (tapped twice). [onMessage] reports what happened.
+ * The rider's data: all saved sections, exported as GeoJSON (plain or
+ * compressed) or imported from such a file, and the recorded rides, newest
+ * first, each exported as GPX or deleted (tapped twice). Files are written
+ * and read only where the rider picks with the system file picker: no
+ * storage permission, and nothing leaves the phone unless the rider sends
+ * it. [engine] fits imported sections to the map; [onSectionsChanged]
+ * reloads them after an import; [onMessage] reports what happened.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RidesSheet(store: SectionStore, onMessage: (String) -> Unit, onDismiss: () -> Unit) {
+fun RidesSheet(
+    store: SectionStore,
+    engine: Engine?,
+    onSectionsChanged: () -> Unit,
+    onMessage: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
@@ -88,8 +107,84 @@ fun RidesSheet(store: SectionStore, onMessage: (String) -> Unit, onDismiss: () -
         }
     }
 
+    // Sections: export in the chosen format, import any supported file.
+    var exportFormat by remember { mutableStateOf<ExportFormat?>(null) }
+    var formatMenu by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val saveSections = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri: Uri? ->
+        val format = exportFormat ?: return@rememberLauncherForActivityResult
+        exportFormat = null
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = store.exportSections(format)
+                    context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                        ?: error(resources.getString(R.string.rides_cannot_write))
+                }
+            }
+            busy = false
+            onMessage(
+                result.fold(
+                    onSuccess = { resources.getString(R.string.sections_exported) },
+                    onFailure = { resources.getString(R.string.rides_export_failed, it.message ?: it.toString()) },
+                ),
+            )
+        }
+    }
+    val openSections = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: error(resources.getString(R.string.sections_cannot_read))
+                    val bytes = input.use { readCapped(it, MAX_IMPORT_FILE_BYTES) }
+                        ?: error(resources.getString(R.string.sections_file_too_large, MAX_IMPORT_FILE_BYTES shr 20))
+                    store.importSections(bytes, engine)
+                }
+            }
+            busy = false
+            result.onSuccess { onSectionsChanged() }
+            onMessage(
+                result.fold(
+                    onSuccess = { r -> importSummary(resources, r) },
+                    onFailure = { resources.getString(R.string.sections_import_failed, it.message ?: it.toString()) },
+                ),
+            )
+        }
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box {
+                    OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
+                        Text(stringResource(R.string.sections_export))
+                    }
+                    DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
+                        EXPORT_FORMATS.forEach { (format, label) ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(label)) },
+                                onClick = {
+                                    formatMenu = false
+                                    exportFormat = format
+                                    saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
+                                },
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
+                    Text(stringResource(R.string.sections_import))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
             val list = tracks
             when {
@@ -151,3 +246,19 @@ private fun rideSummary(res: android.content.res.Resources, t: Track): String {
     )
 }
 
+/** Export formats offered, with their labels. */
+private val EXPORT_FORMATS = listOf(
+    ExportFormat.GEO_JSON to R.string.format_geojson,
+    ExportFormat.ZIP to R.string.format_zip,
+    ExportFormat.GZIP to R.string.format_gzip,
+    ExportFormat.TAR_GZ to R.string.format_tar_gz,
+)
+
+private fun importSummary(res: android.content.res.Resources, r: ImportReport): String =
+    res.getString(
+        R.string.sections_imported,
+        r.added.toLong(),
+        r.skipped.toLong(),
+        r.replaced.toLong(),
+        r.unmatched.toLong(),
+    )
