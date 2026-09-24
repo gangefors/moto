@@ -93,6 +93,15 @@ impl SectionStore {
             .map(|v| v.into_iter().map(Into::into).collect()))
     }
 
+    /// A track as a GPX 1.1 document named `name`, for the rider to export;
+    /// `None` if there is no such track.
+    pub fn export_track_gpx(&self, id: i64, name: String) -> Result<Option<String>, MotoError> {
+        Ok(self
+            .store()
+            .track_points(id)?
+            .map(|points| moto_core::gpx::track_gpx(&name, &points)))
+    }
+
     /// Deletes a track and its fixes; `false` if it did not exist.
     pub fn delete_track(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_track(id)?)
@@ -242,6 +251,18 @@ mod tests {
             store.append_track_points(t2.id, vec![bad]),
             Err(MotoError::InvalidInput { .. })
         ));
+        let gpx = store
+            .export_track_gpx(t.id, "Test ride".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(gpx.matches("<trkpt ").count(), 10);
+        assert!(gpx.contains("<name>Test ride</name>"));
+        assert!(
+            store
+                .export_track_gpx(999, String::new())
+                .unwrap()
+                .is_none()
+        );
         assert!(store.delete_track(t.id).unwrap());
         drop(store);
         for suffix in ["", "-wal", "-shm"] {

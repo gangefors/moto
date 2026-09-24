@@ -17,6 +17,7 @@ mod error;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixture;
 pub mod geo;
+pub mod gpx;
 pub mod matching;
 pub mod region;
 mod route;
