@@ -80,4 +80,22 @@
     <string name="tag_review_done">All tags reviewed.</string>
     <string name="tag_review_later">Later</string>
     <string name="tag_review_discard">Discard</string>
+    <plurals name="sections_unmatched">
+        <item quantity="one">%d section no longer fits the updated map; it is hidden. Show it to delete or keep it.</item>
+        <item quantity="other">%d sections no longer fit the updated map; they are hidden. Show them to delete or keep them.</item>
+    </plurals>
+    <plurals name="unmatched_show">
+        <item quantity="one">Show %d unmatched</item>
+        <item quantity="other">Show %d unmatched</item>
+    </plurals>
+    <string name="unmatched_hide">Hide unmatched</string>
+    <plurals name="unmatched_delete">
+        <item quantity="one">Delete %d unmatched</item>
+        <item quantity="other">Delete %d unmatched</item>
+    </plurals>
+    <plurals name="unmatched_delete_confirm">
+        <item quantity="one">Tap again to delete %d</item>
+        <item quantity="other">Tap again to delete %d</item>
+    </plurals>
+    <string name="unmatched_deleted">Unmatched sections deleted</string>
 </resources>

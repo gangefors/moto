@@ -29,7 +29,8 @@ import se.gangefors.moto.core.Section
 
 /**
  * Draws the rider's saved sections, coloured by rating, with arrows along
- * one-way sections, and finds the section under a tap. The map only draws
+ * one-way sections (grey and dashed when they don't fit the current map),
+ * and finds the section under a tap. The map only draws
  * and hit-tests; the sections come from the core's store.
  */
 class SectionOverlay(style: Style, private val density: Float) {
@@ -48,16 +49,34 @@ class SectionOverlay(style: Style, private val density: Float) {
                 ),
             )
             style.addLayer(
-                LineLayer(LINE_LAYER, SOURCE).withProperties(
-                    PropertyFactory.lineColor(Expression.get(COLOR)),
-                    PropertyFactory.lineWidth(5f),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                ),
+                LineLayer(LINE_LAYER, SOURCE)
+                    .withFilter(Expression.eq(Expression.get(FITS), true))
+                    .withProperties(
+                        PropertyFactory.lineColor(Expression.get(COLOR)),
+                        PropertyFactory.lineWidth(5f),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    ),
+            )
+            // Sections that don't fit the current map's roads (after a map
+            // update): grey and dashed, still tappable to delete or keep.
+            style.addLayer(
+                LineLayer(UNMATCHED_LAYER, SOURCE)
+                    .withFilter(Expression.eq(Expression.get(FITS), false))
+                    .withProperties(
+                        PropertyFactory.lineColor(UNMATCHED_COLOR),
+                        PropertyFactory.lineWidth(5f),
+                        PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
+                    ),
             )
             style.addLayer(
                 SymbolLayer(ARROW_LAYER, SOURCE)
-                    .withFilter(Expression.eq(Expression.get(ONE_WAY), true))
+                    .withFilter(
+                        Expression.all(
+                            Expression.eq(Expression.get(ONE_WAY), true),
+                            Expression.eq(Expression.get(FITS), true),
+                        ),
+                    )
                     .withProperties(
                         PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
                         PropertyFactory.symbolSpacing(80f),
@@ -76,6 +95,7 @@ class SectionOverlay(style: Style, private val density: Float) {
                 addNumberProperty(ID, s.id)
                 addStringProperty(COLOR, ratingColor(s.rating))
                 addBooleanProperty(ONE_WAY, isOneWay(s.direction))
+                addBooleanProperty(FITS, fitsTheMap(s.status))
             }
         }
         source.setGeoJson(FeatureCollection.fromFeatures(features))
@@ -86,7 +106,7 @@ class SectionOverlay(style: Style, private val density: Float) {
         val screen: PointF = map.projection.toScreenLocation(point)
         val r = HIT_RADIUS_DP * density
         val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
-        return map.queryRenderedFeatures(box, LINE_LAYER)
+        return map.queryRenderedFeatures(box, LINE_LAYER, UNMATCHED_LAYER)
             .firstNotNullOfOrNull { sectionIdOf(it.getNumberProperty(ID)) }
     }
 
@@ -94,10 +114,13 @@ class SectionOverlay(style: Style, private val density: Float) {
         const val SOURCE = "moto-sections"
         const val CASING_LAYER = "moto-sections-casing"
         const val LINE_LAYER = "moto-sections-line"
+        const val UNMATCHED_LAYER = "moto-sections-unmatched"
         const val ARROW_LAYER = "moto-sections-arrows"
         const val ARROW_IMAGE = "moto-section-arrow"
         const val ID = "id"
         const val COLOR = "color"
+        const val FITS = "fits"
+        const val UNMATCHED_COLOR = "#80868b"
         const val ONE_WAY = "oneWay"
         const val HIT_RADIUS_DP = 12f
     }
