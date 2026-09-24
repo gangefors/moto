@@ -63,7 +63,8 @@ import se.gangefors.moto.core.exportExtension
  * and read only where the rider picks with the system file picker: no
  * storage permission, and nothing leaves the phone unless the rider sends
  * it. [engine] fits imported sections to the map; [onSectionsChanged]
- * reloads them after an import; [onMessage] reports what happened.
+ * reloads them after an import; [onMessage] reports what happened. At the
+ * bottom, About and licences opens [AboutDialog].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,6 +166,7 @@ fun RidesSheet(
         }
     }
 
+    var showAbout by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
             Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
@@ -252,8 +254,11 @@ fun RidesSheet(
                     }
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = { showAbout = true }) { OneLine(stringResource(R.string.about_open)) }
         }
     }
+    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
 }
 
 private fun rideSummary(res: android.content.res.Resources, t: Track): String {
