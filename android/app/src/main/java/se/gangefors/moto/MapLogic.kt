@@ -9,7 +9,8 @@ import se.gangefors.moto.core.TimeBudget
 
 /**
  * Picking a route with long-presses: the first sets the start, the second
- * the end (completing the pick), the next starts a new pick. Pure logic,
+ * the end (completing the pick), the next starts a new pick. A round trip
+ * takes the start instead of waiting for an end. Pure logic,
  * independent of the map, so it can be unit tested.
  */
 class RoutePicker<P> {
@@ -31,6 +32,10 @@ class RoutePicker<P> {
             Step.Complete(s, point)
         }
     }
+
+    /** The start, forgotten: a loop from it takes the place of the end
+     * (null when there is none). */
+    fun takeStart(): P? = start.also { start = null }
 
     /** Forgets a start that turned out to be unusable. */
     fun reset() {

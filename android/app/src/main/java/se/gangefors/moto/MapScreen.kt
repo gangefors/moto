@@ -488,6 +488,55 @@ fun MapScreen() {
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
     var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
     var allowGravel by remember { mutableStateOf(RoutePrefs.allowGravel(context)) }
+    // A start picked and waiting for an end, or for "Loop from here".
+    var startPicked by remember { mutableStateOf<LatLng?>(null) }
+    // Round trips (M3) from a start: the loops found (empty while they are
+    // being found), the one shown, the options they were found with, and
+    // the length the rider wants. Found again when the length, the gravel
+    // setting or the favourites change.
+    var loopStart by remember { mutableStateOf<LatLng?>(null) }
+    var loops by remember { mutableStateOf<List<Route>>(emptyList()) }
+    var loopIndex by remember { mutableIntStateOf(0) }
+    var loopOpts by remember { mutableStateOf<RouteOptions?>(null) }
+    var loopChoice by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    LaunchedEffect(loopStart, loopChoice, allowGravel, favourites, overlays) {
+        val start = loopStart ?: return@LaunchedEffect
+        val o = overlays ?: return@LaunchedEffect
+        val ready = region as? RegionState.Ready ?: return@LaunchedEffect
+        loops = emptyList()
+        loopIndex = 0
+        o.route.show(start, null, null)
+        val favs = favourites
+        val opts = routeOptions(defaultRouteOptions(), budgetPercent, allowGravel)
+        val choice = loopChoice
+        // A newer request cancels this one; its result is then dropped.
+        val result = withContext(Dispatchers.Default) {
+            runCatching { ready.engine.roundTrip(start.toLatLon(), choice.target, opts, favs) }
+        }
+        result.fold(
+            onSuccess = { found ->
+                val first = found.firstOrNull()
+                if (first == null) {
+                    loopStart = null
+                    o.route.show(null, null, null)
+                    message = resources.getString(R.string.loop_none)
+                } else {
+                    loops = found
+                    loopOpts = opts
+                    o.route.show(start, null, first.geometry, first.favouriteParts)
+                }
+            },
+            onFailure = {
+                loopStart = null
+                o.route.show(null, null, null)
+                message = if (classify(it) == CoreProblem.NO_ROUTE) {
+                    resources.getString(R.string.loop_none)
+                } else {
+                    coreErrorMessage(resources, it)
+                }
+            },
+        )
+    }
     LaunchedEffect(routeEnds, budgetPercent, allowGravel, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
@@ -541,6 +590,8 @@ fun MapScreen() {
             when (val step = picker.onLongPress(point)) {
                 is RoutePicker.Step.StartSet -> {
                     routeEnds = null
+                    loopStart = null
+                    startPicked = null
                     // New start: check it lies on a road before keeping it.
                     val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
                     if (problem != null) {
@@ -548,10 +599,12 @@ fun MapScreen() {
                         message = coreErrorMessage(resources, problem)
                     } else {
                         o.route.show(point, null, null)
+                        startPicked = point
                         message = resources.getString(R.string.route_pick_end)
                     }
                 }
                 is RoutePicker.Step.Complete -> {
+                    startPicked = null
                     o.route.show(step.start, step.end, null)
                     message = null
                     routeEnds = step.start to step.end
@@ -603,6 +656,33 @@ fun MapScreen() {
         done
     }
 
+    /** Hands [r] to a nav app as GPX through the share sheet (PRD R9);
+     * [opts] are the options it was found with. */
+    fun shareRoute(r: Route, opts: RouteOptions) {
+        val engine = (region as? RegionState.Ready)?.engine ?: return
+        scope.launch {
+            val now = System.currentTimeMillis() / 1000
+            val zone = ZoneId.systemDefault()
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val gpx = engine.routeGpx(r.geometry, routeGpxName(now, zone, r.distanceM / 1000.0), opts)
+                    RouteShare.prepare(
+                        context,
+                        gpx,
+                        routeFileName(now, zone),
+                        resources.getString(R.string.route_share_title),
+                    )
+                }
+            }
+            result.fold(
+                onSuccess = { context.startActivity(it) },
+                onFailure = {
+                    message = resources.getString(R.string.route_share_failed, it.message ?: it.toString())
+                },
+            )
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         // Theme-coloured scrim keeps the navigation bar icons readable over any
@@ -624,13 +704,25 @@ fun MapScreen() {
                 .padding(top = 8.dp, start = 64.dp, end = 64.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (message != null || marking) Surface(
+            val offerLoop = startPicked != null && !marking
+            if (message != null || marking || offerLoop) Surface(
                 shape = MaterialTheme.shapes.medium,
                 tonalElevation = 3.dp,
                 shadowElevation = 3.dp,
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     message?.let { Text(it) }
+                    if (offerLoop) {
+                        OutlinedButton(
+                            onClick = {
+                                val start = picker.takeStart()
+                                startPicked = null
+                                message = null
+                                loopStart = start
+                            },
+                            modifier = Modifier.padding(top = 4.dp),
+                        ) { OneLine(stringResource(R.string.loop_from_here)) }
+                    }
                     if (marking) {
                         // The banner is narrow (it keeps clear of the map controls),
                         // so the buttons wrap onto a second line instead of
@@ -679,31 +771,38 @@ fun MapScreen() {
                         routeEnds = null
                         overlays?.route?.show(null, null, null)
                     },
-                    onShare = share@{
-                        val (r, opts) = shownRoute ?: return@share
-                        val engine = (region as? RegionState.Ready)?.engine ?: return@share
-                        scope.launch {
-                            val now = System.currentTimeMillis() / 1000
-                            val zone = ZoneId.systemDefault()
-                            val result = withContext(Dispatchers.IO) {
-                                runCatching {
-                                    val gpx = engine.routeGpx(r.geometry, routeGpxName(now, zone, r.distanceM / 1000.0), opts)
-                                    RouteShare.prepare(
-                                        context,
-                                        gpx,
-                                        routeFileName(now, zone),
-                                        resources.getString(R.string.route_share_title),
-                                    )
-                                }
-                            }
-                            result.fold(
-                                onSuccess = { context.startActivity(it) },
-                                onFailure = {
-                                    message = resources.getString(R.string.route_share_failed, it.message ?: it.toString())
-                                },
-                            )
+                    onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
+                )
+            }
+            loopStart?.let {
+                val shown = loops.getOrNull(loopIndex)
+                LoopCard(
+                    summary = shown?.let { r ->
+                        summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare)
+                    },
+                    position = loopIndex,
+                    count = loops.size,
+                    onNext = {
+                        loopIndex = nextLoop(loopIndex, loops.size)
+                        loops.getOrNull(loopIndex)?.let { r ->
+                            overlays?.route?.show(it, null, r.geometry, r.favouriteParts)
                         }
                     },
+                    choice = loopChoice,
+                    onChoice = { c ->
+                        loopChoice = c
+                        RoutePrefs.setLoopChoice(context, c)
+                    },
+                    allowGravel = allowGravel,
+                    onAllowGravel = { allow ->
+                        allowGravel = allow
+                        RoutePrefs.setAllowGravel(context, allow)
+                    },
+                    onClose = {
+                        loopStart = null
+                        overlays?.route?.show(null, null, null)
+                    },
+                    onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
                 )
             }
         }
