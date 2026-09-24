@@ -9,8 +9,10 @@ Rust crates come from `cargo tree` of moto-ffi for the Android targets
 with the licence files each crate ships (paths from `cargo metadata`).
 Android libraries come from the app's runtime classpath (one
 `group:name:version` per line), with the licences their POMs declare
-(following parent POMs) and the LICENSE/NOTICE files inside their archives
-in the Gradle cache.
+(following parent POMs) and the LICENSE/NOTICE files inside their archives.
+Gradle resolves the POMs and archives and lists their paths (`--artifacts`);
+they lie in its cache as `files-2.1/<group>/<name>/<version>/<hash>/<file>`,
+which is how each file is matched to its component.
 
 When a component ships no licence text, a kept copy is used: a standard
 text by SPDX id (`<licenses>/<id>.txt`) or, for Maven components,
@@ -25,7 +27,6 @@ lines separate paragraphs.
 """
 
 import argparse
-import glob
 import json
 import os
 import re
@@ -121,17 +122,31 @@ def spdx_of_pom(name, url):
     return None
 
 
-def version_dir(cache, group, name, version):
-    return os.path.join(cache, group, name, version)
+def index_artifacts(paths):
+    """{(group, name, version): {"pom": path or None, "archives": [paths]}}
+    for files in Gradle's cache layout; other paths are ignored."""
+    index = {}
+    for path in paths:
+        parts = os.path.normpath(path).split(os.sep)
+        if len(parts) < 6 or parts[-6] != "files-2.1":
+            continue
+        entry = index.setdefault((parts[-5], parts[-4], parts[-3]), {"pom": None, "archives": []})
+        if path.endswith(".pom"):
+            entry["pom"] = path
+        elif path.endswith((".aar", ".jar")) and not path.endswith(("-sources.jar", "-javadoc.jar")):
+            entry["archives"].append(path)
+    for entry in index.values():
+        entry["archives"].sort()
+    return index
 
 
-def pom_licences(cache, group, name, version, depth=0):
+def pom_licences(artifacts, group, name, version, depth=0):
     """[(spdx id, name, url)] declared by a POM or, when it declares none,
-    its nearest parent in the cache."""
-    poms = sorted(glob.glob(os.path.join(version_dir(cache, group, name, version), "*", "*.pom")))
-    if not poms:
-        raise LicenceError(f"{group}:{name}:{version}: no POM in the Gradle cache")
-    root = ET.parse(poms[0]).getroot()
+    its nearest parent."""
+    pom = artifacts.get((group, name, version), {}).get("pom")
+    if pom is None:
+        raise LicenceError(f"{group}:{name}:{version}: no POM resolved")
+    root = ET.parse(pom).getroot()
     out = []
     for lic in root.findall("m:licenses/m:license", POM_NS):
         lname = (lic.findtext("m:name", default="", namespaces=POM_NS) or "").strip()
@@ -140,16 +155,14 @@ def pom_licences(cache, group, name, version, depth=0):
     parent = root.find("m:parent", POM_NS)
     if not out and parent is not None and depth < MAX_POM_DEPTH:
         pg, pa, pv = (parent.findtext(f"m:{k}", default="", namespaces=POM_NS).strip() for k in ("groupId", "artifactId", "version"))
-        return pom_licences(cache, pg, pa, pv, depth + 1)
+        return pom_licences(artifacts, pg, pa, pv, depth + 1)
     return out
 
 
-def archive_notices(cache, group, name, version):
+def archive_notices(artifacts, group, name, version):
     """(entry, text) of the licence files inside a component's .aar/.jar."""
     out = []
-    for path in sorted(glob.glob(os.path.join(version_dir(cache, group, name, version), "*", "*"))):
-        if not path.endswith((".aar", ".jar")) or path.endswith(("-sources.jar", "-javadoc.jar")):
-            continue
+    for path in artifacts.get((group, name, version), {}).get("archives", []):
         with zipfile.ZipFile(path) as z:
             for info in z.infolist():
                 if not info.is_dir() and is_notice(info.filename):
@@ -210,16 +223,16 @@ def crate_entries(crates, index, licenses_dir, texts):
     return lines
 
 
-def maven_entries(components, cache, licenses_dir, texts):
+def maven_entries(components, artifacts, licenses_dir, texts):
     lines = []
     for group, name, version in sorted(components):
         coords = f"{group}:{name}:{version}"
-        licences = pom_licences(cache, group, name, version)
+        licences = pom_licences(artifacts, group, name, version)
         ids = [i for i, _, _ in licences]
         if not ids or None in ids:
             raise LicenceError(f"{coords}: unknown licence {[n for _, n, _ in licences]}")
         who = f"{group}:{name}"
-        refs = [texts.add(e, t, who) for e, t in archive_notices(cache, group, name, version)]
+        refs = [texts.add(e, t, who) for e, t in archive_notices(artifacts, group, name, version)]
         kept = kept_notice(licenses_dir, group, name, version)
         if kept is not None:
             refs.append(texts.add(f"{name} notice", kept, who))
@@ -259,10 +272,10 @@ def body(text):
     return "\n".join(" " + l if l.startswith("#") else l for l in text.split("\n"))
 
 
-def build(crates, index, components, cache, licenses_dir, app_licence):
+def build(crates, index, components, artifacts, licenses_dir, app_licence):
     texts = Texts()
     crate_lines = crate_entries(crates, index, licenses_dir, texts)
-    maven_lines = maven_entries(components, cache, licenses_dir, texts)
+    maven_lines = maven_entries(components, artifacts, licenses_dir, texts)
     out = [
         "## moto",
         "",
@@ -295,7 +308,7 @@ def main(argv=None):
     p.add_argument("--cargo-tree", action="append", required=True, help="cargo tree output (one per target)")
     p.add_argument("--cargo-metadata", required=True, help="cargo metadata JSON")
     p.add_argument("--maven", required=True, help="group:name:version per line")
-    p.add_argument("--gradle-cache", required=True, help="Gradle's modules-2/files-2.1 directory")
+    p.add_argument("--artifacts", required=True, help="paths of the resolved POMs and archives, one per line")
     p.add_argument("--licenses", required=True, help="kept licence texts (android/app/licenses)")
     p.add_argument("--app-licence", required=True, help="the app's LICENSE file")
     p.add_argument("--out", required=True)
@@ -309,9 +322,11 @@ def main(argv=None):
             index = crate_index(json.load(f))
         with open(args.maven, encoding="utf-8") as f:
             components = parse_maven_list(f.read())
+        with open(args.artifacts, encoding="utf-8") as f:
+            artifacts = index_artifacts([l.strip() for l in f if l.strip()])
         with open(args.app_licence, encoding="utf-8") as f:
             app_licence = f.read()
-        text = build(crates, index, components, args.gradle_cache, args.licenses, app_licence)
+        text = build(crates, index, components, artifacts, args.licenses, app_licence)
     except (LicenceError, OSError, ValueError, KeyError, ET.ParseError, zipfile.BadZipFile) as e:
         print(f"third-party licences: {e}", file=sys.stderr)
         return 1

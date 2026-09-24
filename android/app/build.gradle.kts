@@ -185,17 +185,20 @@ abstract class ThirdPartyLicenses @Inject constructor(private val exec: ExecOper
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val appLicence: RegularFileProperty
 
-    /** The variant's runtime dependency graph. */
+    /** "group:name:version" of every library on the variant's runtime
+     * classpath. */
     @get:Input
-    abstract val runtimeGraph: Property<ResolvedComponentResult>
+    abstract val modules: SetProperty<String>
 
-    /** Its archives: declared so Gradle has them in its cache first. */
+    /** Its archives, and the POMs of its libraries and their parents,
+     * resolved by Gradle (see [pomsOf]). */
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.NAME_ONLY)
     abstract val runtimeFiles: ConfigurableFileCollection
 
-    @get:Input
-    abstract val gradleCache: Property<String>
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val poms: ConfigurableFileCollection
 
     @get:Input
     abstract val rustTargets: ListProperty<String>
@@ -210,17 +213,10 @@ abstract class ThirdPartyLicenses @Inject constructor(private val exec: ExecOper
         val out = outputDir.get().asFile
         out.deleteRecursively()
 
-        // group:name:version of every library in the graph.
-        val modules = sortedSetOf<String>()
-        val seen = mutableSetOf<ResolvedComponentResult>()
-        val queue = ArrayDeque(listOf(runtimeGraph.get()))
-        while (queue.isNotEmpty()) {
-            val c = queue.removeFirst()
-            if (!seen.add(c)) continue
-            (c.id as? ModuleComponentIdentifier)?.let { modules += "${it.group}:${it.module}:${it.version}" }
-            c.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { queue += it.selected }
+        val maven = work.resolve("maven.txt").apply { writeText(modules.get().sorted().joinToString("\n", postfix = "\n")) }
+        val artifacts = work.resolve("artifacts.txt").apply {
+            writeText((runtimeFiles.files + poms.files).joinToString("\n", postfix = "\n") { it.absolutePath })
         }
-        val maven = work.resolve("maven.txt").apply { writeText(modules.joinToString("\n", postfix = "\n")) }
 
         fun cargoTo(file: File, vararg args: String) = file.also {
             FileOutputStream(it).use { stream ->
@@ -247,7 +243,7 @@ abstract class ThirdPartyLicenses @Inject constructor(private val exec: ExecOper
                     listOf(
                         "--cargo-metadata", metadata.absolutePath,
                         "--maven", maven.absolutePath,
-                        "--gradle-cache", gradleCache.get(),
+                        "--artifacts", artifacts.absolutePath,
                         "--licenses", keptLicences.get().asFile.absolutePath,
                         "--app-licence", appLicence.get().asFile.absolutePath,
                         "--out", out.resolve("licenses/third_party.txt").absolutePath,
@@ -255,6 +251,60 @@ abstract class ThirdPartyLicenses @Inject constructor(private val exec: ExecOper
             )
         }
     }
+}
+
+/**
+ * The POM files of the libraries [modules] ("group:name:version") and of
+ * their parent POMs, where licences are often declared: resolved as `@pom`
+ * artifacts, so Gradle downloads any its cache lacks (a restored CI cache
+ * holds what builds need, not POMs), and a missing one fails the build.
+ */
+fun pomsOf(modules: Set<String>): Set<File> {
+    val found = mutableSetOf<File>()
+    val seen = mutableSetOf<String>()
+    var todo = modules
+    // Parent chains are short; the bound only stops a cycle.
+    repeat(5) {
+        todo = todo - seen
+        if (todo.isEmpty()) return found
+        seen += todo
+        val poms = configurations.detachedConfiguration(*todo.map { dependencies.create("$it@pom") }.toTypedArray())
+            .apply { isTransitive = false }
+            .resolve()
+        found += poms
+        todo = poms.mapNotNull(::pomParent).toSet()
+    }
+    return found
+}
+
+/** "group:name:version" of a POM's <parent>, or null. */
+fun pomParent(pom: File): String? {
+    val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
+        // POMs come from repositories: no DTDs or external entities.
+        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        isExpandEntityReferences = false
+    }
+    val root = factory.newDocumentBuilder().parse(pom).documentElement
+    val parent = (0 until root.childNodes.length).map { root.childNodes.item(it) }
+        .firstOrNull { it.nodeName == "parent" } ?: return null
+    fun field(name: String) = (0 until parent.childNodes.length).map { parent.childNodes.item(it) }
+        .firstOrNull { it.nodeName == name }?.textContent?.trim().orEmpty()
+    val (g, a, v) = listOf(field("groupId"), field("artifactId"), field("version"))
+    return if (g.isEmpty() || a.isEmpty() || v.isEmpty()) null else "$g:$a:$v"
+}
+
+/** "group:name:version" of every library in a resolved graph. */
+fun modulesOf(root: ResolvedComponentResult): Set<String> {
+    val modules = mutableSetOf<String>()
+    val seen = mutableSetOf<ResolvedComponentResult>()
+    val queue = ArrayDeque(listOf(root))
+    while (queue.isNotEmpty()) {
+        val c = queue.removeFirst()
+        if (!seen.add(c)) continue
+        (c.id as? ModuleComponentIdentifier)?.let { modules += "${it.group}:${it.module}:${it.version}" }
+        c.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { queue += it.selected }
+    }
+    return modules
 }
 
 // The Rust targets cargo-ndk builds for `abis`.
@@ -271,9 +321,10 @@ androidComponents {
             script.set(rootProject.file("../.github/scripts/third_party.py"))
             keptLicences.set(file("licenses"))
             appLicence.set(rootProject.file("../LICENSE"))
-            runtimeGraph.set(variant.runtimeConfiguration.incoming.resolutionResult.rootComponent)
+            val libraries = variant.runtimeConfiguration.incoming.resolutionResult.rootComponent.map(::modulesOf)
+            modules.set(libraries)
             runtimeFiles.from(variant.runtimeConfiguration)
-            gradleCache.set(gradle.gradleUserHomeDir.resolve("caches/modules-2/files-2.1").absolutePath)
+            poms.from(libraries.map(::pomsOf))
             rustTargets.set(abis.map { rustTargetOfAbi.getValue(it) })
             // cargo-ndk has fetched the crates whose licence files are read.
             dependsOn(cargoNdkBuild)

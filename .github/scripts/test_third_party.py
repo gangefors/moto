@@ -27,7 +27,7 @@ class Fixture:
     def __init__(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
-        self.cache = os.path.join(self.root, "cache")
+        self.cache = os.path.join(self.root, "caches", "modules-2", "files-2.1")
         self.licenses = os.path.join(self.root, "licenses")
         os.makedirs(os.path.join(self.licenses, "maven"))
         self.write("licenses/Apache-2.0.txt", "Apache License\nVersion 2.0\n")
@@ -66,6 +66,12 @@ class Fixture:
 
     def index(self):
         return tp.crate_index({"packages": self.packages})
+
+    def artifact_paths(self):
+        return sorted(os.path.join(d, n) for d, _, names in os.walk(self.cache) for n in names)
+
+    def artifacts(self):
+        return tp.index_artifacts(self.artifact_paths())
 
 
 class CargoTreeTest(unittest.TestCase):
@@ -110,7 +116,7 @@ class BuildTest(unittest.TestCase):
         self.addCleanup(self.f.tmp.cleanup)
 
     def build(self, crates, components):
-        return tp.build(crates, self.f.index(), components, self.f.cache, self.f.licenses, "AGPL text\n# not a heading\n")
+        return tp.build(crates, self.f.index(), components, self.f.artifacts(), self.f.licenses, "AGPL text\n# not a heading\n")
 
     def test_texts_are_found_numbered_and_shared(self):
         f = self.f
@@ -184,6 +190,18 @@ class BuildTest(unittest.TestCase):
         with self.assertRaises(tp.LicenceError):
             self.build(set(), {("x", "big", "1.0")})
 
+    def test_artifacts_are_matched_by_their_cache_path(self):
+        c = os.path.join("/g", "caches", "modules-2", "files-2.1")
+        index = tp.index_artifacts([
+            f"{c}/a.b/lib/1.0/h1/lib-1.0.pom",
+            f"{c}/a.b/lib/1.0/h2/lib-1.0.aar",
+            f"{c}/a.b/lib/1.0/h3/lib-1.0-sources.jar",
+            f"{c}/a.b/lib/1.0/h4/lib-1.0.module",
+            "/elsewhere/lib.jar",
+            "short/path.jar",
+        ])
+        self.assertEqual(index, {("a.b", "lib", "1.0"): {"pom": f"{c}/a.b/lib/1.0/h1/lib-1.0.pom", "archives": [f"{c}/a.b/lib/1.0/h2/lib-1.0.aar"]}})
+
     def test_maven_list(self):
         self.assertEqual(tp.parse_maven_list("a:b:1\n\n a:b:1 \nc:d:2\n"), {("a", "b", "1"), ("c", "d", "2")})
         for bad in ["a:b", "a:b:c:d", "a::1"]:
@@ -199,9 +217,10 @@ class MainTest(unittest.TestCase):
         tree = f.write("tree.txt", "a v1.0.0|MPL-2.0\n")
         meta = f.write("meta.json", json.dumps({"packages": f.packages}))
         maven = f.write("maven.txt", "")
+        paths = f.write("artifacts.txt", "")
         app = f.write("LICENSE", "AGPL\n")
         out = os.path.join(f.root, "out", "third_party.txt")
-        args = ["--cargo-tree", tree, "--cargo-metadata", meta, "--maven", maven, "--gradle-cache", f.cache,
+        args = ["--cargo-tree", tree, "--cargo-metadata", meta, "--maven", maven, "--artifacts", paths,
                 "--licenses", f.licenses, "--app-licence", app, "--out", out]
         self.assertEqual(tp.main(args), 0)
         with open(out, encoding="utf-8") as fh:
