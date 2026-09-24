@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -162,10 +163,13 @@ fun RidesSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
             Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Box {
                     OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
-                        Text(stringResource(R.string.sections_export))
+                        OneLine(stringResource(R.string.sections_export))
                     }
                     DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
                         EXPORT_FORMATS.forEach { (format, label) ->
@@ -181,7 +185,7 @@ fun RidesSheet(
                     }
                 }
                 OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
-                    Text(stringResource(R.string.sections_import))
+                    OneLine(stringResource(R.string.sections_import))
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -211,7 +215,7 @@ fun RidesSheet(
                                         saveAs.launch(rideFileName(t.startedAt, zone))
                                     },
                                     enabled = t.endedAt != null,
-                                ) { Text(stringResource(R.string.rides_export)) }
+                                ) { OneLine(stringResource(R.string.rides_export)) }
                                 DeleteButton(
                                     confirming = confirmDelete == t.id,
                                     onArm = { confirmDelete = t.id },

@@ -5,8 +5,8 @@ package se.gangefors.moto
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -101,10 +101,16 @@ fun SectionSheet(
                         onDelete = onDelete,
                     )
                 }
-                Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), maxLines = 1) }
-                Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
-                    Text(stringResource(R.string.section_save), maxLines = 1)
+                // Wraps (right-aligned) when large text leaves no room.
+                FlowRow(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    OutlinedButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) }
+                    Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
+                        OneLine(stringResource(R.string.section_save))
+                    }
                 }
             }
         }
