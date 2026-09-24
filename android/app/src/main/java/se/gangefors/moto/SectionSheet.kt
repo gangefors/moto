@@ -6,22 +6,22 @@ package se.gangefors.moto
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,30 +31,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Rating
 
 /** What the rider chose in the section sheet. */
-data class SectionChoice(val name: String, val rating: Rating, val oneWay: Boolean)
+data class SectionChoice(val rating: Rating, val oneWay: Boolean)
 
 /**
- * A bottom sheet to name, rate and set the direction of a section: for a
- * new one before it is saved, or a saved one (then [onDelete] is set).
- * [fallbackName] is used when the name is left blank.
+ * A bottom sheet to rate a section and set its direction: for a new one
+ * before it is saved, or a saved one (then [onDelete] is set, shown as a
+ * bin that asks for a second tap). Sections have no name the rider sees:
+ * they are found and changed on the map.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SectionSheet(
     title: String,
     initial: SectionChoice,
-    fallbackName: String,
-    saveLabel: String,
     onSave: (SectionChoice) -> Unit,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
 ) {
-    var name by remember { mutableStateOf(initial.name) }
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -66,20 +65,11 @@ fun SectionSheet(
         Column(
             Modifier
                 .fillMaxWidth()
-                .imePadding()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(title, style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = takeCodePoints(it, MAX_SECTION_NAME_CHARS) },
-                label = { Text(stringResource(R.string.section_name)) },
-                placeholder = { Text(fallbackName) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 RATINGS.forEachIndexed { i, r ->
                     SegmentedButton(
@@ -100,20 +90,33 @@ fun SectionSheet(
                 }
                 Switch(checked = oneWay, onCheckedChange = { oneWay = it })
             }
+            if (confirmDelete) {
+                Text(
+                    stringResource(R.string.section_delete_confirm),
+                    color = DELETE_COLOR,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) {
-                    TextButton(
+                    IconButton(
                         onClick = { if (confirmDelete) onDelete() else confirmDelete = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = DELETE_COLOR),
+                        colors = if (confirmDelete) {
+                            IconButtonDefaults.filledIconButtonColors(containerColor = DELETE_COLOR, contentColor = Color.White)
+                        } else {
+                            IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR)
+                        },
                     ) {
-                        Text(stringResource(if (confirmDelete) R.string.section_delete_confirm else R.string.section_delete))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_delete),
+                            contentDescription = stringResource(R.string.section_delete),
+                        )
                     }
                 }
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                }
-                Button(onClick = { onSave(SectionChoice(cleanSectionName(name, fallbackName), rating, oneWay)) }) {
-                    Text(saveLabel)
+                Spacer(Modifier.weight(1f))
+                OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), maxLines = 1) }
+                Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
+                    Text(stringResource(R.string.section_save), maxLines = 1)
                 }
             }
         }

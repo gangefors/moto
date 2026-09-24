@@ -76,6 +76,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.time.ZoneId
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -653,23 +654,26 @@ fun MapScreen() {
         }
     }
 
-    // Name, rate and save the proposed section.
+    // Rate and save the proposed section (its name is generated).
     val proposed = draft
     if (savingDraft && proposed != null) {
-        val fallback = stringResource(R.string.section_default_name, sectionKm(proposed.distanceM))
         val tag = reviewTag
         SectionSheet(
             title = stringResource(R.string.section_new_title),
-            initial = SectionChoice(name = "", rating = Rating.GOOD, oneWay = false),
-            fallbackName = if (tag != null) stringResource(R.string.tag_default_name, sectionKm(proposed.distanceM)) else fallback,
-            saveLabel = stringResource(R.string.section_save),
+            initial = SectionChoice(rating = Rating.GOOD, oneWay = false),
             onDismiss = { savingDraft = false },
             onSave = { choice ->
                 if (tag == null) stopMarking() else savingDraft = false
-                changeSections(resources.getString(R.string.section_saved, choice.name)) { st ->
+                val name = autoSectionName(
+                    fromTag = tag != null,
+                    savedAtSec = System.currentTimeMillis() / 1000,
+                    distanceM = proposed.distanceM,
+                    zone = ZoneId.systemDefault(),
+                )
+                changeSections(resources.getString(R.string.section_saved)) { st ->
                     st.add(
                         NewSection(
-                            name = choice.name,
+                            name = name,
                             rating = choice.rating,
                             direction = directionOf(choice.oneWay),
                             source = if (tag != null) SectionSource.TAG else SectionSource.MAP,
@@ -697,22 +701,20 @@ fun MapScreen() {
     editing?.let { section ->
         SectionSheet(
             title = stringResource(R.string.section_edit_title, sectionKm(lengthM(section.geometry))),
-            initial = SectionChoice(section.name, section.rating, isOneWay(section.direction)),
-            fallbackName = section.name,
-            saveLabel = stringResource(R.string.section_update),
+            initial = SectionChoice(section.rating, isOneWay(section.direction)),
             onDismiss = { editing = null },
             onSave = { choice ->
                 editing = null
-                changeSections(resources.getString(R.string.section_updated, choice.name)) { st ->
+                changeSections(resources.getString(R.string.section_updated)) { st ->
                     st.update(
                         section.id,
-                        SectionUpdate(name = choice.name, rating = choice.rating, direction = directionOf(choice.oneWay)),
+                        SectionUpdate(name = null, rating = choice.rating, direction = directionOf(choice.oneWay)),
                     )
                 }
             },
             onDelete = {
                 editing = null
-                changeSections(resources.getString(R.string.section_deleted, section.name)) { st ->
+                changeSections(resources.getString(R.string.section_deleted)) { st ->
                     st.delete(section.id)
                 }
             },

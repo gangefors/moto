@@ -26,18 +26,15 @@
     <string name="section_proposed">%1$.1f km. Tap near an end to move it.</string>
     <string name="section_save_ellipsis">Save…</string>
     <string name="section_save">Save</string>
-    <string name="section_update">Save changes</string>
     <string name="section_new_title">New section</string>
     <string name="section_edit_title">Section · %1$.1f km</string>
-    <string name="section_default_name">Section, %1$.1f km</string>
-    <string name="section_name">Name</string>
     <string name="section_one_way">One-way</string>
     <string name="section_one_way_hint">Only good in the direction it was marked (arrows)</string>
     <string name="section_delete">Delete</string>
-    <string name="section_delete_confirm">Tap again to delete</string>
-    <string name="section_saved">Saved “%1$s”</string>
-    <string name="section_updated">Updated “%1$s”</string>
-    <string name="section_deleted">Deleted “%1$s”</string>
+    <string name="section_delete_confirm">Tap the bin again to delete this section.</string>
+    <string name="section_saved">Section saved</string>
+    <string name="section_updated">Section updated</string>
+    <string name="section_deleted">Section deleted</string>
     <string name="rating_good">Good</string>
     <string name="rating_great">Great</string>
     <string name="rating_epic">Epic</string>
@@ -83,5 +80,4 @@
     <string name="tag_review_done">All tags reviewed.</string>
     <string name="tag_review_later">Later</string>
     <string name="tag_review_discard">Discard</string>
-    <string name="tag_default_name">Tagged road, %1$.1f km</string>
 </resources>
