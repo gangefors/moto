@@ -42,12 +42,12 @@ A license binds people who receive the code, not the copyright holder. With sole
 
 ## Action Items (for Claude Code / repo)
 
-- [ ] Add `LICENSE` with the full, unmodified AGPL-3.0 text (from [gnu.org/licenses/agpl-3.0.txt](https://www.gnu.org/licenses/agpl-3.0.txt)).
-- [ ] Add an SPDX header to source files: `// SPDX-License-Identifier: AGPL-3.0-only` and `// Copyright (C) 2026 Stefan Gangefors`.
-- [ ] Set `license = "AGPL-3.0-only"` in `Cargo.toml` files.
-- [ ] README "License" section (draft below).
-- [ ] `CONTRIBUTING.md`: contributions require signing the CLA; set up the CLA Assistant GitHub app. Base the CLA on a standard template (e.g. Apache ICLA style or a Contributor Agreements .org template) with the right to relicense.
-- [ ] Add `cargo-deny` license check to CI with an allow-list of AGPL-compatible licenses.
+- [x] Add `LICENSE` with the full, unmodified AGPL-3.0 text (from [gnu.org/licenses/agpl-3.0.txt](https://www.gnu.org/licenses/agpl-3.0.txt)).
+- [x] Add an SPDX header to source files: `// SPDX-License-Identifier: AGPL-3.0-only` and `// Copyright (C) 2026 Stefan Gangefors`.
+- [x] Set `license = "AGPL-3.0-only"` in `Cargo.toml` files.
+- [x] README "License" section (draft below).
+- [x] `CONTRIBUTING.md`: contributions require signing the CLA; set up the CLA Assistant GitHub app. Base the CLA on a standard template (e.g. Apache ICLA style or a Contributor Agreements .org template) with the right to relicense. Done in 22755ed (CLA Assistant Lite workflow, `CLA.md` pending legal review).
+- [x] Add `cargo-deny` license check to CI with an allow-list of AGPL-compatible licenses. Done in 8d3a21e.
 - [ ] Add an in-app "About / Licenses" screen: app license, OSM/ODbL attribution, OpenFreeMap attribution, third-party licenses.
 - [ ] Later: register the app name as a trademark (Swedish PRV / EUIPO) once the name is settled.
 
