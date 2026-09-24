@@ -50,6 +50,10 @@ class MapLogicTest {
         assertEquals(RouteSummary(12.3, 15), summarize(12_345.0, 900.0))
         assertEquals(RouteSummary(0.0, 0), summarize(0.0, 0.0))
         assertEquals(RouteSummary(1.0, 1), summarize(960.0, 89.0))
+        assertEquals(RouteSummary(12.3, 15, 42), summarize(12_345.0, 900.0, 0.4239))
+        assertEquals(0, summarize(1.0, 1.0, 0.004).favouritePercent)
+        assertEquals(100, summarize(1.0, 1.0, 1.2).favouritePercent)
+        assertEquals(0, summarize(1.0, 1.0, Double.NaN).favouritePercent)
     }
 
     @Test

@@ -16,6 +16,7 @@
     <string name="route_pick_end">Start set. Long-press where you want to go.</string>
     <string name="route_computing">Finding a route…</string>
     <string name="route_result">%1$.1f km · %2$d min · found in %3$d ms</string>
+    <string name="route_result_favourites">%1$.1f km · %2$d min · %3$d %% on favourites · found in %4$d ms</string>
     <string name="route_none">No route between these points</string>
     <string name="cancel">Cancel</string>
     <string name="sections_failed">Saved sections unavailable: %1$s</string>
