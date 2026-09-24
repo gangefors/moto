@@ -10,8 +10,10 @@
 use std::sync::Arc;
 
 mod sections;
+mod tags;
 mod tracks;
 pub use sections::*;
+pub use tags::*;
 pub use tracks::*;
 
 uniffi::setup_scaffolding!();

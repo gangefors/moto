@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Stefan Gangefors
 
 //! The rider's own data in one SQLite database (ADR-0006): favourite
-//! sections and recorded rides (tracks); tags join in a later migration.
+//! sections, recorded rides (tracks) and quick-tags.
 //!
 //! Security: every statement is a fixed SQL string with bound parameters;
 //! extensions cannot be loaded (rusqlite is built without that feature);
@@ -72,6 +72,20 @@ const MIGRATIONS: &[&str] = &[
         bearing_deg REAL,
         PRIMARY KEY (track_id, seq)
     ) STRICT, WITHOUT ROWID;",
+    // 3: quick-tags, reviewed after the ride.
+    "CREATE TABLE tags (
+        id          INTEGER PRIMARY KEY,
+        rider_id    TEXT    NOT NULL,
+        time_ms     INTEGER NOT NULL,
+        lat         INTEGER NOT NULL,
+        lon         INTEGER NOT NULL,
+        heading_deg REAL,
+        speed_mps   REAL,
+        track_id    INTEGER REFERENCES tracks (id) ON DELETE SET NULL,
+        status      INTEGER NOT NULL DEFAULT 0 CHECK (status BETWEEN 0 AND 2)
+    ) STRICT;
+    CREATE INDEX tags_status ON tags (status, time_ms);
+    CREATE INDEX tags_track ON tags (track_id);",
 ];
 
 /// The schema version this build writes.
@@ -426,6 +440,7 @@ fn decode_geometry(bytes: &[u8]) -> Option<Vec<LatLon>> {
         .collect()
 }
 
+mod tags;
 mod tracks;
 
 #[cfg(test)]

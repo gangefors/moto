@@ -82,7 +82,7 @@ impl Cost {
 }
 
 /// The edge running the other way along the same geometry, if any.
-fn twin(region: &Region, id: u32) -> Option<u32> {
+pub(crate) fn twin(region: &Region, id: u32) -> Option<u32> {
     let e = region.edges()[id as usize];
     region.out_edges(e.head).find(|&o| {
         let t = region.edges()[o as usize];
@@ -91,7 +91,7 @@ fn twin(region: &Region, id: u32) -> Option<u32> {
 }
 
 /// Shape of an edge in its travel direction.
-fn edge_line(region: &Region, e: &Edge) -> Vec<LatLon> {
+pub(crate) fn edge_line(region: &Region, e: &Edge) -> Vec<LatLon> {
     let mut line: Vec<LatLon> = region
         .geometry(e.geometry)
         .iter()
