@@ -210,6 +210,9 @@ fun rideFileName(startedAtSec: Long, zone: java.time.ZoneId): String =
 /** Largest section file read for import; the core's own limit. */
 const val MAX_IMPORT_FILE_BYTES = 32 * 1024 * 1024
 
+/** Largest GPX file read to import as a ride; the core's own limit. */
+const val MAX_GPX_FILE_BYTES = 64 * 1024 * 1024
+
 /**
  * Up to [limit] bytes from [input], or null if there are more (the file is
  * too large). Stops reading at the limit, whatever the file claims.

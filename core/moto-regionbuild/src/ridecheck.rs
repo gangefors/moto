@@ -9,64 +9,17 @@
 use std::path::Path;
 use std::time::Instant;
 
-use moto_core::matching::{MAX_TRACK_POINTS, MatchedTrack};
+use moto_core::gpx::{MAX_GPX_BYTES, read_track};
+use moto_core::matching::MatchedTrack;
 use moto_core::{Engine, LatLon};
 
-/// Largest GPX file read: 200 000 fixes at about 200 bytes each.
-const MAX_GPX_BYTES: u64 = 64 * 1024 * 1024;
-
-/// The positions of a GPX file's `<trkpt>` elements, in order. The file is
-/// untrusted: anything that isn't a well-formed point with valid lat/lon
-/// attributes is skipped, and size and count are capped.
+/// The positions of a GPX file's track points, in order, read by the
+/// core's GPX import (untrusted input: malformed points are skipped, size
+/// and count capped).
 pub fn gpx_points(text: &str) -> Result<Vec<LatLon>, String> {
-    let mut points = Vec::new();
-    let mut rest = text;
-    while let Some(start) = rest.find("<trkpt") {
-        rest = &rest[start + "<trkpt".len()..];
-        // A tag ends at '>'; a '<' first means it was cut off.
-        let Some(end) = rest.find(['>', '<']) else {
-            break;
-        };
-        let tag = &rest[..end];
-        rest = &rest[end..];
-        // "<trkpt" must be the whole element name, not "<trkptx".
-        if !tag.starts_with(char::is_whitespace) {
-            continue;
-        }
-        let (Some(lat), Some(lon)) = (attr(tag, "lat"), attr(tag, "lon")) else {
-            continue;
-        };
-        if let Ok(p) = LatLon::new(lat, lon) {
-            if points.len() == MAX_TRACK_POINTS {
-                return Err(format!("more than {MAX_TRACK_POINTS} track points"));
-            }
-            points.push(p);
-        }
-    }
-    Ok(points)
-}
-
-/// The number in attribute `name="…"` (or `'…'`) of a tag's text.
-fn attr(tag: &str, name: &str) -> Option<f64> {
-    let mut search = tag;
-    loop {
-        let i = search.find(name)?;
-        let before = search[..i].chars().next_back();
-        let after = &search[i + name.len()..];
-        search = after;
-        if !before.is_some_and(char::is_whitespace) {
-            continue; // part of a longer name, e.g. "xlat"
-        }
-        let after = after.trim_start().strip_prefix('=')?.trim_start();
-        let quote = after.chars().next().filter(|&c| c == '"' || c == '\'')?;
-        let value = &after[1..];
-        let close = value.find(quote)?;
-        return value[..close]
-            .trim()
-            .parse()
-            .ok()
-            .filter(|v: &f64| v.is_finite());
-    }
+    read_track(text, 0)
+        .map(|ps| ps.into_iter().map(|p| p.position).collect())
+        .map_err(|e| e.to_string())
 }
 
 /// Runs `--match`.
@@ -74,7 +27,7 @@ pub fn run(region: &Path, gpx: &Path, geojson: Option<&Path>) -> Result<(), Stri
     let size = std::fs::metadata(gpx)
         .map_err(|e| format!("{}: {e}", gpx.display()))?
         .len();
-    if size > MAX_GPX_BYTES {
+    if size > MAX_GPX_BYTES as u64 {
         return Err(format!(
             "{} is larger than {MAX_GPX_BYTES} bytes",
             gpx.display()
@@ -173,93 +126,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_points_from_the_apps_gpx() {
-        let gpx = moto_core::gpx::track_gpx(
-            "ride",
-            &[
-                moto_core::track::TrackPoint {
-                    time_ms: 0,
-                    position: LatLon {
-                        lat: 55.7,
-                        lon: 13.2,
-                    },
-                    accuracy_m: Some(3.0),
-                    speed_mps: None,
-                    bearing_deg: None,
-                },
-                moto_core::track::TrackPoint {
-                    time_ms: 1000,
-                    position: LatLon {
-                        lat: 55.7001,
-                        lon: 13.2002,
-                    },
-                    accuracy_m: None,
-                    speed_mps: None,
-                    bearing_deg: None,
-                },
-            ],
-        );
-        let p = gpx_points(&gpx).unwrap();
-        assert_eq!(
-            p,
-            [
-                LatLon {
-                    lat: 55.7,
-                    lon: 13.2
-                },
-                LatLon {
-                    lat: 55.7001,
-                    lon: 13.2002
-                }
-            ]
-        );
-    }
-
-    #[test]
-    fn reads_other_gpx_writers() {
-        let text = "<trkpt lon='13.2'  lat = '55.7' ><ele>5</ele></trkpt>\n\
-                    <trkpt\n lat=\"55.8\"\n lon=\"13.3\"/>";
-        assert_eq!(
-            gpx_points(text).unwrap(),
-            [
-                LatLon {
-                    lat: 55.7,
-                    lon: 13.2
-                },
-                LatLon {
-                    lat: 55.8,
-                    lon: 13.3
-                }
-            ]
-        );
-    }
-
-    #[test]
-    fn skips_anything_malformed() {
-        let text = concat!(
-            "<trkptx lat=\"1\" lon=\"1\">",
-            "<trkpt xlat=\"1\" lon=\"1\">",
-            "<trkpt lat=\"NaN\" lon=\"1\">",
-            "<trkpt lat=\"95\" lon=\"1\">",
-            "<trkpt lat=\"inf\" lon=\"1\">",
-            "<trkpt lat=\"1\">",
-            "<trkpt lat=1 lon=2>",
-            "<trkpt lat=\"1\" lon=\"2",
-            "<trkpt lat=\"55.1\" lon=\"13.1\">",
-            "<trkpt lat=\"55.2\" lon=\"13.2\""
-        );
-        assert_eq!(
-            gpx_points(text).unwrap(),
-            [LatLon {
-                lat: 55.1,
-                lon: 13.1
-            }]
-        );
-        assert!(gpx_points("").unwrap().is_empty());
-        assert!(gpx_points("<trkpt").unwrap().is_empty());
-    }
-
-    #[test]
     fn random_bytes_never_panic() {
         let mut x: u64 = 0x2545_f491_4f6c_dd1d;
         let alphabet = b"<trkpt lat=lon\"'>0123456789.-/ \n";
@@ -280,7 +146,7 @@ mod tests {
     #[test]
     fn too_many_points_is_an_error() {
         let one = "<trkpt lat=\"55.7\" lon=\"13.2\"/>";
-        assert!(gpx_points(&one.repeat(MAX_TRACK_POINTS + 1)).is_err());
+        assert!(gpx_points(&one.repeat(moto_core::matching::MAX_TRACK_POINTS + 1)).is_err());
     }
 
     #[test]

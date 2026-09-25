@@ -45,6 +45,37 @@ fn to_track(r: (i64, String, i64, Option<i64>, i64, f64)) -> Result<Track, CoreE
     })
 }
 
+/// Stores `points` on track `id` from sequence number `first` on.
+fn insert_points<'a>(
+    tx: &rusqlite::Transaction<'_>,
+    id: i64,
+    first: usize,
+    points: impl Iterator<Item = &'a TrackPoint>,
+) -> Result<(), CoreError> {
+    let mut stmt = tx
+        .prepare(
+            "INSERT INTO track_points
+                (track_id, seq, time_ms, lat, lon, accuracy_m, speed_mps, bearing_deg)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        )
+        .map_err(db_err)?;
+    for (i, p) in points.enumerate() {
+        let (lat, lon) = e7(p.position);
+        stmt.execute(params![
+            id,
+            (first + i) as i64,
+            p.time_ms,
+            lat,
+            lon,
+            p.accuracy_m,
+            p.speed_mps,
+            p.bearing_deg
+        ])
+        .map_err(db_err)?;
+    }
+    Ok(())
+}
+
 fn unknown(id: i64) -> CoreError {
     CoreError::InvalidArgument(format!("no track {id}"))
 }
@@ -115,29 +146,7 @@ impl Store {
                 "a track may have at most {MAX_TRACK_POINTS} points"
             )));
         }
-        {
-            let mut stmt = tx
-                .prepare(
-                    "INSERT INTO track_points
-                        (track_id, seq, time_ms, lat, lon, accuracy_m, speed_mps, bearing_deg)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                )
-                .map_err(db_err)?;
-            for (i, p) in fresh.iter().enumerate() {
-                let (lat, lon) = e7(p.position);
-                stmt.execute(params![
-                    id,
-                    (count + i) as i64,
-                    p.time_ms,
-                    lat,
-                    lon,
-                    p.accuracy_m,
-                    p.speed_mps,
-                    p.bearing_deg
-                ])
-                .map_err(db_err)?;
-            }
-        }
+        insert_points(&tx, id, count, fresh.iter().copied())?;
         let total = count + fresh.len();
         if let Some(p) = fresh.last() {
             tx.execute(
@@ -151,6 +160,48 @@ impl Store {
             added: fresh.len() as u64,
             point_count: total as u64,
         })
+    }
+
+    /// Stores a finished ride from elsewhere (an imported GPX file) in one
+    /// transaction: started and ended at its first and last fix. The
+    /// points must be valid, at least two and at most
+    /// [`MAX_TRACK_POINTS`], and strictly later one after another.
+    pub fn import_track(&mut self, points: &[TrackPoint]) -> Result<Track, CoreError> {
+        let bad = |why: &str| Err(CoreError::InvalidArgument(format!("imported ride: {why}")));
+        let (Some(first), Some(last)) = (points.first(), points.last()) else {
+            return bad("no points");
+        };
+        if points.len() < 2 {
+            return bad("fewer than two points");
+        }
+        if points.len() > MAX_TRACK_POINTS {
+            return bad("too many points");
+        }
+        for p in points {
+            p.validate()?;
+        }
+        if points.windows(2).any(|w| w[1].time_ms <= w[0].time_ms) {
+            return bad("fix times must increase");
+        }
+        let tx = self.conn.transaction().map_err(db_err)?;
+        tx.execute(
+            "INSERT INTO tracks
+                (rider_id, started_at, ended_at, point_count, last_time_ms, distance_m)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                LOCAL_RIDER,
+                first.time_ms.div_euclid(1000),
+                last.time_ms.div_euclid(1000),
+                points.len() as i64,
+                last.time_ms,
+                ridden_distance_m(points)
+            ],
+        )
+        .map_err(db_err)?;
+        let id = tx.last_insert_rowid();
+        insert_points(&tx, id, 0, points.iter())?;
+        tx.commit().map_err(db_err)?;
+        self.get_track(id)?.ok_or_else(|| unknown(id))
     }
 
     /// Ends a track and counts its length. Finishing a finished track
