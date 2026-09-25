@@ -44,6 +44,16 @@ val DEFAULT_LOOP: LoopChoice = LoopChoice.Hours(2)
  * (preferences are read back as untrusted input). */
 fun loopChoiceOf(stored: String?): LoopChoice = LOOP_CHOICES.firstOrNull { it.key == stored } ?: DEFAULT_LOOP
 
+/** Which way loops should head: any, or roughly north, east, south or
+ * west ([bearing] in degrees clockwise from north). */
+enum class LoopDirection(val bearing: Double?) {
+    ANY(null),
+    NORTH(0.0),
+    EAST(90.0),
+    SOUTH(180.0),
+    WEST(270.0),
+}
+
 /** A seed for another set of loops: never 0 (the standard loops). */
 fun shuffleSeed(random: kotlin.random.Random = kotlin.random.Random.Default): UInt =
     random.nextInt(1, Int.MAX_VALUE).toUInt()

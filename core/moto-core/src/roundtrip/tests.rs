@@ -273,7 +273,7 @@ fn the_street_home_may_be_ridden_out_and_back() {
 
 #[test]
 fn seed_zero_is_the_standard_candidates() {
-    let c: Vec<Candidate> = Candidates::new(0).collect();
+    let c: Vec<Candidate> = Candidates::new(0, None).collect();
     assert_eq!(c.len(), HEADINGS);
     for (i, c) in c.iter().enumerate() {
         assert_eq!(
@@ -289,9 +289,9 @@ fn seed_zero_is_the_standard_candidates() {
 
 #[test]
 fn seeded_candidates_vary_within_bounds_and_repeat() {
-    let a: Vec<Candidate> = Candidates::new(42).collect();
-    assert_eq!(a, Candidates::new(42).collect::<Vec<_>>());
-    assert_ne!(a, Candidates::new(43).collect::<Vec<_>>());
+    let a: Vec<Candidate> = Candidates::new(42, None).collect();
+    assert_eq!(a, Candidates::new(42, None).collect::<Vec<_>>());
+    assert_ne!(a, Candidates::new(43, None).collect::<Vec<_>>());
     assert_eq!(a.len(), HEADINGS);
     let turn = a[0].bearing;
     assert!((0.0..30.0).contains(&turn), "{turn}");
@@ -302,7 +302,7 @@ fn seeded_candidates_vary_within_bounds_and_repeat() {
     }
     // The extremes of the generator stay in range.
     for seed in [1, u32::MAX] {
-        assert!(Candidates::new(seed).all(|c| (15.0..45.0).contains(&c.spread)));
+        assert!(Candidates::new(seed, None).all(|c| (15.0..45.0).contains(&c.spread)));
     }
 }
 
@@ -312,7 +312,20 @@ fn shuffled_loops_differ_and_still_fit() {
     let opts = RouteOptions::default();
     let none = Favourites::none();
     let standard = round_trip(&e, CENTRE, km(20.0), &opts, &none).unwrap();
-    let seeded = |seed| loops(&e, CENTRE, km(20.0), &opts, &none, &LoopOptions { seed }).unwrap();
+    let seeded = |seed| {
+        loops(
+            &e,
+            CENTRE,
+            km(20.0),
+            &opts,
+            &none,
+            &LoopOptions {
+                seed,
+                bearing: None,
+            },
+        )
+        .unwrap()
+    };
     assert_eq!(seeded(0), standard);
     assert_eq!(seeded(9), seeded(9));
     let mut differing = 0;
@@ -332,4 +345,98 @@ fn shuffled_loops_differ_and_still_fit() {
         }
     }
     assert!(differing >= 3, "{differing} of 6 seeds gave other loops");
+}
+
+#[test]
+fn a_direction_fans_the_headings_around_it() {
+    let c: Vec<Candidate> = Candidates::new(0, Some(90.0)).collect();
+    assert_eq!(c.len(), HEADINGS);
+    assert!((c[0].bearing - 30.0).abs() < 1e-9);
+    assert!((c[HEADINGS - 1].bearing - 150.0).abs() < 1e-9);
+    assert!(c.iter().all(|c| c.spread == SPREAD_DEG && c.size == 1.0));
+    // Around north the bearings wrap into 0-360.
+    let north: Vec<f64> = Candidates::new(0, Some(0.0)).map(|c| c.bearing).collect();
+    assert!(north.iter().all(|b| (0.0..360.0).contains(b)));
+    assert!(
+        north
+            .iter()
+            .all(|&b| !(60.0 + 1e-9..300.0 - 1e-9).contains(&b)),
+        "{north:?}"
+    );
+    // Seeded: still within one step of the fan.
+    let step = 120.0 / (HEADINGS - 1) as f64;
+    for c in Candidates::new(7, Some(180.0)) {
+        assert!((120.0..=240.0 + step).contains(&c.bearing), "{c:?}");
+    }
+}
+
+/// Mean latitude of a loop's line.
+fn mean_lat(r: &Route) -> f64 {
+    r.geometry.iter().map(|p| p.lat).sum::<f64>() / r.geometry.len() as f64
+}
+
+#[test]
+fn loops_head_the_way_asked() {
+    let e = engine(fixture::grid(13));
+    let opts = RouteOptions::default();
+    let none = Favourites::none();
+    let start = e.snap(CENTRE).unwrap().position;
+    for (bearing, north) in [(0.0, true), (180.0, false)] {
+        let shape = LoopOptions {
+            seed: 0,
+            bearing: Some(bearing),
+        };
+        let set = loops(&e, CENTRE, km(20.0), &opts, &none, &shape).unwrap();
+        assert!(set.len() >= 2, "{bearing}: {}", set.len());
+        for l in &set {
+            assert!((l.distance_m - 20_000.0).abs() <= 20_000.0 * TOLERANCE);
+            assert_eq!(mean_lat(l) > start.lat, north, "{bearing}: {}", mean_lat(l));
+        }
+    }
+}
+
+#[test]
+fn a_direction_with_too_few_loops_is_topped_up() {
+    // Asked to head west from the grid's west edge, into nothing.
+    let e = engine(fixture::grid(13));
+    let edge = ll(55.754, 13.40);
+    let shape = LoopOptions {
+        seed: 0,
+        bearing: Some(270.0),
+    };
+    let set = loops(
+        &e,
+        edge,
+        km(20.0),
+        &RouteOptions::default(),
+        &Favourites::none(),
+        &shape,
+    )
+    .unwrap();
+    assert!(!set.is_empty());
+    for l in &set {
+        assert!((l.distance_m - 20_000.0).abs() <= 20_000.0 * TOLERANCE);
+    }
+}
+
+#[test]
+fn a_bad_bearing_is_a_typed_error() {
+    let e = engine(fixture::grid(13));
+    for b in [f64::NAN, f64::INFINITY] {
+        let shape = LoopOptions {
+            seed: 0,
+            bearing: Some(b),
+        };
+        assert!(matches!(
+            loops(
+                &e,
+                CENTRE,
+                km(20.0),
+                &RouteOptions::default(),
+                &Favourites::none(),
+                &shape
+            ),
+            Err(CoreError::InvalidArgument(_))
+        ));
+    }
 }

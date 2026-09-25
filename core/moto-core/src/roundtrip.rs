@@ -99,6 +99,7 @@ pub fn loops(
     start.validate()?;
     target.validate()?;
     opts.validate()?;
+    shape.validate()?;
     favourites.check(engine)?;
     let target_m = match target {
         RoundTripTarget::DistanceM(m) => m,
@@ -122,52 +123,49 @@ pub fn loops(
         RoundTripTarget::DurationS(_) => r.duration_s * PARAMS.loop_speed_mps,
     };
 
-    let mut loops = Vec::new();
     let radius = target_m / (3.0 * PARAMS.loop_detour);
     let home = home_radius_m(target_m);
-    for (heading, c) in Candidates::new(shape.seed).enumerate() {
-        let at = |r: f64| {
-            loop_at(
-                engine, &fun, opts, &s, c.bearing, c.spread, r, home, favourites,
-            )
-        };
-        let Some(first) = at(radius * c.size) else {
-            continue;
-        };
-        // One resize towards the target.
-        let found = if fits(&first.routed.route) {
-            Some(first)
-        } else {
-            let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
-            at(radius * c.size * scale).filter(|l| fits(&l.routed.route))
-        };
-        if let Some(mut l) = found {
-            l.heading = heading;
-            if reuse_share(&l) <= MAX_REUSE {
-                loops.push(l);
+    let collect = |candidates: Candidates| {
+        let mut loops = Vec::new();
+        for (heading, c) in candidates.enumerate() {
+            let at = |r: f64| {
+                loop_at(
+                    engine, &fun, opts, &s, c.bearing, c.spread, r, home, favourites,
+                )
+            };
+            let Some(first) = at(radius * c.size) else {
+                continue;
+            };
+            // One resize towards the target.
+            let found = if fits(&first.routed.route) {
+                Some(first)
+            } else {
+                let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
+                at(radius * c.size * scale).filter(|l| fits(&l.routed.route))
+            };
+            if let Some(mut l) = found {
+                l.heading = heading;
+                if reuse_share(&l) <= MAX_REUSE {
+                    loops.push(l);
+                }
             }
         }
+        loops
+    };
+    // The loops that way first; when there are fewer than two (the sea,
+    // the region's edge), the best of any way fill up to two.
+    let mut kept = pick(
+        Vec::new(),
+        collect(Candidates::new(shape.seed, shape.bearing)),
+        MAX_LOOPS,
+    );
+    if shape.bearing.is_some() && kept.len() < 2 {
+        kept = pick(kept, collect(Candidates::new(shape.seed, None)), 2);
     }
-    if loops.is_empty() {
+    if kept.is_empty() {
         return Err(CoreError::NoRoute(
             "no loop of that length from here; try another length or start".into(),
         ));
-    }
-
-    // Best worth per second first; ties by heading, so results are stable.
-    loops.sort_by(|a, b| {
-        worth_per_s(b)
-            .total_cmp(&worth_per_s(a))
-            .then(a.heading.cmp(&b.heading))
-    });
-    let mut kept: Vec<Loop> = Vec::new();
-    for l in loops {
-        if kept.len() == MAX_LOOPS {
-            break;
-        }
-        if kept.iter().all(|k| overlap(k, &l) < MAX_OVERLAP) {
-            kept.push(l);
-        }
     }
     Ok(kept
         .into_iter()
@@ -178,6 +176,26 @@ pub fn loops(
             r
         })
         .collect())
+}
+
+/// `kept` plus the best of `loops` (worth per second; ties by heading, so
+/// results are stable) that overlap every kept loop by less than
+/// [`MAX_OVERLAP`], up to `max` loops in all.
+fn pick(mut kept: Vec<Loop>, mut loops: Vec<Loop>, max: usize) -> Vec<Loop> {
+    loops.sort_by(|a, b| {
+        worth_per_s(b)
+            .total_cmp(&worth_per_s(a))
+            .then(a.heading.cmp(&b.heading))
+    });
+    for l in loops {
+        if kept.len() >= max {
+            break;
+        }
+        if kept.iter().all(|k| overlap(k, &l) < MAX_OVERLAP) {
+            kept.push(l);
+        }
+    }
+    kept
 }
 
 fn worth_per_s(l: &Loop) -> f64 {
@@ -193,28 +211,44 @@ struct Candidate {
     size: f64,
 }
 
-/// The [`HEADINGS`] candidates of a seed. Seed 0: every 30°, spread
+/// Half the fan of headings tried when the loops should head one way.
+const DIRECTION_SPREAD_DEG: f64 = 60.0;
+
+/// The [`HEADINGS`] candidates of a seed and an optional direction. The
+/// headings are every 30° all round, or spread evenly over
+/// [`DIRECTION_SPREAD_DEG`] either side of `bearing`. Seed 0: spread
 /// [`SPREAD_DEG`], size 1 (the standard loops). Other seeds: the headings
-/// turned by up to 30°, and each candidate's spread 15–45° and size
+/// turned by up to one step, and each candidate's spread 15–45° and size
 /// 0.8–1.2, from a small deterministic generator (splitmix64), so a seed
 /// always gives the same loops.
 struct Candidates {
     seed: u32,
     state: u64,
+    first: f64,
+    step: f64,
     turn: f64,
     i: usize,
 }
 
 impl Candidates {
-    fn new(seed: u32) -> Self {
+    fn new(seed: u32, bearing: Option<f64>) -> Self {
+        let (first, step) = match bearing {
+            None => (0.0, 360.0 / HEADINGS as f64),
+            Some(b) => (
+                b - DIRECTION_SPREAD_DEG,
+                2.0 * DIRECTION_SPREAD_DEG / (HEADINGS - 1) as f64,
+            ),
+        };
         let mut c = Self {
             seed,
             state: u64::from(seed),
+            first,
+            step,
             turn: 0.0,
             i: 0,
         };
         if seed != 0 {
-            c.turn = c.unit() * 360.0 / HEADINGS as f64;
+            c.turn = c.unit() * step;
         }
         c
     }
@@ -237,7 +271,7 @@ impl Iterator for Candidates {
         if self.i == HEADINGS {
             return None;
         }
-        let bearing = self.i as f64 * 360.0 / HEADINGS as f64 + self.turn;
+        let bearing = (self.first + self.i as f64 * self.step + self.turn).rem_euclid(360.0);
         self.i += 1;
         if self.seed == 0 {
             return Some(Candidate {
