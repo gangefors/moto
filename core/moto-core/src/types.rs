@@ -22,7 +22,6 @@ pub struct RoadPoint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Avoid {
     pub motorways: bool,
-    pub unpaved: bool,
     pub ferries: bool,
 }
 
@@ -30,10 +29,23 @@ impl Default for Avoid {
     fn default() -> Self {
         Self {
             motorways: true,
-            unpaved: true,
             ferries: false,
         }
     }
+}
+
+/// What a route does with gravel and other unpaved roads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Gravel {
+    /// Keep off them where possible (they count as much slower), except
+    /// on the rider's own favourite sections.
+    #[default]
+    Avoid,
+    /// Treat them like any other road.
+    Allow,
+    /// Seek them out ("adv" riding): they pull the route like curvy
+    /// roads do, within the same time budget.
+    Prefer,
 }
 
 /// How much time a route may take (PRD R6). The time over the fastest
@@ -68,6 +80,7 @@ pub struct RouteOptions {
     pub min_gain: f64,
     /// Whether curvy roads pull the route too (R5), besides favourites.
     pub curvy: bool,
+    pub gravel: Gravel,
 }
 
 impl Default for RouteOptions {
@@ -77,6 +90,7 @@ impl Default for RouteOptions {
             budget: TimeBudget::Extra(0.4),
             min_gain: crate::scoring::PARAMS.min_gain,
             curvy: true,
+            gravel: Gravel::Avoid,
         }
     }
 }

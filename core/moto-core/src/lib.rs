@@ -44,4 +44,6 @@ pub use favourites::Favourites;
 pub use geo::LatLon;
 pub use road::RoadInfo;
 pub use suggest::TAG_REACH_M;
-pub use types::{Avoid, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions, TimeBudget};
+pub use types::{
+    Avoid, Gravel, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions, TimeBudget,
+};

@@ -39,8 +39,18 @@ pub struct RoadPoint {
 #[derive(Debug, Clone, Copy, uniffi::Record)]
 pub struct Avoid {
     pub motorways: bool,
-    pub unpaved: bool,
     pub ferries: bool,
+}
+
+/// What a route does with gravel and other unpaved roads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Gravel {
+    /// Keep off them where possible, except on the rider's favourites.
+    Avoid,
+    /// Treat them like any other road.
+    Allow,
+    /// Seek them out ("adv" riding), within the time budget.
+    Prefer,
 }
 
 /// How much time a route may take; the time over the fastest route is
@@ -62,6 +72,7 @@ pub struct RouteOptions {
     pub min_gain: f64,
     /// Whether curvy roads pull the route too, besides favourites.
     pub curvy: bool,
+    pub gravel: Gravel,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
@@ -276,7 +287,6 @@ impl From<Avoid> for moto_core::Avoid {
     fn from(a: Avoid) -> Self {
         Self {
             motorways: a.motorways,
-            unpaved: a.unpaved,
             ferries: a.ferries,
         }
     }
@@ -286,8 +296,27 @@ impl From<moto_core::Avoid> for Avoid {
     fn from(a: moto_core::Avoid) -> Self {
         Self {
             motorways: a.motorways,
-            unpaved: a.unpaved,
             ferries: a.ferries,
+        }
+    }
+}
+
+impl From<Gravel> for moto_core::Gravel {
+    fn from(g: Gravel) -> Self {
+        match g {
+            Gravel::Avoid => Self::Avoid,
+            Gravel::Allow => Self::Allow,
+            Gravel::Prefer => Self::Prefer,
+        }
+    }
+}
+
+impl From<moto_core::Gravel> for Gravel {
+    fn from(g: moto_core::Gravel) -> Self {
+        match g {
+            moto_core::Gravel::Avoid => Self::Avoid,
+            moto_core::Gravel::Allow => Self::Allow,
+            moto_core::Gravel::Prefer => Self::Prefer,
         }
     }
 }
@@ -302,6 +331,7 @@ impl From<RouteOptions> for moto_core::RouteOptions {
             },
             min_gain: o.min_gain,
             curvy: o.curvy,
+            gravel: o.gravel.into(),
         }
     }
 }
@@ -316,6 +346,7 @@ impl From<moto_core::RouteOptions> for RouteOptions {
             },
             min_gain: o.min_gain,
             curvy: o.curvy,
+            gravel: o.gravel.into(),
         }
     }
 }
@@ -584,15 +615,16 @@ mod tests {
     fn avoid_options_convert_both_ways() {
         let a = Avoid {
             motorways: false,
-            unpaved: true,
             ferries: true,
         };
         let core: moto_core::Avoid = a.into();
         let back: Avoid = core.into();
-        assert_eq!(
-            (back.motorways, back.unpaved, back.ferries),
-            (false, true, true)
-        );
+        assert_eq!((back.motorways, back.ferries), (false, true));
+        for g in [Gravel::Avoid, Gravel::Allow, Gravel::Prefer] {
+            let core: moto_core::Gravel = g.into();
+            assert_eq!(Gravel::from(core), g);
+        }
+        assert_eq!(default_route_options().gravel, Gravel::Avoid);
     }
 
     #[test]

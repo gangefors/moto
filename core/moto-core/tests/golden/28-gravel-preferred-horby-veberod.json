@@ -1,0 +1,10 @@
+{
+  "name": "Hörby–Veberöd, gravel preferred",
+  "description": "With gravel preferred (\"adv\" riding), gravel roads pull like curvy ones within the 40 % budget: the route rides about 26 km of gravel instead of the 3 km it takes when gravel is only allowed.",
+  "from": [55.8547, 13.6617],
+  "to": [55.6333, 13.4833],
+  "gravel": "prefer",
+  "expect": {
+    "min_unpaved_km": 15
+  }
+}

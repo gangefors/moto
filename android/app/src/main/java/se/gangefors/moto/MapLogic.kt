@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.MotoException
 import se.gangefors.moto.core.RouteOptions
 import se.gangefors.moto.core.TimeBudget
@@ -109,7 +110,7 @@ fun budgetPercentOf(stored: Int?): Int = stored?.takeIf { it in BUDGET_CHOICES }
 fun routeOptions(base: RouteOptions, percent: Int, allowGravel: Boolean = false): RouteOptions =
     base.copy(
         budget = TimeBudget.Extra(percent / 100.0),
-        avoid = base.avoid.copy(unpaved = !allowGravel),
+        gravel = if (allowGravel) Gravel.ALLOW else Gravel.AVOID,
     )
 
 /**

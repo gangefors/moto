@@ -24,7 +24,9 @@ use std::collections::HashMap;
 use moto_core::geo::{distance_to_line, haversine_m};
 use moto_core::roundtrip::{MAX_LOOPS, MAX_REUSE, TOLERANCE, home_radius_m};
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
-use moto_core::{Engine, Favourites, LatLon, RoundTripTarget, Route, RouteOptions, TimeBudget};
+use moto_core::{
+    Engine, Favourites, Gravel, LatLon, RoundTripTarget, Route, RouteOptions, TimeBudget,
+};
 use serde::{Deserialize, Serialize};
 
 /// Largest case file read.
@@ -59,10 +61,10 @@ pub struct Case {
     /// second must buy (see `RouteOptions::min_gain`); the default if
     /// left out.
     pub min_gain: Option<f64>,
-    /// Gravel (unpaved) roads allowed, like the app's "Allow gravel";
-    /// avoided where possible if left out.
+    /// Gravel (unpaved) roads: "avoid" (where possible, the default),
+    /// "allow" or "prefer", like the app's gravel choice.
     #[serde(default)]
-    pub allow_unpaved: bool,
+    pub gravel: GravelName,
     /// Whether curvy roads pull the route (default true, as in the app);
     /// false for cases about favourites or gravel alone.
     #[serde(default = "yes")]
@@ -105,6 +107,25 @@ pub struct Favourite {
     pub one_way: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GravelName {
+    #[default]
+    Avoid,
+    Allow,
+    Prefer,
+}
+
+impl From<GravelName> for Gravel {
+    fn from(g: GravelName) -> Self {
+        match g {
+            GravelName::Avoid => Gravel::Avoid,
+            GravelName::Allow => Gravel::Allow,
+            GravelName::Prefer => Gravel::Prefer,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RatingName {
@@ -134,6 +155,8 @@ pub struct Expect {
     /// Share of the distance on curvy roads (see `Route::curvy_share`),
     /// at least.
     pub min_curvy_share: Option<f64>,
+    /// Kilometres on gravel and other unpaved roads, at least.
+    pub min_unpaved_km: Option<f64>,
     /// Time over the fastest route as a ratio (1.0 = none), at most.
     /// Defaults to 1 + the detour budget.
     pub max_detour_ratio: Option<f64>,
@@ -230,6 +253,13 @@ impl Case {
         share(e.min_favourite_share, "min_favourite_share")?;
         share(e.max_favourite_share, "max_favourite_share")?;
         share(e.min_curvy_share, "min_curvy_share")?;
+        if let Some(km) = e.min_unpaved_km
+            && !(km.is_finite() && km >= 0.0)
+        {
+            return Err(format!(
+                "min_unpaved_km must be a non-negative number, got {km}"
+            ));
+        }
         if let Some(r) = e.max_detour_ratio
             && !(r.is_finite() && r >= 1.0)
         {
@@ -253,7 +283,7 @@ impl Case {
         if let Some(g) = self.min_gain {
             opts.min_gain = g;
         }
-        opts.avoid.unpaved = !self.allow_unpaved;
+        opts.gravel = self.gravel.into();
         opts.curvy = self.curvy;
         opts
     }
@@ -439,7 +469,7 @@ impl Case {
         self.check_route(best, out);
     }
 
-    /// Favourite and curvy shares, pass and avoid points.
+    /// Favourite and curvy shares, gravel, pass and avoid points.
     fn check_route(&self, route: &Route, out: &mut Outcome) {
         let e = &self.expect;
         if let Some(min) = e.min_favourite_share
@@ -467,6 +497,14 @@ impl Case {
                 "{:.0} % curvy, expected at least {:.0} %",
                 route.curvy_share * 100.0,
                 min * 100.0
+            ));
+        }
+        if let Some(min) = e.min_unpaved_km
+            && route.unpaved_m / 1000.0 < min
+        {
+            out.failures.push(format!(
+                "{:.1} km on gravel, expected at least {min:.1} km",
+                route.unpaved_m / 1000.0
             ));
         }
         for p in &e.pass {

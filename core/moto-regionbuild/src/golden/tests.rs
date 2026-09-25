@@ -173,12 +173,31 @@ fn curvature_is_on_unless_turned_off() {
 }
 
 #[test]
-fn gravel_can_be_allowed() {
-    let c = Case::parse(&case(r#","allow_unpaved":true"#, "")).unwrap();
-    assert!(!c.options().avoid.unpaved);
+fn gravel_can_be_allowed_or_preferred() {
+    let c = Case::parse(&case(r#","gravel":"allow""#, "")).unwrap();
+    assert_eq!(c.options().gravel, Gravel::Allow);
+    let c = Case::parse(&case(r#","gravel":"prefer""#, "")).unwrap();
+    assert_eq!(c.options().gravel, Gravel::Prefer);
     let c = Case::parse(&case("", "")).unwrap();
-    assert!(c.options().avoid.unpaved);
-    assert!(Case::parse(&case(r#","allow_unpaved":"yes""#, "")).is_err());
+    assert_eq!(c.options().gravel, Gravel::Avoid);
+    assert!(Case::parse(&case(r#","gravel":"yes""#, "")).is_err());
+    assert!(Case::parse(&case(r#","allow_unpaved":true"#, "")).is_err());
+}
+
+#[test]
+fn a_demand_for_gravel_is_checked() {
+    // The fixture route is paved.
+    let file = built_fixture("golden-gravel");
+    let engine = Engine::open(file.path()).unwrap();
+    let o = Case::parse(&case("", r#""min_unpaved_km":0.0"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    let o = Case::parse(&case("", r#""min_unpaved_km":1.0"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures[0].contains("gravel"), "{o:?}");
+    assert!(Case::parse(&case("", r#""min_unpaved_km":-1"#)).is_err());
 }
 
 #[test]

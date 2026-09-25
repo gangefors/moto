@@ -232,9 +232,9 @@ mod tests {
         let anything = RouteOptions {
             avoid: Avoid {
                 motorways: false,
-                unpaved: false,
                 ferries: false,
             },
+            gravel: crate::Gravel::Allow,
             ..RouteOptions::default()
         };
         let fast = e.route(a, b, &anything).unwrap();

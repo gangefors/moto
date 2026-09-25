@@ -97,10 +97,11 @@ class MapLogicTest {
         assertEquals(40, budgetPercentOf(-1))
         assertTrue(DEFAULT_BUDGET_PERCENT in BUDGET_CHOICES)
         val base = se.gangefors.moto.core.RouteOptions(
-            se.gangefors.moto.core.Avoid(motorways = true, unpaved = true, ferries = false),
+            se.gangefors.moto.core.Avoid(motorways = true, ferries = false),
             se.gangefors.moto.core.TimeBudget.Extra(0.4),
             1.0,
             true,
+            se.gangefors.moto.core.Gravel.AVOID,
         )
         val o = routeOptions(base, 20)
         assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
@@ -108,9 +109,9 @@ class MapLogicTest {
         assertEquals(1.0, o.minGain, 0.0)
         assertTrue(o.curvy)
         // Gravel: avoided unless allowed; the other avoid options stay.
-        assertTrue(routeOptions(base, 40).avoid.unpaved)
+        assertEquals(se.gangefors.moto.core.Gravel.AVOID, routeOptions(base, 40).gravel)
         val gravel = routeOptions(base, 40, allowGravel = true)
-        assertFalse(gravel.avoid.unpaved)
+        assertEquals(se.gangefors.moto.core.Gravel.ALLOW, gravel.gravel)
         assertTrue(gravel.avoid.motorways)
         assertFalse(gravel.avoid.ferries)
     }
