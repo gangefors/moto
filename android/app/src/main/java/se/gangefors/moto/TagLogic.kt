@@ -39,14 +39,19 @@ fun newTag(fix: TrackPoint, trackId: Long?): NewTag =
     )
 
 /**
- * Post-ride review of pending tags, oldest first: one tag at a time until
- * each is saved as a section, discarded, or the rider stops ("Later").
+ * Post-ride review of pending tags, oldest first: one tag at a time, each
+ * saved as a section, discarded, or skipped (it stays pending for the next
+ * review), until the last one or until the rider stops.
  */
 class TagReview(tags: List<Tag>) {
     private val queue = tags.toList()
     private var index = 0
 
     val size: Int get() = queue.size
+
+    /** Tags skipped so far in this review; they stay pending. */
+    var skipped: Int = 0
+        private set
 
     /** The tag under review, or null when all are done. */
     val current: Tag? get() = queue.getOrNull(index)
@@ -58,5 +63,11 @@ class TagReview(tags: List<Tag>) {
     fun next(): Tag? {
         if (index < queue.size) index++
         return current
+    }
+
+    /** Leaves [current] pending and moves on, like [next]. */
+    fun skip(): Tag? {
+        if (current != null) skipped++
+        return next()
     }
 }

@@ -382,7 +382,14 @@ fun MapScreen() {
         val ready = store as? StoreState.Ready
         val engine = (region as? RegionState.Ready)?.engine
         if (tag == null || r == null || ready == null || engine == null) {
-            endReview(resources.getString(R.string.tag_review_done))
+            val skipped = r?.skipped ?: 0
+            endReview(
+                if (skipped > 0) {
+                    resources.getQuantityString(R.plurals.tag_review_done_skipped, skipped, skipped)
+                } else {
+                    resources.getString(R.string.tag_review_done)
+                },
+            )
             return
         }
         stopMarking()
@@ -429,6 +436,12 @@ fun MapScreen() {
             review = TagReview(tags)
             showTag(review?.current)
         }
+    }
+
+    /** Leaves the tag under review pending and moves on to the next one. */
+    fun skipTag() {
+        if (reviewTag == null) return
+        showTag(review?.skip())
     }
 
     /** Marks the tag under review and moves on to the next one. */
@@ -756,8 +769,14 @@ fun MapScreen() {
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             if (reviewTag != null) {
+                                // Stop ends the review; tags not yet handled
+                                // stay pending. Skip leaves this one pending
+                                // and moves on to the next.
                                 OutlinedButton(onClick = { endReview(resources.getString(R.string.map_hint)) }) {
-                                    OneLine(stringResource(R.string.tag_review_later))
+                                    OneLine(stringResource(R.string.tag_review_stop))
+                                }
+                                OutlinedButton(onClick = { skipTag() }) {
+                                    OneLine(stringResource(R.string.tag_review_skip))
                                 }
                                 OutlinedButton(
                                     onClick = { finishTag(TagStatus.DISCARDED) },

@@ -122,7 +122,12 @@
     <string name="tag_review_none">Tag %1$d of %2$d: no suggestion (%3$s). Tap the start to mark it yourself, or discard it.</string>
     <string name="tag_review_loading">Tag %1$d of %2$d…</string>
     <string name="tag_review_done">All tags reviewed.</string>
-    <string name="tag_review_later">Later</string>
+    <string name="tag_review_stop">Stop</string>
+    <string name="tag_review_skip">Skip</string>
+    <plurals name="tag_review_done_skipped">
+        <item quantity="one">Review done. %1$d skipped tag stays for the next review.</item>
+        <item quantity="other">Review done. %1$d skipped tags stay for the next review.</item>
+    </plurals>
     <string name="tag_review_discard">Discard</string>
     <plurals name="sections_unmatched">
         <item quantity="one">%d section no longer fits the updated map; it is hidden. Show it to delete or keep it.</item>
