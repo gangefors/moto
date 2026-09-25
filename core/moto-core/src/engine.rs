@@ -14,6 +14,7 @@ use crate::favourites::Favourites;
 use crate::matching::MatchedTrack;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
+use crate::road::RoadInfo;
 use crate::{CoreError, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions};
 
 /// How far from a road a point may be and still snap to it.
@@ -80,6 +81,12 @@ impl Engine {
             });
         }
         crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M)
+    }
+
+    /// Snaps `point` to the nearest road and describes that road: class,
+    /// surface, speed, one-way, curviness and its OSM way.
+    pub fn road_at(&self, point: LatLon) -> Result<RoadInfo, CoreError> {
+        crate::road::road_info(&self.region, self.snap(point)?)
     }
 
     /// Fastest route from `from` to `to` under `opts.avoid`: no

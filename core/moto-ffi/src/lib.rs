@@ -10,10 +10,12 @@
 use std::sync::Arc;
 
 mod exchange;
+mod road;
 mod sections;
 mod tags;
 mod tracks;
 pub use exchange::*;
+pub use road::*;
 pub use sections::*;
 pub use tags::*;
 pub use tracks::*;
@@ -440,6 +442,32 @@ mod tests {
         let err = verify_region_file(file.path()).unwrap_err();
         assert!(matches!(err, MotoError::Region { .. }), "got {err:?}");
         assert!(err.to_string().contains("checksum"), "{err}");
+    }
+
+    #[test]
+    fn describes_the_road_through_the_ffi() {
+        let file = fixture_file("road");
+        let engine = Engine::open(file.path()).unwrap();
+        let r = engine.road_at(ll(55.7001, 13.215)).unwrap();
+        assert_eq!(r.class, RoadClass::Primary);
+        assert_eq!(r.surface, Surface::Asphalt);
+        assert!(r.paved && r.one_way && !r.toll);
+        assert_eq!((r.speed_kmh, r.way_id), (70, 300));
+        assert!(matches!(
+            engine.road_at(ll(10.0, 10.0)),
+            Err(MotoError::OutsideRegion { .. })
+        ));
+    }
+
+    #[test]
+    fn unknown_classes_and_surfaces_map_to_catch_alls() {
+        assert_eq!(RoadClass::from(None), RoadClass::Other);
+        assert_eq!(Surface::from(None), Surface::Unknown);
+        use moto_core::region::format as f;
+        for c in f::RoadClass::ALL {
+            assert_ne!(RoadClass::from(Some(c)), RoadClass::Other, "{c:?}");
+        }
+        assert_eq!(Surface::from(Some(f::Surface::Gravel)), Surface::Gravel);
     }
 
     #[test]
