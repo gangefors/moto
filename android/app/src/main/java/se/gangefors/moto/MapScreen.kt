@@ -909,21 +909,26 @@ fun MapScreen() {
                         message = resources.getString(R.string.section_pick_start)
                     }) { Text(stringResource(R.string.section_mark)) }
                 }
+                // Record: a red dot. While recording: a red stop square with
+                // the distance so far, readable at a glance on the bike.
                 val active = recording as? Recording.State.Active
-                ExtendedFloatingActionButton(onClick = {
-                    if (active != null) {
-                        RecordingService.stop(context)
-                    } else {
-                        recordPermissions.launch(recordingPermissions())
-                    }
-                }) {
-                    Text(
-                        if (active != null) {
-                            stringResource(R.string.record_stop, sectionKm(active.distanceM))
-                        } else {
-                            stringResource(R.string.record_start)
-                        },
+                if (active != null) {
+                    val km = sectionKm(active.distanceM)
+                    val stopDescription = stringResource(R.string.record_stop_description, km)
+                    ExtendedFloatingActionButton(
+                        onClick = { RecordingService.stop(context) },
+                        icon = { Icon(painterResource(R.drawable.ic_stop), contentDescription = null, tint = RECORD_RED) },
+                        text = { OneLine(stringResource(R.string.record_stop, km)) },
+                        modifier = Modifier.semantics { contentDescription = stopDescription },
                     )
+                } else {
+                    FloatingActionButton(onClick = { recordPermissions.launch(recordingPermissions()) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_record_dot),
+                            contentDescription = stringResource(R.string.record_start),
+                            tint = RECORD_RED,
+                        )
+                    }
                 }
                 if (hasLocation) {
                     FloatingActionButton(onClick = { map?.locationComponent?.cameraMode = CameraMode.TRACKING }) {
@@ -1191,6 +1196,9 @@ private data class SafeInsets(val left: Int, val top: Int, val right: Int, val b
 /** Translucent scrims behind the navigation bar, per system theme. */
 private val LIGHT_SCRIM = Color.White.copy(alpha = 0.7f)
 private val DARK_SCRIM = Color.Black.copy(alpha = 0.7f)
+
+/** The record symbol's red. */
+private val RECORD_RED = Color(0xFFD93025)
 
 /** Widest the messages and route card get (tablets, landscape). */
 private val TOP_BOX_MAX_WIDTH: Dp = 640.dp

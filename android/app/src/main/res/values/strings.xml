@@ -83,7 +83,8 @@
     <string name="rating_great">Great</string>
     <string name="rating_epic">Epic</string>
     <string name="record_start">Record ride</string>
-    <string name="record_stop">Stop · %1$.1f km</string>
+    <string name="record_stop">%1$.1f km</string>
+    <string name="record_stop_description">Stop recording, %1$.1f km so far</string>
     <string name="recording_channel">Ride recording</string>
     <string name="recording_title">Recording ride</string>
     <string name="recording_waiting">Waiting for GPS…</string>
