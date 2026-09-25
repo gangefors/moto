@@ -321,3 +321,44 @@ fn reuse_is_measured_from_the_line() {
     assert_eq!(reuse_share(&[], 0.0), 0.0);
     assert_eq!(reuse_share(&[p(55.7, 13.4); 3], 0.0), 0.0);
 }
+
+#[test]
+fn loops_take_a_seed_and_a_direction() {
+    let (_f, engine) = grid_engine("golden-loop-shape");
+    let plain = Case::parse(&loop_case(r#""km":20"#, ""))
+        .unwrap()
+        .run(&engine);
+    let shaped = Case::parse(&loop_case(r#""km":20,"seed":7,"direction":90"#, ""))
+        .unwrap()
+        .run(&engine);
+    assert!(shaped.failures.is_empty(), "{shaped:?}");
+    assert_ne!(
+        plain.distance_km, shaped.distance_km,
+        "another set of loops"
+    );
+    assert!(Case::parse(&loop_case(r#""km":20,"direction":"east""#, "")).is_err());
+    assert!(Case::parse(&loop_case(r#""km":20,"seed":-1"#, "")).is_err());
+}
+
+#[test]
+fn fast_roads_are_counted() {
+    // All grid roads at 70 km/h: none fast.
+    let (_f, engine) = grid_engine("golden-fast-none");
+    let o = Case::parse(&loop_case(r#""km":20"#, r#""max_fast_km":0"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    // All at 110 km/h: every loop fails a limit of 1 km.
+    let file = TempFile::new("golden-fast-all");
+    let mut data = moto_core::fixture::grid(13);
+    for e in &mut data.edges {
+        e.speed_kmh = 110;
+    }
+    std::fs::write(file.path(), data.to_bytes().unwrap()).unwrap();
+    let engine = Engine::open(file.path()).unwrap();
+    let o = Case::parse(&loop_case(r#""km":20"#, r#""max_fast_km":1"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.iter().any(|f| f.contains("100+ km/h")), "{o:?}");
+    assert!(Case::parse(&case("", r#""max_fast_km":-1"#)).is_err());
+}

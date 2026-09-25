@@ -1,6 +1,6 @@
 {
   "name": "Klippan to Helsingborg, the same road only good",
-  "description": "Rated good, the 17 km parallel road still buys about 14 minutes of good riding for 3 extra minutes: worth it with the default 40 % budget and guard (1.75 s of weighted favourite riding per extra second).",
+  "description": "Rated good, the 17 km parallel road is worth riding with the default 40 % budget, but its west end is reached over 5.5 km of 100 km/h road. Since 2026-09-26 (dull fast roads) the route joins it further on over 60-80 km/h roads instead: part of the favourite, no 100 km/h road, curvier, a few minutes longer. A great rating (case 05) still rides all of it.",
   "from": [56.134, 13.133],
   "to": [56.046, 12.694],
   "favourites": [
@@ -16,7 +16,7 @@
     {"from": [56.09662, 12.85833], "to": [56.09866, 12.85277], "rating": "good"}
   ],
   "expect": {
-    "pass": [[56.09132, 12.97399]],
-    "min_favourite_share": 0.3
+    "min_favourite_share": 0.15,
+    "max_fast_km": 1
   }
 }

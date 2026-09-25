@@ -33,7 +33,7 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 }
 ```
 
-- Points are `[lat, lon]`. The time budget is either `max_detour` (extra over the fastest route, default 0.4 as in the app) or `max_minutes` (the most minutes in all, as when arriving by a set time). The favourites pull as hard as the budget allows. `min_gain` is the guard: seconds of rating-weighted favourite riding (epic 1, great 0.7, good 0.4) each extra second must buy (default 1; 0 spends the whole budget). `max_detour_ratio` defaults to 1 + `max_detour`, and `max_minutes` is checked too. `curvy` (default true, as in the app) lets curvy roads pull the route too; cases about favourites or gravel alone turn it off. `min_curvy_share` checks the share of curvy road (each metre counted by how curvy it is), `min_unpaved_km` the kilometres on gravel. `gravel` is `"avoid"` (where possible, the default), `"allow"` or `"prefer"`, like the app's gravel choice; preferred gravel pulls the route like curvy roads do, and gravel on a favourite is never avoided.
+- Points are `[lat, lon]`. The time budget is either `max_detour` (extra over the fastest route, default 0.4 as in the app) or `max_minutes` (the most minutes in all, as when arriving by a set time). The favourites pull as hard as the budget allows. `min_gain` is the guard: seconds of rating-weighted favourite riding (epic 1, great 0.7, good 0.4) each extra second must buy (default 1; 0 spends the whole budget). `max_detour_ratio` defaults to 1 + `max_detour`, and `max_minutes` is checked too. `curvy` (default true, as in the app) lets curvy roads pull the route too; cases about favourites or gravel alone turn it off. `min_curvy_share` checks the share of curvy road (each metre counted by how curvy it is), `min_unpaved_km` the kilometres on gravel, `max_fast_km` the kilometres on roads posted 100 km/h or more (measured by the runner from the line; for round trips on every loop). `gravel` is `"avoid"` (where possible, the default), `"allow"` or `"prefer"`, like the app's gravel choice; preferred gravel pulls the route like curvy roads do, and favourites on gravel count for nothing while gravel is avoided.
 - A favourite is marked like in the app: the road between two points, so a long road is a chain of short pieces (about 2 km), each ending where the next starts. `rating` is `good`, `great` or `epic`; `one_way` means only from `from` to `to`.
 - `pass` points must be within 50 m of the route, `avoid` points further away.
 
@@ -49,7 +49,7 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 }
 ```
 
-- `loop` replaces `to`: `{"km": …}` or `{"minutes": …}`. Round trips have no time budget, so `max_detour`, `max_minutes`, `min_gain` and `max_detour_ratio` are refused.
+- `loop` replaces `to`: `{"km": …}` or `{"minutes": …}`, optionally with the app's Shuffle `"seed"` (0 = the standard loops) and Direction `"direction"` (degrees from north), to reproduce a loop the app offered. Round trips have no time budget, so `max_detour`, `max_minutes`, `min_gain` and `max_detour_ratio` are refused.
 - Every loop returned must be within ±15 % of the target, come back to the start, and ride at most 10 % of its length twice outside the home zone (the way out of town and home, 2–5 km around the start). The runner measures reuse from the line itself, not from the core. At least `min_loops` loops (default 2) must come back.
 - The other expectations (`pass`, `avoid`, the shares) apply to the best loop.
 

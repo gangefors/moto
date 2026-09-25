@@ -25,7 +25,8 @@ use moto_core::geo::{distance_to_line, haversine_m};
 use moto_core::roundtrip::{MAX_LOOPS, MAX_REUSE, TOLERANCE, home_radius_m};
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
 use moto_core::{
-    Engine, Favourites, Gravel, LatLon, RoundTripTarget, Route, RouteOptions, TimeBudget,
+    Engine, Favourites, Gravel, LatLon, LoopOptions, RoundTripTarget, Route, RouteOptions,
+    TimeBudget,
 };
 use serde::{Deserialize, Serialize};
 
@@ -74,15 +75,28 @@ pub struct Case {
     pub expect: Expect,
 }
 
-/// A round trip's length: `km` or `minutes`.
+/// A round trip's length: `km` or `minutes`; optionally the app's
+/// Shuffle `seed` and Direction (`direction`, degrees from north).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopTarget {
     pub km: Option<f64>,
     pub minutes: Option<f64>,
+    #[serde(default)]
+    pub seed: u32,
+    pub direction: Option<f64>,
 }
 
 impl LoopTarget {
+    fn shape(self) -> Result<LoopOptions, String> {
+        let shape = LoopOptions {
+            seed: self.seed,
+            bearing: self.direction,
+        };
+        shape.validate().map_err(|e| e.to_string())?;
+        Ok(shape)
+    }
+
     fn target(self) -> Result<RoundTripTarget, String> {
         match (self.km, self.minutes) {
             (Some(km), None) if km.is_finite() && km > 0.0 => {
@@ -157,6 +171,9 @@ pub struct Expect {
     pub min_curvy_share: Option<f64>,
     /// Kilometres on gravel and other unpaved roads, at least.
     pub min_unpaved_km: Option<f64>,
+    /// Kilometres on roads posted 100 km/h or more, at most (every loop
+    /// of a round trip).
+    pub max_fast_km: Option<f64>,
     /// Time over the fastest route as a ratio (1.0 = none), at most.
     /// Defaults to 1 + the detour budget.
     pub max_detour_ratio: Option<f64>,
@@ -253,12 +270,18 @@ impl Case {
         share(e.min_favourite_share, "min_favourite_share")?;
         share(e.max_favourite_share, "max_favourite_share")?;
         share(e.min_curvy_share, "min_curvy_share")?;
-        if let Some(km) = e.min_unpaved_km
-            && !(km.is_finite() && km >= 0.0)
-        {
-            return Err(format!(
-                "min_unpaved_km must be a non-negative number, got {km}"
-            ));
+        for (name, v) in [
+            ("min_unpaved_km", e.min_unpaved_km),
+            ("max_fast_km", e.max_fast_km),
+        ] {
+            if let Some(km) = v
+                && !(km.is_finite() && km >= 0.0)
+            {
+                return Err(format!("{name} must be a non-negative number, got {km}"));
+            }
+        }
+        if let Some(t) = case.round_trip {
+            t.shape()?;
         }
         if let Some(r) = e.max_detour_ratio
             && !(r.is_finite() && r >= 1.0)
@@ -384,6 +407,7 @@ impl Case {
             out.failures
                 .push(format!("{:.1} min, allowed {max:.1} min", out.duration_min));
         }
+        self.check_fast(engine, "", &route, &mut out);
         self.check_route(&route, &mut out);
         out
     }
@@ -395,13 +419,7 @@ impl Case {
             let target = t.target()?;
             let fav = Favourites::build(engine, &self.favourites(engine)?);
             let loops = engine
-                .round_trip_with(
-                    ll(self.from)?,
-                    target,
-                    &self.options(),
-                    &fav,
-                    &Default::default(),
-                )
+                .round_trip_with(ll(self.from)?, target, &self.options(), &fav, &t.shape()?)
                 .map_err(|e| e.to_string())?;
             Ok((target, loops))
         })();
@@ -446,6 +464,7 @@ impl Case {
                 out.failures
                     .push(format!("loop {n}: does not come back to the start"));
             }
+            self.check_fast(engine, &format!("loop {n}: "), l, out);
             let reuse = reuse_share(&l.geometry, home);
             worst = worst.max(reuse);
             if reuse > MAX_REUSE + REUSE_SLACK {
@@ -467,6 +486,19 @@ impl Case {
         out.favourite_share = best.favourite_share;
         out.curvy_share = best.curvy_share;
         self.check_route(best, out);
+    }
+
+    /// Kilometres on roads posted 100 km/h or more, against `max_fast_km`.
+    fn check_fast(&self, engine: &Engine, what: &str, route: &Route, out: &mut Outcome) {
+        let Some(max) = self.expect.max_fast_km else {
+            return;
+        };
+        let km = fast_km(engine, &route.geometry);
+        if km > max {
+            out.failures.push(format!(
+                "{what}{km:.1} km on 100+ km/h roads, expected at most {max:.1} km"
+            ));
+        }
     }
 
     /// Favourite and curvy shares, gravel, pass and avoid points.
@@ -521,6 +553,25 @@ impl Case {
             }
         }
     }
+}
+
+/// What counts as a fast (and dull) road, km/h.
+const FAST_KMH: u32 = 100;
+
+/// Kilometres of `line` on roads posted [`FAST_KMH`] or more: each
+/// stretch between two points counts by the road under its middle.
+pub fn fast_km(engine: &Engine, line: &[LatLon]) -> f64 {
+    line.windows(2)
+        .filter(|w| {
+            let mid = LatLon {
+                lat: (w[0].lat + w[1].lat) / 2.0,
+                lon: (w[0].lon + w[1].lon) / 2.0,
+            };
+            engine.road_at(mid).is_ok_and(|r| r.speed_kmh >= FAST_KMH)
+        })
+        .map(|w| haversine_m(w[0], w[1]))
+        .sum::<f64>()
+        / 1000.0
 }
 
 /// Reuse is measured on points this far apart along the line...

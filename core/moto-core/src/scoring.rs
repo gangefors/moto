@@ -47,6 +47,23 @@ pub struct ScoringParams {
     /// to an epic favourite (1). Adds to favourites and curvature, capped
     /// at 1.
     pub gravel_weight: f64,
+    /// Speed bands that are dull to ride (Stefan: anything from 51 to
+    /// 99 km/h can be fun; 100+ and 50 or below mostly aren't, unless
+    /// curvy). Roads at `fast_kmh` or more (in Sweden mostly straight,
+    /// often split 2+1 roads riders avoid) cost `fast_penalty` times more
+    /// at full pull in fun routing, roads at `slow_kmh` or less
+    /// `slow_penalty` (not gravel while gravel is preferred: most gravel
+    /// roads are 50 km/h). A curvy road is spared: the extra shrinks with
+    /// its curviness. Scaled down with the pull, so the fastest route is
+    /// untouched.
+    pub fast_kmh: u8,
+    pub fast_penalty: f64,
+    pub slow_kmh: u8,
+    pub slow_penalty: f64,
+    /// What a second on a dull road takes off a route's worth, per unit
+    /// of dullness over 1: a straight 100 km/h road (dullness 3) is worth
+    /// -0.5, so the guard counts leaving it as fun gained.
+    pub dull_worth: f64,
     /// Bisection steps over the pull when full pull gives a route over the
     /// budget or the guard (each one is a route search).
     pub detour_steps: u32,
@@ -104,6 +121,11 @@ pub const PARAMS: ScoringParams = ScoringParams {
     curve_class_weight: [0.0, 0.5, 1.0, 1.0, 1.0, 0.6, 0.2, 0.0, 0.0, 0.0, 0.0],
     curve_weight: 0.8,
     gravel_weight: 0.8,
+    fast_kmh: 100,
+    fast_penalty: 3.0,
+    slow_kmh: 50,
+    slow_penalty: 1.5,
+    dull_worth: 0.25,
     detour_steps: 5,
     reuse_penalty: 4.0,
     loop_detour: 1.3,
