@@ -82,7 +82,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.ZoneId
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +100,7 @@ import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
 import se.gangefors.moto.core.NewSection
 import se.gangefors.moto.core.Rating
+import se.gangefors.moto.core.RoadInfo
 import se.gangefors.moto.core.RouteOptions
 import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.Route
@@ -136,6 +136,8 @@ fun MapScreen() {
     var hasLocation by remember { mutableStateOf(hasLocationPermission(context)) }
     var region by remember { mutableStateOf<RegionState>(RegionState.Loading) }
     var message by remember { mutableStateOf<String?>(null) }
+    // The road the rider last tapped, shown until closed.
+    var roadInfo by remember { mutableStateOf<RoadInfo?>(null) }
 
     // Install (first start only) and open the bundled region off the main thread.
     LaunchedEffect(Unit) {
@@ -614,8 +616,19 @@ fun MapScreen() {
             val hit = o.sections.sectionAt(m, tap)?.let { id -> sections.firstOrNull { it.id == id } }
             if (hit != null) {
                 editing = hit
+            } else if (ready == null) {
+                message = regionStatus(resources, region)
             } else {
-                message = snapAndMark(resources, region, tap, o.snap)
+                try {
+                    val info = ready.engine.roadAt(tap.toLatLon())
+                    o.snap.show(tap, LatLng(info.point.position.lat, info.point.position.lon))
+                    roadInfo = info
+                    message = null
+                } catch (e: MotoException) {
+                    o.snap.show(tap, null)
+                    roadInfo = null
+                    message = coreErrorMessage(resources, e)
+                }
             }
             true
         }
@@ -804,6 +817,16 @@ fun MapScreen() {
                         }
                     }
                 }
+            }
+            roadInfo?.let {
+                RoadInfoCard(
+                    it,
+                    onClose = {
+                        roadInfo = null
+                        overlays?.snap?.clear()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             routeEnds?.let {
                 RouteCard(
@@ -1125,25 +1148,6 @@ private class Overlays(
     val route: RouteOverlay,
     val snap: SnapMarker,
 )
-
-/** Snaps [tap] with the region's engine, draws the result and returns a line to show. */
-private fun snapAndMark(res: Resources, region: RegionState, tap: LatLng, marker: SnapMarker): String =
-    when (region) {
-        is RegionState.Ready -> try {
-            val p = region.engine.snap(LatLon(tap.latitude, tap.longitude))
-            marker.show(tap, LatLng(p.position.lat, p.position.lon))
-            res.getString(
-                R.string.snap_result,
-                p.distanceM.roundToInt(),
-                p.edge.toLong(),
-                (p.offset * 100).roundToInt(),
-            )
-        } catch (e: MotoException) {
-            marker.show(tap, null)
-            coreErrorMessage(res, e)
-        }
-        else -> regionStatus(res, region)
-    }
 
 /** What to say while the region is not ready to use. */
 private fun regionStatus(res: Resources, region: RegionState): String = when (region) {

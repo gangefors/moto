@@ -67,6 +67,11 @@ class SnapMarker(style: Style) {
         source.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
+    /** Removes the marker. */
+    fun clear() {
+        source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+    }
+
     private fun feature(geometry: org.maplibre.geojson.Geometry, kind: String): Feature =
         Feature.fromGeometry(geometry).apply { addStringProperty(KIND, kind) }
 
