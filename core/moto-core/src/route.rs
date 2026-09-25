@@ -30,7 +30,7 @@ fn time_s(e: &Edge) -> f64 {
 }
 
 /// Gravel and other unpaved roads.
-fn is_unpaved(e: &Edge) -> bool {
+pub(crate) fn is_unpaved(e: &Edge) -> bool {
     Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved())
 }
 

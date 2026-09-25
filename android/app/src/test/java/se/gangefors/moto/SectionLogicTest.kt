@@ -186,4 +186,34 @@ class SectionLogicTest {
         assertEquals(AddOutcome.Saved(0), addOutcome(se.gangefors.moto.core.AddResult(saved, emptyList(), null)))
         assertEquals(AddOutcome.Saved(2), addOutcome(se.gangefors.moto.core.AddResult(saved, listOf(1, 2), null)))
     }
+
+    @Test
+    fun mostlyGravelSectionsHideOnlyWhileGravelIsAvoided() {
+        val part = listOf(LatLon(55.7, 13.2), LatLon(55.71, 13.2))
+        fun g(id: Long, unpaved: Double) = se.gangefors.moto.core.SectionGravel(id, unpaved, 1000.0, listOf(part))
+        val gravel = listOf(g(1, 900.0), g(2, 500.0), g(3, 100.0), se.gangefors.moto.core.SectionGravel(4, 5.0, 0.0, emptyList()))
+        assertEquals(setOf(1L, 2L), hiddenForGravel(gravel, se.gangefors.moto.core.Gravel.AVOID))
+        assertEquals(emptySet<Long>(), hiddenForGravel(gravel, se.gangefors.moto.core.Gravel.ALLOW))
+        assertEquals(emptySet<Long>(), hiddenForGravel(gravel, se.gangefors.moto.core.Gravel.PREFER))
+    }
+
+    @Test
+    fun gravelIsDrawnOnlyOnShownSectionsThatFit() {
+        fun section(id: Long, status: se.gangefors.moto.core.SectionStatus) = se.gangefors.moto.core.Section(
+            id, "local", "", Rating.GOOD, Direction.BOTH, se.gangefors.moto.core.SectionSource.MAP, status,
+            0, 0, emptyList(), listOf(LatLon(55.7, 13.2), LatLon(55.71, 13.2)),
+        )
+        val a = listOf(LatLon(55.7, 13.2), LatLon(55.705, 13.2))
+        val b = listOf(LatLon(55.8, 13.2), LatLon(55.805, 13.2))
+        val gravel = listOf(
+            se.gangefors.moto.core.SectionGravel(1, 500.0, 1000.0, listOf(a)),
+            se.gangefors.moto.core.SectionGravel(2, 500.0, 1000.0, listOf(b)),
+            se.gangefors.moto.core.SectionGravel(3, 500.0, 1000.0, listOf(b)),
+        )
+        val shown = listOf(
+            section(1, se.gangefors.moto.core.SectionStatus.OK),
+            section(3, se.gangefors.moto.core.SectionStatus.UNMATCHED),
+        )
+        assertEquals(listOf(a), gravelParts(gravel, shown))
+    }
 }

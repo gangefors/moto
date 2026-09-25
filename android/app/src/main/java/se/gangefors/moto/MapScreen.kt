@@ -107,6 +107,7 @@ import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.Route
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionDraft
+import se.gangefors.moto.core.SectionGravel
 import se.gangefors.moto.core.SectionSource
 import se.gangefors.moto.core.SectionStatus
 import se.gangefors.moto.core.SectionStore
@@ -256,11 +257,17 @@ fun MapScreen() {
     // thread whenever they change, re-matched ones included. Until the first
     // build is done, routes are the fastest ones.
     var favourites by remember { mutableStateOf<Favourites?>(null) }
+    // Where the favourites run on gravel: drawn dashed, and mostly-gravel
+    // sections hidden while gravel is avoided.
+    var sectionGravel by remember { mutableStateOf<List<SectionGravel>>(emptyList()) }
     LaunchedEffect(store, region, sections) {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
-        withContext(Dispatchers.IO) { runCatching { s.favourites(engine) } }
-            .onSuccess { favourites = it }
+        withContext(Dispatchers.IO) { runCatching { s.favourites(engine).let { it to it.gravel() } } }
+            .onSuccess { (f, g) ->
+                favourites = f
+                sectionGravel = g
+            }
             .onFailure { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) }
     }
 
@@ -289,9 +296,6 @@ fun MapScreen() {
         style?.let { s ->
             Overlays(SectionOverlay(s, density.density), RideOverlay(s), SectionDraftOverlay(s), RouteOverlay(s), SnapMarker(s))
         }
-    }
-    LaunchedEffect(overlays, sections, showUnmatched) {
-        overlays?.sections?.show(visibleSections(sections, showUnmatched))
     }
 
     // Ride recording (RecordingService): the line so far, and what to say.
@@ -529,6 +533,12 @@ fun MapScreen() {
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
     var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
+    LaunchedEffect(overlays, sections, showUnmatched, sectionGravel, gravel) {
+        val hidden = hiddenForGravel(sectionGravel, gravel)
+        val shown = visibleSections(sections, showUnmatched).filterNot { it.id in hidden }
+        overlays?.sections?.show(shown)
+        overlays?.sections?.showGravel(gravelParts(sectionGravel, shown))
+    }
     // A start picked and waiting for an end, or for "Loop from here".
     var startPicked by remember { mutableStateOf<LatLng?>(null) }
     // Round trips (M3) from a start: the loops found (empty while they are

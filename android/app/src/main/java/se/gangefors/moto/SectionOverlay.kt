@@ -35,6 +35,7 @@ import se.gangefors.moto.core.Section
  */
 class SectionOverlay(private val style: Style, private val density: Float) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
+    private val gravelSource = style.getSourceAs(GRAVEL_SOURCE) ?: GeoJsonSource(GRAVEL_SOURCE).also(style::addSource)
 
     init {
         if (style.getLayer(LINE_LAYER) == null) {
@@ -72,6 +73,17 @@ class SectionOverlay(private val style: Style, private val density: Float) {
                         PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
                     ),
             )
+            // Gravel stretches: a white dashed centre line, as on routes.
+            style.addLayer(
+                LineLayer(GRAVEL_LAYER, GRAVEL_SOURCE)
+                    .withProperties(
+                        PropertyFactory.lineColor("#ffffff"),
+                        PropertyFactory.lineWidth(2f),
+                        PropertyFactory.lineDasharray(arrayOf(3f, 2f)),
+                        PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    ),
+            )
             style.addLayer(
                 SymbolLayer(ARROW_LAYER, SOURCE)
                     .withFilter(
@@ -105,6 +117,16 @@ class SectionOverlay(private val style: Style, private val density: Float) {
             PropertyFactory.lineOpacity(look.lineOpacity),
         )
         style.getLayer(ARROW_LAYER)?.setProperties(PropertyFactory.iconOpacity(look.arrowOpacity))
+        style.getLayer(GRAVEL_LAYER)?.setProperties(
+            PropertyFactory.lineOpacity(look.lineOpacity),
+            PropertyFactory.lineWidth(look.lineWidth * GRAVEL_WIDTH_SHARE),
+        )
+    }
+
+    /** Draws the gravel stretches of the shown sections (see [gravelParts]). */
+    fun showGravel(parts: List<List<LatLon>>) {
+        val features = parts.filter { it.size >= 2 }.map { Feature.fromGeometry(it.toLineString()) }
+        gravelSource.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
     fun show(sections: List<Section>) {
@@ -137,6 +159,10 @@ class SectionOverlay(private val style: Style, private val density: Float) {
         const val LINE_LAYER = "moto-sections-line"
         const val UNMATCHED_LAYER = "moto-sections-unmatched"
         const val ARROW_LAYER = "moto-sections-arrows"
+        const val GRAVEL_SOURCE = "moto-sections-gravel"
+        const val GRAVEL_LAYER = "moto-sections-gravel"
+        // The dashes' width as a share of the section line's (2 of 5 px).
+        const val GRAVEL_WIDTH_SHARE = 0.4f
         const val ARROW_IMAGE = "moto-section-arrow"
         const val ID = "id"
         const val ORDER = "order"

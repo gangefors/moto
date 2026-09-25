@@ -11,7 +11,8 @@ use std::collections::HashMap;
 
 use crate::geo::haversine_m;
 use crate::region::format::WayRef;
-use crate::route::edge_line;
+use crate::region::format::edge_flags::REVERSED;
+use crate::route::{edge_line, is_unpaved};
 use crate::scoring::PARAMS;
 use crate::section::{Direction, Section, Status};
 use crate::{CoreError, Engine, LatLon};
@@ -34,10 +35,26 @@ pub struct Favourites {
     /// The middle of each matched section and its rating weight: places
     /// a round trip may go through (ADR-0007).
     anchors: Vec<(LatLon, f64)>,
+    /// The gravel stretches of each matched section that has any.
+    gravel: Vec<SectionGravel>,
+}
+
+/// Where a favourite section runs on gravel or other unpaved road, for
+/// drawing it (and hiding the section while gravel is avoided).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SectionGravel {
+    pub section_id: i64,
+    /// Metres of the section on unpaved road, and its whole length.
+    pub unpaved_m: f64,
+    pub length_m: f64,
+    /// The unpaved stretches, each at least two points.
+    pub parts: Vec<Vec<LatLon>>,
 }
 
 /// A way span of a section, as the build looks it up.
 struct Span {
+    /// Index of the section in the build's input.
+    section: usize,
     lo: u32,
     hi: u32,
     /// `Some(true)` if the section may only be ridden along the OSM way,
@@ -60,7 +77,11 @@ impl Favourites {
     pub fn build(engine: &Engine, sections: &[Section]) -> Self {
         let mut by_way: HashMap<i64, Vec<Span>> = HashMap::new();
         let mut anchors = Vec::new();
-        for s in sections.iter().filter(|s| s.status == Status::Ok) {
+        for (i, s) in sections
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.status == Status::Ok)
+        {
             let bonus = PARAMS.bonus(s.rating);
             if let Some(mid) = crate::geo::polyline_slice(&s.geometry, 0.5, 0.5).first() {
                 anchors.push((*mid, bonus / PARAMS.max_pull));
@@ -75,6 +96,7 @@ impl Favourites {
                     Direction::Forward => Some(w.to_idx > w.from_idx),
                 };
                 by_way.entry(w.way_id).or_default().push(Span {
+                    section: i,
                     lo,
                     hi,
                     along_way,
@@ -93,6 +115,7 @@ impl Favourites {
 
         let region = engine.region();
         let mut bonus = vec![0.0f32; region.edge_count()];
+        let mut gravel: HashMap<usize, SectionGravel> = HashMap::new();
         for (id, r) in region.way_refs().iter().enumerate() {
             let Some(spans) = by_way.get(&r.way_id) else {
                 continue;
@@ -119,6 +142,25 @@ impl Favourites {
                 } else {
                     covered(engine, id, r, from, to)
                 };
+                // Gravel is drawn once per road: from the edge along the
+                // geometry, or from the one direction a one-way section
+                // takes.
+                let e = &region.edges()[id as usize];
+                let once = s.along_way.is_some() || e.flags & REVERSED == 0;
+                if once && is_unpaved(e) && stretch.1 > stretch.0 {
+                    let part =
+                        crate::geo::polyline_slice(&edge_line(region, e), stretch.0, stretch.1);
+                    let g = gravel.entry(s.section).or_insert_with(|| SectionGravel {
+                        section_id: sections[s.section].id,
+                        unpaved_m: 0.0,
+                        length_m: crate::geo::polyline_length_m(&sections[s.section].geometry),
+                        parts: Vec::new(),
+                    });
+                    g.unpaved_m += (stretch.1 - stretch.0) * f64::from(e.length_dm) / 10.0;
+                    if part.len() >= 2 {
+                        g.parts.push(part);
+                    }
+                }
                 let b = (stretch.1 - stretch.0) * s.bonus;
                 if b > best.0 {
                     best = (b, stretch, s.bonus / PARAMS.max_pull);
@@ -137,6 +179,9 @@ impl Favourites {
         if !favourites.coverage.is_empty() {
             favourites.bonus = bonus;
         }
+        let mut gravel: Vec<SectionGravel> = gravel.into_values().collect();
+        gravel.sort_by_key(|g| g.section_id);
+        favourites.gravel = gravel;
         favourites
     }
 
@@ -201,6 +246,12 @@ impl Favourites {
             .get(&id)
             .map_or(0.0, |&(_, _, w)| f64::from(w));
         self.covered_between(id, from, to) * weight
+    }
+
+    /// The gravel stretches of the sections that run on any, by section
+    /// id.
+    pub fn gravel(&self) -> &[SectionGravel] {
+        &self.gravel
     }
 
     /// The middle of each matched section and its rating weight (epic 1).

@@ -240,12 +240,41 @@ pub struct Favourites {
     pub(crate) inner: moto_core::Favourites,
 }
 
+/// Where a favourite section runs on gravel or other unpaved road.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct SectionGravel {
+    pub section_id: i64,
+    /// Metres of the section on unpaved road, and its whole length.
+    pub unpaved_m: f64,
+    pub length_m: f64,
+    /// The unpaved stretches, for drawing.
+    pub parts: Vec<Vec<LatLon>>,
+}
+
 #[uniffi::export]
 impl Favourites {
     /// How many road stretches (edges, each direction counted) are
     /// favourites.
     pub fn edge_count(&self) -> u64 {
         u64::try_from(self.inner.edge_count()).unwrap_or(u64::MAX)
+    }
+
+    /// The gravel stretches of the sections that run on any.
+    pub fn gravel(&self) -> Vec<SectionGravel> {
+        self.inner
+            .gravel()
+            .iter()
+            .map(|g| SectionGravel {
+                section_id: g.section_id,
+                unpaved_m: g.unpaved_m,
+                length_m: g.length_m,
+                parts: g
+                    .parts
+                    .iter()
+                    .map(|p| p.iter().map(|&q| q.into()).collect())
+                    .collect(),
+            })
+            .collect()
     }
 }
 
