@@ -104,14 +104,23 @@ class RouteOverlay(private val style: Style) {
             )
             style.addLayer(
                 CircleLayer(PIN_LAYER, SOURCE)
-                    .withFilter(Expression.any(Expression.eq(Expression.get(KIND), START), Expression.eq(Expression.get(KIND), END)))
+                    .withFilter(
+                        Expression.any(
+                            Expression.eq(Expression.get(KIND), START),
+                            Expression.eq(Expression.get(KIND), END),
+                            Expression.eq(Expression.get(KIND), VIA),
+                        ),
+                    )
                     .withProperties(
-                        PropertyFactory.circleRadius(9f),
+                        PropertyFactory.circleRadius(
+                            Expression.match(Expression.get(KIND), Expression.literal(9f), Expression.stop(VIA, 7f)),
+                        ),
                         PropertyFactory.circleColor(
                             Expression.match(
                                 Expression.get(KIND),
                                 Expression.literal(START_COLOR),
                                 Expression.stop(END, END_COLOR),
+                                Expression.stop(VIA, ROUTE_COLOR),
                             ),
                         ),
                         PropertyFactory.circleStrokeColor("#ffffff"),
@@ -122,14 +131,15 @@ class RouteOverlay(private val style: Style) {
     }
 
     /** Shows the start pin, and the end pin and route when there are any;
-     * [favourites] are the route's stretches on favourite sections and
-     * [gravel] those on unpaved roads. */
+     * [favourites] are the route's stretches on favourite sections,
+     * [gravel] those on unpaved roads, and [via] the points it passes. */
     fun show(
         start: LatLng?,
         end: LatLng?,
         route: List<LatLon>?,
         favourites: List<List<LatLon>> = emptyList(),
         gravel: List<List<LatLon>> = emptyList(),
+        via: List<LatLng> = emptyList(),
     ) {
         val features = mutableListOf<Feature>()
         fun line(points: List<LatLon>) = LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })
@@ -138,6 +148,7 @@ class RouteOverlay(private val style: Style) {
             favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
             gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }
         }
+        via.forEach { features += feature(Point.fromLngLat(it.longitude, it.latitude), VIA) }
         start?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), START) }
         end?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), END) }
         source.setGeoJson(FeatureCollection.fromFeatures(features))
@@ -159,6 +170,7 @@ class RouteOverlay(private val style: Style) {
         const val GRAVEL = "gravel"
         const val START = "start"
         const val END = "end"
+        const val VIA = "via"
         const val ROUTE_COLOR = "#1a73e8"
         // Epic purple, the favourite colour of the section layer.
         const val FAVOURITE_COLOR = "#a142f4"

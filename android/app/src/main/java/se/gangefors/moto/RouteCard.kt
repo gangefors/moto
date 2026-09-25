@@ -16,9 +16,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,9 @@ fun RouteCard(
     onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
+    viaCount: Int,
+    onAddVia: () -> Unit,
+    onClearVia: () -> Unit,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
@@ -60,12 +65,17 @@ fun RouteCard(
                 onClose,
                 stringResource(R.string.route_close),
             )
-            if (expanded) RouteCardDetails(budgetPercent, onBudget, gravel, onGravel, onShare, onSave, summary != null)
+            if (expanded) {
+                RouteCardDetails(
+                    budgetPercent, onBudget, gravel, onGravel, onShare, onSave, summary != null,
+                    viaCount, onAddVia, onClearVia,
+                )
+            }
         }
     }
 }
 
-/** The route card's choices: extra time, gravel and sharing. */
+/** The route card's choices: via points, extra time, gravel and sharing. */
 @Composable
 private fun RouteCardDetails(
     budgetPercent: Int,
@@ -75,8 +85,24 @@ private fun RouteCardDetails(
     onShare: () -> Unit,
     onSave: () -> Unit,
     shareEnabled: Boolean,
+    viaCount: Int,
+    onAddVia: () -> Unit,
+    onClearVia: () -> Unit,
 ) {
     Column {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(onClick = onAddVia, enabled = viaCount < MAX_VIA_POINTS) {
+                OneLine(stringResource(R.string.route_add_via))
+            }
+            if (viaCount > 0) {
+                TextButton(onClick = onClearVia) {
+                    OneLine(pluralStringResource(R.plurals.route_clear_via, viaCount, viaCount))
+                }
+            }
+        }
         Text(
             stringResource(R.string.route_budget),
             style = MaterialTheme.typography.labelMedium,

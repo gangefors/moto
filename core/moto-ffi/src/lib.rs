@@ -195,21 +195,24 @@ impl Engine {
         Ok(self.inner.snap(point.into())?.into())
     }
 
-    /// Route from `from` to `to`: the fastest one, or with `favourites`
-    /// (from `SectionStore.favourites` for this region) the one over as
-    /// many of them as `opts.budget` buys.
+    /// Route from `from` to `to` through the `via` points in order (at
+    /// most 8; each leg routed on its own): the fastest one, or with
+    /// `favourites` (from `SectionStore.favourites` for this region) the
+    /// one over as many of them as `opts.budget` buys.
     pub fn route(
         &self,
         from: LatLon,
+        via: Vec<LatLon>,
         to: LatLon,
         opts: RouteOptions,
         favourites: Option<Arc<Favourites>>,
     ) -> Result<Route, MotoError> {
         let none = moto_core::Favourites::none();
         let fav = favourites.as_ref().map_or(&none, |f| &f.inner);
+        let via: Vec<moto_core::LatLon> = via.into_iter().map(Into::into).collect();
         Ok(self
             .inner
-            .route_with(from.into(), to.into(), &opts.into(), fav)?
+            .route_via(from.into(), &via, to.into(), &opts.into(), fav)?
             .into())
     }
 
@@ -478,6 +481,23 @@ mod tests {
     }
 
     #[test]
+    fn routes_through_via_points_across_the_ffi() {
+        let file = fixture_file("via");
+        let engine = Engine::open(file.path()).unwrap();
+        let (from, to) = (ll(55.7001, 13.201), ll(55.7001, 13.219));
+        let opts = default_route_options();
+        let direct = engine.route(from, vec![], to, opts.clone(), None).unwrap();
+        let via = engine
+            .route(from, vec![ll(55.705, 13.2119)], to, opts.clone(), None)
+            .unwrap();
+        assert!(via.distance_m > direct.distance_m + 1000.0);
+        assert!(matches!(
+            engine.route(from, vec![from; 9], to, opts, None),
+            Err(MotoError::InvalidInput { .. })
+        ));
+    }
+
+    #[test]
     fn describes_the_road_through_the_ffi() {
         let file = fixture_file("road");
         let engine = Engine::open(file.path()).unwrap();
@@ -514,6 +534,7 @@ mod tests {
         let route = engine
             .route(
                 ll(55.7001, 13.201),
+                vec![],
                 ll(55.7001, 13.219),
                 default_route_options(),
                 None,
@@ -541,7 +562,13 @@ mod tests {
         let far = engine.snap(ll(55.7145, 13.2245)).unwrap_err();
         assert!(matches!(far, MotoError::NoRoadNearby { .. }), "{far:?}");
         let none = engine
-            .route(ll(55.7001, 13.219), ll(55.7001, 13.201), opts.clone(), None)
+            .route(
+                ll(55.7001, 13.219),
+                vec![],
+                ll(55.7001, 13.201),
+                opts.clone(),
+                None,
+            )
             .unwrap_err();
         assert!(matches!(none, MotoError::NoRoute { .. }), "{none:?}");
         let bad = engine.snap(ll(91.0, 0.0)).unwrap_err();
@@ -635,7 +662,13 @@ mod tests {
         let engine = Engine::open(file.path()).unwrap();
         let opts = default_route_options();
         let r = engine
-            .route(ll(55.7001, 13.201), ll(55.7001, 13.219), opts.clone(), None)
+            .route(
+                ll(55.7001, 13.201),
+                vec![],
+                ll(55.7001, 13.219),
+                opts.clone(),
+                None,
+            )
             .unwrap();
         let gpx = engine
             .route_gpx(r.geometry.clone(), "Lund & back".into(), opts.clone())

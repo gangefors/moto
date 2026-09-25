@@ -648,10 +648,16 @@ mod tests {
         assert_eq!(fav.edge_count(), 3, "A–B both ways, the one-way B→D");
         let (from, to) = (ll(55.7001, 13.203), ll(55.7001, 13.218));
         let plain = engine
-            .route(from, to, crate::default_route_options(), None)
+            .route(from, vec![], to, crate::default_route_options(), None)
             .unwrap();
         let r = engine
-            .route(from, to, crate::default_route_options(), Some(fav.clone()))
+            .route(
+                from,
+                vec![],
+                to,
+                crate::default_route_options(),
+                Some(fav.clone()),
+            )
             .unwrap();
         assert_eq!(plain.favourite_share, 0.0);
         assert!(r.favourite_share > 0.99, "{r:?}");
@@ -671,6 +677,7 @@ mod tests {
         let err = other
             .route(
                 ll(55.7001, 13.405),
+                vec![],
                 ll(55.7001, 13.435),
                 crate::default_route_options(),
                 Some(fav),
