@@ -526,6 +526,8 @@ fun MapScreen() {
     // 0: the standard loops; Shuffle picks another seed. A new start goes
     // back to the standard loops.
     var loopSeed by remember { mutableStateOf(0u) }
+    // Which way the loops should head; any way again for a new start.
+    var loopDirection by remember { mutableStateOf(LoopDirection.ANY) }
     // Whether the route and loop cards show all their choices or only the
     // figures (collapsed, to see more of the map); kept for new routes.
     var cardExpanded by rememberSaveable { mutableStateOf(true) }
@@ -534,7 +536,7 @@ fun MapScreen() {
     LaunchedEffect(overlays, routeEnds, loopStart) {
         overlays?.sections?.setLook(sectionLook(routeShown = routeEnds != null || loopStart != null))
     }
-    LaunchedEffect(loopStart, loopChoice, loopSeed, allowGravel, favourites, overlays) {
+    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, allowGravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -544,7 +546,7 @@ fun MapScreen() {
         val favs = favourites
         val opts = routeOptions(defaultRouteOptions(), budgetPercent, allowGravel)
         val choice = loopChoice
-        val shape = LoopOptions(seed = loopSeed)
+        val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
             runCatching { ready.engine.roundTrip(start.toLatLon(), choice.target, opts, favs, shape) }
@@ -760,6 +762,7 @@ fun MapScreen() {
                                 startPicked = null
                                 message = null
                                 loopSeed = 0u
+                                loopDirection = LoopDirection.ANY
                                 loopStart = start
                             },
                             modifier = Modifier.padding(top = 4.dp),
@@ -837,6 +840,8 @@ fun MapScreen() {
                     position = loopIndex,
                     count = loops.size,
                     onShuffle = { loopSeed = shuffleSeed() },
+                    direction = loopDirection,
+                    onDirection = { loopDirection = it },
                     onNext = {
                         loopIndex = nextLoop(loopIndex, loops.size)
                         loops.getOrNull(loopIndex)?.let { r ->

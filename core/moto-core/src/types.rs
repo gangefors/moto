@@ -130,6 +130,21 @@ pub struct LoopOptions {
     /// another set, the same for the same seed: headings turned, and each
     /// candidate's spread and size varied (see `roundtrip`).
     pub seed: u32,
+    /// Which way the loops should head, in degrees clockwise from north:
+    /// loops are tried within 60 deg either side of it, topped up to two
+    /// from every direction when fewer fit there. `None`: every direction.
+    pub bearing: Option<f64>,
+}
+
+impl LoopOptions {
+    pub fn validate(&self) -> Result<(), CoreError> {
+        match self.bearing {
+            Some(b) if !b.is_finite() => Err(CoreError::InvalidArgument(format!(
+                "a loop bearing must be a number of degrees, got {b}"
+            ))),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// A computed route with the summary figures shown to the rider (PRD R8).

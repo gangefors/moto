@@ -52,6 +52,11 @@ class LoopLogicTest {
     }
 
     @Test
+    fun directionsAreCompassBearings() {
+        assertEquals(listOf(null, 0.0, 90.0, 180.0, 270.0), LoopDirection.entries.map { it.bearing })
+    }
+
+    @Test
     fun nextLoopWrapsAround() {
         assertEquals(1, nextLoop(0, 3))
         assertEquals(2, nextLoop(1, 3))

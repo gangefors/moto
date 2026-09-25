@@ -105,8 +105,8 @@ private fun RouteCardDetails(
  * alternatives it is, Next loop to flip through them, and the length the
  * rider wants. Choosing another length, or allowing gravel, finds the
  * loops again; Share hands the loop shown to a nav app; the cross clears
- * them; Shuffle finds another set. When not [expanded], only the figures
- * show.
+ * them; Shuffle finds another set, and a direction makes them head that
+ * way. When not [expanded], only the figures show.
  */
 @Composable
 fun LoopCard(
@@ -115,6 +115,8 @@ fun LoopCard(
     count: Int,
     onNext: () -> Unit,
     onShuffle: () -> Unit,
+    direction: LoopDirection,
+    onDirection: (LoopDirection) -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     allowGravel: Boolean,
@@ -141,7 +143,20 @@ fun LoopCard(
                 stringResource(R.string.loop_close),
             )
             if (expanded) {
-                LoopCardDetails(summary != null, position, count, onNext, onShuffle, choice, onChoice, allowGravel, onAllowGravel, onShare)
+                LoopCardDetails(
+                    found = summary != null,
+                    position = position,
+                    count = count,
+                    onNext = onNext,
+                    onShuffle = onShuffle,
+                    direction = direction,
+                    onDirection = onDirection,
+                    choice = choice,
+                    onChoice = onChoice,
+                    allowGravel = allowGravel,
+                    onAllowGravel = onAllowGravel,
+                    onShare = onShare,
+                )
             }
         }
     }
@@ -155,6 +170,8 @@ private fun LoopCardDetails(
     count: Int,
     onNext: () -> Unit,
     onShuffle: () -> Unit,
+    direction: LoopDirection,
+    onDirection: (LoopDirection) -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     allowGravel: Boolean,
@@ -194,6 +211,32 @@ private fun LoopCardDetails(
                                 is LoopChoice.Hours -> stringResource(R.string.loop_hours, c.hours)
                                 is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
                             },
+                        )
+                    },
+                )
+            }
+        }
+        Text(
+            stringResource(R.string.loop_direction),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LoopDirection.entries.forEach { d ->
+                FilterChip(
+                    selected = d == direction,
+                    onClick = { onDirection(d) },
+                    label = {
+                        OneLine(
+                            stringResource(
+                                when (d) {
+                                    LoopDirection.ANY -> R.string.loop_direction_any
+                                    LoopDirection.NORTH -> R.string.loop_direction_north
+                                    LoopDirection.EAST -> R.string.loop_direction_east
+                                    LoopDirection.SOUTH -> R.string.loop_direction_south
+                                    LoopDirection.WEST -> R.string.loop_direction_west
+                                },
+                            ),
                         )
                     },
                 )

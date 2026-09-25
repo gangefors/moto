@@ -70,15 +70,20 @@ pub enum RoundTripTarget {
 
 /// How round trips are shaped beyond their length: `seed` 0 gives the
 /// standard loops, any other value another set (the same for the same
-/// seed).
+/// seed); `bearing` (degrees clockwise from north) is the way they should
+/// head, or any way when absent.
 #[derive(Debug, Clone, Default, uniffi::Record)]
 pub struct LoopOptions {
     pub seed: u32,
+    pub bearing: Option<f64>,
 }
 
 impl From<LoopOptions> for moto_core::LoopOptions {
     fn from(o: LoopOptions) -> Self {
-        Self { seed: o.seed }
+        Self {
+            seed: o.seed,
+            bearing: o.bearing,
+        }
     }
 }
 
@@ -519,7 +524,10 @@ mod tests {
                     RoundTripTarget::DistanceM { meters: 20_000.0 },
                     default_route_options(),
                     None,
-                    LoopOptions { seed },
+                    LoopOptions {
+                        seed,
+                        bearing: None,
+                    },
                 )
                 .unwrap()
         };
