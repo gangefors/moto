@@ -513,7 +513,7 @@ fun MapScreen() {
     // The route shown and the options it was found with, for sharing.
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
     var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
-    var allowGravel by remember { mutableStateOf(RoutePrefs.allowGravel(context)) }
+    var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
     // A start picked and waiting for an end, or for "Loop from here".
     var startPicked by remember { mutableStateOf<LatLng?>(null) }
     // Round trips (M3) from a start: the loops found (empty while they are
@@ -538,7 +538,7 @@ fun MapScreen() {
     LaunchedEffect(overlays, routeEnds, loopStart) {
         overlays?.sections?.setLook(sectionLook(routeShown = routeEnds != null || loopStart != null))
     }
-    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, allowGravel, favourites, overlays) {
+    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -546,7 +546,7 @@ fun MapScreen() {
         loopIndex = 0
         o.route.show(start, null, null)
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), budgetPercent, allowGravel)
+        val opts = routeOptions(defaultRouteOptions(), budgetPercent, gravel)
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         // A newer request cancels this one; its result is then dropped.
@@ -577,14 +577,14 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, budgetPercent, allowGravel, favourites, overlays) {
+    LaunchedEffect(routeEnds, budgetPercent, gravel, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
         routeSummary = null
         shownRoute = null
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), budgetPercent, allowGravel)
+        val opts = routeOptions(defaultRouteOptions(), budgetPercent, gravel)
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
             runCatching { ready.engine.route(start.toLatLon(), end.toLatLon(), opts, favs) }
@@ -839,10 +839,10 @@ fun MapScreen() {
                         budgetPercent = percent
                         RoutePrefs.setBudgetPercent(context, percent)
                     },
-                    allowGravel = allowGravel,
-                    onAllowGravel = { allow ->
-                        allowGravel = allow
-                        RoutePrefs.setAllowGravel(context, allow)
+                    gravel = gravel,
+                    onGravel = { g ->
+                        gravel = g
+                        RoutePrefs.setGravel(context, g)
                     },
                     onClose = {
                         routeEnds = null
@@ -876,10 +876,10 @@ fun MapScreen() {
                         loopChoice = c
                         RoutePrefs.setLoopChoice(context, c)
                     },
-                    allowGravel = allowGravel,
-                    onAllowGravel = { allow ->
-                        allowGravel = allow
-                        RoutePrefs.setAllowGravel(context, allow)
+                    gravel = gravel,
+                    onGravel = { g ->
+                        gravel = g
+                        RoutePrefs.setGravel(context, g)
                     },
                     onClose = {
                         loopStart = null
@@ -1075,10 +1075,10 @@ fun MapScreen() {
             },
             onMessage = { message = it },
             onDismiss = { showRides = false },
-            allowGravel = allowGravel,
-            onAllowGravel = { allow ->
-                allowGravel = allow
-                RoutePrefs.setAllowGravel(context, allow)
+            gravel = gravel,
+            onGravel = { g ->
+                gravel = g
+                RoutePrefs.setGravel(context, g)
             },
         )
     }

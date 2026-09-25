@@ -102,15 +102,28 @@ const val DEFAULT_BUDGET_PERCENT = 40
  * (preferences are read back as untrusted input). */
 fun budgetPercentOf(stored: Int?): Int = stored?.takeIf { it in BUDGET_CHOICES } ?: DEFAULT_BUDGET_PERCENT
 
+/** The gravel choices, in the order they are offered. */
+val GRAVEL_CHOICES: List<Gravel> = listOf(Gravel.AVOID, Gravel.ALLOW, Gravel.PREFER)
+
+/** How a gravel choice is stored in preferences. */
+fun gravelKey(g: Gravel): String = g.name.lowercase()
+
+/** A stored gravel choice; without one, [legacyAllow] (the old Allow
+ * gravel switch) or else avoid. Preferences are read back as untrusted
+ * input: anything else counts as unset. */
+fun gravelOf(stored: String?, legacyAllow: Boolean = false): Gravel =
+    GRAVEL_CHOICES.firstOrNull { gravelKey(it) == stored } ?: if (legacyAllow) Gravel.ALLOW else Gravel.AVOID
+
 /**
  * [base] (the core's defaults) with [percent] extra time allowed, and
- * gravel (unpaved) roads allowed or avoided. Avoided means "where
- * possible": the core counts them as much slower, it doesn't ban them.
+ * gravel (unpaved) roads avoided, allowed or preferred. Avoided means
+ * "where possible": the core counts them as much slower, it doesn't ban
+ * them; preferred means they pull the route within the extra time.
  */
-fun routeOptions(base: RouteOptions, percent: Int, allowGravel: Boolean = false): RouteOptions =
+fun routeOptions(base: RouteOptions, percent: Int, gravel: Gravel = Gravel.AVOID): RouteOptions =
     base.copy(
         budget = TimeBudget.Extra(percent / 100.0),
-        gravel = if (allowGravel) Gravel.ALLOW else Gravel.AVOID,
+        gravel = gravel,
     )
 
 /**

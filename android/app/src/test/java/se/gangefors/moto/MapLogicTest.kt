@@ -110,8 +110,12 @@ class MapLogicTest {
         assertTrue(o.curvy)
         // Gravel: avoided unless allowed; the other avoid options stay.
         assertEquals(se.gangefors.moto.core.Gravel.AVOID, routeOptions(base, 40).gravel)
-        val gravel = routeOptions(base, 40, allowGravel = true)
+        val gravel = routeOptions(base, 40, se.gangefors.moto.core.Gravel.ALLOW)
         assertEquals(se.gangefors.moto.core.Gravel.ALLOW, gravel.gravel)
+        assertEquals(
+            se.gangefors.moto.core.Gravel.PREFER,
+            routeOptions(base, 40, se.gangefors.moto.core.Gravel.PREFER).gravel,
+        )
         assertTrue(gravel.avoid.motorways)
         assertFalse(gravel.avoid.ferries)
     }
@@ -128,5 +132,23 @@ class MapLogicTest {
             assertFalse(other, isRouteFileName(other))
         }
     }
-}
 
+    @Test
+    fun gravelChoicesAreStoredByKey() {
+        GRAVEL_CHOICES.forEach { assertEquals(it, gravelOf(gravelKey(it))) }
+        assertEquals(listOf("avoid", "allow", "prefer"), GRAVEL_CHOICES.map(::gravelKey))
+    }
+
+    @Test
+    fun unknownGravelFallsBackToTheOldSwitchOrAvoid() {
+        val avoid = se.gangefors.moto.core.Gravel.AVOID
+        val allow = se.gangefors.moto.core.Gravel.ALLOW
+        assertEquals(avoid, gravelOf(null))
+        assertEquals(avoid, gravelOf("PREFER"))
+        assertEquals(avoid, gravelOf(""))
+        assertEquals(allow, gravelOf(null, legacyAllow = true))
+        assertEquals(allow, gravelOf("junk", legacyAllow = true))
+        // A stored choice wins over the old switch.
+        assertEquals(avoid, gravelOf("avoid", legacyAllow = true))
+    }
+}
