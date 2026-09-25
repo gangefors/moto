@@ -11,11 +11,13 @@ use std::sync::Arc;
 
 mod exchange;
 mod road;
+mod routes;
 mod sections;
 mod tags;
 mod tracks;
 pub use exchange::*;
 pub use road::*;
+pub use routes::*;
 pub use sections::*;
 pub use tags::*;
 pub use tracks::*;

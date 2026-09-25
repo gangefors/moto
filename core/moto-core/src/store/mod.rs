@@ -91,6 +91,17 @@ const MIGRATIONS: &[&str] = &[
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
     ) STRICT, WITHOUT ROWID;",
+    // 5: routes and loops the rider saved to ride again.
+    "CREATE TABLE routes (
+        id          INTEGER PRIMARY KEY,
+        rider_id    TEXT    NOT NULL,
+        name        TEXT    NOT NULL,
+        is_loop     INTEGER NOT NULL CHECK (is_loop IN (0, 1)),
+        created_at  INTEGER NOT NULL,
+        distance_m  REAL    NOT NULL CHECK (distance_m >= 0),
+        duration_s  REAL    NOT NULL CHECK (duration_s >= 0),
+        geometry    BLOB    NOT NULL
+    ) STRICT;",
 ];
 
 /// The schema version this build writes.
@@ -457,10 +468,15 @@ fn encode_geometry(points: &[LatLon]) -> Vec<u8> {
 }
 
 /// Inverse of [`encode_geometry`]; `None` unless the bytes are whole,
-/// in-range points, at least two of them.
+/// in-range points, at least two of them and at most a section's.
 fn decode_geometry(bytes: &[u8]) -> Option<Vec<LatLon>> {
+    decode_line(bytes, crate::section::MAX_SECTION_POINTS)
+}
+
+/// As [`decode_geometry`], with at most `max` points.
+fn decode_line(bytes: &[u8], max: usize) -> Option<Vec<LatLon>> {
     let (pairs, rest) = bytes.as_chunks::<8>();
-    if !rest.is_empty() || pairs.len() < 2 || pairs.len() > crate::section::MAX_SECTION_POINTS {
+    if !rest.is_empty() || pairs.len() < 2 || pairs.len() > max {
         return None;
     }
     pairs
@@ -475,6 +491,8 @@ fn decode_geometry(bytes: &[u8]) -> Option<Vec<LatLon>> {
 
 mod exchange;
 mod rematch;
+mod routes;
+pub use routes::{MAX_ROUTE_POINTS, NewRoute, SavedRoute};
 mod tags;
 mod tracks;
 
