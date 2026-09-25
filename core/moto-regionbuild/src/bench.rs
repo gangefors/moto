@@ -321,6 +321,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
                 RoundTripTarget::DistanceM(km * 1000.0),
                 &opts,
                 &favourites,
+                &Default::default(),
             );
             loop_per_request[i].push(ms(t));
             if round == 0 {

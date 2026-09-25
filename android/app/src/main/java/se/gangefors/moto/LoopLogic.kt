@@ -44,6 +44,10 @@ val DEFAULT_LOOP: LoopChoice = LoopChoice.Hours(2)
  * (preferences are read back as untrusted input). */
 fun loopChoiceOf(stored: String?): LoopChoice = LOOP_CHOICES.firstOrNull { it.key == stored } ?: DEFAULT_LOOP
 
+/** A seed for another set of loops: never 0 (the standard loops). */
+fun shuffleSeed(random: kotlin.random.Random = kotlin.random.Random.Default): UInt =
+    random.nextInt(1, Int.MAX_VALUE).toUInt()
+
 /** The loop shown after [index] of [count]: the next one, back to the
  * first after the last. */
 fun nextLoop(index: Int, count: Int): Int = if (count <= 0) 0 else (index + 1).mod(count)

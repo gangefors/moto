@@ -42,4 +42,4 @@ pub use error::CoreError;
 pub use favourites::Favourites;
 pub use geo::LatLon;
 pub use suggest::TAG_REACH_M;
-pub use types::{Avoid, RoadPoint, RoundTripTarget, Route, RouteOptions, TimeBudget};
+pub use types::{Avoid, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions, TimeBudget};

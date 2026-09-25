@@ -18,6 +18,7 @@
     <string name="loop_computing">Finding loops…</string>
     <string name="loop_position">Loop %1$d of %2$d</string>
     <string name="loop_next">Next loop</string>
+    <string name="loop_shuffle">Shuffle</string>
     <string name="loop_length">Length</string>
     <string name="loop_hours">%1$d h</string>
     <string name="loop_km">%1$d km</string>
