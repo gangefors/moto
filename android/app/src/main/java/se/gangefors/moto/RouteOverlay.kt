@@ -57,7 +57,7 @@ class RouteOverlay(style: Style) {
                 LineLayer(CASING_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), ROUTE))
                     .withProperties(
-                        PropertyFactory.lineColor("#ffffff"),
+                        PropertyFactory.lineColor(CASING_COLOR),
                         PropertyFactory.lineWidth(9f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -83,15 +83,18 @@ class RouteOverlay(style: Style) {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
-            // Gravel dashed over everything else on the route, so it shows
-            // on favourite stretches too.
+            // Gravel makes the route dashed: gaps in the casing's white over
+            // the line, as wide as the widest (favourite) line, so it shows
+            // whatever the route's colour there. Dashes are in line widths:
+            // 9 px of line, 9 px of gap.
             style.addLayer(
                 LineLayer(GRAVEL_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), GRAVEL))
                     .withProperties(
-                        PropertyFactory.lineColor(GRAVEL_COLOR),
-                        PropertyFactory.lineWidth(4f),
-                        PropertyFactory.lineDasharray(arrayOf(1.5f, 1.2f)),
+                        PropertyFactory.lineColor(CASING_COLOR),
+                        PropertyFactory.lineWidth(6f),
+                        PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
+                        PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),
             )
@@ -155,8 +158,8 @@ class RouteOverlay(style: Style) {
         const val ROUTE_COLOR = "#1a73e8"
         // Epic purple, the favourite colour of the section layer.
         const val FAVOURITE_COLOR = "#a142f4"
-        // Brown, dashed: an unpaved road.
-        const val GRAVEL_COLOR = "#795548"
+        // The route's white outline, also the gaps that dash it on gravel.
+        const val CASING_COLOR = "#ffffff"
         const val START_COLOR = "#188038"
         const val END_COLOR = "#c5221f"
     }
