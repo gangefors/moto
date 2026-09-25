@@ -149,6 +149,9 @@
         <item quantity="other">%d GPS fixes</item>
     </plurals>
     <string name="rides_export">Export</string>
+    <string name="rides_import">Import GPX…</string>
+    <string name="rides_imported">Ride imported: %1$.1f km</string>
+    <string name="rides_import_failed">Import failed: %1$s</string>
     <string name="rides_exported">Ride exported as GPX</string>
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>

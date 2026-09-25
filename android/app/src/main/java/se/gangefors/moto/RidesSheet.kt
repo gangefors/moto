@@ -59,7 +59,8 @@ import se.gangefors.moto.core.exportExtension
  * ([gravel], the same setting as on the route and loop cards), all saved
  * sections, exported as GeoJSON (plain or
  * compressed) or imported from such a file, and the recorded rides, newest
- * first, each exported as GPX or deleted (tapped twice). Files are written
+ * first, each exported as GPX or deleted (tapped twice), plus rides imported
+ * from a GPX file (another app's track, or an earlier export). Files are written
  * and read only where the rider picks with the system file picker: no
  * storage permission, and nothing leaves the phone unless the rider sends
  * it. [engine] fits imported sections to the map; [onSectionsChanged]
@@ -142,6 +143,30 @@ fun RidesSheet(
             )
         }
     }
+    // Rides: import a GPX file from another app or an earlier export.
+    val openRide = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: error(resources.getString(R.string.sections_cannot_read))
+                    val bytes = input.use { readCapped(it, MAX_GPX_FILE_BYTES) }
+                        ?: error(resources.getString(R.string.sections_file_too_large, MAX_GPX_FILE_BYTES shr 20))
+                    store.importTrackGpx(bytes)
+                }
+            }
+            busy = false
+            reload()
+            onMessage(
+                result.fold(
+                    onSuccess = { t -> resources.getString(R.string.rides_imported, sectionKm(t.distanceM)) },
+                    onFailure = { resources.getString(R.string.rides_import_failed, it.message ?: it.toString()) },
+                ),
+            )
+        }
+    }
     val openSections = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
@@ -206,6 +231,9 @@ fun RidesSheet(
             }
             Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
+            OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
+                OneLine(stringResource(R.string.rides_import))
+            }
             val list = tracks
             when {
                 list == null -> Text(stringResource(R.string.rides_loading), Modifier.padding(vertical = 16.dp))

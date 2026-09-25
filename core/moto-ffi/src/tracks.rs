@@ -102,6 +102,22 @@ impl SectionStore {
             .map(|points| moto_core::gpx::track_gpx(&name, &points)))
     }
 
+    /// Imports a GPX file (at most 64 MiB) from another app or an earlier
+    /// export as a finished ride: its track, or its route if it has no
+    /// track. The file is untrusted; see `moto_core::gpx::read_track`.
+    pub fn import_track_gpx(&self, gpx: Vec<u8>) -> Result<Track, MotoError> {
+        if gpx.len() > moto_core::gpx::MAX_GPX_BYTES {
+            return Err(moto_core::CoreError::InvalidArgument(format!(
+                "a GPX file may be at most {} MiB",
+                moto_core::gpx::MAX_GPX_BYTES >> 20
+            ))
+            .into());
+        }
+        let text = String::from_utf8_lossy(&gpx);
+        let points = moto_core::gpx::read_track(&text, now().saturating_mul(1000))?;
+        Ok(self.store().import_track(&points)?.into())
+    }
+
     /// Deletes a track and its fixes; `false` if it did not exist.
     pub fn delete_track(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_track(id)?)
@@ -257,6 +273,20 @@ mod tests {
             .unwrap();
         assert_eq!(gpx.matches("<trkpt ").count(), 10);
         assert!(gpx.contains("<name>Test ride</name>"));
+
+        // The export imports back as a finished ride with the same fixes.
+        let back = store.import_track_gpx(gpx.into_bytes()).unwrap();
+        assert!(back.ended_at.is_some() && back.id != t.id);
+        assert_eq!(back.point_count, 10);
+        assert_eq!(store.track_points(back.id).unwrap().unwrap(), read);
+        assert!(matches!(
+            store.import_track_gpx(b"<gpx/>".to_vec()),
+            Err(MotoError::InvalidInput { .. })
+        ));
+        assert!(matches!(
+            store.import_track_gpx(vec![b' '; moto_core::gpx::MAX_GPX_BYTES + 1]),
+            Err(MotoError::InvalidInput { .. })
+        ));
         assert!(
             store
                 .export_track_gpx(999, String::new())

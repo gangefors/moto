@@ -246,3 +246,42 @@ fn damaged_track_rows_are_errors_not_panics() {
         );
     }
 }
+
+#[test]
+fn imports_a_finished_ride() {
+    let mut s = store();
+    let points = ride(MS0, 50);
+    let t = s.import_track(&points).unwrap();
+    assert_eq!((t.started_at, t.ended_at), (T0, Some(T0 + 49)));
+    assert_eq!(t.point_count, 50);
+    assert!((t.distance_m - 49.0 * 20.0).abs() < 1.0, "{t:?}");
+    // Stored at OSM precision (1e-7°).
+    let back = s.track_points(t.id).unwrap().unwrap();
+    assert_eq!(back.len(), points.len());
+    for (b, p) in back.iter().zip(&points) {
+        assert_eq!(b.time_ms, p.time_ms);
+        assert!((b.position.lat - p.position.lat).abs() < 1e-7);
+    }
+    assert_eq!(s.list_tracks().unwrap(), std::slice::from_ref(&t));
+    // A finished track takes no more points.
+    assert!(
+        s.append_track_points(t.id, &ride(MS0 + 100_000, 2))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_bad_import_stores_nothing() {
+    let mut s = store();
+    let mut backwards = ride(MS0, 3);
+    backwards[2].time_ms = backwards[1].time_ms;
+    let mut invalid = ride(MS0, 3);
+    invalid[1].speed_mps = Some(-1.0);
+    for points in [vec![], ride(MS0, 1), backwards, invalid] {
+        assert!(
+            matches!(s.import_track(&points), Err(CoreError::InvalidArgument(_))),
+            "{points:?}"
+        );
+    }
+    assert!(s.list_tracks().unwrap().is_empty());
+}

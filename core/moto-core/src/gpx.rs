@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Stefan Gangefors
 
-//! GPX 1.1 export of recorded rides, for the rider to take a ride out of
+//! GPX 1.1 export (and import, see [`read_track`]) of recorded rides, for the rider to take a ride out of
 //! the app (backup, other apps, or checking map matching on real data),
 //! and of routes, to hand them to a nav app (PRD R9).
 
@@ -9,6 +9,9 @@ use std::fmt::Write;
 
 use crate::LatLon;
 use crate::track::TrackPoint;
+
+mod read;
+pub use read::{MAX_GPX_BYTES, read_track};
 
 const HEADER: &str = concat!(
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
