@@ -54,6 +54,12 @@ const SKANE_BBOX: [f64; 4] = [55.28, 12.20, 56.72, 15.05];
 /// the cells of a 550 m grid add 1 MiB and make snapping in towns 3× faster.
 const GRID_CELL_E7: (i32, i32) = (25_000, 45_000);
 
+/// Road networks shorter than this in all are left out of the region:
+/// on the M0 region (2026-09) 869 of 877 networks, 202 km of 40 342 km,
+/// that a tap or a route end snapped to and then found no way out of.
+/// The larger separate ones (islands, about 40 km each) stay.
+const MIN_NETWORK_M: f64 = 5_000.0;
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "-h" || a == "--help") {
@@ -140,7 +146,7 @@ fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), S
         source_name: format!("{file_name} [{},{},{},{}]", b[0], b[1], b[2], b[3]),
     };
     let index = NodeIndex::new(osm.nodes);
-    let (data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7);
+    let (data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7, MIN_NETWORK_M);
     eprintln!(
         "graph     {:>7.1} s  {} ways in bbox → {} nodes, {} edges, {} geometries, {} shape points",
         t.elapsed().as_secs_f64(),
@@ -149,6 +155,12 @@ fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), S
         stats.edges,
         stats.segments,
         stats.shape_points
+    );
+    eprintln!(
+        "fragments          {} road networks under {:.0} km dropped, {:.1} km in all",
+        stats.fragments,
+        MIN_NETWORK_M / 1000.0,
+        stats.fragment_m / 1000.0
     );
     Ok((data, stats))
 }

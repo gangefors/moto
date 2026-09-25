@@ -61,6 +61,10 @@ struct Segment {
 /// Build statistics for the report.
 #[derive(Debug, Default)]
 pub struct GraphStats {
+    /// Small road networks cut off from the rest, dropped, and their
+    /// total length in metres.
+    pub fragments: usize,
+    pub fragment_m: f64,
     pub ways: usize,
     pub segments: usize,
     pub nodes: usize,
@@ -68,11 +72,15 @@ pub struct GraphStats {
     pub shape_points: usize,
 }
 
+/// Builds the routing graph of `ways`. Networks of connected roads
+/// shorter than `min_network_m` in all are left out (see
+/// [`drop_fragments`]).
 pub fn build(
     ways: &[RawWay],
     index: &NodeIndex,
     info: RegionInfo,
     grid_cell: (i32, i32),
+    min_network_m: f64,
 ) -> (RegionData, GraphStats) {
     // Pieces of ways inside the region: runs of consecutive known nodes.
     let mut pieces: Vec<(u32, u32, Vec<u32>)> = Vec::new(); // (way, first idx, nodes)
@@ -100,6 +108,8 @@ pub fn build(
             pieces.push((w as u32, start, run));
         }
     }
+
+    let (fragments, fragment_m) = drop_fragments(&mut pieces, index, min_network_m);
 
     let pieces_ways = {
         let mut w: Vec<u32> = pieces.iter().map(|p| p.0).collect();
@@ -234,6 +244,8 @@ pub fn build(
     drafts.sort_by_key(|d| (d.edge.tail, d.edge.head, d.edge.geometry));
 
     let stats = GraphStats {
+        fragments,
+        fragment_m,
         ways: pieces_ways,
         segments: segments.len(),
         nodes: nodes.len(),
@@ -251,6 +263,70 @@ pub fn build(
         grid_cell,
     };
     (data, stats)
+}
+
+/// Removes the way pieces of every network (roads connected to each
+/// other, whatever their direction) shorter than `min_m` in all: a
+/// car park, a gated estate or a road cut by the region's edge, which a
+/// tap or a route end would snap to and then find no way out of. The
+/// largest network always stays, however short (a small test region).
+/// Returns how many networks were dropped and their total length.
+fn drop_fragments(
+    pieces: &mut Vec<(u32, u32, Vec<u32>)>,
+    index: &NodeIndex,
+    min_m: f64,
+) -> (usize, f64) {
+    if min_m.is_nan() || min_m <= 0.0 || pieces.is_empty() {
+        return (0, 0.0);
+    }
+    fn root(parent: &mut [u32], mut x: u32) -> u32 {
+        while parent[x as usize] != x {
+            let up = parent[parent[x as usize] as usize];
+            parent[x as usize] = up;
+            x = up;
+        }
+        x
+    }
+    let mut parent: Vec<u32> = (0..index.len() as u32).collect();
+    for (_, _, nodes) in pieces.iter() {
+        for &n in &nodes[1..] {
+            let (a, b) = (root(&mut parent, nodes[0]), root(&mut parent, n));
+            if a != b {
+                parent[a as usize] = b;
+            }
+        }
+    }
+    let mut length = vec![0.0f64; index.len()];
+    let piece_m: Vec<f64> = pieces
+        .iter()
+        .map(|(_, _, nodes)| {
+            let line: Vec<LatLon> = nodes
+                .iter()
+                .map(|&n| latlon(index.pos[n as usize]))
+                .collect();
+            polyline_length_m(&line)
+        })
+        .collect();
+    for ((_, _, nodes), &m) in pieces.iter().zip(&piece_m) {
+        length[root(&mut parent, nodes[0]) as usize] += m;
+    }
+    let largest = (0..length.len())
+        .max_by(|&a, &b| length[a].total_cmp(&length[b]))
+        .unwrap_or(0);
+    let mut dropped = std::collections::HashSet::new();
+    let mut dropped_m = 0.0;
+    let mut keep = Vec::with_capacity(pieces.len());
+    for (piece, m) in pieces.drain(..).zip(piece_m) {
+        let r = root(&mut parent, piece.2[0]);
+        if length[r as usize] < min_m && r as usize != largest {
+            dropped.insert(r);
+            dropped_m += m;
+        } else {
+            keep.push(piece);
+        }
+    }
+    *pieces = keep;
+    (dropped.len(), dropped_m)
 }
 
 /// Calls `f(a, b)` for each stretch `nodes[a..=b]` between routing nodes.
@@ -328,7 +404,7 @@ mod tests {
     }
 
     fn build_region(ways: &[RawWay]) -> (Region, GraphStats) {
-        let (data, stats) = build(ways, &index(), info(), (5_000, 5_000));
+        let (data, stats) = build(ways, &index(), info(), (5_000, 5_000), 0.0);
         (
             Region::from_bytes(&data.to_bytes().unwrap()).unwrap(),
             stats,
@@ -442,12 +518,53 @@ mod tests {
             refs: vec![1, 2, 3, 4],
             attrs: attrs(Oneway::No),
         }];
-        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000));
+        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
         let keys: Vec<u64> = data
             .nodes
             .iter()
             .map(|&n| hilbert::index(n, &info().bbox))
             .collect();
         assert!(keys.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn small_separate_networks_are_dropped() {
+        // A main road 1-2-3-4 (about 2 km) and, not touching it, a short
+        // road 7-8 (about 630 m): with a 1 km minimum only the main road
+        // stays; with none, both.
+        let ways = [
+            RawWay {
+                id: 10,
+                refs: vec![1, 2, 3, 4],
+                attrs: attrs(Oneway::No),
+            },
+            RawWay {
+                id: 11,
+                refs: vec![7, 8],
+                attrs: attrs(Oneway::No),
+            },
+        ];
+        let (_, all) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
+        assert_eq!((all.fragments, all.segments), (0, 2));
+        let (data, kept) = build(&ways, &index(), info(), (5_000, 5_000), 1_000.0);
+        assert_eq!((kept.fragments, kept.segments, kept.nodes), (1, 1, 2));
+        assert!((kept.fragment_m - 630.0).abs() < 10.0, "{kept:?}");
+        let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+        assert!(r.way_refs().iter().all(|w| w.way_id == 10));
+        // Joined to the main road (2-5 then 5-7), the short road stays.
+        let joined = [
+            ways[0].clone(),
+            ways[1].clone(),
+            RawWay {
+                id: 12,
+                refs: vec![2, 5, 7],
+                attrs: attrs(Oneway::Forward),
+            },
+        ];
+        let (_, s) = build(&joined, &index(), info(), (5_000, 5_000), 1_000.0);
+        assert_eq!(s.fragments, 0);
+        // Everything too short: the largest network still stays.
+        let (_, one) = build(&ways, &index(), info(), (5_000, 5_000), 1e9);
+        assert_eq!((one.fragments, one.segments), (1, 1));
     }
 }
