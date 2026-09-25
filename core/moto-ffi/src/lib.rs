@@ -68,6 +68,20 @@ pub enum RoundTripTarget {
     DurationS { seconds: f64 },
 }
 
+/// How round trips are shaped beyond their length: `seed` 0 gives the
+/// standard loops, any other value another set (the same for the same
+/// seed).
+#[derive(Debug, Clone, Default, uniffi::Record)]
+pub struct LoopOptions {
+    pub seed: u32,
+}
+
+impl From<LoopOptions> for moto_core::LoopOptions {
+    fn from(o: LoopOptions) -> Self {
+        Self { seed: o.seed }
+    }
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct Route {
     pub geometry: Vec<LatLon>,
@@ -197,19 +211,25 @@ impl Engine {
     /// Up to three round trips from `start` of about `target` (±15 %),
     /// best first, each riding at most 10 % of its length twice
     /// (ADR-0007). `opts.budget` does not apply; with `favourites` the
-    /// loops go through and along them where they can.
+    /// loops go through and along them where they can; `shape` gives
+    /// other sets of loops.
     pub fn round_trip(
         &self,
         start: LatLon,
         target: RoundTripTarget,
         opts: RouteOptions,
         favourites: Option<Arc<Favourites>>,
+        shape: LoopOptions,
     ) -> Result<Vec<Route>, MotoError> {
         let none = moto_core::Favourites::none();
         let fav = favourites.as_ref().map_or(&none, |f| &f.inner);
-        let routes = self
-            .inner
-            .round_trip_with(start.into(), target.into(), &opts.into(), fav)?;
+        let routes = self.inner.round_trip_with(
+            start.into(),
+            target.into(),
+            &opts.into(),
+            fav,
+            &shape.into(),
+        )?;
         Ok(routes.into_iter().map(Into::into).collect())
     }
 }
@@ -466,6 +486,7 @@ mod tests {
                 RoundTripTarget::DistanceM { meters: 1_000.0 },
                 opts,
                 None,
+                LoopOptions::default(),
             )
             .unwrap_err();
         assert!(matches!(short, MotoError::InvalidInput { .. }), "{short:?}");
@@ -486,9 +507,25 @@ mod tests {
                 RoundTripTarget::DistanceM { meters: 20_000.0 },
                 default_route_options(),
                 None,
+                LoopOptions::default(),
             )
             .unwrap();
         assert!(loops.len() >= 2, "{}", loops.len());
+        // A seed gives another set, the same every time.
+        let seeded = |seed| {
+            engine
+                .round_trip(
+                    ll(55.754, 13.496),
+                    RoundTripTarget::DistanceM { meters: 20_000.0 },
+                    default_route_options(),
+                    None,
+                    LoopOptions { seed },
+                )
+                .unwrap()
+        };
+        let lines = |ls: &[Route]| ls.iter().map(|l| l.geometry.len()).collect::<Vec<_>>();
+        assert_eq!(lines(&seeded(7)), lines(&seeded(7)));
+        assert!((1..=5).any(|seed| lines(&seeded(seed)) != lines(&loops)));
         for l in &loops {
             assert!(
                 (l.distance_m - 20_000.0).abs() <= 3_000.0,

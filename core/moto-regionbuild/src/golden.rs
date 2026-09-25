@@ -365,7 +365,13 @@ impl Case {
             let target = t.target()?;
             let fav = Favourites::build(engine, &self.favourites(engine)?);
             let loops = engine
-                .round_trip_with(ll(self.from)?, target, &self.options(), &fav)
+                .round_trip_with(
+                    ll(self.from)?,
+                    target,
+                    &self.options(),
+                    &fav,
+                    &Default::default(),
+                )
                 .map_err(|e| e.to_string())?;
             Ok((target, loops))
         })();

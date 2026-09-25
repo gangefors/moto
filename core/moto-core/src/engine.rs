@@ -14,7 +14,7 @@ use crate::favourites::Favourites;
 use crate::matching::MatchedTrack;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
-use crate::{CoreError, LatLon, RoadPoint, RoundTripTarget, Route, RouteOptions};
+use crate::{CoreError, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions};
 
 /// How far from a road a point may be and still snap to it.
 pub const SNAP_MAX_DISTANCE_M: f64 = 500.0;
@@ -167,20 +167,28 @@ impl Engine {
         target: RoundTripTarget,
         opts: &RouteOptions,
     ) -> Result<Vec<Route>, CoreError> {
-        self.round_trip_with(start, target, opts, &Favourites::none())
+        self.round_trip_with(
+            start,
+            target,
+            opts,
+            &Favourites::none(),
+            &LoopOptions::default(),
+        )
     }
 
     /// Up to three different loops from `start` of about `target` (±15 %),
     /// over the rider's `favourites` and curvy roads, best first (PRD R7,
-    /// ADR-0007). `opts.budget` doesn't apply: the target is the budget.
+    /// ADR-0007). `opts.budget` doesn't apply: the target is the budget;
+    /// `shape` gives other sets of loops (a seed).
     pub fn round_trip_with(
         &self,
         start: LatLon,
         target: RoundTripTarget,
         opts: &RouteOptions,
         favourites: &Favourites,
+        shape: &LoopOptions,
     ) -> Result<Vec<Route>, CoreError> {
-        crate::roundtrip::round_trip(self, start, target, opts, favourites)
+        crate::roundtrip::loops(self, start, target, opts, favourites, shape)
     }
 
     /// The highest edge speed, which bounds the A* estimate.

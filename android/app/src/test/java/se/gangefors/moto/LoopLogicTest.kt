@@ -45,6 +45,13 @@ class LoopLogicTest {
     }
 
     @Test
+    fun shuffleSeedsAreNeverTheStandardSet() {
+        val random = kotlin.random.Random(1)
+        repeat(1000) { assert(shuffleSeed(random) != 0u) }
+        assertEquals(shuffleSeed(kotlin.random.Random(5)), shuffleSeed(kotlin.random.Random(5)))
+    }
+
+    @Test
     fun nextLoopWrapsAround() {
         assertEquals(1, nextLoop(0, 3))
         assertEquals(2, nextLoop(1, 3))

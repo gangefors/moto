@@ -18,7 +18,9 @@ use crate::favourites::Favourites;
 use crate::geo::{bearing_deg, destination, haversine_m};
 use crate::route::{Cost, Fun, Partial, Routed, build, latlon, path};
 use crate::scoring::PARAMS;
-use crate::{CoreError, Engine, LatLon, RoadPoint, RoundTripTarget, Route, RouteOptions};
+use crate::{
+    CoreError, Engine, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
+};
 
 /// Headings tried, evenly spread.
 pub const HEADINGS: usize = 12;
@@ -74,6 +76,26 @@ pub fn round_trip(
     opts: &RouteOptions,
     favourites: &Favourites,
 ) -> Result<Vec<Route>, CoreError> {
+    loops(
+        engine,
+        start,
+        target,
+        opts,
+        favourites,
+        &LoopOptions::default(),
+    )
+}
+
+/// [`round_trip`], shaped by `shape`: a non-zero seed gives another set of
+/// loops (see [`Candidates`]).
+pub fn loops(
+    engine: &Engine,
+    start: LatLon,
+    target: RoundTripTarget,
+    opts: &RouteOptions,
+    favourites: &Favourites,
+    shape: &LoopOptions,
+) -> Result<Vec<Route>, CoreError> {
     start.validate()?;
     target.validate()?;
     opts.validate()?;
@@ -103,10 +125,13 @@ pub fn round_trip(
     let mut loops = Vec::new();
     let radius = target_m / (3.0 * PARAMS.loop_detour);
     let home = home_radius_m(target_m);
-    for heading in 0..HEADINGS {
-        let bearing = heading as f64 * 360.0 / HEADINGS as f64;
-        let at = |r: f64| loop_at(engine, &fun, opts, &s, bearing, r, home, favourites);
-        let Some(first) = at(radius) else {
+    for (heading, c) in Candidates::new(shape.seed).enumerate() {
+        let at = |r: f64| {
+            loop_at(
+                engine, &fun, opts, &s, c.bearing, c.spread, r, home, favourites,
+            )
+        };
+        let Some(first) = at(radius * c.size) else {
             continue;
         };
         // One resize towards the target.
@@ -114,7 +139,7 @@ pub fn round_trip(
             Some(first)
         } else {
             let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
-            at(radius * scale).filter(|l| fits(&l.routed.route))
+            at(radius * c.size * scale).filter(|l| fits(&l.routed.route))
         };
         if let Some(mut l) = found {
             l.heading = heading;
@@ -159,8 +184,80 @@ fn worth_per_s(l: &Loop) -> f64 {
     l.routed.value_s / l.routed.route.duration_s.max(1.0)
 }
 
-/// The loop through two waypoints `SPREAD_DEG` either side of `bearing`
-/// at `radius`, or through a favourite near a waypoint; `None` when a
+/// One candidate loop: the waypoints lie `spread` degrees either side of
+/// `bearing`, at the loop radius times `size`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Candidate {
+    bearing: f64,
+    spread: f64,
+    size: f64,
+}
+
+/// The [`HEADINGS`] candidates of a seed. Seed 0: every 30°, spread
+/// [`SPREAD_DEG`], size 1 (the standard loops). Other seeds: the headings
+/// turned by up to 30°, and each candidate's spread 15–45° and size
+/// 0.8–1.2, from a small deterministic generator (splitmix64), so a seed
+/// always gives the same loops.
+struct Candidates {
+    seed: u32,
+    state: u64,
+    turn: f64,
+    i: usize,
+}
+
+impl Candidates {
+    fn new(seed: u32) -> Self {
+        let mut c = Self {
+            seed,
+            state: u64::from(seed),
+            turn: 0.0,
+            i: 0,
+        };
+        if seed != 0 {
+            c.turn = c.unit() * 360.0 / HEADINGS as f64;
+        }
+        c
+    }
+
+    /// A number in [0, 1) (splitmix64).
+    fn unit(&mut self) -> f64 {
+        self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^= z >> 31;
+        (z >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+impl Iterator for Candidates {
+    type Item = Candidate;
+
+    fn next(&mut self) -> Option<Candidate> {
+        if self.i == HEADINGS {
+            return None;
+        }
+        let bearing = self.i as f64 * 360.0 / HEADINGS as f64 + self.turn;
+        self.i += 1;
+        if self.seed == 0 {
+            return Some(Candidate {
+                bearing,
+                spread: SPREAD_DEG,
+                size: 1.0,
+            });
+        }
+        let spread = 15.0 + 30.0 * self.unit();
+        let size = 0.8 + 0.4 * self.unit();
+        Some(Candidate {
+            bearing,
+            spread,
+            size,
+        })
+    }
+}
+
+/// The loop through two waypoints `spread` degrees either side of
+/// `bearing` at `radius`, or through a favourite near a waypoint; `None` when a
 /// waypoint has no road or a leg no route. Roads within `home` metres of
 /// the start are free to ride twice.
 #[allow(clippy::too_many_arguments)]
@@ -170,6 +267,7 @@ fn loop_at(
     opts: &RouteOptions,
     start: &RoadPoint,
     bearing: f64,
+    spread: f64,
     radius: f64,
     home: f64,
     favourites: &Favourites,
@@ -194,8 +292,8 @@ fn loop_at(
             engine.snap(p).ok().inspect(|_| taken.push(p))
         })
     };
-    let w1 = waypoint(bearing - SPREAD_DEG)?;
-    let w2 = waypoint(bearing + SPREAD_DEG)?;
+    let w1 = waypoint(bearing - spread)?;
+    let w2 = waypoint(bearing + spread)?;
 
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();

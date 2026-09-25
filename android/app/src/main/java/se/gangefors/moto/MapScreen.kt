@@ -102,6 +102,7 @@ import se.gangefors.moto.core.MotoException
 import se.gangefors.moto.core.NewSection
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.RouteOptions
+import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.Route
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionDraft
@@ -522,6 +523,9 @@ fun MapScreen() {
     var loopIndex by remember { mutableIntStateOf(0) }
     var loopOpts by remember { mutableStateOf<RouteOptions?>(null) }
     var loopChoice by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    // 0: the standard loops; Shuffle picks another seed. A new start goes
+    // back to the standard loops.
+    var loopSeed by remember { mutableStateOf(0u) }
     // Whether the route and loop cards show all their choices or only the
     // figures (collapsed, to see more of the map); kept for new routes.
     var cardExpanded by rememberSaveable { mutableStateOf(true) }
@@ -530,7 +534,7 @@ fun MapScreen() {
     LaunchedEffect(overlays, routeEnds, loopStart) {
         overlays?.sections?.setLook(sectionLook(routeShown = routeEnds != null || loopStart != null))
     }
-    LaunchedEffect(loopStart, loopChoice, allowGravel, favourites, overlays) {
+    LaunchedEffect(loopStart, loopChoice, loopSeed, allowGravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -540,9 +544,10 @@ fun MapScreen() {
         val favs = favourites
         val opts = routeOptions(defaultRouteOptions(), budgetPercent, allowGravel)
         val choice = loopChoice
+        val shape = LoopOptions(seed = loopSeed)
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
-            runCatching { ready.engine.roundTrip(start.toLatLon(), choice.target, opts, favs) }
+            runCatching { ready.engine.roundTrip(start.toLatLon(), choice.target, opts, favs, shape) }
         }
         result.fold(
             onSuccess = { found ->
@@ -754,6 +759,7 @@ fun MapScreen() {
                                 val start = picker.takeStart()
                                 startPicked = null
                                 message = null
+                                loopSeed = 0u
                                 loopStart = start
                             },
                             modifier = Modifier.padding(top = 4.dp),
@@ -830,6 +836,7 @@ fun MapScreen() {
                     },
                     position = loopIndex,
                     count = loops.size,
+                    onShuffle = { loopSeed = shuffleSeed() },
                     onNext = {
                         loopIndex = nextLoop(loopIndex, loops.size)
                         loops.getOrNull(loopIndex)?.let { r ->

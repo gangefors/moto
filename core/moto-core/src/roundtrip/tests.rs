@@ -270,3 +270,66 @@ fn the_street_home_may_be_ridden_out_and_back() {
     assert_eq!(home_radius_m(60_000.0), 3_000.0);
     assert_eq!(home_radius_m(400_000.0), 5_000.0);
 }
+
+#[test]
+fn seed_zero_is_the_standard_candidates() {
+    let c: Vec<Candidate> = Candidates::new(0).collect();
+    assert_eq!(c.len(), HEADINGS);
+    for (i, c) in c.iter().enumerate() {
+        assert_eq!(
+            *c,
+            Candidate {
+                bearing: i as f64 * 30.0,
+                spread: SPREAD_DEG,
+                size: 1.0
+            }
+        );
+    }
+}
+
+#[test]
+fn seeded_candidates_vary_within_bounds_and_repeat() {
+    let a: Vec<Candidate> = Candidates::new(42).collect();
+    assert_eq!(a, Candidates::new(42).collect::<Vec<_>>());
+    assert_ne!(a, Candidates::new(43).collect::<Vec<_>>());
+    assert_eq!(a.len(), HEADINGS);
+    let turn = a[0].bearing;
+    assert!((0.0..30.0).contains(&turn), "{turn}");
+    for (i, c) in a.iter().enumerate() {
+        assert!((c.bearing - (i as f64 * 30.0 + turn)).abs() < 1e-9);
+        assert!((15.0..45.0).contains(&c.spread), "{c:?}");
+        assert!((0.8..1.2).contains(&c.size), "{c:?}");
+    }
+    // The extremes of the generator stay in range.
+    for seed in [1, u32::MAX] {
+        assert!(Candidates::new(seed).all(|c| (15.0..45.0).contains(&c.spread)));
+    }
+}
+
+#[test]
+fn shuffled_loops_differ_and_still_fit() {
+    let e = engine(fixture::grid(13));
+    let opts = RouteOptions::default();
+    let none = Favourites::none();
+    let standard = round_trip(&e, CENTRE, km(20.0), &opts, &none).unwrap();
+    let seeded = |seed| loops(&e, CENTRE, km(20.0), &opts, &none, &LoopOptions { seed }).unwrap();
+    assert_eq!(seeded(0), standard);
+    assert_eq!(seeded(9), seeded(9));
+    let mut differing = 0;
+    for seed in 1..=6 {
+        let set = seeded(seed);
+        assert!(!set.is_empty());
+        for l in &set {
+            assert!(
+                (l.distance_m - 20_000.0).abs() <= 20_000.0 * TOLERANCE,
+                "{}",
+                l.distance_m
+            );
+            assert_eq!(l.geometry.first(), l.geometry.last());
+        }
+        if set != standard {
+            differing += 1;
+        }
+    }
+    assert!(differing >= 3, "{differing} of 6 seeds gave other loops");
+}

@@ -123,6 +123,15 @@ impl RoundTripTarget {
     }
 }
 
+/// How round trips are shaped, beyond their length.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LoopOptions {
+    /// 0: the standard loops (the same every time). Any other value gives
+    /// another set, the same for the same seed: headings turned, and each
+    /// candidate's spread and size varied (see `roundtrip`).
+    pub seed: u32,
+}
+
 /// A computed route with the summary figures shown to the rider (PRD R8).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Route {

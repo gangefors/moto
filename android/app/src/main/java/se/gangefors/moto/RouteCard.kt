@@ -105,7 +105,8 @@ private fun RouteCardDetails(
  * alternatives it is, Next loop to flip through them, and the length the
  * rider wants. Choosing another length, or allowing gravel, finds the
  * loops again; Share hands the loop shown to a nav app; the cross clears
- * them. When not [expanded], only the figures show.
+ * them; Shuffle finds another set. When not [expanded], only the figures
+ * show.
  */
 @Composable
 fun LoopCard(
@@ -113,6 +114,7 @@ fun LoopCard(
     position: Int,
     count: Int,
     onNext: () -> Unit,
+    onShuffle: () -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     allowGravel: Boolean,
@@ -139,7 +141,7 @@ fun LoopCard(
                 stringResource(R.string.loop_close),
             )
             if (expanded) {
-                LoopCardDetails(summary != null, position, count, onNext, choice, onChoice, allowGravel, onAllowGravel, onShare)
+                LoopCardDetails(summary != null, position, count, onNext, onShuffle, choice, onChoice, allowGravel, onAllowGravel, onShare)
             }
         }
     }
@@ -152,6 +154,7 @@ private fun LoopCardDetails(
     position: Int,
     count: Int,
     onNext: () -> Unit,
+    onShuffle: () -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     allowGravel: Boolean,
@@ -159,16 +162,20 @@ private fun LoopCardDetails(
     onShare: () -> Unit,
 ) {
     Column {
-        if (found && count > 1) {
+        // Which loop, the next one, and a new set of loops (Shuffle).
+        if (found) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    stringResource(R.string.loop_position, position + 1, count),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                OutlinedButton(onClick = onNext) { OneLine(stringResource(R.string.loop_next)) }
+                if (count > 1) {
+                    Text(
+                        stringResource(R.string.loop_position, position + 1, count),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    OutlinedButton(onClick = onNext) { OneLine(stringResource(R.string.loop_next)) }
+                }
+                OutlinedButton(onClick = onShuffle) { OneLine(stringResource(R.string.loop_shuffle)) }
             }
         }
         Text(
