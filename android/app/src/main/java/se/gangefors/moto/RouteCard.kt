@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import se.gangefors.moto.core.Gravel
 
 /**
  * The route between the two long-pressed points: its figures (or that it
@@ -35,8 +36,8 @@ fun RouteCard(
     summary: RouteSummary?,
     budgetPercent: Int,
     onBudget: (Int) -> Unit,
-    allowGravel: Boolean,
-    onAllowGravel: (Boolean) -> Unit,
+    gravel: Gravel,
+    onGravel: (Gravel) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
     expanded: Boolean,
@@ -58,7 +59,7 @@ fun RouteCard(
                 onClose,
                 stringResource(R.string.route_close),
             )
-            if (expanded) RouteCardDetails(budgetPercent, onBudget, allowGravel, onAllowGravel, onShare, summary != null)
+            if (expanded) RouteCardDetails(budgetPercent, onBudget, gravel, onGravel, onShare, summary != null)
         }
     }
 }
@@ -68,8 +69,8 @@ fun RouteCard(
 private fun RouteCardDetails(
     budgetPercent: Int,
     onBudget: (Int) -> Unit,
-    allowGravel: Boolean,
-    onAllowGravel: (Boolean) -> Unit,
+    gravel: Gravel,
+    onGravel: (Gravel) -> Unit,
     onShare: () -> Unit,
     shareEnabled: Boolean,
 ) {
@@ -96,7 +97,7 @@ private fun RouteCardDetails(
                 )
             }
         }
-        GravelAndShare(allowGravel, onAllowGravel, onShare, shareEnabled = shareEnabled)
+        GravelAndShare(gravel, onGravel, onShare, shareEnabled = shareEnabled)
     }
 }
 
@@ -119,8 +120,8 @@ fun LoopCard(
     onDirection: (LoopDirection) -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
-    allowGravel: Boolean,
-    onAllowGravel: (Boolean) -> Unit,
+    gravel: Gravel,
+    onGravel: (Gravel) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
     expanded: Boolean,
@@ -153,8 +154,8 @@ fun LoopCard(
                     onDirection = onDirection,
                     choice = choice,
                     onChoice = onChoice,
-                    allowGravel = allowGravel,
-                    onAllowGravel = onAllowGravel,
+                    gravel = gravel,
+                    onGravel = onGravel,
                     onShare = onShare,
                 )
             }
@@ -174,8 +175,8 @@ private fun LoopCardDetails(
     onDirection: (LoopDirection) -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
-    allowGravel: Boolean,
-    onAllowGravel: (Boolean) -> Unit,
+    gravel: Gravel,
+    onGravel: (Gravel) -> Unit,
     onShare: () -> Unit,
 ) {
     Column {
@@ -242,7 +243,7 @@ private fun LoopCardDetails(
                 )
             }
         }
-        GravelAndShare(allowGravel, onAllowGravel, onShare, shareEnabled = found)
+        GravelAndShare(gravel, onGravel, onShare, shareEnabled = found)
     }
 }
 
@@ -305,27 +306,49 @@ private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Mo
     }
 }
 
+/** The gravel choice (the same setting as in My data: changing it here
+ * routes again, to see what gravel roads change), then Share. */
 @Composable
 private fun GravelAndShare(
-    allowGravel: Boolean,
-    onAllowGravel: (Boolean) -> Unit,
+    gravel: Gravel,
+    onGravel: (Gravel) -> Unit,
     onShare: () -> Unit,
     shareEnabled: Boolean,
 ) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
-    ) {
-        // The same setting as in My data: toggling it here routes again,
-        // to see what gravel roads change.
-        FilterChip(
-            selected = allowGravel,
-            onClick = { onAllowGravel(!allowGravel) },
-            label = { OneLine(stringResource(R.string.route_allow_gravel)) },
+    Column {
+        Text(
+            stringResource(R.string.route_gravel_label),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(top = 4.dp),
         )
+        GravelChips(gravel, onGravel)
         OutlinedButton(
             onClick = onShare,
             enabled = shareEnabled,
         ) { OneLine(stringResource(R.string.route_share)) }
+    }
+}
+
+/** Avoid / Allow / Prefer gravel, one of them selected. */
+@Composable
+fun GravelChips(gravel: Gravel, onGravel: (Gravel) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        GRAVEL_CHOICES.forEach { g ->
+            FilterChip(
+                selected = g == gravel,
+                onClick = { onGravel(g) },
+                label = {
+                    OneLine(
+                        stringResource(
+                            when (g) {
+                                Gravel.AVOID -> R.string.gravel_avoid
+                                Gravel.ALLOW -> R.string.gravel_allow
+                                Gravel.PREFER -> R.string.gravel_prefer
+                            },
+                        ),
+                    )
+                },
+            )
+        }
     }
 }

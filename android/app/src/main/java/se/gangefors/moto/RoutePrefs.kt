@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import android.content.Context
 import androidx.core.content.edit
+import se.gangefors.moto.core.Gravel
 
 /**
  * The route settings the rider last chose, in app-private preferences
@@ -13,7 +14,9 @@ import androidx.core.content.edit
 object RoutePrefs {
     private const val FILE = "route"
     private const val BUDGET = "budget_percent"
-    private const val GRAVEL = "allow_gravel"
+    /** The old Allow gravel switch (a boolean), read once as a fallback. */
+    private const val ALLOW_GRAVEL = "allow_gravel"
+    private const val GRAVEL = "gravel"
     private const val LOOP = "loop_length"
 
     /** The extra-time budget in percent, or the default. */
@@ -27,14 +30,21 @@ object RoutePrefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putInt(BUDGET, percent) }
     }
 
-    /** Whether routes may use gravel (unpaved) roads freely; avoided by
-     * default. */
-    fun allowGravel(context: Context): Boolean =
-        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(GRAVEL, false) }
-            .getOrDefault(false)
+    /** What routes do with gravel (unpaved) roads; avoided by default.
+     * A value of another type throws; it counts as unset. */
+    fun gravel(context: Context): Gravel {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        return gravelOf(
+            runCatching { prefs.getString(GRAVEL, null) }.getOrNull(),
+            legacyAllow = runCatching { prefs.getBoolean(ALLOW_GRAVEL, false) }.getOrDefault(false),
+        )
+    }
 
-    fun setAllowGravel(context: Context, allow: Boolean) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(GRAVEL, allow) }
+    fun setGravel(context: Context, gravel: Gravel) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit {
+            putString(GRAVEL, gravelKey(gravel))
+            remove(ALLOW_GRAVEL)
+        }
     }
 
     /** The round-trip length last picked, or the default. */
