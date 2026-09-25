@@ -64,7 +64,8 @@ import se.gangefors.moto.core.exportExtension
  * and read only where the rider picks with the system file picker: no
  * storage permission, and nothing leaves the phone unless the rider sends
  * it. [engine] fits imported sections to the map; [onSectionsChanged]
- * reloads them after an import; [onMessage] reports what happened. At the
+ * reloads them after an import; [onShow] draws a ride on the map (to mark
+ * sections along it); [onMessage] reports what happened. At the
  * bottom, About and licences opens [AboutDialog].
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +76,7 @@ fun RidesSheet(
     onSectionsChanged: () -> Unit,
     onMessage: (String) -> Unit,
     onDismiss: () -> Unit,
+    onShow: (Track) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
 ) {
@@ -240,11 +242,14 @@ fun RidesSheet(
                 list.isEmpty() -> Text(stringResource(R.string.rides_none), Modifier.padding(vertical = 16.dp))
                 else -> LazyColumn(Modifier.heightIn(max = 480.dp)) {
                     items(list, key = { it.id }) { t ->
-                        Row(
+                        // The buttons wrap under the ride's text when there
+                        // is no room beside it (narrow screens, large fonts).
+                        FlowRow(
                             Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(Modifier.weight(1f)) {
+                            Column(Modifier.padding(end = 8.dp)) {
                                 Text(rideTitle(t.startedAt, zone))
                                 Text(
                                     rideSummary(resources, t),
@@ -253,6 +258,10 @@ fun RidesSheet(
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(
+                                    onClick = { onShow(t) },
+                                    enabled = t.endedAt != null,
+                                ) { OneLine(stringResource(R.string.rides_show)) }
                                 TextButton(
                                     onClick = {
                                         exporting = t

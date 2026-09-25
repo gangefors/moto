@@ -295,8 +295,11 @@ fun MapScreen() {
 
     // Ride recording (RecordingService): the line so far, and what to say.
     val recording by Recording.state.collectAsState()
-    LaunchedEffect(overlays, recording) {
-        overlays?.ride?.show((recording as? Recording.State.Active)?.line)
+    // A saved ride the rider asked to see (My data > Rides > Show), to
+    // mark sections along it; the ride being recorded takes its place.
+    var shownRide by remember { mutableStateOf<ShownRide?>(null) }
+    LaunchedEffect(overlays, recording, shownRide) {
+        overlays?.ride?.show((recording as? Recording.State.Active)?.line ?: shownRide?.line)
     }
     LaunchedEffect(recording) {
         when (val r = recording) {
@@ -818,6 +821,9 @@ fun MapScreen() {
                     }
                 }
             }
+            shownRide?.let {
+                ShownRideCard(it, onClose = { shownRide = null }, modifier = Modifier.fillMaxWidth())
+            }
             roadInfo?.let {
                 RoadInfoCard(
                     it,
@@ -1075,6 +1081,21 @@ fun MapScreen() {
             },
             onMessage = { message = it },
             onDismiss = { showRides = false },
+            onShow = { track ->
+                showRides = false
+                scope.launch {
+                    val points = withContext(Dispatchers.IO) {
+                        runCatching { readyStore.store.trackPoints(track.id) }.getOrNull()
+                    }
+                    val line = points?.map { it.position }
+                    if (line.isNullOrEmpty()) {
+                        message = resources.getString(R.string.rides_gone)
+                    } else {
+                        shownRide = ShownRide(track, line)
+                        map?.let { m -> fitTo(m, line, density.density) }
+                    }
+                }
+            },
             gravel = gravel,
             onGravel = { g ->
                 gravel = g
