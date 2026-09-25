@@ -188,4 +188,34 @@ class MapLogicTest {
         // Beyond the end: before the end, as the last via point.
         assertEquals(listOf(p(13.5), p(14.2)), insertVia(start, listOf(p(13.5)), end, p(14.2)))
     }
+
+    @Test
+    fun arriveByTurnsTheTimeLeftIntoATotalBudget() {
+        val base = se.gangefors.moto.core.RouteOptions(
+            se.gangefors.moto.core.Avoid(motorways = true, ferries = false),
+            se.gangefors.moto.core.TimeBudget.Extra(0.4),
+            1.0,
+            true,
+            se.gangefors.moto.core.Gravel.AVOID,
+        )
+        val o = arriveByOptions(base, 1_000, 1_000 + 3_600, se.gangefors.moto.core.Gravel.PREFER)
+        assertEquals(se.gangefors.moto.core.TimeBudget.Total(3_240.0), o.budget)
+        assertEquals(0.0, o.minGain, 0.0)
+        assertEquals(se.gangefors.moto.core.Gravel.PREFER, o.gravel)
+        assertTrue(o.curvy)
+        // Already too late: no time at all, so the fastest route.
+        assertEquals(se.gangefors.moto.core.TimeBudget.Total(0.0), arriveByOptions(base, 5_000, 1_000, o.gravel).budget)
+    }
+
+    @Test
+    fun arrivalTimesAreTheNextOnTheClock() {
+        val utc = java.time.ZoneOffset.UTC
+        val now = 1_790_274_600L // 2026-09-24 18:30 UTC
+        assertEquals(now + 90 * 60, nextTimeOfDay(now, utc, 20, 0))
+        assertEquals(now + 24 * 3600 - 30 * 60, nextTimeOfDay(now, utc, 18, 0))
+        assertEquals(now + 24 * 3600, nextTimeOfDay(now, utc, 18, 30))
+        assertEquals("18:30", clockTime(now, utc))
+        assertEquals(Arrival(now + 3_600, late = false), arrival(now, 3_599.6, now + 3_600))
+        assertEquals(Arrival(now + 3_601, late = true), arrival(now, 3_601.0, now + 3_600))
+    }
 }

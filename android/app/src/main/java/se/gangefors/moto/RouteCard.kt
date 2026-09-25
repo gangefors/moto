@@ -25,6 +25,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Gravel
+import java.time.ZoneId
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 
 /**
  * The route between the two long-pressed points: its figures (or that it
@@ -46,6 +55,9 @@ fun RouteCard(
     viaCount: Int,
     onAddVia: () -> Unit,
     onClearVia: () -> Unit,
+    arriveBy: Long?,
+    arrivalNote: String?,
+    onArriveBy: (Long?) -> Unit,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
@@ -68,7 +80,7 @@ fun RouteCard(
             if (expanded) {
                 RouteCardDetails(
                     budgetPercent, onBudget, gravel, onGravel, onShare, onSave, summary != null,
-                    viaCount, onAddVia, onClearVia,
+                    viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
                 )
             }
         }
@@ -88,8 +100,16 @@ private fun RouteCardDetails(
     viaCount: Int,
     onAddVia: () -> Unit,
     onClearVia: () -> Unit,
+    arriveBy: Long?,
+    arrivalNote: String?,
+    onArriveBy: (Long?) -> Unit,
 ) {
+    var pickingTime by remember { mutableStateOf(false) }
+    val zone = remember { ZoneId.systemDefault() }
     Column {
+        arrivalNote?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+        }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
@@ -111,8 +131,11 @@ private fun RouteCardDetails(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BUDGET_CHOICES.forEach { percent ->
                 FilterChip(
-                    selected = percent == budgetPercent,
-                    onClick = { onBudget(percent) },
+                    selected = arriveBy == null && percent == budgetPercent,
+                    onClick = {
+                        onArriveBy(null)
+                        onBudget(percent)
+                    },
                     label = {
                         OneLine(
                             if (percent == 0) {
@@ -124,8 +147,29 @@ private fun RouteCardDetails(
                     },
                 )
             }
+            FilterChip(
+                selected = arriveBy != null,
+                onClick = { pickingTime = true },
+                label = {
+                    OneLine(
+                        arriveBy?.let { stringResource(R.string.route_arrive_by_time, clockTime(it, zone)) }
+                            ?: stringResource(R.string.route_arrive_by),
+                    )
+                },
+            )
         }
         GravelAndShare(gravel, onGravel, onShare, onSave, shareEnabled = shareEnabled)
+        if (pickingTime) {
+            ArriveByDialog(
+                initial = arriveBy,
+                zone = zone,
+                onDismiss = { pickingTime = false },
+                onPick = { at ->
+                    pickingTime = false
+                    onArriveBy(at)
+                },
+            )
+        }
     }
 }
 
@@ -389,4 +433,25 @@ fun GravelChips(gravel: Gravel, onGravel: (Gravel) -> Unit) {
             )
         }
     }
+}
+
+/** Picks the time to arrive by: the next time the clock shows it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArriveByDialog(initial: Long?, zone: ZoneId, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    val start = remember {
+        java.time.Instant.ofEpochSecond(initial ?: (System.currentTimeMillis() / 1000 + 2 * 3600)).atZone(zone)
+    }
+    val state = rememberTimePickerState(start.hour, start.minute, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.route_arrive_title)) },
+        text = { TimePicker(state = state) },
+        confirmButton = {
+            TextButton(onClick = {
+                onPick(nextTimeOfDay(System.currentTimeMillis() / 1000, zone, state.hour, state.minute))
+            }) { OneLine(stringResource(R.string.route_arrive_set)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) } },
+    )
 }

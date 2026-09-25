@@ -65,6 +65,12 @@
     <string name="card_expand">Show more</string>
     <string name="loop_none">No loop of that length from here. Try another length or start.</string>
     <string name="route_computing">Finding a route…</string>
+    <string name="route_arrive_by">Arrive by…</string>
+    <string name="route_arrive_by_time">By %1$s</string>
+    <string name="route_arrive_title">Arrive by</string>
+    <string name="route_arrive_set">Set</string>
+    <string name="route_arrives">Arrives about %1$s</string>
+    <string name="route_arrives_late">Can’t make %1$s: arrives about %2$s at the earliest</string>
     <string name="route_add_via">Add via point</string>
     <string name="route_pick_via">Long-press where the route should pass.</string>
     <plurals name="route_clear_via">

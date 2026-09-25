@@ -193,3 +193,46 @@ fun insertVia(start: LatLon, vias: List<LatLon>, end: LatLon, p: LatLon): List<L
     }
     return vias.subList(0, best) + p + vias.subList(best, vias.size)
 }
+
+/**
+ * Share of the time until an arrival kept in hand for stops, traffic and
+ * the nav app's own timing. Provisional: to be tuned against recorded
+ * rides.
+ */
+const val ARRIVE_MARGIN = 0.10
+
+/**
+ * [base] set up to arrive by [arriveAtSec] when leaving at [nowSec]: the
+ * time until then, less [ARRIVE_MARGIN], is the whole budget, and all of
+ * it may be spent on favourites and curvy roads (guard off). Too little
+ * time gives the fastest route.
+ */
+fun arriveByOptions(base: RouteOptions, nowSec: Long, arriveAtSec: Long, gravel: Gravel): RouteOptions =
+    base.copy(
+        budget = TimeBudget.Total((arriveAtSec - nowSec).coerceAtLeast(0L) * (1.0 - ARRIVE_MARGIN)),
+        minGain = 0.0,
+        gravel = gravel,
+    )
+
+/** The next [hour]:[minute] after [nowSec] in [zone]: today, or tomorrow
+ * once it has passed. */
+fun nextTimeOfDay(nowSec: Long, zone: java.time.ZoneId, hour: Int, minute: Int): Long {
+    val now = java.time.Instant.ofEpochSecond(nowSec).atZone(zone)
+    var at = now.toLocalDate().atTime(hour.coerceIn(0, 23), minute.coerceIn(0, 59)).atZone(zone)
+    if (!at.isAfter(now)) at = now.toLocalDate().plusDays(1).atTime(hour.coerceIn(0, 23), minute.coerceIn(0, 59)).atZone(zone)
+    return at.toEpochSecond()
+}
+
+/** When a route found at [foundAtSec] taking [durationS] gets there, and
+ * whether that is after [arriveBySec]. */
+data class Arrival(val atSec: Long, val late: Boolean)
+
+fun arrival(foundAtSec: Long, durationS: Double, arriveBySec: Long): Arrival {
+    val at = foundAtSec + Math.round(durationS.coerceAtLeast(0.0))
+    return Arrival(at, at > arriveBySec)
+}
+
+/** A time of day as "14:30". */
+fun clockTime(atSec: Long, zone: java.time.ZoneId): String =
+    java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.ROOT))

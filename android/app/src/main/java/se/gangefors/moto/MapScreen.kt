@@ -55,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -519,6 +520,10 @@ fun MapScreen() {
     // The via points before the last one was added, until the route
     // through it is found (restored if it can't be).
     var viasBefore by remember { mutableStateOf<List<LatLng>?>(null) }
+    // The time to arrive by (seconds since the epoch) in place of the
+    // extra-time choice, and when the route shown was found.
+    var arriveBy by remember { mutableStateOf<Long?>(null) }
+    var routeFoundAt by remember { mutableLongStateOf(0L) }
     var routeSummary by remember { mutableStateOf<RouteSummary?>(null) }
     // The route shown and the options it was found with, for sharing.
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
@@ -592,14 +597,20 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, vias, budgetPercent, gravel, favourites, overlays) {
+    LaunchedEffect(routeEnds, vias, budgetPercent, arriveBy, gravel, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
         routeSummary = null
         shownRoute = null
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), budgetPercent, gravel)
+        val now = System.currentTimeMillis() / 1000
+        val by = arriveBy
+        val opts = if (by != null) {
+            arriveByOptions(defaultRouteOptions(), now, by, gravel)
+        } else {
+            routeOptions(defaultRouteOptions(), budgetPercent, gravel)
+        }
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
             runCatching { ready.engine.route(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
@@ -609,6 +620,7 @@ fun MapScreen() {
                 o.route.show(start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias)
                 routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
                 shownRoute = r to opts
+                routeFoundAt = now
                 viasBefore = null
             },
             onFailure = {
@@ -692,6 +704,7 @@ fun MapScreen() {
                     o.route.show(step.start, step.end, null)
                     message = null
                     vias = emptyList()
+                    arriveBy = null
                     routeEnds = step.start to step.end
                 }
             }
@@ -917,6 +930,7 @@ fun MapScreen() {
                         routeEnds = null
                         vias = emptyList()
                         addingVia = false
+                        arriveBy = null
                         overlays?.route?.show(null, null, null)
                     },
                     onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
@@ -930,6 +944,19 @@ fun MapScreen() {
                         vias = emptyList()
                         addingVia = false
                     },
+                    arriveBy = arriveBy,
+                    arrivalNote = arriveBy?.let { by ->
+                        shownRoute?.let { (r, _) ->
+                            val zone = ZoneId.systemDefault()
+                            val a = arrival(routeFoundAt, r.durationS, by)
+                            if (a.late) {
+                                stringResource(R.string.route_arrives_late, clockTime(by, zone), clockTime(a.atSec, zone))
+                            } else {
+                                stringResource(R.string.route_arrives, clockTime(a.atSec, zone))
+                            }
+                        }
+                    },
+                    onArriveBy = { arriveBy = it },
                 )
             }
             loopStart?.let {
