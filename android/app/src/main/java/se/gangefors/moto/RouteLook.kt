@@ -3,24 +3,6 @@
 
 package se.gangefors.moto
 
-/**
- * How a route marks its stretches on favourite sections. The route itself
- * stays blue all the way, so no saved section (amber, orange, purple) can
- * be taken for it: a thin purple stripe along its middle, or a purple glow
- * around it.
- */
-enum class FavouriteMark(val key: String) {
-    STRIPE("stripe"),
-    GLOW("glow"),
-}
-
-val DEFAULT_FAVOURITE_MARK = FavouriteMark.STRIPE
-
-/** A stored mark, or the default when it isn't one (preferences are read
- * back as untrusted input). */
-fun favouriteMarkOf(stored: String?): FavouriteMark =
-    FavouriteMark.entries.firstOrNull { it.key == stored } ?: DEFAULT_FAVOURITE_MARK
-
 /** How saved sections are drawn: line width (dp) and opacity, and the
  * opacity of their white casing and one-way arrows. */
 data class SectionLook(

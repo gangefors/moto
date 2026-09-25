@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -26,7 +27,8 @@ import androidx.compose.ui.unit.dp
  * The route between the two long-pressed points: its figures (or that it
  * is being found), and the extra time the rider gives it for favourites.
  * Choosing another budget, or allowing gravel roads, finds the route
- * again; Share hands it to a nav app as GPX; the cross clears it.
+ * again; Share hands it to a nav app as GPX; the cross clears it. When not
+ * [expanded], only the figures show.
  */
 @Composable
 fun RouteCard(
@@ -37,6 +39,8 @@ fun RouteCard(
     onAllowGravel: (Boolean) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -46,36 +50,53 @@ fun RouteCard(
         shadowElevation = 3.dp,
     ) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RouteFigures(summary, stringResource(R.string.route_computing), Modifier.weight(1f))
-                IconButton(onClick = onClose) {
-                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.route_close))
-                }
-            }
-            Text(
-                stringResource(R.string.route_budget),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(top = 4.dp),
+            CardHeader(
+                summary,
+                stringResource(R.string.route_computing),
+                expanded,
+                onToggleExpanded,
+                onClose,
+                stringResource(R.string.route_close),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BUDGET_CHOICES.forEach { percent ->
-                    FilterChip(
-                        selected = percent == budgetPercent,
-                        onClick = { onBudget(percent) },
-                        label = {
-                            OneLine(
-                                if (percent == 0) {
-                                    stringResource(R.string.route_budget_fastest)
-                                } else {
-                                    stringResource(R.string.route_budget_extra, percent)
-                                },
-                            )
-                        },
-                    )
-                }
-            }
-            GravelAndShare(allowGravel, onAllowGravel, onShare, shareEnabled = summary != null)
+            if (expanded) RouteCardDetails(budgetPercent, onBudget, allowGravel, onAllowGravel, onShare, summary != null)
         }
+    }
+}
+
+/** The route card's choices: extra time, gravel and sharing. */
+@Composable
+private fun RouteCardDetails(
+    budgetPercent: Int,
+    onBudget: (Int) -> Unit,
+    allowGravel: Boolean,
+    onAllowGravel: (Boolean) -> Unit,
+    onShare: () -> Unit,
+    shareEnabled: Boolean,
+) {
+    Column {
+        Text(
+            stringResource(R.string.route_budget),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BUDGET_CHOICES.forEach { percent ->
+                FilterChip(
+                    selected = percent == budgetPercent,
+                    onClick = { onBudget(percent) },
+                    label = {
+                        OneLine(
+                            if (percent == 0) {
+                                stringResource(R.string.route_budget_fastest)
+                            } else {
+                                stringResource(R.string.route_budget_extra, percent)
+                            },
+                        )
+                    },
+                )
+            }
+        }
+        GravelAndShare(allowGravel, onAllowGravel, onShare, shareEnabled = shareEnabled)
     }
 }
 
@@ -84,7 +105,7 @@ fun RouteCard(
  * alternatives it is, Next loop to flip through them, and the length the
  * rider wants. Choosing another length, or allowing gravel, finds the
  * loops again; Share hands the loop shown to a nav app; the cross clears
- * them.
+ * them. When not [expanded], only the figures show.
  */
 @Composable
 fun LoopCard(
@@ -98,6 +119,8 @@ fun LoopCard(
     onAllowGravel: (Boolean) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -107,46 +130,96 @@ fun LoopCard(
         shadowElevation = 3.dp,
     ) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RouteFigures(summary, stringResource(R.string.loop_computing), Modifier.weight(1f))
-                IconButton(onClick = onClose) {
-                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.loop_close))
-                }
-            }
-            if (summary != null && count > 1) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(R.string.loop_position, position + 1, count),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    OutlinedButton(onClick = onNext) { OneLine(stringResource(R.string.loop_next)) }
-                }
-            }
-            Text(
-                stringResource(R.string.loop_length),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(top = 4.dp),
+            CardHeader(
+                summary,
+                stringResource(R.string.loop_computing),
+                expanded,
+                onToggleExpanded,
+                onClose,
+                stringResource(R.string.loop_close),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LOOP_CHOICES.forEach { c ->
-                    FilterChip(
-                        selected = c == choice,
-                        onClick = { onChoice(c) },
-                        label = {
-                            OneLine(
-                                when (c) {
-                                    is LoopChoice.Hours -> stringResource(R.string.loop_hours, c.hours)
-                                    is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
-                                },
-                            )
-                        },
-                    )
-                }
+            if (expanded) {
+                LoopCardDetails(summary != null, position, count, onNext, choice, onChoice, allowGravel, onAllowGravel, onShare)
             }
-            GravelAndShare(allowGravel, onAllowGravel, onShare, shareEnabled = summary != null)
+        }
+    }
+}
+
+/** The loop card's choices: which loop, the length, gravel and sharing. */
+@Composable
+private fun LoopCardDetails(
+    found: Boolean,
+    position: Int,
+    count: Int,
+    onNext: () -> Unit,
+    choice: LoopChoice,
+    onChoice: (LoopChoice) -> Unit,
+    allowGravel: Boolean,
+    onAllowGravel: (Boolean) -> Unit,
+    onShare: () -> Unit,
+) {
+    Column {
+        if (found && count > 1) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.loop_position, position + 1, count),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                OutlinedButton(onClick = onNext) { OneLine(stringResource(R.string.loop_next)) }
+            }
+        }
+        Text(
+            stringResource(R.string.loop_length),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LOOP_CHOICES.forEach { c ->
+                FilterChip(
+                    selected = c == choice,
+                    onClick = { onChoice(c) },
+                    label = {
+                        OneLine(
+                            when (c) {
+                                is LoopChoice.Hours -> stringResource(R.string.loop_hours, c.hours)
+                                is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
+                            },
+                        )
+                    },
+                )
+            }
+        }
+        GravelAndShare(allowGravel, onAllowGravel, onShare, shareEnabled = found)
+    }
+}
+
+/**
+ * A card's top line: the route's figures, a chevron to show or hide the
+ * rest of the card (tapping the figures does the same), and the cross.
+ * Collapsed, only this line shows, so the card covers little of the map.
+ */
+@Composable
+private fun CardHeader(
+    summary: RouteSummary?,
+    computing: String,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onClose: () -> Unit,
+    closeDescription: String,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RouteFigures(summary, computing, Modifier.weight(1f).clickable(onClick = onToggleExpanded))
+        IconButton(onClick = onToggleExpanded) {
+            Icon(
+                painterResource(if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
+                contentDescription = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand),
+            )
+        }
+        IconButton(onClick = onClose) {
+            Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
     }
 }

@@ -9,15 +9,6 @@ import org.junit.Test
 
 class RouteLookTest {
     @Test
-    fun favouriteMarksAreStoredByKey() {
-        FavouriteMark.entries.forEach { assertEquals(it, favouriteMarkOf(it.key)) }
-        assertEquals(FavouriteMark.GLOW, favouriteMarkOf("glow"))
-        assertEquals(DEFAULT_FAVOURITE_MARK, favouriteMarkOf(null))
-        assertEquals(DEFAULT_FAVOURITE_MARK, favouriteMarkOf("GLOW"))
-        assertEquals(DEFAULT_FAVOURITE_MARK, favouriteMarkOf("sparkle"))
-    }
-
-    @Test
     fun sectionsFadeWhileARouteIsShown() {
         val normal = sectionLook(routeShown = false)
         val faded = sectionLook(routeShown = true)

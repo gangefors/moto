@@ -45,8 +45,8 @@ fun showRegionOutline(style: Style, info: RegionInfo) {
 
 /**
  * Draws a route from the Rust core with its start and end pins. The route
- * is blue all the way; its stretches on favourite sections are marked with
- * a purple stripe or glow ([setFavouriteMark]), and gravel makes it dashed.
+ * is blue all the way; its stretches on favourite sections glow purple, and
+ * on gravel it gets white dashes along its middle.
  * The map only draws; the route comes from the core.
  */
 class RouteOverlay(private val style: Style) {
@@ -65,7 +65,6 @@ class RouteOverlay(private val style: Style) {
                         PropertyFactory.lineOpacity(0.55f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                        PropertyFactory.visibility(Property.NONE),
                     ),
             )
             style.addLayer(
@@ -88,28 +87,17 @@ class RouteOverlay(private val style: Style) {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
-            // Stripe: a thin purple line along the middle of the route.
-            style.addLayer(
-                LineLayer(STRIPE_LAYER, SOURCE)
-                    .withFilter(Expression.eq(Expression.get(KIND), FAVOURITE))
-                    .withProperties(
-                        PropertyFactory.lineColor(FAVOURITE_COLOR),
-                        PropertyFactory.lineWidth(2f),
-                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                    ),
-            )
-            // Gravel makes the route dashed: gaps in the casing's white over
-            // the line (and its stripe), a little wider than the line so no
-            // blue edge shows. Dashes are in line widths: 9 px of line, 9 px
-            // of gap.
+            // Gravel: white dashes along the middle of the route, like the
+            // centre line of a road. The line and its casing stay whole, so
+            // the route keeps its width. Dashes are in line widths: 6 px of
+            // dash, 4 px of gap.
             style.addLayer(
                 LineLayer(GRAVEL_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), GRAVEL))
                     .withProperties(
                         PropertyFactory.lineColor(CASING_COLOR),
-                        PropertyFactory.lineWidth(6f),
-                        PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
+                        PropertyFactory.lineWidth(2f),
+                        PropertyFactory.lineDasharray(arrayOf(3f, 2f)),
                         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),
@@ -131,16 +119,6 @@ class RouteOverlay(private val style: Style) {
                     ),
             )
         }
-    }
-
-    /** Marks favourite stretches with a stripe or a glow. */
-    fun setFavouriteMark(mark: FavouriteMark) {
-        val (stripe, glow) = when (mark) {
-            FavouriteMark.STRIPE -> Property.VISIBLE to Property.NONE
-            FavouriteMark.GLOW -> Property.NONE to Property.VISIBLE
-        }
-        style.getLayer(STRIPE_LAYER)?.setProperties(PropertyFactory.visibility(stripe))
-        style.getLayer(GLOW_LAYER)?.setProperties(PropertyFactory.visibility(glow))
     }
 
     /** Shows the start pin, and the end pin and route when there are any;
@@ -172,7 +150,6 @@ class RouteOverlay(private val style: Style) {
         const val SOURCE = "moto-route"
         const val CASING_LAYER = "moto-route-casing"
         const val LINE_LAYER = "moto-route-line"
-        const val STRIPE_LAYER = "moto-route-favourite-stripe"
         const val GLOW_LAYER = "moto-route-favourite-glow"
         const val GRAVEL_LAYER = "moto-route-gravel"
         const val PIN_LAYER = "moto-route-pins"
@@ -185,7 +162,7 @@ class RouteOverlay(private val style: Style) {
         const val ROUTE_COLOR = "#1a73e8"
         // Epic purple, the favourite colour of the section layer.
         const val FAVOURITE_COLOR = "#a142f4"
-        // The route's white outline, also the gaps that dash it on gravel.
+        // The route's white outline, also its centre dashes on gravel.
         const val CASING_COLOR = "#ffffff"
         const val START_COLOR = "#188038"
         const val END_COLOR = "#c5221f"

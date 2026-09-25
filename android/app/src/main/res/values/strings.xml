@@ -22,6 +22,8 @@
     <string name="loop_hours">%1$d h</string>
     <string name="loop_km">%1$d km</string>
     <string name="loop_close">Clear the loop</string>
+    <string name="card_collapse">Show less</string>
+    <string name="card_expand">Show more</string>
     <string name="loop_none">No loop of that length from here. Try another length or start.</string>
     <string name="route_computing">Finding a route…</string>
     <string name="route_summary">%1$.1f km · %2$d min</string>
@@ -29,9 +31,6 @@
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_gravel">%1$.1f km gravel</string>
-    <string name="routing_favourite_mark">Favourites on a route</string>
-    <string name="routing_favourite_stripe">Stripe</string>
-    <string name="routing_favourite_glow">Glow</string>
     <string name="about_open">About and licences</string>
     <string name="about_title">About moto</string>
     <string name="about_close">Close</string>
