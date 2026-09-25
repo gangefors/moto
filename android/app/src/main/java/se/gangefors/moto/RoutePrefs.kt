@@ -15,7 +15,6 @@ object RoutePrefs {
     private const val BUDGET = "budget_percent"
     private const val GRAVEL = "allow_gravel"
     private const val LOOP = "loop_length"
-    private const val FAVOURITE_MARK = "favourite_mark"
 
     /** The extra-time budget in percent, or the default. */
     fun budgetPercent(context: Context): Int {
@@ -44,15 +43,5 @@ object RoutePrefs {
 
     fun setLoopChoice(context: Context, choice: LoopChoice) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP, choice.key) }
-    }
-
-    /** How routes mark their favourite stretches, or the default. */
-    fun favouriteMark(context: Context): FavouriteMark =
-        favouriteMarkOf(
-            runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(FAVOURITE_MARK, null) }.getOrNull(),
-        )
-
-    fun setFavouriteMark(context: Context, mark: FavouriteMark) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(FAVOURITE_MARK, mark.key) }
     }
 }

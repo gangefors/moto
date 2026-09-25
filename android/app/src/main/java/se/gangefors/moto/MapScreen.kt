@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -521,14 +522,13 @@ fun MapScreen() {
     var loopIndex by remember { mutableIntStateOf(0) }
     var loopOpts by remember { mutableStateOf<RouteOptions?>(null) }
     var loopChoice by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    // Whether the route and loop cards show all their choices or only the
+    // figures (collapsed, to see more of the map); kept for new routes.
+    var cardExpanded by rememberSaveable { mutableStateOf(true) }
     // While a route or loop is shown, the sections fade so the route is the
-    // one strong line; its favourite stretches get a stripe or a glow.
-    var favouriteMark by remember { mutableStateOf(RoutePrefs.favouriteMark(context)) }
+    // one strong line (its favourite stretches glow; see RouteOverlay).
     LaunchedEffect(overlays, routeEnds, loopStart) {
         overlays?.sections?.setLook(sectionLook(routeShown = routeEnds != null || loopStart != null))
-    }
-    LaunchedEffect(overlays, favouriteMark) {
-        overlays?.route?.setFavouriteMark(favouriteMark)
     }
     LaunchedEffect(loopStart, loopChoice, allowGravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
@@ -799,6 +799,8 @@ fun MapScreen() {
             routeEnds?.let {
                 RouteCard(
                     modifier = Modifier.fillMaxWidth(),
+                    expanded = cardExpanded,
+                    onToggleExpanded = { cardExpanded = !cardExpanded },
                     summary = routeSummary,
                     budgetPercent = budgetPercent,
                     onBudget = { percent ->
@@ -821,6 +823,8 @@ fun MapScreen() {
                 val shown = loops.getOrNull(loopIndex)
                 LoopCard(
                     modifier = Modifier.fillMaxWidth(),
+                    expanded = cardExpanded,
+                    onToggleExpanded = { cardExpanded = !cardExpanded },
                     summary = shown?.let { r ->
                         summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
                     },
@@ -1040,11 +1044,6 @@ fun MapScreen() {
             onAllowGravel = { allow ->
                 allowGravel = allow
                 RoutePrefs.setAllowGravel(context, allow)
-            },
-            favouriteMark = favouriteMark,
-            onFavouriteMark = { mark ->
-                favouriteMark = mark
-                RoutePrefs.setFavouriteMark(context, mark)
             },
         )
     }

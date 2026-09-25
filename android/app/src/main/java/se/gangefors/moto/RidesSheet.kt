@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -57,8 +56,7 @@ import se.gangefors.moto.core.exportExtension
 
 /**
  * The rider's settings and data: whether routes may use gravel roads
- * ([allowGravel], the same setting as on the route card), how routes mark
- * their favourite stretches ([favouriteMark]: stripe or glow), all saved
+ * ([allowGravel], the same setting as on the route card), all saved
  * sections, exported as GeoJSON (plain or
  * compressed) or imported from such a file, and the recorded rides, newest
  * first, each exported as GPX or deleted (tapped twice). Files are written
@@ -78,8 +76,6 @@ fun RidesSheet(
     onDismiss: () -> Unit,
     allowGravel: Boolean,
     onAllowGravel: (Boolean) -> Unit,
-    favouriteMark: FavouriteMark,
-    onFavouriteMark: (FavouriteMark) -> Unit,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -184,25 +180,6 @@ fun RidesSheet(
                     )
                 }
                 Switch(checked = allowGravel, onCheckedChange = onAllowGravel)
-            }
-            Text(stringResource(R.string.routing_favourite_mark), Modifier.padding(top = 8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FavouriteMark.entries.forEach { mark ->
-                    FilterChip(
-                        selected = mark == favouriteMark,
-                        onClick = { onFavouriteMark(mark) },
-                        label = {
-                            OneLine(
-                                stringResource(
-                                    when (mark) {
-                                        FavouriteMark.STRIPE -> R.string.routing_favourite_stripe
-                                        FavouriteMark.GLOW -> R.string.routing_favourite_glow
-                                    },
-                                ),
-                            )
-                        },
-                    )
-                }
             }
             Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
