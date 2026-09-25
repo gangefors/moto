@@ -52,6 +52,7 @@ import se.gangefors.moto.core.ImportReport
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.Track
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.exportExtension
 
 /**
@@ -64,7 +65,8 @@ import se.gangefors.moto.core.exportExtension
  * and read only where the rider picks with the system file picker: no
  * storage permission, and nothing leaves the phone unless the rider sends
  * it. [engine] fits imported sections to the map; [onSectionsChanged]
- * reloads them after an import; [onShow] draws a ride on the map (to mark
+ * reloads them after an import; the saved routes can be shown
+ * ([onShowRoute]), renamed or deleted; [onShow] draws a ride on the map (to mark
  * sections along it); [onMessage] reports what happened. At the
  * bottom, About and licences opens [AboutDialog].
  */
@@ -77,6 +79,7 @@ fun RidesSheet(
     onMessage: (String) -> Unit,
     onDismiss: () -> Unit,
     onShow: (Track) -> Unit,
+    onShowRoute: (SavedRoute) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
 ) {
@@ -88,8 +91,11 @@ fun RidesSheet(
     var confirmDelete by remember { mutableLongStateOf(0L) }
     var exporting by remember { mutableStateOf<Track?>(null) }
 
+    var routes by remember { mutableStateOf<List<SavedRoute>?>(null) }
+
     suspend fun reload() {
         tracks = withContext(Dispatchers.IO) { runCatching { store.listTracks() }.getOrDefault(emptyList()) }
+        routes = withContext(Dispatchers.IO) { runCatching { store.listRoutes() }.getOrDefault(emptyList()) }
     }
     LaunchedEffect(store) { reload() }
 
@@ -231,6 +237,23 @@ fun RidesSheet(
                     OneLine(stringResource(R.string.sections_import))
                 }
             }
+            Spacer(Modifier.height(24.dp))
+            SavedRoutesList(
+                routes = routes,
+                onShow = onShowRoute,
+                onRename = { r, name ->
+                    scope.launch {
+                        withContext(Dispatchers.IO) { runCatching { store.renameRoute(r.id, name) } }
+                        reload()
+                    }
+                },
+                onDelete = { r ->
+                    scope.launch {
+                        withContext(Dispatchers.IO) { runCatching { store.deleteRoute(r.id) } }
+                        reload()
+                    }
+                },
+            )
             Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
             OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {

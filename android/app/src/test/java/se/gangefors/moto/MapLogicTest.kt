@@ -151,4 +151,26 @@ class MapLogicTest {
         // A stored choice wins over the old switch.
         assertEquals(avoid, gravelOf("avoid", legacyAllow = true))
     }
+
+    @Test
+    fun savedRoutesGetADatedDefaultName() {
+        val utc = java.time.ZoneOffset.UTC
+        assertEquals("Route 2026-09-24 18:30, 57.4 km", defaultRouteName(1_790_274_600, utc, 57.43, isLoop = false))
+        assertEquals("Loop 2026-09-24 18:30, 120.0 km", defaultRouteName(1_790_274_600, utc, 120.0, isLoop = true))
+    }
+
+    @Test
+    fun typedRouteNamesAreCleaned() {
+        assertEquals("Kullaberg", cleanRouteName("  Kullaberg \n"))
+        assertEquals("a b", cleanRouteName("a\nb"))
+        assertEquals("ab", cleanRouteName("a\u0000b\u007f"))
+        assertEquals(null, cleanRouteName(" \t\n "))
+        assertEquals(null, cleanRouteName(""))
+        assertEquals(MAX_ROUTE_NAME_CHARS, cleanRouteName("é".repeat(500))!!.length)
+        // Characters outside the BMP count once and are never cut in half.
+        val emoji = "\uD83C\uDFCD" // motorcycle
+        val long = cleanRouteName(emoji.repeat(300))!!
+        assertEquals(MAX_ROUTE_NAME_CHARS, long.codePointCount(0, long.length))
+        assertEquals(MAX_ROUTE_NAME_CHARS * 2, long.length)
+    }
 }

@@ -40,6 +40,7 @@ fun RouteCard(
     onGravel: (Gravel) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
+    onSave: () -> Unit,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
@@ -59,7 +60,7 @@ fun RouteCard(
                 onClose,
                 stringResource(R.string.route_close),
             )
-            if (expanded) RouteCardDetails(budgetPercent, onBudget, gravel, onGravel, onShare, summary != null)
+            if (expanded) RouteCardDetails(budgetPercent, onBudget, gravel, onGravel, onShare, onSave, summary != null)
         }
     }
 }
@@ -72,6 +73,7 @@ private fun RouteCardDetails(
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
     onShare: () -> Unit,
+    onSave: () -> Unit,
     shareEnabled: Boolean,
 ) {
     Column {
@@ -97,7 +99,7 @@ private fun RouteCardDetails(
                 )
             }
         }
-        GravelAndShare(gravel, onGravel, onShare, shareEnabled = shareEnabled)
+        GravelAndShare(gravel, onGravel, onShare, onSave, shareEnabled = shareEnabled)
     }
 }
 
@@ -124,6 +126,7 @@ fun LoopCard(
     onGravel: (Gravel) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
+    onSave: () -> Unit,
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
@@ -157,6 +160,7 @@ fun LoopCard(
                     gravel = gravel,
                     onGravel = onGravel,
                     onShare = onShare,
+                    onSave = onSave,
                 )
             }
         }
@@ -178,6 +182,7 @@ private fun LoopCardDetails(
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
     onShare: () -> Unit,
+    onSave: () -> Unit,
 ) {
     Column {
         // Which loop, the next one, and a new set of loops (Shuffle).
@@ -243,7 +248,7 @@ private fun LoopCardDetails(
                 )
             }
         }
-        GravelAndShare(gravel, onGravel, onShare, shareEnabled = found)
+        GravelAndShare(gravel, onGravel, onShare, onSave, shareEnabled = found)
     }
 }
 
@@ -307,12 +312,13 @@ private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Mo
 }
 
 /** The gravel choice (the same setting as in My data: changing it here
- * routes again, to see what gravel roads change), then Share. */
+ * routes again, to see what gravel roads change), then Save and Share. */
 @Composable
 private fun GravelAndShare(
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
     onShare: () -> Unit,
+    onSave: () -> Unit,
     shareEnabled: Boolean,
 ) {
     Column {
@@ -322,10 +328,16 @@ private fun GravelAndShare(
             modifier = Modifier.padding(top = 4.dp),
         )
         GravelChips(gravel, onGravel)
-        OutlinedButton(
-            onClick = onShare,
-            enabled = shareEnabled,
-        ) { OneLine(stringResource(R.string.route_share)) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onSave,
+                enabled = shareEnabled,
+            ) { OneLine(stringResource(R.string.route_save)) }
+            OutlinedButton(
+                onClick = onShare,
+                enabled = shareEnabled,
+            ) { OneLine(stringResource(R.string.route_share)) }
+        }
     }
 }
 
