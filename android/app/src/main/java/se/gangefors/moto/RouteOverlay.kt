@@ -44,15 +44,30 @@ fun showRegionOutline(style: Style, info: RegionInfo) {
 }
 
 /**
- * Draws a route from the Rust core with its start and end pins, the
- * stretches on favourite sections highlighted. The map only draws; the
- * route comes from the core.
+ * Draws a route from the Rust core with its start and end pins. The route
+ * is blue all the way; its stretches on favourite sections are marked with
+ * a purple stripe or glow ([setFavouriteMark]), and gravel makes it dashed.
+ * The map only draws; the route comes from the core.
  */
-class RouteOverlay(style: Style) {
+class RouteOverlay(private val style: Style) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
 
     init {
         if (style.getLayer(LINE_LAYER) == null) {
+            // Glow: a wide, soft purple band under the route's casing.
+            style.addLayer(
+                LineLayer(GLOW_LAYER, SOURCE)
+                    .withFilter(Expression.eq(Expression.get(KIND), FAVOURITE))
+                    .withProperties(
+                        PropertyFactory.lineColor(FAVOURITE_COLOR),
+                        PropertyFactory.lineWidth(18f),
+                        PropertyFactory.lineBlur(4f),
+                        PropertyFactory.lineOpacity(0.55f),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                        PropertyFactory.visibility(Property.NONE),
+                    ),
+            )
             style.addLayer(
                 LineLayer(CASING_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), ROUTE))
@@ -73,20 +88,21 @@ class RouteOverlay(style: Style) {
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
+            // Stripe: a thin purple line along the middle of the route.
             style.addLayer(
-                LineLayer(FAVOURITE_LAYER, SOURCE)
+                LineLayer(STRIPE_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), FAVOURITE))
                     .withProperties(
                         PropertyFactory.lineColor(FAVOURITE_COLOR),
-                        PropertyFactory.lineWidth(6f),
+                        PropertyFactory.lineWidth(2f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
             // Gravel makes the route dashed: gaps in the casing's white over
-            // the line, as wide as the widest (favourite) line, so it shows
-            // whatever the route's colour there. Dashes are in line widths:
-            // 9 px of line, 9 px of gap.
+            // the line (and its stripe), a little wider than the line so no
+            // blue edge shows. Dashes are in line widths: 9 px of line, 9 px
+            // of gap.
             style.addLayer(
                 LineLayer(GRAVEL_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), GRAVEL))
@@ -115,6 +131,16 @@ class RouteOverlay(style: Style) {
                     ),
             )
         }
+    }
+
+    /** Marks favourite stretches with a stripe or a glow. */
+    fun setFavouriteMark(mark: FavouriteMark) {
+        val (stripe, glow) = when (mark) {
+            FavouriteMark.STRIPE -> Property.VISIBLE to Property.NONE
+            FavouriteMark.GLOW -> Property.NONE to Property.VISIBLE
+        }
+        style.getLayer(STRIPE_LAYER)?.setProperties(PropertyFactory.visibility(stripe))
+        style.getLayer(GLOW_LAYER)?.setProperties(PropertyFactory.visibility(glow))
     }
 
     /** Shows the start pin, and the end pin and route when there are any;
@@ -146,7 +172,8 @@ class RouteOverlay(style: Style) {
         const val SOURCE = "moto-route"
         const val CASING_LAYER = "moto-route-casing"
         const val LINE_LAYER = "moto-route-line"
-        const val FAVOURITE_LAYER = "moto-route-favourites"
+        const val STRIPE_LAYER = "moto-route-favourite-stripe"
+        const val GLOW_LAYER = "moto-route-favourite-glow"
         const val GRAVEL_LAYER = "moto-route-gravel"
         const val PIN_LAYER = "moto-route-pins"
         const val KIND = "kind"

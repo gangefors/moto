@@ -33,7 +33,7 @@ import se.gangefors.moto.core.Section
  * and finds the section under a tap. The map only draws
  * and hit-tests; the sections come from the core's store.
  */
-class SectionOverlay(style: Style, private val density: Float) {
+class SectionOverlay(private val style: Style, private val density: Float) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
 
     init {
@@ -90,6 +90,21 @@ class SectionOverlay(style: Style, private val density: Float) {
                     ),
             )
         }
+    }
+
+    /** Draws the sections as [look] says: full strength, or faded while a
+     * route is shown (see [sectionLook]). */
+    fun setLook(look: SectionLook) {
+        style.getLayer(CASING_LAYER)?.setProperties(PropertyFactory.lineOpacity(look.casingOpacity))
+        style.getLayer(LINE_LAYER)?.setProperties(
+            PropertyFactory.lineWidth(look.lineWidth),
+            PropertyFactory.lineOpacity(look.lineOpacity),
+        )
+        style.getLayer(UNMATCHED_LAYER)?.setProperties(
+            PropertyFactory.lineWidth(look.lineWidth),
+            PropertyFactory.lineOpacity(look.lineOpacity),
+        )
+        style.getLayer(ARROW_LAYER)?.setProperties(PropertyFactory.iconOpacity(look.arrowOpacity))
     }
 
     fun show(sections: List<Section>) {
