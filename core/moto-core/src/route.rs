@@ -304,6 +304,48 @@ fn push_part(parts: &mut Vec<Vec<LatLon>>, piece: Vec<LatLon>) {
     }
 }
 
+/// One route from routes run end to end (through via points): lines
+/// joined where one ends and the next starts, figures added up, shares
+/// weighted by distance, and stretches that run on across a via point
+/// kept as one part.
+pub(crate) fn join(legs: Vec<Route>) -> Route {
+    let mut out = Route {
+        geometry: Vec::new(),
+        distance_m: 0.0,
+        duration_s: 0.0,
+        favourite_share: 0.0,
+        curvy_share: 0.0,
+        fastest_duration_s: 0.0,
+        favourite_parts: Vec::new(),
+        unpaved_m: 0.0,
+        unpaved_parts: Vec::new(),
+    };
+    let (mut favourite_m, mut curvy_m) = (0.0, 0.0);
+    for leg in legs {
+        let skip = usize::from(
+            out.geometry.last().is_some() && out.geometry.last() == leg.geometry.first(),
+        );
+        out.geometry.extend(leg.geometry.into_iter().skip(skip));
+        out.distance_m += leg.distance_m;
+        out.duration_s += leg.duration_s;
+        out.fastest_duration_s += leg.fastest_duration_s;
+        out.unpaved_m += leg.unpaved_m;
+        favourite_m += leg.favourite_share * leg.distance_m;
+        curvy_m += leg.curvy_share * leg.distance_m;
+        for p in leg.favourite_parts {
+            push_part(&mut out.favourite_parts, p);
+        }
+        for p in leg.unpaved_parts {
+            push_part(&mut out.unpaved_parts, p);
+        }
+    }
+    if out.distance_m > 0.0 {
+        out.favourite_share = (favourite_m / out.distance_m).clamp(0.0, 1.0);
+        out.curvy_share = (curvy_m / out.distance_m).clamp(0.0, 1.0);
+    }
+    out
+}
+
 impl Builder {
     fn add(&mut self, fun: &Fun, id: u32, from: f64, to: f64) {
         let (region, favourites) = (fun.region, fun.favourites);
@@ -1024,5 +1066,83 @@ mod tests {
         let r = e.route_with(from, to, &avoid_all, &fav).unwrap();
         assert!(r.unpaved_m > 2000.0, "{r:?}");
         assert!(r.favourite_share > 0.5, "{r:?}");
+    }
+
+    #[test]
+    fn a_route_passes_its_via_points_in_order() {
+        // From near A to near D, through the bend towards C: the one-way
+        // B→D then comes after a detour up the bend and back.
+        let e = engine(fixture::region());
+        let none = crate::Favourites::none();
+        let o = opts(true, true);
+        let (from, to) = (ll(55.7001, 13.201), ll(55.7001, 13.219));
+        let direct = e.route_with(from, to, &o, &none).unwrap();
+        let bend = ll(55.705, 13.2119);
+        let r = e.route_via(from, &[bend], to, &o, &none).unwrap();
+        assert!(
+            r.geometry.iter().any(|&q| haversine_m(q, bend) < 10.0),
+            "{r:?}"
+        );
+        assert!(r.distance_m > direct.distance_m + 1000.0);
+        // The legs, joined: figures add up and the line has no repeat at
+        // the via point.
+        let a = e.route_with(from, bend, &o, &none).unwrap();
+        let b = e.route_with(bend, to, &o, &none).unwrap();
+        assert!((r.distance_m - a.distance_m - b.distance_m).abs() < 1e-6);
+        assert!((r.duration_s - a.duration_s - b.duration_s).abs() < 1e-6);
+        assert!(r.geometry.windows(2).all(|w| w[0] != w[1]));
+        assert_eq!(r.geometry.len(), a.geometry.len() + b.geometry.len() - 1);
+        // No via points: the plain route.
+        assert_eq!(e.route_via(from, &[], to, &o, &none).unwrap(), direct);
+    }
+
+    #[test]
+    fn via_points_are_checked() {
+        let e = engine(fixture::region());
+        let none = crate::Favourites::none();
+        let o = opts(true, true);
+        let (from, to) = (ll(55.7001, 13.201), ll(55.7001, 13.219));
+        let many = vec![ll(55.7001, 13.205); crate::MAX_VIA_POINTS + 1];
+        assert!(matches!(
+            e.route_via(from, &many, to, &o, &none),
+            Err(CoreError::InvalidArgument(_))
+        ));
+        assert!(matches!(
+            e.route_via(from, &[ll(56.5, 13.5)], to, &o, &none),
+            Err(CoreError::OutsideRegion { .. })
+        ));
+        assert!(
+            e.route_via(from, &[ll(f64::NAN, 13.2)], to, &o, &none)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn joined_parts_run_on_across_a_via_point() {
+        let p = |lat| LatLon { lat, lon: 13.2 };
+        let leg = |a: f64, b: f64, share: f64, parts: Vec<Vec<LatLon>>| crate::Route {
+            geometry: vec![p(a), p(b)],
+            distance_m: 1000.0,
+            duration_s: 60.0,
+            favourite_share: share,
+            curvy_share: share,
+            fastest_duration_s: 50.0,
+            favourite_parts: parts.clone(),
+            unpaved_m: 0.0,
+            unpaved_parts: parts,
+        };
+        let r = super::join(vec![
+            leg(55.0, 55.1, 1.0, vec![vec![p(55.05), p(55.1)]]),
+            leg(55.1, 55.2, 0.0, vec![vec![p(55.1), p(55.15)]]),
+        ]);
+        assert_eq!(r.geometry, [p(55.0), p(55.1), p(55.2)]);
+        assert_eq!(r.favourite_parts, [vec![p(55.05), p(55.1), p(55.15)]]);
+        assert_eq!(r.unpaved_parts.len(), 1);
+        assert_eq!(
+            (r.distance_m, r.duration_s, r.fastest_duration_s),
+            (2000.0, 120.0, 100.0)
+        );
+        assert!((r.favourite_share - 0.5).abs() < 1e-12);
+        assert_eq!(super::join(vec![]).distance_m, 0.0);
     }
 }

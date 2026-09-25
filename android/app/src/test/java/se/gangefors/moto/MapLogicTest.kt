@@ -173,4 +173,19 @@ class MapLogicTest {
         assertEquals(MAX_ROUTE_NAME_CHARS, long.codePointCount(0, long.length))
         assertEquals(MAX_ROUTE_NAME_CHARS * 2, long.length)
     }
+
+    @Test
+    fun viaPointsGoWhereTheyAddTheLeast() {
+        fun p(lon: Double) = se.gangefors.moto.core.LatLon(55.7, lon)
+        val (start, end) = p(13.0) to p(14.0)
+        // The first via point goes between start and end.
+        assertEquals(listOf(p(13.5)), insertVia(start, emptyList(), end, p(13.5)))
+        // Later ones fall into the leg they belong to, whatever the order
+        // they were added in.
+        val two = insertVia(start, listOf(p(13.5)), end, p(13.2))
+        assertEquals(listOf(p(13.2), p(13.5)), two)
+        assertEquals(listOf(p(13.2), p(13.5), p(13.8)), insertVia(start, two, end, p(13.8)))
+        // Beyond the end: before the end, as the last via point.
+        assertEquals(listOf(p(13.5), p(14.2)), insertVia(start, listOf(p(13.5)), end, p(14.2)))
+    }
 }

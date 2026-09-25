@@ -65,6 +65,12 @@
     <string name="card_expand">Show more</string>
     <string name="loop_none">No loop of that length from here. Try another length or start.</string>
     <string name="route_computing">Finding a route…</string>
+    <string name="route_add_via">Add via point</string>
+    <string name="route_pick_via">Long-press where the route should pass.</string>
+    <plurals name="route_clear_via">
+        <item quantity="one">Clear %1$d via point</item>
+        <item quantity="other">Clear %1$d via points</item>
+    </plurals>
     <string name="route_save">Save…</string>
     <string name="route_save_title">Save to My data</string>
     <string name="route_name">Name</string>

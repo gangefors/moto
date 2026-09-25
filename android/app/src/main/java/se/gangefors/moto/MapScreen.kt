@@ -512,6 +512,13 @@ fun MapScreen() {
     // The route between the picked points and the extra time the rider gives
     // it; it is found again when either changes (or the favourites do).
     var routeEnds by remember { mutableStateOf<Pair<LatLng, LatLng>?>(null) }
+    // Points the route must pass, in order, and whether the next
+    // long-press adds one (Add via point on the route card).
+    var vias by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+    var addingVia by remember { mutableStateOf(false) }
+    // The via points before the last one was added, until the route
+    // through it is found (restored if it can't be).
+    var viasBefore by remember { mutableStateOf<List<LatLng>?>(null) }
     var routeSummary by remember { mutableStateOf<RouteSummary?>(null) }
     // The route shown and the options it was found with, for sharing.
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
@@ -585,7 +592,7 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, budgetPercent, gravel, favourites, overlays) {
+    LaunchedEffect(routeEnds, vias, budgetPercent, gravel, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -595,16 +602,24 @@ fun MapScreen() {
         val opts = routeOptions(defaultRouteOptions(), budgetPercent, gravel)
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
-            runCatching { ready.engine.route(start.toLatLon(), end.toLatLon(), opts, favs) }
+            runCatching { ready.engine.route(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
         }
         result.fold(
             onSuccess = { r ->
-                o.route.show(start, end, r.geometry, r.favouriteParts, r.unpavedParts)
+                o.route.show(start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias)
                 routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
                 shownRoute = r to opts
+                viasBefore = null
             },
             onFailure = {
-                routeEnds = null
+                val before = viasBefore
+                if (before != null) {
+                    // The new via point can't be reached: keep the route without it.
+                    viasBefore = null
+                    vias = before
+                } else {
+                    routeEnds = null
+                }
                 message = coreErrorMessage(resources, it)
             },
         )
@@ -646,6 +661,15 @@ fun MapScreen() {
                 message = regionStatus(resources, region)
                 return@OnMapLongClickListener true
             }
+            val ends = routeEnds
+            if (addingVia && ends != null) {
+                addingVia = false
+                message = null
+                val added = insertVia(ends.first.toLatLon(), vias.map { it.toLatLon() }, ends.second.toLatLon(), point.toLatLon())
+                viasBefore = vias
+                vias = added.map { LatLng(it.lat, it.lon) }
+                return@OnMapLongClickListener true
+            }
             when (val step = picker.onLongPress(point)) {
                 is RoutePicker.Step.StartSet -> {
                     routeEnds = null
@@ -667,6 +691,7 @@ fun MapScreen() {
                     startPicked = null
                     o.route.show(step.start, step.end, null)
                     message = null
+                    vias = emptyList()
                     routeEnds = step.start to step.end
                 }
             }
@@ -890,10 +915,21 @@ fun MapScreen() {
                     },
                     onClose = {
                         routeEnds = null
+                        vias = emptyList()
+                        addingVia = false
                         overlays?.route?.show(null, null, null)
                     },
                     onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
                     onSave = { shownRoute?.let { (r, _) -> savingRoute = r to false } },
+                    viaCount = vias.size,
+                    onAddVia = {
+                        addingVia = true
+                        message = resources.getString(R.string.route_pick_via)
+                    },
+                    onClearVia = {
+                        vias = emptyList()
+                        addingVia = false
+                    },
                 )
             }
             loopStart?.let {

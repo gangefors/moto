@@ -22,6 +22,9 @@ use crate::{
 /// How far from a road a point may be and still snap to it.
 pub const SNAP_MAX_DISTANCE_M: f64 = 500.0;
 
+/// Most via points one route may pass through.
+pub const MAX_VIA_POINTS: usize = 8;
+
 #[derive(Debug)]
 pub struct Engine {
     region: Region,
@@ -134,6 +137,35 @@ impl Engine {
             favourites,
             self.max_speed_kmh,
         )
+    }
+
+    /// As [`Self::route_with`], through the `via` points in order: each leg
+    /// between two stops is routed on its own, with the same options and
+    /// its own share of the time budget, and the legs are joined into one
+    /// route. At most [`MAX_VIA_POINTS`]; none is a plain `route_with`.
+    pub fn route_via(
+        &self,
+        from: LatLon,
+        via: &[LatLon],
+        to: LatLon,
+        opts: &RouteOptions,
+        favourites: &Favourites,
+    ) -> Result<Route, CoreError> {
+        if via.len() > MAX_VIA_POINTS {
+            return Err(CoreError::InvalidArgument(format!(
+                "at most {MAX_VIA_POINTS} via points, got {}",
+                via.len()
+            )));
+        }
+        let stops: Vec<LatLon> = std::iter::once(from)
+            .chain(via.iter().copied())
+            .chain(std::iter::once(to))
+            .collect();
+        let legs = stops
+            .windows(2)
+            .map(|w| self.route_with(w[0], w[1], opts, favourites))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(crate::route::join(legs))
     }
 
     /// Proposes a section along the road between two points the rider picked

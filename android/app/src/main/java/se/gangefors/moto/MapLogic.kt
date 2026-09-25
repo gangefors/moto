@@ -4,6 +4,7 @@
 package se.gangefors.moto
 
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
 import se.gangefors.moto.core.RouteOptions
 import se.gangefors.moto.core.TimeBudget
@@ -174,4 +175,21 @@ fun cleanRouteName(typed: String): String? {
     if (text.isEmpty()) return null
     val cps = text.codePointCount(0, text.length)
     return if (cps <= MAX_ROUTE_NAME_CHARS) text else text.substring(0, text.offsetByCodePoints(0, MAX_ROUTE_NAME_CHARS)).trimEnd()
+}
+
+/** Most via points a route may pass (the core's limit). */
+const val MAX_VIA_POINTS = 8
+
+/**
+ * [vias] with [p] put where it lengthens the trip [start] → vias → [end]
+ * the least, measured in straight lines: a via point dropped anywhere on
+ * the map lands in the leg it belongs to, however the rider added the
+ * others.
+ */
+fun insertVia(start: LatLon, vias: List<LatLon>, end: LatLon, p: LatLon): List<LatLon> {
+    val stops = listOf(start) + vias + listOf(end)
+    val best = (0 until stops.size - 1).minBy { i ->
+        approxDistanceM(stops[i], p) + approxDistanceM(p, stops[i + 1]) - approxDistanceM(stops[i], stops[i + 1])
+    }
+    return vias.subList(0, best) + p + vias.subList(best, vias.size)
 }

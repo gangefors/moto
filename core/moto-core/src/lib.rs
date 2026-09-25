@@ -38,7 +38,7 @@ pub mod track;
 mod types;
 
 pub use draft::SectionDraft;
-pub use engine::{Engine, SNAP_MAX_DISTANCE_M};
+pub use engine::{Engine, MAX_VIA_POINTS, SNAP_MAX_DISTANCE_M};
 pub use error::CoreError;
 pub use favourites::Favourites;
 pub use geo::LatLon;
