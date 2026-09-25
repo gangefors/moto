@@ -131,16 +131,59 @@ impl<'a> Fun<'a> {
         }
     }
 
+    /// The dullness penalty of edge `id` for its speed band (see
+    /// `ScoringParams::fast_kmh`), before curves spare it: 1 on 51–99
+    /// km/h roads, on the rider's own favourites (marked as fun, whatever
+    /// their speed) and whenever nothing but favourites pulls.
+    fn speed_penalty(&self, id: u32, e: &Edge) -> f64 {
+        if !(self.curvy || self.gravel) || self.favourite_bonus(id, e) > 0.0 {
+            1.0
+        } else if e.speed_kmh >= PARAMS.fast_kmh {
+            PARAMS.fast_penalty
+        } else if e.speed_kmh <= PARAMS.slow_kmh && !(self.gravel && is_unpaved(e)) {
+            PARAMS.slow_penalty
+        } else {
+            1.0
+        }
+    }
+
+    /// Cost factor of edge `id` at `pull`: cheaper by its worth, dearer by
+    /// its dullness (the speed penalty, less the curvier the road is).
+    /// Worth per second is 0–1: an epic favourite is 1, a fully curvy road
+    /// `curve_weight`, a preferred gravel road `gravel_weight`; they add
+    /// up, capped at 1. Curviness is looked up at most once.
+    fn factor(&self, id: u32, e: &Edge, pull: f64) -> f64 {
+        let penalty = self.speed_penalty(id, e);
+        let curviness = if self.curvy || penalty > 1.0 {
+            self.curviness(id, e)
+        } else {
+            0.0
+        };
+        let curve = if self.curvy {
+            PARAMS.curve_weight * curviness
+        } else {
+            0.0
+        };
+        let worth =
+            (self.favourite_bonus(id, e) / PARAMS.max_pull + curve + self.gravel_worth(e)).min(1.0);
+        let dullness = 1.0 + (penalty - 1.0) * (1.0 - curviness);
+        (1.0 - pull * PARAMS.max_pull * worth) * (1.0 + pull * (dullness - 1.0))
+    }
+
+    /// How dull edge `id` is over 1 (0 on 51–99 km/h roads, or when
+    /// nothing but favourites pulls; less the curvier it is).
+    fn dullness(&self, id: u32, e: &Edge) -> f64 {
+        let penalty = self.speed_penalty(id, e);
+        if penalty > 1.0 {
+            (penalty - 1.0) * (1.0 - self.curviness(id, e))
+        } else {
+            0.0
+        }
+    }
+
     /// What curvature and gravel add to edge `id`'s worth.
     fn road_worth(&self, id: u32, e: &Edge) -> f64 {
         self.curve_worth(id, e) + self.gravel_worth(e)
-    }
-
-    /// What riding all of edge `id` is worth per second, 0–1: an epic
-    /// favourite is 1, a fully curvy road `curve_weight`, a preferred
-    /// gravel road `gravel_weight`; they add up, capped at 1.
-    fn worth(&self, id: u32, e: &Edge) -> f64 {
-        (self.favourite_bonus(id, e) / PARAMS.max_pull + self.road_worth(id, e)).min(1.0)
     }
 
     /// The most any edge can be worth.
@@ -174,16 +217,14 @@ impl Cost<'_> {
     /// Cost of whole edge `id`.
     fn edge(&self, id: u32, e: &Edge) -> f64 {
         match self {
-            Cost::Favoured(off, fun, pull) => {
-                time_cost(off, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e))
-            }
+            Cost::Favoured(off, fun, pull) => time_cost(off, e) * fun.factor(id, e, *pull),
             Cost::Loop(off, fun, pull, used) => {
                 let reused = if used.contains(&e.geometry) {
                     PARAMS.reuse_penalty
                 } else {
                     1.0
                 };
-                time_cost(off, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e)) * reused
+                time_cost(off, e) * fun.factor(id, e, *pull) * reused
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
@@ -202,7 +243,8 @@ impl Cost<'_> {
     fn estimate(&self, metres: f64, max_mps: f64) -> f64 {
         match self {
             // `max_pull` is below 1, so the bound stays positive.
-            // The reuse penalty only adds cost, so the bound still holds.
+            // The reuse and dullness penalties only add cost, so the bound
+            // still holds.
             Cost::Favoured(_, fun, pull) | Cost::Loop(_, fun, pull, _) => {
                 metres / max_mps * (1.0 - pull * PARAMS.max_pull * fun.max_worth())
             }
@@ -374,7 +416,10 @@ impl Builder {
         } else {
             0.0
         };
-        self.value_s += time_s(&e) * (favourite_value + frac * fun.road_worth(id, &e)).min(frac);
+        // Time on dull roads counts against the worth (see `dull_worth`).
+        let dull = frac * PARAMS.dull_worth * fun.dullness(id, &e);
+        self.value_s +=
+            time_s(&e) * ((favourite_value + frac * fun.road_worth(id, &e)).min(frac) - dull);
         let line = edge_line(region, &e);
         if let Some((lo, hi)) = favourites.covered_part(id, from, to) {
             push_part(&mut self.favourite_parts, polyline_slice(&line, lo, hi));
@@ -1158,5 +1203,68 @@ mod tests {
         );
         assert!((r.favourite_share - 0.5).abs() < 1e-12);
         assert_eq!(super::join(vec![]).distance_m, 0.0);
+    }
+
+    /// Two parallel roads between the same stubs: a straight 100 km/h
+    /// primary road in the south and a slightly longer 70 km/h road in
+    /// the north; `north_kmh` sets the north road's speed.
+    fn fast_and_fun(north_kmh: u8) -> Engine {
+        use crate::fixture::Road;
+        let nodes = [
+            (55.70, 13.39),
+            (55.70, 13.40),
+            (55.70, 13.44),
+            (55.70, 13.45),
+        ];
+        let north = Road {
+            via: vec![(55.701, 13.41), (55.701, 13.43)],
+            ..Road::new(
+                1,
+                2,
+                crate::region::format::RoadClass::Tertiary,
+                north_kmh,
+                3,
+            )
+        };
+        engine(fixture::build(
+            &nodes,
+            &[
+                Road::new(0, 1, crate::region::format::RoadClass::Tertiary, 70, 1),
+                Road::new(1, 2, crate::region::format::RoadClass::Primary, 100, 2),
+                north,
+                Road::new(2, 3, crate::region::format::RoadClass::Tertiary, 70, 4),
+            ],
+            50_000,
+        ))
+    }
+
+    #[test]
+    fn fun_routes_keep_off_fast_and_slow_roads() {
+        let none = crate::Favourites::none();
+        let (from, to) = (ll(55.7, 13.395), ll(55.7, 13.445));
+        let north = |r: &crate::Route| r.geometry.iter().any(|p| p.lat > 55.7005);
+        // The plain fastest route takes the 100 km/h road; a fun route
+        // the 70 km/h one, for a little more time.
+        let e = fast_and_fun(70);
+        let fastest = e.route(from, to, &RouteOptions::default()).unwrap();
+        assert!(!north(&fastest), "{fastest:?}");
+        let fun = e
+            .route_with(from, to, &RouteOptions::default(), &none)
+            .unwrap();
+        assert!(north(&fun), "{fun:?}");
+        assert!(fun.duration_s > fastest.duration_s);
+        assert!(fun.duration_s <= fastest.duration_s * 1.4);
+        // Curvature off and nothing else pulling: plain fastest.
+        let flat = RouteOptions {
+            curvy: false,
+            ..RouteOptions::default()
+        };
+        assert!(!north(&e.route_with(from, to, &flat, &none).unwrap()));
+        // A 40 km/h north road is dull too: the fast road wins again.
+        let e = fast_and_fun(40);
+        assert!(!north(
+            &e.route_with(from, to, &RouteOptions::default(), &none)
+                .unwrap()
+        ));
     }
 }

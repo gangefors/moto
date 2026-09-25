@@ -1,11 +1,11 @@
 {
   "name": "Hässleholm to Eslöv, curvy roads, 10 % budget",
-  "description": "The same trip with only 10 % extra time: the curvy detour (12 %) doesn't fit, the route stays near the fast road.",
+  "description": "The same trip with only 10 % extra time: the route must stay within it. Until 2026-09-26 the curvy detour (12 %) didn't fit and the route stayed near the fast road; with fast roads counted as dull a curvier way within 10 % is found (26 % curvy against 6 %).",
   "from": [56.159, 13.766],
   "to": [55.839, 13.304],
   "max_detour": 0.1,
   "expect": {
-    "avoid": [[56.01073, 13.49203]],
-    "max_detour_ratio": 1.1
+    "max_detour_ratio": 1.1,
+    "min_curvy_share": 0.2
   }
 }

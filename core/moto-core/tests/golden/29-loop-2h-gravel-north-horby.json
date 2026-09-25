@@ -1,0 +1,10 @@
+{
+  "name": "Loop of 2 hours from Hörby, gravel preferred, north (shuffled)",
+  "description": "From a real test (2026-09-25): with gravel preferred, heading north, one loop rode 18 km of a straight 100 km/h road towards Kristianstad, where the plain has no gravel through-route. Riders avoid such roads (in Sweden mostly split 2+1 roads); when gravel can't be had, a loop should still ride curvy, smaller paved roads.",
+  "from": [55.848513, 13.6564631],
+  "loop": { "minutes": 120, "seed": 1, "direction": 0 },
+  "gravel": "prefer",
+  "expect": {
+    "max_fast_km": 5
+  }
+}
