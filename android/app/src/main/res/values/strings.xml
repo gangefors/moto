@@ -65,6 +65,16 @@
     <string name="card_expand">Show more</string>
     <string name="loop_none">No loop of that length from here. Try another length or start.</string>
     <string name="route_computing">Finding a route…</string>
+    <string name="route_save">Save…</string>
+    <string name="route_save_title">Save to My data</string>
+    <string name="route_name">Name</string>
+    <string name="route_saved">Saved as “%1$s”</string>
+    <string name="route_save_failed">Saving failed: %1$s</string>
+    <string name="saved_routes_title">Saved routes</string>
+    <string name="saved_routes_none">No saved routes yet. Save a route or loop from its card.</string>
+    <string name="saved_route_rename">Rename</string>
+    <string name="saved_route_rename_title">Rename route</string>
+    <string name="saved_route_hide">Hide the saved route</string>
     <string name="route_summary">%1$.1f km · %2$d min</string>
     <string name="route_extra">+%1$d min over the fastest</string>
     <string name="route_on_favourites">%1$d %% on favourites</string>

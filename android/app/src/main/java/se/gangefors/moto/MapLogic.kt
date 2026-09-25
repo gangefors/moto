@@ -152,3 +152,26 @@ fun routeGpxName(atSec: Long, zone: java.time.ZoneId, km: Double): String =
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", java.util.Locale.ROOT)) +
         String.format(java.util.Locale.ROOT, ", %.1f km", km)
 
+
+/** Longest saved-route name, in characters (the core's limit). */
+const val MAX_ROUTE_NAME_CHARS = 200
+
+/** The name a saved route gets unless the rider types one:
+ * "Loop 2026-09-24 18:30, 57.4 km" (or "Route …"). */
+fun defaultRouteName(atSec: Long, zone: java.time.ZoneId, km: Double, isLoop: Boolean): String =
+    (if (isLoop) "Loop " else "Route ") + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", java.util.Locale.ROOT)) +
+        String.format(java.util.Locale.ROOT, ", %.1f km", km)
+
+/** A typed route name as the core accepts it: control characters dropped
+ * (a pasted newline becomes a space), trimmed and cut to
+ * [MAX_ROUTE_NAME_CHARS] characters; null when nothing is left. */
+fun cleanRouteName(typed: String): String? {
+    val text = typed.map { if (it == '\n' || it == '\t') ' ' else it }
+        .filterNot { Character.isISOControl(it) }
+        .joinToString("")
+        .trim()
+    if (text.isEmpty()) return null
+    val cps = text.codePointCount(0, text.length)
+    return if (cps <= MAX_ROUTE_NAME_CHARS) text else text.substring(0, text.offsetByCodePoints(0, MAX_ROUTE_NAME_CHARS)).trimEnd()
+}

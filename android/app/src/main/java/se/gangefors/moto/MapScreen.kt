@@ -538,8 +538,13 @@ fun MapScreen() {
     var cardExpanded by rememberSaveable { mutableStateOf(true) }
     // While a route or loop is shown, the sections fade so the route is the
     // one strong line (its favourite stretches glow; see RouteOverlay).
-    LaunchedEffect(overlays, routeEnds, loopStart) {
-        overlays?.sections?.setLook(sectionLook(routeShown = routeEnds != null || loopStart != null))
+    // A saved route the rider asked to see (My data > Saved routes > Show),
+    // and a route or loop being saved (its name is asked first).
+    var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
+    var savingRoute by remember { mutableStateOf<Pair<Route, Boolean>?>(null) }
+    LaunchedEffect(overlays, routeEnds, loopStart, shownSaved) {
+        val routeShown = routeEnds != null || loopStart != null || shownSaved != null
+        overlays?.sections?.setLook(sectionLook(routeShown = routeShown))
     }
     LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
@@ -645,6 +650,7 @@ fun MapScreen() {
                 is RoutePicker.Step.StartSet -> {
                     routeEnds = null
                     loopStart = null
+                    shownSaved = null
                     startPicked = null
                     // New start: check it lies on a road before keeping it.
                     val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
@@ -710,16 +716,16 @@ fun MapScreen() {
         done
     }
 
-    /** Hands [r] to a nav app as GPX through the share sheet (PRD R9);
-     * [opts] are the options it was found with. */
-    fun shareRoute(r: Route, opts: RouteOptions) {
+    /** Hands [line] to a nav app as GPX named [gpxName]; [opts] place its
+     * route points (see `Engine.routeGpx`). */
+    fun shareLine(line: List<LatLon>, gpxName: String, opts: RouteOptions) {
         val engine = (region as? RegionState.Ready)?.engine ?: return
         scope.launch {
             val now = System.currentTimeMillis() / 1000
             val zone = ZoneId.systemDefault()
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val gpx = engine.routeGpx(r.geometry, routeGpxName(now, zone, r.distanceM / 1000.0), opts)
+                    val gpx = engine.routeGpx(line, gpxName, opts)
                     RouteShare.prepare(
                         context,
                         gpx,
@@ -733,6 +739,25 @@ fun MapScreen() {
                 onFailure = {
                     message = resources.getString(R.string.route_share_failed, it.message ?: it.toString())
                 },
+            )
+        }
+    }
+
+    /** Hands [r] to a nav app as GPX through the share sheet (PRD R9);
+     * [opts] are the options it was found with. */
+    fun shareRoute(r: Route, opts: RouteOptions) {
+        val now = System.currentTimeMillis() / 1000
+        shareLine(r.geometry, routeGpxName(now, ZoneId.systemDefault(), r.distanceM / 1000.0), opts)
+    }
+
+    /** Saves [r] (a loop when [isLoop]) as [name] in My data. */
+    fun saveRoute(r: Route, isLoop: Boolean, name: String) {
+        val ready = store as? StoreState.Ready ?: return
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { ready.store.saveRoute(name, isLoop, r) } }
+            message = result.fold(
+                onSuccess = { resources.getString(R.string.route_saved, it.name) },
+                onFailure = { resources.getString(R.string.route_save_failed, it.message ?: it.toString()) },
             )
         }
     }
@@ -824,6 +849,19 @@ fun MapScreen() {
             shownRide?.let {
                 ShownRideCard(it, onClose = { shownRide = null }, modifier = Modifier.fillMaxWidth())
             }
+            shownSaved?.let { s ->
+                SavedRouteCard(
+                    s,
+                    onShare = {
+                        shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), budgetPercent, gravel))
+                    },
+                    onClose = {
+                        shownSaved = null
+                        overlays?.route?.show(null, null, null)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             roadInfo?.let {
                 RoadInfoCard(
                     it,
@@ -855,6 +893,7 @@ fun MapScreen() {
                         overlays?.route?.show(null, null, null)
                     },
                     onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
+                    onSave = { shownRoute?.let { (r, _) -> savingRoute = r to false } },
                 )
             }
             loopStart?.let {
@@ -892,6 +931,7 @@ fun MapScreen() {
                         overlays?.route?.show(null, null, null)
                     },
                     onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
+                    onSave = { shown?.let { savingRoute = it to true } },
                 )
             }
         }
@@ -1067,6 +1107,21 @@ fun MapScreen() {
         )
     }
 
+    savingRoute?.let { (r, isLoop) ->
+        val initial = remember(r) {
+            defaultRouteName(System.currentTimeMillis() / 1000, ZoneId.systemDefault(), r.distanceM / 1000.0, isLoop)
+        }
+        RouteNameDialog(
+            title = stringResource(R.string.route_save_title),
+            initial = initial,
+            onDismiss = { savingRoute = null },
+            onSave = { name ->
+                savingRoute = null
+                saveRoute(r, isLoop, name)
+            },
+        )
+    }
+
     // Recorded rides: export as GPX or delete.
     val readyStore = store as? StoreState.Ready
     if (showRides && readyStore != null) {
@@ -1081,6 +1136,27 @@ fun MapScreen() {
             },
             onMessage = { message = it },
             onDismiss = { showRides = false },
+            onShowRoute = { saved ->
+                showRides = false
+                scope.launch {
+                    val line = withContext(Dispatchers.IO) {
+                        runCatching { readyStore.store.routeGeometry(saved.id) }.getOrNull()
+                    }
+                    if (line.isNullOrEmpty()) {
+                        message = resources.getString(R.string.rides_gone)
+                    } else {
+                        routeEnds = null
+                        loopStart = null
+                        startPicked = null
+                        picker.reset()
+                        shownSaved = ShownSavedRoute(saved, line)
+                        val start = LatLng(line.first().lat, line.first().lon)
+                        val end = if (saved.isLoop) null else LatLng(line.last().lat, line.last().lon)
+                        overlays?.route?.show(start, end, line)
+                        map?.let { m -> fitTo(m, line, density.density) }
+                    }
+                }
+            },
             onShow = { track ->
                 showRides = false
                 scope.launch {
