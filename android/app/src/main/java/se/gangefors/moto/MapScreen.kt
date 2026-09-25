@@ -895,19 +895,21 @@ fun MapScreen() {
                     }
                 }
                 if (store is StoreState.Ready) {
-                    ExtendedFloatingActionButton(onClick = { showRides = true }) {
-                        Text(stringResource(R.string.rides_open))
+                    FloatingActionButton(onClick = { showRides = true }) {
+                        Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.rides_open))
                     }
                 }
                 if (store is StoreState.Ready && region is RegionState.Ready) {
-                    ExtendedFloatingActionButton(onClick = {
+                    FloatingActionButton(onClick = {
                         marker.begin()
                         markSession++
                         marking = true
                         draft = null
                         showDraft()
                         message = resources.getString(R.string.section_pick_start)
-                    }) { Text(stringResource(R.string.section_mark)) }
+                    }) {
+                        Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
+                    }
                 }
                 // Record: a red dot. While recording: a red stop square with
                 // the distance so far, readable at a glance on the bike.
