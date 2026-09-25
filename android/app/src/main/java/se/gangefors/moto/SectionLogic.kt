@@ -8,9 +8,11 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import se.gangefors.moto.core.AddResult
 import se.gangefors.moto.core.Direction
+import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionGravel
 import se.gangefors.moto.core.SectionStatus
 
 /**
@@ -174,3 +176,23 @@ sealed interface AddOutcome {
 
 fun addOutcome(result: AddResult): AddOutcome =
     if (result.section == null) AddOutcome.Covered else AddOutcome.Saved(result.replaced.size)
+
+/** Share of a section on gravel from which it counts as a gravel section. */
+const val GRAVEL_SECTION_SHARE = 0.5
+
+/** The sections hidden while [choice] is Avoid: those mostly on gravel
+ * (the router ignores favourites on gravel then). None otherwise. */
+fun hiddenForGravel(gravel: List<SectionGravel>, choice: Gravel): Set<Long> =
+    if (choice != Gravel.AVOID) {
+        emptySet()
+    } else {
+        gravel.filter { it.lengthM > 0.0 && it.unpavedM / it.lengthM >= GRAVEL_SECTION_SHARE }
+            .map { it.sectionId }
+            .toSet()
+    }
+
+/** The gravel stretches to draw on [shown] sections. */
+fun gravelParts(gravel: List<SectionGravel>, shown: List<Section>): List<List<LatLon>> {
+    val ids = shown.filter { fitsTheMap(it.status) }.map { it.id }.toSet()
+    return gravel.filter { it.sectionId in ids }.flatMap { it.parts }
+}

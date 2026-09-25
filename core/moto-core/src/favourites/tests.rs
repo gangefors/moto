@@ -401,3 +401,71 @@ fn routes_report_the_fastest_time_and_their_favourite_parts() {
         "{part:?}"
     );
 }
+
+/// The fork with the middle edge of the north loop (way nodes 1–2) on
+/// gravel.
+fn fork_with_gravel() -> Engine {
+    let mut data = fixture::fork();
+    for (e, w) in data.edges.iter_mut().zip(&data.way_refs) {
+        if w.way_id == NORTH && w.from_idx.min(w.to_idx) == 1 && w.from_idx.max(w.to_idx) == 2 {
+            e.surface = crate::region::format::Surface::Gravel as u8;
+        }
+    }
+    engine(data)
+}
+
+#[test]
+fn gravel_stretches_of_sections_are_found_once() {
+    let e = fork_with_gravel();
+    let middle = |e: &Engine| {
+        let r = e.region();
+        (0..r.edge_count())
+            .find(|&i| {
+                let w = r.way_refs()[i];
+                w.way_id == NORTH && w.from_idx.min(w.to_idx) == 1 && w.from_idx.max(w.to_idx) == 2
+            })
+            .map(|i| f64::from(r.edges()[i].length_dm) / 10.0)
+            .unwrap()
+    };
+    let m = middle(&e);
+    for direction in [Direction::Both, Direction::Forward] {
+        let fav = Favourites::build(&e, &[section(&[(NORTH, 0, 3)], Rating::Epic, direction)]);
+        let g = fav.gravel();
+        assert_eq!(g.len(), 1, "{direction:?}");
+        assert_eq!(g[0].section_id, 1);
+        assert_eq!(g[0].parts.len(), 1, "one road, drawn once: {g:?}");
+        assert!((g[0].unpaved_m - m).abs() < 0.5, "{g:?}");
+        assert!(g[0].length_m > 0.0);
+        assert!(g[0].parts[0].iter().all(|p| p.lat > 55.705));
+    }
+    // A section off the gravel, or no gravel at all: nothing.
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 0, 1)], Rating::Epic, Direction::Both)],
+    );
+    assert!(fav.gravel().is_empty());
+    let fav = Favourites::build(
+        &fork(),
+        &[section(&[(NORTH, 0, 3)], Rating::Epic, Direction::Both)],
+    );
+    assert!(fav.gravel().is_empty());
+    assert!(Favourites::none().gravel().is_empty());
+}
+
+#[test]
+fn a_section_ending_on_gravel_counts_only_its_part() {
+    // From way node 0 to halfway along the gravel edge is not expressible
+    // as nodes; a span ending at node 2 covers the whole gravel edge, one
+    // ending at node 1 none of it.
+    let e = fork_with_gravel();
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 1, 2)], Rating::Good, Direction::Both)],
+    );
+    assert_eq!(fav.gravel().len(), 1);
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 2, 3)], Rating::Good, Direction::Both)],
+    );
+    assert!(fav.gravel().is_empty());
+}

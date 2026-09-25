@@ -114,7 +114,7 @@
     <string name="gravel_prefer">Prefer</string>
     <string name="routing_title">Routing</string>
     <string name="routing_gravel">Gravel roads</string>
-    <string name="routing_gravel_hint">Avoid keeps routes off gravel and other unpaved roads where it can, except on your own sections. Prefer seeks them out, within the extra time you give a route.</string>
+    <string name="routing_gravel_hint">Avoid keeps routes off gravel and other unpaved roads where it can, and hides your sections that are mostly gravel. Prefer seeks them out, within the extra time you give a route. Gravel on your sections has a dashed centre line.</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
