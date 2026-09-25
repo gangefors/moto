@@ -64,10 +64,25 @@ class TagLogicTest {
     }
 
     @Test
+    fun skippedTagsAreCountedAndTheReviewMovesOn() {
+        val review = TagReview(listOf(tag(1), tag(2), tag(3)))
+        assertEquals(2L, review.skip()!!.id)
+        assertEquals(1, review.skipped)
+        assertEquals(3L, review.next()!!.id)
+        assertNull(review.skip())
+        assertEquals(2, review.skipped)
+        // Nothing left to skip.
+        assertNull(review.skip())
+        assertEquals(2, review.skipped)
+    }
+
+    @Test
     fun anEmptyReviewHasNothingToShow() {
         val review = TagReview(emptyList())
         assertNull(review.current)
         assertNull(review.next())
+        assertNull(review.skip())
+        assertEquals(0, review.skipped)
     }
 
     @Test
