@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -184,7 +186,14 @@ fun MapScreen() {
     LaunchedEffect(map, insets) {
         val m = map ?: return@LaunchedEffect
         with(density) {
-            applyControlMargins(m, insets, CONTROL_MARGIN.roundToPx(), ATTRIBUTION_OFFSET.roundToPx())
+            applyControlMargins(
+                m,
+                insets,
+                CONTROL_MARGIN.roundToPx(),
+                ATTRIBUTION_OFFSET.roundToPx(),
+                compassRight = (FAB_PADDING + FAB_SIZE + COMPASS_GAP).roundToPx(),
+                compassBottom = (FAB_PADDING + (FAB_SIZE - COMPASS_SIZE) / 2).roundToPx(),
+            )
         }
     }
 
@@ -499,6 +508,15 @@ fun MapScreen() {
     var loopIndex by remember { mutableIntStateOf(0) }
     var loopOpts by remember { mutableStateOf<RouteOptions?>(null) }
     var loopChoice by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    // While a route or loop is shown, the sections fade so the route is the
+    // one strong line; its favourite stretches get a stripe or a glow.
+    var favouriteMark by remember { mutableStateOf(RoutePrefs.favouriteMark(context)) }
+    LaunchedEffect(overlays, routeEnds, loopStart) {
+        overlays?.sections?.setLook(sectionLook(routeShown = routeEnds != null || loopStart != null))
+    }
+    LaunchedEffect(overlays, favouriteMark) {
+        overlays?.route?.setFavouriteMark(favouriteMark)
+    }
     LaunchedEffect(loopStart, loopChoice, allowGravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
@@ -696,16 +714,21 @@ fun MapScreen() {
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
                 .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
         )
-        // Messages and the route card, top centre, clear of the map controls.
+        // Messages and the route card, across the top (the compass sits at
+        // the bottom right, so nothing else is up here); on wide screens no
+        // wider than TOP_BOX_MAX_WIDTH.
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .safeDrawingPadding()
-                .padding(top = 8.dp, start = 64.dp, end = 64.dp),
+                .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                .widthIn(max = TOP_BOX_MAX_WIDTH)
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val offerLoop = startPicked != null && !marking
             if (message != null || marking || offerLoop) Surface(
+                modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
                 tonalElevation = 3.dp,
                 shadowElevation = 3.dp,
@@ -756,6 +779,7 @@ fun MapScreen() {
             }
             routeEnds?.let {
                 RouteCard(
+                    modifier = Modifier.fillMaxWidth(),
                     summary = routeSummary,
                     budgetPercent = budgetPercent,
                     onBudget = { percent ->
@@ -777,6 +801,7 @@ fun MapScreen() {
             loopStart?.let {
                 val shown = loops.getOrNull(loopIndex)
                 LoopCard(
+                    modifier = Modifier.fillMaxWidth(),
                     summary = shown?.let { r ->
                         summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
                     },
@@ -990,6 +1015,11 @@ fun MapScreen() {
                 allowGravel = allow
                 RoutePrefs.setAllowGravel(context, allow)
             },
+            favouriteMark = favouriteMark,
+            onFavouriteMark = { mark ->
+                favouriteMark = mark
+                RoutePrefs.setFavouriteMark(context, mark)
+            },
         )
     }
 
@@ -1162,16 +1192,37 @@ private data class SafeInsets(val left: Int, val top: Int, val right: Int, val b
 private val LIGHT_SCRIM = Color.White.copy(alpha = 0.7f)
 private val DARK_SCRIM = Color.Black.copy(alpha = 0.7f)
 
+/** Widest the messages and route card get (tablets, landscape). */
+private val TOP_BOX_MAX_WIDTH: Dp = 640.dp
+
 /** MapLibre's default control margin. */
 private val CONTROL_MARGIN: Dp = 4.dp
 
 /** MapLibre's default attribution offset from the left, which keeps it clear of the logo. */
 private val ATTRIBUTION_OFFSET: Dp = 92.dp
 
-/** Moves the compass, logo and attribution inside the safe area; px arguments. */
-private fun applyControlMargins(map: MapLibreMap, insets: SafeInsets, margin: Int, attributionOffset: Int) {
+/** The bottom-right buttons' distance from the safe edges, the size of the
+ * my-position button at the bottom (a standard FAB), and the compass: it
+ * sits just left of that button, clear of the messages and cards at the
+ * top. */
+private val FAB_PADDING: Dp = 16.dp
+private val FAB_SIZE: Dp = 56.dp
+private val COMPASS_SIZE: Dp = 48.dp
+private val COMPASS_GAP: Dp = 8.dp
+
+/** Moves the compass, logo and attribution inside the safe area; px
+ * arguments. The compass is placed from the bottom right corner. */
+private fun applyControlMargins(
+    map: MapLibreMap,
+    insets: SafeInsets,
+    margin: Int,
+    attributionOffset: Int,
+    compassRight: Int,
+    compassBottom: Int,
+) {
     map.uiSettings.apply {
-        setCompassMargins(0, insets.top + margin, insets.right + margin, 0)
+        compassGravity = Gravity.BOTTOM or Gravity.END
+        setCompassMargins(0, 0, insets.right + compassRight, insets.bottom + compassBottom)
         setLogoMargins(insets.left + margin, 0, 0, insets.bottom + margin)
         setAttributionMargins(insets.left + attributionOffset, 0, 0, insets.bottom + margin)
     }

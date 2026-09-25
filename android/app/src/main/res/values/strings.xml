@@ -29,6 +29,9 @@
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_gravel">%1$.1f km gravel</string>
+    <string name="routing_favourite_mark">Favourites on a route</string>
+    <string name="routing_favourite_stripe">Stripe</string>
+    <string name="routing_favourite_glow">Glow</string>
     <string name="about_open">About and licences</string>
     <string name="about_title">About moto</string>
     <string name="about_close">Close</string>
