@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::favourites::Favourites;
 use crate::geo::{bearing_deg, destination, haversine_m};
-use crate::route::{Cost, Fun, Partial, Routed, build, latlon, path};
+use crate::route::{Cost, Fun, Off, Partial, Routed, build, latlon, path};
 use crate::scoring::PARAMS;
 use crate::{
     CoreError, Engine, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
@@ -113,7 +113,7 @@ pub fn loops(
         )));
     }
     let s = engine.snap(start)?;
-    let fun = Fun::new(engine.region(), favourites, opts.curvy);
+    let fun = Fun::new(engine.region(), favourites, opts);
     let fits = |r: &Route| match target {
         RoundTripTarget::DistanceM(m) => (r.distance_m - m).abs() <= m * TOLERANCE,
         RoundTripTarget::DurationS(t) => (r.duration_s - t).abs() <= t * TOLERANCE,
@@ -332,7 +332,7 @@ fn loop_at(
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
     for (from, to) in [(start, &w1), (&w1, &w2), (&w2, start)] {
-        let cost = Cost::Loop(opts.avoid, *fun, PARAMS.loop_pull, &used);
+        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &used);
         let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
             used.insert(region.edges()[p.edge as usize].geometry);

@@ -15,7 +15,9 @@ use crate::matching::MatchedTrack;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
 use crate::road::RoadInfo;
-use crate::{CoreError, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions};
+use crate::{
+    CoreError, Gravel, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
+};
 
 /// How far from a road a point may be and still snap to it.
 pub const SNAP_MAX_DISTANCE_M: f64 = 500.0;
@@ -89,12 +91,18 @@ impl Engine {
         crate::road::road_info(&self.region, self.snap(point)?)
     }
 
-    /// Fastest route from `from` to `to` under `opts.avoid`: no
+    /// Fastest route from `from` to `to` under `opts.avoid` and
+    /// `opts.gravel` (preferred gravel counts as allowed): no
     /// favourites, no curvature, the budget unused. The reference that
     /// fun routes are measured against.
     pub fn route(&self, from: LatLon, to: LatLon, opts: &RouteOptions) -> Result<Route, CoreError> {
         let fastest = RouteOptions {
             curvy: false,
+            // Preferring gravel is a pull; the fastest route only allows it.
+            gravel: match opts.gravel {
+                Gravel::Prefer => Gravel::Allow,
+                g => g,
+            },
             ..opts.clone()
         };
         self.route_with(from, to, &fastest, &Favourites::none())

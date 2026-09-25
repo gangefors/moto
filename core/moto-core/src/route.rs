@@ -13,7 +13,7 @@ use crate::geo::{haversine_m, polyline_slice};
 use crate::region::Region;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, RoadClass, Surface, edge_flags};
 use crate::scoring::PARAMS;
-use crate::{Avoid, CoreError, LatLon, RoadPoint, Route, RouteOptions};
+use crate::{Avoid, CoreError, Gravel, LatLon, RoadPoint, Route, RouteOptions};
 
 const NONE: u32 = u32::MAX;
 
@@ -34,37 +34,63 @@ fn is_unpaved(e: &Edge) -> bool {
     Surface::from_u8(e.surface).is_some_and(|s| !s.is_paved())
 }
 
+/// The kinds of road a search keeps off where it can.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Off {
+    avoid: Avoid,
+    unpaved: bool,
+}
+
+impl Off {
+    pub(crate) fn of(opts: &RouteOptions) -> Self {
+        Self {
+            avoid: opts.avoid,
+            unpaved: opts.gravel == Gravel::Avoid,
+        }
+    }
+}
+
 /// Travel time of a whole edge, avoided kinds of road costing
-/// `avoid_penalty` times more.
-fn time_cost(avoid: &Avoid, e: &Edge) -> f64 {
+/// `avoid_penalty` times more. Gravel on a `favourite` is never avoided:
+/// the rider chose that road.
+fn time_cost(off: &Off, e: &Edge, favourite: bool) -> f64 {
     let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
-    let unpaved = is_unpaved(e);
+    let unpaved = is_unpaved(e) && !favourite;
     let ferry = e.flags & edge_flags::FERRY != 0;
-    let avoided = avoid.motorways && motorway || avoid.unpaved && unpaved || avoid.ferries && ferry;
+    let avoided =
+        off.avoid.motorways && motorway || off.unpaved && unpaved || off.avoid.ferries && ferry;
     time_s(e) * if avoided { PARAMS.avoid_penalty } else { 1.0 }
 }
 
-/// What makes a road worth riding (R5, R6): the rider's favourites and,
-/// when `curvy`, curvature (see `ScoringParams::curviness`).
+/// What makes a road worth riding (R5, R6): the rider's favourites,
+/// when `curvy` curvature (see `ScoringParams::curviness`), and when
+/// `gravel` (the rider prefers it) unpaved roads.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Fun<'a> {
     region: &'a Region,
     favourites: &'a Favourites,
     curvy: bool,
+    gravel: bool,
 }
 
 impl<'a> Fun<'a> {
-    pub(crate) fn new(region: &'a Region, favourites: &'a Favourites, curvy: bool) -> Self {
+    pub(crate) fn new(region: &'a Region, favourites: &'a Favourites, opts: &RouteOptions) -> Self {
         Self {
             region,
             favourites,
-            curvy,
+            curvy: opts.curvy,
+            gravel: opts.gravel == Gravel::Prefer,
         }
     }
 
     /// Whether no road is worth more than another: plain fastest routes.
     fn is_empty(&self) -> bool {
-        !self.curvy && self.favourites.is_empty()
+        !self.curvy && !self.gravel && self.favourites.is_empty()
+    }
+
+    /// Whether edge `id` is on a favourite in its direction.
+    fn is_favourite(&self, id: u32) -> bool {
+        self.favourites.bonus(id) > 0.0
     }
 
     /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
@@ -82,31 +108,50 @@ impl<'a> Fun<'a> {
         }
     }
 
+    /// What gravel adds to an edge's worth: `gravel_weight` on unpaved
+    /// roads when the rider prefers gravel, else nothing.
+    fn gravel_worth(&self, e: &Edge) -> f64 {
+        if self.gravel && is_unpaved(e) {
+            PARAMS.gravel_weight
+        } else {
+            0.0
+        }
+    }
+
+    /// What curvature and gravel add to edge `id`'s worth.
+    fn road_worth(&self, id: u32, e: &Edge) -> f64 {
+        self.curve_worth(id, e) + self.gravel_worth(e)
+    }
+
     /// What riding all of edge `id` is worth per second, 0–1: an epic
-    /// favourite is 1, a fully curvy road `curve_weight`; they add up,
-    /// capped at 1.
+    /// favourite is 1, a fully curvy road `curve_weight`, a preferred
+    /// gravel road `gravel_weight`; they add up, capped at 1.
     fn worth(&self, id: u32, e: &Edge) -> f64 {
-        (self.favourites.bonus(id) / PARAMS.max_pull + self.curve_worth(id, e)).min(1.0)
+        (self.favourites.bonus(id) / PARAMS.max_pull + self.road_worth(id, e)).min(1.0)
     }
 
     /// The most any edge can be worth.
     fn max_worth(&self) -> f64 {
         let curve = if self.curvy { PARAMS.curve_weight } else { 0.0 };
-        (self.favourites.max_bonus() / PARAMS.max_pull + curve).min(1.0)
+        let gravel = if self.gravel {
+            PARAMS.gravel_weight
+        } else {
+            0.0
+        };
+        (self.favourites.max_bonus() / PARAMS.max_pull + curve + gravel).min(1.0)
     }
 }
 
 /// What a path search minimises.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Cost<'a> {
-    /// Travel time, with avoided kinds of road costing more.
-    Fastest(Avoid),
-    /// As `Fastest`, with roads worth riding cheaper by their worth times
-    /// `max_pull` times the pull (0–1).
-    Favoured(Avoid, Fun<'a>, f64),
+    /// Travel time, with avoided kinds of road costing more, and roads
+    /// worth riding cheaper by their worth times `max_pull` times the pull
+    /// (0–1; 0 is the fastest route).
+    Favoured(Off, Fun<'a>, f64),
     /// As `Favoured`, with roads the loop already rides (either way, by
     /// geometry) costing `reuse_penalty` times more (round trips).
-    Loop(Avoid, Fun<'a>, f64, &'a HashSet<u32>),
+    Loop(Off, Fun<'a>, f64, &'a HashSet<u32>),
     /// Distance along the road, nothing avoided: the road the rider points
     /// at, not a faster one nearby (marking sections).
     Shortest,
@@ -116,17 +161,19 @@ impl Cost<'_> {
     /// Cost of whole edge `id`.
     fn edge(&self, id: u32, e: &Edge) -> f64 {
         match self {
-            Cost::Fastest(avoid) => time_cost(avoid, e),
-            Cost::Favoured(avoid, fun, pull) => {
-                time_cost(avoid, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e))
+            Cost::Favoured(off, fun, pull) => {
+                time_cost(off, e, fun.is_favourite(id))
+                    * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e))
             }
-            Cost::Loop(avoid, fun, pull, used) => {
+            Cost::Loop(off, fun, pull, used) => {
                 let reused = if used.contains(&e.geometry) {
                     PARAMS.reuse_penalty
                 } else {
                     1.0
                 };
-                time_cost(avoid, e) * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e)) * reused
+                time_cost(off, e, fun.is_favourite(id))
+                    * (1.0 - pull * PARAMS.max_pull * fun.worth(id, e))
+                    * reused
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
@@ -136,7 +183,7 @@ impl Cost<'_> {
     /// penalised nor favoured: the rider chose that road).
     fn partial(&self, e: &Edge, frac: f64) -> f64 {
         frac * match self {
-            Cost::Fastest(_) | Cost::Favoured(..) | Cost::Loop(..) => time_s(e),
+            Cost::Favoured(..) | Cost::Loop(..) => time_s(e),
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
     }
@@ -144,7 +191,6 @@ impl Cost<'_> {
     /// Lower bound of the cost of `metres` in a straight line.
     fn estimate(&self, metres: f64, max_mps: f64) -> f64 {
         match self {
-            Cost::Fastest(_) => metres / max_mps,
             // `max_pull` is below 1, so the bound stays positive.
             // The reuse penalty only adds cost, so the bound still holds.
             Cost::Favoured(_, fun, pull) | Cost::Loop(_, fun, pull, _) => {
@@ -272,7 +318,7 @@ impl Builder {
         self.curvy_m += frac * length_m * fun.curviness(id, &e);
         self.favourite_m += length_m * favourites.covered_between(id, from, to);
         self.value_s += time_s(&e)
-            * (favourites.value_between(id, from, to) + frac * fun.curve_worth(id, &e)).min(frac);
+            * (favourites.value_between(id, from, to) + frac * fun.road_worth(id, &e)).min(frac);
         let line = edge_line(region, &e);
         if let Some((lo, hi)) = favourites.covered_part(id, from, to) {
             push_part(&mut self.favourite_parts, polyline_slice(&line, lo, hi));
@@ -316,7 +362,8 @@ impl Builder {
 /// A route and what riding it is worth.
 pub(crate) struct Routed {
     pub(crate) route: Route,
-    /// Seconds on favourites and curvy road, weighted (see `Fun::worth`).
+    /// Seconds on favourites, curvy road and preferred gravel, weighted
+    /// (see `Fun::worth`).
     pub(crate) value_s: f64,
 }
 
@@ -345,9 +392,17 @@ pub(crate) fn route(
     favourites: &Favourites,
     max_speed_kmh: f64,
 ) -> Result<Route, CoreError> {
-    let avoid = opts.avoid;
-    let fun = Fun::new(region, favourites, opts.curvy);
-    let parts = path(region, from, to, Cost::Fastest(avoid), max_speed_kmh)?;
+    let off = Off::of(opts);
+    let fun = Fun::new(region, favourites, opts);
+    // The fastest route, with gravel on favourites not avoided: pull 0
+    // is travel time alone.
+    let parts = path(
+        region,
+        from,
+        to,
+        Cost::Favoured(off, fun, 0.0),
+        max_speed_kmh,
+    )?;
     let fastest = build(&fun, &parts);
     if fun.is_empty() {
         return Ok(fastest.route);
@@ -365,7 +420,7 @@ pub(crate) fn route(
             && (extra_s <= 1e-6 || (r.value_s - base_value_s) >= opts.min_gain * extra_s)
     };
     let pulled = |pull: f64| -> Result<Routed, CoreError> {
-        let cost = Cost::Favoured(avoid, fun, pull);
+        let cost = Cost::Favoured(off, fun, pull);
         let parts = path(region, from, to, cost, max_speed_kmh)?;
         Ok(build(&fun, &parts))
     };
@@ -621,7 +676,7 @@ mod tests {
     use crate::geo::haversine_m;
     use crate::region::Region;
     use crate::region::format::{COORD_SCALE, Surface};
-    use crate::{Avoid, CoreError, Engine, LatLon, RouteOptions};
+    use crate::{Avoid, CoreError, Engine, Gravel, LatLon, RouteOptions};
 
     fn engine(data: crate::region::RegionData) -> Engine {
         Engine::from_region(Region::from_bytes(&data.to_bytes().unwrap()).unwrap())
@@ -635,8 +690,12 @@ mod tests {
         RouteOptions {
             avoid: Avoid {
                 motorways,
-                unpaved,
                 ferries: false,
+            },
+            gravel: if unpaved {
+                Gravel::Avoid
+            } else {
+                Gravel::Allow
             },
             ..RouteOptions::default()
         }
@@ -870,5 +929,100 @@ mod tests {
             e.route_with(from, to, &budget(1.0, false), &none).unwrap(),
             fastest
         );
+    }
+
+    /// The gravel ladder with the north road at 70 km/h, so preferring it
+    /// is worth a short detour; motorways allowed (the south road is
+    /// faster).
+    fn fast_gravel_ladder() -> Engine {
+        let mut data = fixture::ladder(Surface::Gravel);
+        for e in &mut data.edges {
+            if e.class == crate::region::format::RoadClass::Residential as u8 {
+                e.speed_kmh = 70;
+            }
+        }
+        engine(data)
+    }
+
+    fn gravel(g: Gravel) -> RouteOptions {
+        RouteOptions {
+            gravel: g,
+            ..opts(false, false)
+        }
+    }
+
+    const LADDER_FROM: LatLon = LatLon {
+        lat: 55.71,
+        lon: 13.3995,
+    };
+    const LADDER_TO: LatLon = LatLon {
+        lat: 55.71,
+        lon: 13.4405,
+    };
+
+    #[test]
+    fn preferred_gravel_pulls_the_route_within_the_budget() {
+        let e = fast_gravel_ladder();
+        let none = crate::Favourites::none();
+        let (from, to) = (LADDER_FROM, LADDER_TO);
+        for g in [Gravel::Avoid, Gravel::Allow] {
+            let r = e.route_with(from, to, &gravel(g), &none).unwrap();
+            assert_eq!(r.unpaved_m, 0.0, "{g:?}: the motorway is faster");
+        }
+        let r = e
+            .route_with(from, to, &gravel(Gravel::Prefer), &none)
+            .unwrap();
+        assert!(r.unpaved_m > 2000.0, "{r:?}");
+        assert!(r.duration_s > r.fastest_duration_s);
+        assert!(r.duration_s <= r.fastest_duration_s * 1.4 + 1e-6);
+        // The plain fastest route only allows gravel.
+        let plain = e.route(from, to, &gravel(Gravel::Prefer)).unwrap();
+        assert_eq!(plain.unpaved_m, 0.0, "{plain:?}");
+        assert_eq!(plain.duration_s, r.fastest_duration_s);
+        // No budget: the fastest route, gravel or not.
+        let tight = RouteOptions {
+            budget: crate::TimeBudget::Extra(0.0),
+            ..gravel(Gravel::Prefer)
+        };
+        let r = e.route_with(from, to, &tight, &none).unwrap();
+        assert_eq!(r.unpaved_m, 0.0, "{r:?}");
+    }
+
+    #[test]
+    fn gravel_on_a_favourite_is_not_avoided() {
+        use crate::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
+        // Both the motorway and the gravel road are avoided; without
+        // favourites the route takes the motorway (the lesser evil).
+        let e = engine(fixture::ladder(Surface::Gravel));
+        let (from, to) = (LADDER_FROM, LADDER_TO);
+        let avoid_all = RouteOptions {
+            budget: crate::TimeBudget::Extra(0.0),
+            ..opts(true, true)
+        };
+        let none = crate::Favourites::none();
+        let r = e.route_with(from, to, &avoid_all, &none).unwrap();
+        assert_eq!(r.unpaved_m, 0.0, "{r:?}");
+        // The rider marked the gravel road as a favourite: it counts at
+        // its real time, so it wins even with no budget for favourites.
+        let d = e
+            .section_between(ll(55.7201, 13.401), ll(55.7201, 13.439))
+            .unwrap();
+        let s = Section {
+            id: 1,
+            rider_id: LOCAL_RIDER.into(),
+            name: String::new(),
+            rating: Rating::Good,
+            direction: Direction::Both,
+            source: Source::Map,
+            status: Status::Ok,
+            created_at: 0,
+            updated_at: 0,
+            ways: d.ways,
+            geometry: d.geometry,
+        };
+        let fav = crate::Favourites::build(&e, &[s]);
+        let r = e.route_with(from, to, &avoid_all, &fav).unwrap();
+        assert!(r.unpaved_m > 2000.0, "{r:?}");
+        assert!(r.favourite_share > 0.5, "{r:?}");
     }
 }

@@ -43,6 +43,10 @@ pub struct ScoringParams {
     /// What a fully curvy road is worth next to an epic favourite (1).
     /// Favourite and curvature add up, capped at 1.
     pub curve_weight: f64,
+    /// What a gravel road is worth when the rider prefers gravel, next
+    /// to an epic favourite (1). Adds to favourites and curvature, capped
+    /// at 1.
+    pub gravel_weight: f64,
     /// Bisection steps over the pull when full pull gives a route over the
     /// budget or the guard (each one is a route search).
     pub detour_steps: u32,
@@ -99,6 +103,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     //                 residential living_street service track ferry
     curve_class_weight: [0.0, 0.5, 1.0, 1.0, 1.0, 0.6, 0.2, 0.0, 0.0, 0.0, 0.0],
     curve_weight: 0.8,
+    gravel_weight: 0.8,
     detour_steps: 5,
     reuse_penalty: 4.0,
     loop_detour: 1.3,

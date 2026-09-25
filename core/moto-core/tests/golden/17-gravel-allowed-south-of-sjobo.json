@@ -3,7 +3,7 @@
   "description": "With gravel allowed (the app's Allow gravel), the same trip takes the 12 km gravel shortcut, 10 instead of 18 minutes (curvature off: this case is about gravel alone).",
   "from": [55.5578, 13.8215],
   "to": [55.6155, 13.8641],
-  "allow_unpaved": true,
+  "gravel": "allow",
   "curvy": false,
   "expect": {
     "pass": [[55.56802, 13.85889]],

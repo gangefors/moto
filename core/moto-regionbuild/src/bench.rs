@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use moto_core::region::Region;
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
-use moto_core::{Avoid, Engine, Favourites, LatLon, RoundTripTarget, RouteOptions};
+use moto_core::{Avoid, Engine, Favourites, Gravel, LatLon, RoundTripTarget, RouteOptions};
 
 /// Random points snapped by the benchmark.
 pub const SNAP_POINTS: usize = 10_000;
@@ -196,9 +196,9 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let anything = RouteOptions {
         avoid: Avoid {
             motorways: false,
-            unpaved: false,
             ferries: false,
         },
+        gravel: Gravel::Allow,
         ..opts.clone()
     };
 
