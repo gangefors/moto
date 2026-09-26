@@ -5,7 +5,7 @@
 //! with a stated hypothesis and a before/after comparison of the golden
 //! routes (see the route-scoring procedure).
 
-use crate::region::format::{CurvatureMetrics, RADIUS_BINS_M, RoadClass};
+use crate::region::format::{CurvatureMetrics, RADIUS_BINS_M, RoadClass, edge_flags};
 use crate::section::Rating;
 
 /// What the route cost is made of.
@@ -70,6 +70,11 @@ pub struct ScoringParams {
     pub brisk_penalty: f64,
     pub slow_kmh: u8,
     pub slow_penalty: f64,
+    /// What a road in a built-up area (`edge_flags::BUILT_UP`) costs at
+    /// least at full pull, whatever its speed (Stefan: suburbs of large
+    /// towns have 50–80 km/h roads that are no fun either). A town is
+    /// still ridden through when that is the way to better roads.
+    pub built_up_penalty: f64,
     /// What a second on a dull road takes off a route's worth, per unit
     /// of dullness over 1: a straight 100 km/h road (dullness 3) is worth
     /// -0.5, so the guard counts leaving it as fun gained.
@@ -105,10 +110,20 @@ impl ScoringParams {
         self.max_pull * self.favourite_weight.iter().copied().fold(0.0, f64::max)
     }
 
-    /// How curvy an edge of road class `class`, posted `speed_kmh` and
-    /// `length_m` long is, 0–1, from its curvature metrics (R5).
-    pub fn curviness(&self, m: &CurvatureMetrics, class: u8, speed_kmh: u8, length_m: f64) -> f64 {
-        if length_m <= 0.0 || speed_kmh <= self.street_kmh {
+    /// How curvy an edge of road class `class`, posted `speed_kmh`, with
+    /// `flags` (`edge_flags`) and `length_m` long is, 0–1, from its
+    /// curvature metrics (R5). Roundabouts, slip roads and roads in
+    /// built-up areas count as not curvy: their bends are junctions.
+    pub fn curviness(
+        &self,
+        m: &CurvatureMetrics,
+        class: u8,
+        speed_kmh: u8,
+        flags: u8,
+        length_m: f64,
+    ) -> f64 {
+        let junction = edge_flags::ROUNDABOUT | edge_flags::LINK | edge_flags::BUILT_UP;
+        if length_m <= 0.0 || speed_kmh <= self.street_kmh || flags & junction != 0 {
             return 0.0;
         }
         let class_weight = self
@@ -145,6 +160,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     brisk_penalty: 1.25,
     slow_kmh: 50,
     slow_penalty: 1.5,
+    built_up_penalty: 2.0,
     dull_worth: 0.25,
     detour_steps: 5,
     reuse_penalty: 4.0,
@@ -182,21 +198,21 @@ mod tests {
         };
         let tertiary = RoadClass::Tertiary as u8;
         // Straight road.
-        assert_eq!(p.curviness(&m([0; 6]), tertiary, 70, 1000.0), 0.0);
+        assert_eq!(p.curviness(&m([0; 6]), tertiary, 70, 0, 1000.0), 0.0);
         // 200 m of 60–100 m sweepers per km: half way to fully curvy.
-        let half = p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 70, 1000.0);
+        let half = p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 70, 0, 1000.0);
         assert!((half - 0.5).abs() < 1e-9, "{half}");
         // Very curvy roads cap at 1; hairpins count less than sweepers.
         assert_eq!(
-            p.curviness(&m([0, 900, 0, 0, 0, 0]), tertiary, 70, 1000.0),
+            p.curviness(&m([0, 900, 0, 0, 0, 0]), tertiary, 70, 0, 1000.0),
             1.0
         );
-        assert!(p.curviness(&m([200, 0, 0, 0, 0, 0]), tertiary, 70, 1000.0) < half);
+        assert!(p.curviness(&m([200, 0, 0, 0, 0, 0]), tertiary, 70, 0, 1000.0) < half);
         // The same bends on a motorway ramp or a car park count nothing,
         // on a residential street little.
         for class in [RoadClass::Motorway, RoadClass::Service, RoadClass::Track] {
             assert_eq!(
-                p.curviness(&m([0, 0, 200, 0, 0, 0]), class as u8, 70, 1000.0),
+                p.curviness(&m([0, 0, 200, 0, 0, 0]), class as u8, 70, 0, 1000.0),
                 0.0
             );
         }
@@ -204,6 +220,7 @@ mod tests {
             &m([0, 0, 200, 0, 0, 0]),
             RoadClass::Residential as u8,
             70,
+            0,
             1000.0,
         );
         assert!(street > 0.0 && street < half / 2.0);
@@ -211,17 +228,39 @@ mod tests {
         // junctions, not bends. 50 km/h roads still count.
         for kmh in [0, 30, 40] {
             assert_eq!(
-                p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, kmh, 1000.0),
+                p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, kmh, 0, 1000.0),
                 0.0
             );
         }
         assert_eq!(
-            p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 50, 1000.0),
+            p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 50, 0, 1000.0),
+            half
+        );
+        // Roundabouts, slip roads and built-up roads count nothing.
+        for flags in [
+            edge_flags::ROUNDABOUT,
+            edge_flags::LINK,
+            edge_flags::BUILT_UP,
+        ] {
+            assert_eq!(
+                p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 70, flags, 1000.0),
+                0.0
+            );
+        }
+        // Other flags don't matter.
+        assert_eq!(
+            p.curviness(
+                &m([0, 0, 200, 0, 0, 0]),
+                tertiary,
+                70,
+                edge_flags::TOLL,
+                1000.0
+            ),
             half
         );
         // Nonsense input never panics.
-        assert_eq!(p.curviness(&m([u16::MAX; 6]), 250, 70, 1000.0), 0.0);
-        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 70, 0.0), 0.0);
-        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 70, 1.0), 1.0);
+        assert_eq!(p.curviness(&m([u16::MAX; 6]), 250, 70, 0, 1000.0), 0.0);
+        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 70, 0, 0.0), 0.0);
+        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 70, 0, 1.0), 1.0);
     }
 }

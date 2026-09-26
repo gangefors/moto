@@ -17,10 +17,42 @@ use crate::region::format::{CurvatureMetrics, RADIUS_BINS_M};
 /// [`MIN_SPACING_M`] to the previous kept point are skipped first, so
 /// coordinate rounding on densely mapped roads doesn't read as tight bends.
 pub fn curvature_metrics(points: &[LatLon]) -> CurvatureMetrics {
+    curvature_between_junctions(points, false, false)
+}
+
+/// How far from a junction a bend is left out of the curvature: the
+/// corner where roads meet, a flare or a turning lane, not a bend of the
+/// road itself.
+pub const JUNCTION_TRIM_M: f64 = 20.0;
+
+/// [`curvature_metrics`], leaving out bends within [`JUNCTION_TRIM_M`] of
+/// the first point when `junction_at_start` and of the last when
+/// `junction_at_end` (where three or more roads meet; where one road
+/// simply continues into the next, its bends count).
+pub fn curvature_between_junctions(
+    points: &[LatLon],
+    junction_at_start: bool,
+    junction_at_end: bool,
+) -> CurvatureMetrics {
     let points = thin(points);
+    let mut along = Vec::with_capacity(points.len());
+    let mut total = 0.0;
+    for (i, &p) in points.iter().enumerate() {
+        if i > 0 {
+            total += haversine_m(points[i - 1], p);
+        }
+        along.push(total);
+    }
+    let trimmed = |i: usize| {
+        (junction_at_start && along[i] < JUNCTION_TRIM_M)
+            || (junction_at_end && total - along[i] < JUNCTION_TRIM_M)
+    };
     let mut turn_deg = 0.0;
     let mut bins = [0.0f64; RADIUS_BINS_M.len()];
-    for w in points.windows(3) {
+    for (i, w) in points.windows(3).enumerate() {
+        if trimmed(i + 1) {
+            continue;
+        }
         let (a, b, c) = (w[0], w[1], w[2]);
         let k = b.lat.to_radians().cos();
         let xy = |p: LatLon| {
@@ -155,6 +187,53 @@ mod tests {
             lon: 13.4,
         };
         assert_eq!(curvature_metrics(&[]), CurvatureMetrics::default());
+        assert_eq!(
+            curvature_between_junctions(&[], true, true),
+            CurvatureMetrics::default()
+        );
         assert_eq!(curvature_metrics(&[p, p, p]), CurvatureMetrics::default());
+    }
+
+    #[test]
+    fn bends_next_to_a_junction_are_left_out() {
+        // A 90° bend of 50 m radius, then 100 m straight on each side.
+        let bend = arc(50.0, 90.0, 10.0);
+        let first = bend[0];
+        let last = *bend.last().unwrap();
+        let k = first.lat.to_radians().cos();
+        let north = |p: LatLon, m: f64| LatLon {
+            lat: p.lat + (m / EARTH_RADIUS_M).to_degrees(),
+            lon: p.lon,
+        };
+        let west = |p: LatLon, m: f64| LatLon {
+            lat: p.lat,
+            lon: p.lon - (m / (EARTH_RADIUS_M * k)).to_degrees(),
+        };
+        let mut road = vec![north(first, -100.0)];
+        road.extend(&bend);
+        road.push(west(last, 100.0));
+        let full = curvature_metrics(&road);
+        let bend_m: u16 = full.radius_len_m.iter().sum();
+        assert!(bend_m > 50, "{full:?}");
+        // The bend lies 100 m from either end: a junction there changes
+        // nothing.
+        assert_eq!(curvature_between_junctions(&road, true, true), full);
+        // The bend alone, between two junctions: its first and last 20 m
+        // go.
+        let only = curvature_between_junctions(&bend, true, true);
+        let only_m: u16 = only.radius_len_m.iter().sum();
+        assert!(only_m > 0 && only_m < bend_m - 20, "{only:?} {full:?}");
+        // A short corner between junctions counts nothing.
+        let corner = arc(20.0, 90.0, 15.0);
+        assert!(curvature_metrics(&corner).radius_len_m.iter().sum::<u16>() > 0);
+        assert_eq!(
+            curvature_between_junctions(&corner, true, true),
+            CurvatureMetrics::default()
+        );
+        // Where the road just continues, its bends count.
+        assert_eq!(
+            curvature_between_junctions(&corner, false, false),
+            curvature_metrics(&corner)
+        );
     }
 }

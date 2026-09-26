@@ -145,6 +145,9 @@ pub mod edge_flags {
     pub const ROUNDABOUT: u8 = 1 << 4;
     /// Slip road (`*_link`).
     pub const LINK: u8 = 1 << 5;
+    /// Mostly within a built-up area (a town or suburb, told by how
+    /// densely roads meet around it); set by the region builder.
+    pub const BUILT_UP: u8 = 1 << 6;
 }
 
 /// Road class, from OSM `highway=*` (and `route=ferry`).
