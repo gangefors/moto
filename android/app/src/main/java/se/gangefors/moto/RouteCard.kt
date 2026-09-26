@@ -183,6 +183,7 @@ private fun RouteCardDetails(
 @Composable
 fun LoopCard(
     summary: RouteSummary?,
+    problem: String?,
     position: Int,
     count: Int,
     onNext: () -> Unit,
@@ -214,10 +215,12 @@ fun LoopCard(
                 onToggleExpanded,
                 onClose,
                 stringResource(R.string.loop_close),
+                problem = problem,
             )
             if (expanded) {
                 LoopCardDetails(
                     found = summary != null,
+                    canShuffle = summary != null || problem != null,
                     position = position,
                     count = count,
                     onNext = onNext,
@@ -240,6 +243,7 @@ fun LoopCard(
 @Composable
 private fun LoopCardDetails(
     found: Boolean,
+    canShuffle: Boolean,
     position: Int,
     count: Int,
     onNext: () -> Unit,
@@ -272,7 +276,7 @@ private fun LoopCardDetails(
                 )
                 OutlinedButton(onClick = onNext, enabled = found) { OneLine(stringResource(R.string.loop_next)) }
             }
-            OutlinedButton(onClick = onShuffle, enabled = found) { OneLine(stringResource(R.string.loop_shuffle)) }
+            OutlinedButton(onClick = onShuffle, enabled = canShuffle) { OneLine(stringResource(R.string.loop_shuffle)) }
         }
         // Length as a slider, in hours or kilometres.
         StepSlider(
@@ -337,9 +341,15 @@ private fun CardHeader(
     onToggleExpanded: () -> Unit,
     onClose: () -> Unit,
     closeDescription: String,
+    problem: String? = null,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        RouteFigures(summary, computing, Modifier.weight(1f).clickable(onClick = onToggleExpanded))
+        val figures = Modifier.weight(1f).clickable(onClick = onToggleExpanded)
+        if (problem != null) {
+            Problem(problem, figures)
+        } else {
+            RouteFigures(summary, computing, figures)
+        }
         IconButton(onClick = onToggleExpanded) {
             Icon(
                 painterResource(if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
@@ -349,6 +359,20 @@ private fun CardHeader(
         IconButton(onClick = onClose) {
             Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
+    }
+}
+
+/** Why nothing was found, in place of the figures and as tall as them. */
+@Composable
+private fun Problem(problem: String, modifier: Modifier = Modifier) {
+    Column(modifier.padding(top = 8.dp)) {
+        Text(stringResource(R.string.loop_none_title), style = MaterialTheme.typography.titleMedium)
+        Text(
+            problem,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            minLines = 2,
+        )
     }
 }
 
