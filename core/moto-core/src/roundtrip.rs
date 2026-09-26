@@ -16,10 +16,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::favourites::Favourites;
 use crate::geo::{bearing_deg, destination, haversine_m};
+use crate::region::format::{RoadClass, Surface, edge_flags};
 use crate::route::{Cost, Fun, Off, Partial, Routed, build, latlon, path};
 use crate::scoring::PARAMS;
 use crate::{
-    CoreError, Engine, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
+    CoreError, Engine, Gravel, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
 };
 
 /// Headings tried, evenly spread.
@@ -41,6 +42,11 @@ pub const MAX_TARGET_M: f64 = 400_000.0;
 /// Shares of the radius tried for a waypoint, in order, until one lies
 /// near a road.
 const WAYPOINT_PULL_IN: [f64; 3] = [1.0, 0.8, 0.6];
+/// How far from a waypoint's place a road for it is looked for.
+const WAYPOINT_SEARCH_M: f64 = 1_500.0;
+/// Most roads looked at for a waypoint.
+const WAYPOINT_CANDIDATES: usize = 64;
+
 /// A favourite's middle can be a waypoint when it lies this far from the
 /// start (as a share of the waypoint radius) and within `SPREAD_DEG` of
 /// the waypoint's bearing.
@@ -415,12 +421,19 @@ fn loop_at(
             taken.push(p);
             return engine.snap(p).ok();
         }
-        // A waypoint with no road near it (the sea, the region's edge) is
-        // pulled in towards the start; the resize makes up the length.
-        WAYPOINT_PULL_IN.iter().find_map(|&f| {
-            let p = destination(start.position, b, radius * f);
-            engine.snap(p).ok().inspect(|_| taken.push(p))
-        })
+        // A waypoint with no road for a loop near it (the sea, the
+        // region's edge, forest) is pulled in towards the start; the
+        // resize makes up the length. Failing that, any road will do.
+        WAYPOINT_PULL_IN
+            .iter()
+            .find_map(|&f| {
+                let p = destination(start.position, b, radius * f);
+                loop_road_near(engine, p, opts).inspect(|_| taken.push(p))
+            })
+            .or_else(|| {
+                let p = destination(start.position, b, radius);
+                engine.snap(p).ok().inspect(|_| taken.push(p))
+            })
     };
     let w1 = waypoint(bearing - spread)?;
     let w2 = waypoint(bearing + spread)?;
@@ -478,6 +491,36 @@ fn overlap(a: &Loop, b: &Loop) -> f64 {
 
 /// The best-rated favourite whose middle lies near where a waypoint at
 /// `bearing` and `radius` would go, not yet a waypoint of this loop.
+/// The nearest point near `p` on a road a loop should pass through: a
+/// main or minor through road (trunk to unclassified), open to all, and
+/// paved unless the rider prefers gravel. Never a service road, driveway,
+/// residential street, track or ferry, which the loop would ride out to
+/// and back for nothing.
+fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<RoadPoint> {
+    let region = engine.region();
+    crate::snap::nearby(region, p, WAYPOINT_SEARCH_M, WAYPOINT_CANDIDATES)
+        .into_iter()
+        .find(|rp| {
+            let Some(e) = region.edges().get(rp.edge as usize) else {
+                return false;
+            };
+            let through = matches!(
+                RoadClass::from_u8(e.class),
+                Some(
+                    RoadClass::Trunk
+                        | RoadClass::Primary
+                        | RoadClass::Secondary
+                        | RoadClass::Tertiary
+                        | RoadClass::Unclassified
+                )
+            );
+            let open = e.flags & (edge_flags::DESTINATION | edge_flags::FERRY) == 0;
+            let surface = opts.gravel == Gravel::Prefer
+                || Surface::from_u8(e.surface).is_none_or(Surface::is_paved);
+            through && open && surface
+        })
+}
+
 fn anchor_near(
     start: LatLon,
     bearing: f64,

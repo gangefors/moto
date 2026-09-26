@@ -501,3 +501,41 @@ fn shuffled_sets_spread_out_and_keep_the_best_first() {
         round_trip(&e, CENTRE, km(20.0), &opts, &Favourites::none()).unwrap()
     );
 }
+
+#[test]
+fn waypoints_go_on_through_roads() {
+    use crate::fixture::Road;
+    use crate::region::format::{RoadClass, Surface};
+    // Three parallel east-west roads 200 m apart: a service road nearest
+    // the point, then a gravel tertiary road, then a paved one.
+    let nodes = [
+        (55.7000, 13.40),
+        (55.7000, 13.42),
+        (55.7018, 13.40),
+        (55.7018, 13.42),
+        (55.7036, 13.40),
+        (55.7036, 13.42),
+    ];
+    let roads = [
+        Road::new(0, 1, RoadClass::Service, 20, 1),
+        Road {
+            surface: Surface::Gravel,
+            ..Road::new(2, 3, RoadClass::Tertiary, 70, 2)
+        },
+        Road::new(4, 5, RoadClass::Tertiary, 70, 3),
+    ];
+    let e = engine(fixture::build(&nodes, &roads, 50_000));
+    let p = ll(55.6995, 13.41);
+    let way = |opts: &RouteOptions| {
+        let w = loop_road_near(&e, p, opts).unwrap();
+        e.region().way_refs()[w.edge as usize].way_id
+    };
+    assert_eq!(way(&RouteOptions::default()), 3, "paved through road");
+    let prefer = RouteOptions {
+        gravel: Gravel::Prefer,
+        ..RouteOptions::default()
+    };
+    assert_eq!(way(&prefer), 2, "gravel is fine when preferred");
+    // Nothing suitable in reach: no waypoint.
+    assert!(loop_road_near(&e, ll(55.80, 13.41), &RouteOptions::default()).is_none());
+}
