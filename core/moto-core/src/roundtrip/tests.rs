@@ -52,10 +52,13 @@ fn loops_come_back_at_about_the_target_length() {
             .fold(0.0, f64::max);
         assert!(far > 2_500.0, "{far}");
     }
-    // Alternatives differ: they share less than half their roads.
+    // Alternatives differ: outside the home zone (where the way out and
+    // home may be shared), they share less than half their roads.
+    let home = home_radius_m(20_000.0);
     let roads = |r: &Route| -> Vec<(i64, i64)> {
         r.geometry
             .windows(2)
+            .filter(|w| haversine_m(w[0], start) > home || haversine_m(w[1], start) > home)
             .map(|w| {
                 (
                     (w[0].lat * 1e4 + w[1].lat * 1e4) as i64,
@@ -68,8 +71,9 @@ fn loops_come_back_at_about_the_target_length() {
     let shared = a.iter().filter(|s| b.contains(s)).count();
     assert!(
         (shared as f64) < 0.5 * a.len().min(b.len()) as f64,
-        "{shared} of {}",
-        a.len()
+        "{shared} of {} and {}",
+        a.len(),
+        b.len()
     );
     // The same request gives the same loops.
     assert_eq!(
@@ -538,4 +542,42 @@ fn waypoints_go_on_through_roads() {
     assert_eq!(way(&prefer), 2, "gravel is fine when preferred");
     // Nothing suitable in reach: no waypoint.
     assert!(loop_road_near(&e, ll(55.80, 13.41), &RouteOptions::default()).is_none());
+}
+
+#[test]
+fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
+    use crate::fixture::{E_AB, E_BA, E_BC, E_BD, E_CB};
+    let data = fixture::region();
+    let region = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+    let p = |edge, from, to| Partial { edge, from, to };
+    let joined = |parts: Vec<Partial>, leg: Vec<Partial>| {
+        let mut parts = parts;
+        append_leg(&region, &mut parts, leg);
+        parts
+    };
+    // Out to 70 % of A-B and straight back to A: both go.
+    assert!(joined(vec![p(E_AB, 0.0, 0.7)], vec![p(E_BA, 0.3, 1.0)]).is_empty());
+    // Back only part of the way: the last piece ends where it turned.
+    assert_eq!(
+        joined(vec![p(E_AB, 0.0, 0.7)], vec![p(E_BA, 0.3, 0.5)]),
+        [p(E_AB, 0.0, 0.5)]
+    );
+    // Back past where the last piece started: it goes, the next is cut.
+    assert_eq!(
+        joined(vec![p(E_AB, 0.2, 0.7)], vec![p(E_BA, 0.3, 1.0)]),
+        [p(E_BA, 0.8, 1.0)]
+    );
+    // Over whole edges: A-B, out to C and back, then on to D.
+    assert_eq!(
+        joined(
+            vec![p(E_AB, 0.0, 1.0), p(E_BC, 0.0, 1.0)],
+            vec![p(E_CB, 0.0, 1.0), p(E_BD, 0.0, 0.5)],
+        ),
+        [p(E_AB, 0.0, 1.0), p(E_BD, 0.0, 0.5)]
+    );
+    // Going on the same way: nothing is cut.
+    assert_eq!(
+        joined(vec![p(E_AB, 0.0, 0.7)], vec![p(E_AB, 0.7, 1.0)]),
+        [p(E_AB, 0.0, 0.7), p(E_AB, 0.7, 1.0)]
+    );
 }
