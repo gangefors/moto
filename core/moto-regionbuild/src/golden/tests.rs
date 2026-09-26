@@ -90,6 +90,7 @@ fn bad_case_files_are_refused() {
         &case(r#","max_detour":0.2,"max_minutes":30"#, ""), // two budgets
         &case(r#","min_gain":-1"#, ""),            // negative guard
         &case("", r#""pass":[[91.0,13.0]]"#),      // not a coordinate
+        &case("", r#""max_side_loops":0"#),        // round trips only
         &case(
             r#","favourites":[{"from":[55.7,13.19],"to":[55.7,13.19],"rating":"superb"}]"#,
             "",
@@ -361,4 +362,31 @@ fn fast_roads_are_counted() {
         .run(&engine);
     assert!(o.failures.iter().any(|f| f.contains("100+ km/h")), "{o:?}");
     assert!(Case::parse(&case("", r#""max_fast_km":-1"#)).is_err());
+}
+
+#[test]
+fn side_loops_are_found_outside_the_home_zone() {
+    // East along lat 55.70 (1 km at about 63 m per 0.001°), then a
+    // 1.4 km diamond to the north that comes back to where it turned off,
+    // then on east.
+    let p = |lat: f64, lon: f64| LatLon { lat, lon };
+    let mut line: Vec<LatLon> = (0..=16)
+        .map(|i| p(55.70, 13.20 + 0.001 * f64::from(i)))
+        .collect();
+    line.extend([
+        p(55.7027, 13.2185),
+        p(55.7054, 13.216),
+        p(55.7027, 13.2135),
+        p(55.70, 13.216),
+    ]);
+    line.extend((17..=30).map(|i| p(55.70, 13.20 + 0.001 * f64::from(i))));
+    let (count, longest) = side_loops(&line, 500.0);
+    assert_eq!(count, 1);
+    assert!((1_000.0..1_600.0).contains(&longest), "{longest}");
+    // Inside the home zone it doesn't count.
+    assert_eq!(side_loops(&line, 1_100.0).0, 0);
+    // A plain line, a point and nothing have none.
+    assert_eq!(side_loops(&line[..17], 0.0).0, 0);
+    assert_eq!(side_loops(&line[..1], 0.0), (0, 0.0));
+    assert_eq!(side_loops(&[], 0.0), (0, 0.0));
 }

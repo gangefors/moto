@@ -111,6 +111,14 @@ impl<'a> Fun<'a> {
         }
     }
 
+    /// Whether edge `id` is part of a favourite that counts.
+    pub(crate) fn is_favourite(&self, id: u32) -> bool {
+        self.region
+            .edges()
+            .get(id as usize)
+            .is_some_and(|e| self.favourite_bonus(id, e) > 0.0)
+    }
+
     /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
     fn curviness(&self, id: u32, e: &Edge) -> f64 {
         let m = self.region.curvature()[id as usize];
