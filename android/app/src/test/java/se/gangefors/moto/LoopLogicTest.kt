@@ -4,6 +4,7 @@
 package se.gangefors.moto
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import se.gangefors.moto.core.RoundTripTarget
 
@@ -92,5 +93,38 @@ class LoopLogicTest {
             val other = switchUnit(it)
             assertEquals(true, other in loopSteps(other))
         }
+    }
+}
+
+class OneAheadTest {
+    private val dropped = mutableListOf<String>()
+    private val ahead = OneAhead<Int, String> { dropped += it }
+
+    @Test
+    fun theValueForTheSameKeyIsHandedOverOnce() {
+        ahead.hold(1, "set 1")
+        assertEquals("set 1", ahead.take(1))
+        assertNull(ahead.take(1))
+        assertEquals(emptyList<String>(), dropped)
+    }
+
+    @Test
+    fun anotherKeyGetsNothingAndDropsTheHeldValue() {
+        ahead.hold(1, "set 1")
+        assertNull(ahead.take(2))
+        assertEquals(listOf("set 1"), dropped)
+        assertNull(ahead.take(1))
+    }
+
+    @Test
+    fun holdingAnotherOrClearingDropsTheOldOne() {
+        ahead.hold(1, "set 1")
+        ahead.hold(2, "set 2")
+        assertEquals(listOf("set 1"), dropped)
+        ahead.clear()
+        assertEquals(listOf("set 1", "set 2"), dropped)
+        ahead.clear()
+        assertEquals(2, dropped.size)
+        assertNull(ahead.take(2))
     }
 }

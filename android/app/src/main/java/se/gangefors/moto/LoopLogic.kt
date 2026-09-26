@@ -80,3 +80,39 @@ fun shuffleSeed(random: kotlin.random.Random = kotlin.random.Random.Default): UI
 /** The loop shown after [index] of [count]: the next one, back to the
  * first after the last. */
 fun nextLoop(index: Int, count: Int): Int = if (count <= 0) 0 else (index + 1).mod(count)
+
+/**
+ * One result computed ahead of time for a [key] (the loops the next
+ * Shuffle will show), so it is ready when asked for. Holds at most one:
+ * holding another, clearing, or taking it for a different key drops it
+ * through [drop] (cancels the work), so nothing runs for a request that
+ * will not come.
+ */
+class OneAhead<K, V>(private val drop: (V) -> Unit) {
+    private var held: Pair<K, V>? = null
+
+    /** Holds [value] for [key], dropping what was held. */
+    fun hold(key: K, value: V) {
+        clear()
+        held = key to value
+    }
+
+    /** The value held for [key], handed over; `null` (and the held one
+     * dropped) when it was for another key. */
+    fun take(key: K): V? {
+        val h = held ?: return null
+        held = null
+        return if (h.first == key) {
+            h.second
+        } else {
+            drop(h.second)
+            null
+        }
+    }
+
+    /** Drops what is held. */
+    fun clear() {
+        held?.let { drop(it.second) }
+        held = null
+    }
+}
