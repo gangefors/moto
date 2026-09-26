@@ -88,8 +88,14 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all
 cargo deny --locked check   # advisories, licences, sources (deny.toml; cargo-deny 0.20.2)
 
-# Region file and benchmark (CI compares --json output between builds)
+# Region file and benchmark (CI compares --json output between builds).
+# The extract: download.geofabrik.de refuses Claude's sessions (never try
+# it); use the same data from the openstreetmap.fr mirror:
+# https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf
 cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf m0.region
+# Derive curvature and built-up areas afresh for an existing region file,
+# without the extract
+cargo run --release -p moto-regionbuild -- --refresh m0.region m0-new.region
 cargo run --release -p moto-regionbuild -- --check m0.region --json bench.json
 python3 ../.github/scripts/bench_compare.py old.json bench.json
 # Golden routes: route-quality regression set (run before and after every
