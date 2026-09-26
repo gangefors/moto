@@ -625,6 +625,9 @@ fun MapScreen() {
         OneAhead<LoopRequest, Deferred<Result<List<Route>>>> { it.cancel() }
     }
     DisposableEffect(Unit) { onDispose { loopsAhead.clear() } }
+    // Why the last search found no loop (shown on the loop card instead of
+    // figures), or null.
+    var loopProblem by remember { mutableStateOf<String?>(null) }
     // What the map was last fitted to (a loop start, or a route's ends): a
     // new one is always fitted, a recalculated one only when it needs to be.
     var fittedFor by remember { mutableStateOf<Any?>(null) }
@@ -653,6 +656,16 @@ fun MapScreen() {
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         val request = LoopRequest(start, choice, opts, favs, shape)
+        loopProblem = null
+        // No loop this time: the start and the card stay, with why, so the
+        // rider can Shuffle or change the length or direction from here.
+        fun noLoop(why: String) {
+            loopsAhead.clear()
+            nextSeed = shuffleSeed()
+            loopProblem = why
+            cardExpanded = true
+            o.route.show(start, null, null)
+        }
         val find = { r: LoopRequest ->
             runCatching { ready.engine.roundTrip(r.start.toLatLon(), r.choice.target, r.opts, r.favourites, r.shape) }
         }
@@ -664,9 +677,7 @@ fun MapScreen() {
             onSuccess = { found ->
                 val first = found.firstOrNull()
                 if (first == null) {
-                    loopStart = null
-                    o.route.show(null, null, null)
-                    message = resources.getString(R.string.loop_none)
+                    noLoop(resources.getString(R.string.loop_none))
                 } else {
                     loops = found
                     loopOpts = opts
@@ -681,14 +692,13 @@ fun MapScreen() {
                 }
             },
             onFailure = {
-                loopsAhead.clear()
-                loopStart = null
-                o.route.show(null, null, null)
-                message = if (classify(it) == CoreProblem.NO_ROUTE) {
-                    resources.getString(R.string.loop_none)
-                } else {
-                    coreErrorMessage(resources, it)
-                }
+                noLoop(
+                    if (classify(it) == CoreProblem.NO_ROUTE) {
+                        resources.getString(R.string.loop_none)
+                    } else {
+                        coreErrorMessage(resources, it)
+                    },
+                )
             },
         )
     }
@@ -1076,6 +1086,7 @@ fun MapScreen() {
                     summary = shown?.let { r ->
                         summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
                     },
+                    problem = loopProblem,
                     position = loopIndex,
                     count = loops.size,
                     onShuffle = { loopSeed = nextSeed },
