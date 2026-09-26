@@ -76,6 +76,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import android.graphics.PointF
+import kotlin.math.max
+import kotlin.math.roundToInt
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.view.WindowCompat
@@ -207,6 +214,58 @@ fun MapScreen() {
 
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
+
+    // Where the panels over the map end, in pixels, measured as they are
+    // laid out: the card at the top, the buttons at the right, the tag
+    // button at the bottom. Routes are fitted clear of them.
+    var mapSize by remember { mutableStateOf(IntSize.Zero) }
+    var topPanelBottom by remember { mutableIntStateOf(0) }
+    var buttonsLeft by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    fun fitPaddingNow(): FitPadding {
+        val (w, h) = mapSize.width to mapSize.height
+        val panels = Panels(
+            width = w,
+            height = h,
+            left = insets.left,
+            top = max(topPanelBottom, insets.top),
+            right = max(w - buttonsLeft, insets.right),
+            bottom = max(h - tagTop, insets.bottom),
+        )
+        return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
+    }
+
+    /** What the map shows clear of the panels, or `null` before it is laid out. */
+    fun visibleBounds(m: MapLibreMap, pad: FitPadding): GeoBounds? {
+        val (w, h) = mapSize.width.toFloat() to mapSize.height.toFloat()
+        val (l, t, r, b) = listOf(pad.left, pad.top, w - pad.right, h - pad.bottom).map { it.toFloat() }
+        if (r <= l || b <= t) return null
+        val corners = listOf(PointF(l, t), PointF(r, t), PointF(l, b), PointF(r, b))
+            .map { m.projection.fromScreenLocation(it) }
+            .map { LatLon(it.latitude, it.longitude) }
+        return boundsOf(listOf(corners))
+    }
+
+    /**
+     * Moves the map to show all of [lines] clear of the panels, zoomed in
+     * as far as they allow (never closer than [minSpanM] across). Unless
+     * [always], only when part of them is out of view or they are small in
+     * it, so recalculating doesn't make the map jump.
+     */
+    fun showOnMap(lines: List<List<LatLon>>, always: Boolean, minSpanM: Double = MIN_FIT_SPAN_M) {
+        val m = map ?: return
+        val target = boundsOf(lines)?.withMinSpan(minSpanM) ?: return
+        val pad = fitPaddingNow()
+        if (!always && !needsFit(visibleBounds(m, pad), target)) return
+        // Following the rider's position would pull the map straight back;
+        // the location button turns it on again.
+        m.locationComponent.takeIf { it.isLocationComponentActivated }?.cameraMode = CameraMode.NONE
+        val bounds = LatLngBounds.Builder()
+            .include(LatLng(target.north, target.east))
+            .include(LatLng(target.south, target.west))
+            .build()
+        m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, pad.left, pad.top, pad.right, pad.bottom))
+    }
 
     // The rider's saved sections (ADR-0006), opened off the main thread.
     var store by remember { mutableStateOf<StoreState>(StoreState.Loading) }
@@ -429,12 +488,12 @@ fun MapScreen() {
                     marker.propose(LatLng(first.lat, first.lon), LatLng(last.lat, last.lon))
                     draft = d
                     message = resources.getString(R.string.tag_review_suggested, r.position, r.size, sectionKm(d.distanceM))
-                    map?.let { m -> fitTo(m, d.geometry, density.density) }
+                    showOnMap(listOf(d.geometry), always = true, minSpanM = TAG_REVIEW_SPAN_M)
                 },
                 onFailure = { e ->
                     marker.begin()
                     message = resources.getString(R.string.tag_review_none, r.position, r.size, e.message ?: e.toString())
-                    map?.let { m -> fitTo(m, listOf(tag.position), density.density) }
+                    showOnMap(listOf(listOf(tag.position)), always = true, minSpanM = TAG_REVIEW_SPAN_M)
                 },
             )
             showDraft()
@@ -566,6 +625,9 @@ fun MapScreen() {
         OneAhead<LoopRequest, Deferred<Result<List<Route>>>> { it.cancel() }
     }
     DisposableEffect(Unit) { onDispose { loopsAhead.clear() } }
+    // What the map was last fitted to (a loop start, or a route's ends): a
+    // new one is always fitted, a recalculated one only when it needs to be.
+    var fittedFor by remember { mutableStateOf<Any?>(null) }
     // Whether the route and loop cards show all their choices or only the
     // figures (collapsed, to see more of the map); kept for new routes.
     var cardExpanded by rememberSaveable { mutableStateOf(true) }
@@ -609,6 +671,9 @@ fun MapScreen() {
                     loops = found
                     loopOpts = opts
                     o.route.show(start, null, first.geometry, first.favouriteParts, first.unpavedParts)
+                    // All the loops of the set, so Next doesn't move the map.
+                    showOnMap(found.map { it.geometry } + listOf(listOf(start.toLatLon())), always = fittedFor != start)
+                    fittedFor = start
                     val next = shuffleSeed()
                     nextSeed = next
                     val nextRequest = request.copy(shape = shape.copy(seed = next))
@@ -648,6 +713,8 @@ fun MapScreen() {
         result.fold(
             onSuccess = { r ->
                 o.route.show(start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias)
+                showOnMap(listOf(r.geometry), always = fittedFor != (start to end))
+                fittedFor = start to end
                 routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
                 shownRoute = r to opts
                 routeFoundAt = now
@@ -665,6 +732,16 @@ fun MapScreen() {
                 message = coreErrorMessage(resources, it)
             },
         )
+    }
+    // When the card grows or shrinks (expanded, collapsed, a message), the
+    // route or loops shown stay in view.
+    LaunchedEffect(cardExpanded, topPanelBottom, mapSize) {
+        val lines = when {
+            loopStart != null -> loops.map { it.geometry }
+            routeEnds != null -> listOfNotNull(shownRoute?.first?.geometry)
+            else -> emptyList()
+        }
+        if (lines.isNotEmpty()) showOnMap(lines, always = false)
     }
     DisposableEffect(map, overlays, region) {
         val m = map
@@ -830,7 +907,7 @@ fun MapScreen() {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().onSizeChanged { mapSize = it }) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         // Theme-coloured scrim keeps the navigation bar icons readable over any
         // part of the map; the icons follow the same theme (MainActivity). The
@@ -852,7 +929,8 @@ fun MapScreen() {
                 .safeDrawingPadding()
                 .padding(top = 8.dp, start = 16.dp, end = 16.dp)
                 .widthIn(max = TOP_BOX_MAX_WIDTH)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .onGloballyPositioned { topPanelBottom = it.boundsInRoot().bottom.roundToInt() },
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val offerLoop = startPicked != null && !marking
@@ -1030,11 +1108,13 @@ fun MapScreen() {
             }
         }
         if (!marking) {
+            DisposableEffect(Unit) { onDispose { buttonsLeft = Int.MAX_VALUE } }
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .safeDrawingPadding()
-                    .padding(16.dp),
+                    .padding(16.dp)
+                    .onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() },
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -1143,6 +1223,7 @@ fun MapScreen() {
         // Quick-tag (PRD R3): one big button, usable with gloves, whenever the
         // map is open. Bottom left, above the map's logo and attribution.
         if (store is StoreState.Ready && !marking) {
+            DisposableEffect(Unit) { onDispose { tagTop = Int.MAX_VALUE } }
             LargeFloatingActionButton(
                 onClick = { quickTag() },
                 shape = CircleShape,
@@ -1153,6 +1234,7 @@ fun MapScreen() {
                     .safeDrawingPadding()
                     .padding(start = 16.dp, bottom = 40.dp)
                     .size(TAG_BUTTON_SIZE)
+                    .onGloballyPositioned { tagTop = it.boundsInRoot().top.roundToInt() }
                     .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
             ) {
                 Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
@@ -1247,7 +1329,7 @@ fun MapScreen() {
                         val start = LatLng(line.first().lat, line.first().lon)
                         val end = if (saved.isLoop) null else LatLng(line.last().lat, line.last().lon)
                         overlays?.route?.show(start, end, line)
-                        map?.let { m -> fitTo(m, line, density.density) }
+                        showOnMap(listOf(line), always = true)
                     }
                 }
             },
@@ -1262,7 +1344,7 @@ fun MapScreen() {
                         message = resources.getString(R.string.rides_gone)
                     } else {
                         shownRide = ShownRide(track, line)
-                        map?.let { m -> fitTo(m, line, density.density) }
+                        showOnMap(listOf(line), always = true)
                     }
                 }
             },
@@ -1312,19 +1394,6 @@ private fun mapFix(map: MapLibreMap?): TrackPoint? {
         speedMps = if (l.hasSpeed()) l.speed.toDouble() else null,
         bearingDeg = if (l.hasBearing()) l.bearing.toDouble() else null,
     )
-}
-
-/** Moves the camera to show [points], clear of the panels at the top and bottom. */
-private fun fitTo(map: MapLibreMap, points: List<LatLon>, density: Float) {
-    if (points.isEmpty()) return
-    val update = if (points.size == 1) {
-        CameraUpdateFactory.newLatLngZoom(LatLng(points[0].lat, points[0].lon), 15.0)
-    } else {
-        val bounds = LatLngBounds.Builder().includes(points.map { LatLng(it.lat, it.lon) }).build()
-        val pad = (48 * density).toInt()
-        CameraUpdateFactory.newLatLngBounds(bounds, pad, (160 * density).toInt(), pad, (120 * density).toInt())
-    }
-    map.animateCamera(update)
 }
 
 /** Quick-tag button: large enough to hit with gloves on. */
@@ -1419,6 +1488,13 @@ private const val SAMPLE_INTERVAL_MS = 500L
 
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
+
+/** Room between a fitted route and the panels around it. */
+private val FIT_MARGIN = 24.dp
+
+/** Tag review shows a tag or the section proposed for it close up, as
+ * wide as a few streets. */
+private const val TAG_REVIEW_SPAN_M = 600.0
 
 /** Translucent scrims behind the navigation bar, per system theme. */
 private val LIGHT_SCRIM = Color.White.copy(alpha = 0.7f)
