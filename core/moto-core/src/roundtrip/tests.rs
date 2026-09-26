@@ -285,7 +285,7 @@ fn seed_zero_is_the_standard_candidates() {
             Candidate {
                 bearing: i as f64 * 30.0,
                 spread: SPREAD_DEG,
-                size: 1.0
+                size: (1.0, 1.0)
             }
         );
     }
@@ -301,12 +301,19 @@ fn seeded_candidates_vary_within_bounds_and_repeat() {
     assert!((0.0..30.0).contains(&turn), "{turn}");
     for (i, c) in a.iter().enumerate() {
         assert!((c.bearing - (i as f64 * 30.0 + turn)).abs() < 1e-9);
-        assert!((15.0..45.0).contains(&c.spread), "{c:?}");
-        assert!((0.8..1.2).contains(&c.size), "{c:?}");
+        assert!((10.0..70.0).contains(&c.spread), "{c:?}");
+        assert!((0.6..1.3).contains(&c.size.0), "{c:?}");
+        assert!((0.6..1.3).contains(&c.size.1), "{c:?}");
     }
+    // Lopsided: the two waypoints are not always as far out.
+    assert!(a.iter().any(|c| (c.size.0 - c.size.1).abs() > 0.1));
     // The extremes of the generator stay in range.
     for seed in [1, u32::MAX] {
-        assert!(Candidates::new(seed, None).all(|c| (15.0..45.0).contains(&c.spread)));
+        assert!(Candidates::new(seed, None).all(|c| {
+            (10.0..70.0).contains(&c.spread)
+                && (0.6..1.3).contains(&c.size.0)
+                && (0.6..1.3).contains(&c.size.1)
+        }));
     }
 }
 
@@ -357,7 +364,10 @@ fn a_direction_fans_the_headings_around_it() {
     assert_eq!(c.len(), HEADINGS);
     assert!((c[0].bearing - 30.0).abs() < 1e-9);
     assert!((c[HEADINGS - 1].bearing - 150.0).abs() < 1e-9);
-    assert!(c.iter().all(|c| c.spread == SPREAD_DEG && c.size == 1.0));
+    assert!(
+        c.iter()
+            .all(|c| c.spread == SPREAD_DEG && c.size == (1.0, 1.0))
+    );
     // Around north the bearings wrap into 0-360.
     let north: Vec<f64> = Candidates::new(0, Some(0.0)).map(|c| c.bearing).collect();
     assert!(north.iter().all(|b| (0.0..360.0).contains(b)));
