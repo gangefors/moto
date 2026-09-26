@@ -40,6 +40,11 @@ pub struct ScoringParams {
     /// motorways (their ramps), service roads, living streets and tracks
     /// (car parks, estates, farms), little on residential streets.
     pub curve_class_weight: [f64; RoadClass::ALL.len()],
+    /// Roads posted at this or less count as not curvy at all: town
+    /// streets, split at every junction into short pieces where a street
+    /// corner reads as a bend (Stefan: city riding is boring; ride through
+    /// a town only to reach better roads).
+    pub street_kmh: u8,
     /// What a fully curvy road is worth next to an epic favourite (1).
     /// Favourite and curvature add up, capped at 1.
     pub curve_weight: f64,
@@ -100,10 +105,10 @@ impl ScoringParams {
         self.max_pull * self.favourite_weight.iter().copied().fold(0.0, f64::max)
     }
 
-    /// How curvy an edge of road class `class` and `length_m` is, 0–1,
-    /// from its curvature metrics (R5).
-    pub fn curviness(&self, m: &CurvatureMetrics, class: u8, length_m: f64) -> f64 {
-        if length_m <= 0.0 {
+    /// How curvy an edge of road class `class`, posted `speed_kmh` and
+    /// `length_m` long is, 0–1, from its curvature metrics (R5).
+    pub fn curviness(&self, m: &CurvatureMetrics, class: u8, speed_kmh: u8, length_m: f64) -> f64 {
+        if length_m <= 0.0 || speed_kmh <= self.street_kmh {
             return 0.0;
         }
         let class_weight = self
@@ -131,6 +136,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     //                 motorway trunk primary secondary tertiary unclassified
     //                 residential living_street service track ferry
     curve_class_weight: [0.0, 0.5, 1.0, 1.0, 1.0, 0.6, 0.2, 0.0, 0.0, 0.0, 0.0],
+    street_kmh: 40,
     curve_weight: 0.8,
     gravel_weight: 0.8,
     fast_kmh: 100,
@@ -176,30 +182,46 @@ mod tests {
         };
         let tertiary = RoadClass::Tertiary as u8;
         // Straight road.
-        assert_eq!(p.curviness(&m([0; 6]), tertiary, 1000.0), 0.0);
+        assert_eq!(p.curviness(&m([0; 6]), tertiary, 70, 1000.0), 0.0);
         // 200 m of 60–100 m sweepers per km: half way to fully curvy.
-        let half = p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 1000.0);
+        let half = p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 70, 1000.0);
         assert!((half - 0.5).abs() < 1e-9, "{half}");
         // Very curvy roads cap at 1; hairpins count less than sweepers.
-        assert_eq!(p.curviness(&m([0, 900, 0, 0, 0, 0]), tertiary, 1000.0), 1.0);
-        assert!(p.curviness(&m([200, 0, 0, 0, 0, 0]), tertiary, 1000.0) < half);
+        assert_eq!(
+            p.curviness(&m([0, 900, 0, 0, 0, 0]), tertiary, 70, 1000.0),
+            1.0
+        );
+        assert!(p.curviness(&m([200, 0, 0, 0, 0, 0]), tertiary, 70, 1000.0) < half);
         // The same bends on a motorway ramp or a car park count nothing,
         // on a residential street little.
         for class in [RoadClass::Motorway, RoadClass::Service, RoadClass::Track] {
             assert_eq!(
-                p.curviness(&m([0, 0, 200, 0, 0, 0]), class as u8, 1000.0),
+                p.curviness(&m([0, 0, 200, 0, 0, 0]), class as u8, 70, 1000.0),
                 0.0
             );
         }
         let street = p.curviness(
             &m([0, 0, 200, 0, 0, 0]),
             RoadClass::Residential as u8,
+            70,
             1000.0,
         );
         assert!(street > 0.0 && street < half / 2.0);
+        // Town streets (40 km/h or less) count nothing: their corners are
+        // junctions, not bends. 50 km/h roads still count.
+        for kmh in [0, 30, 40] {
+            assert_eq!(
+                p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, kmh, 1000.0),
+                0.0
+            );
+        }
+        assert_eq!(
+            p.curviness(&m([0, 0, 200, 0, 0, 0]), tertiary, 50, 1000.0),
+            half
+        );
         // Nonsense input never panics.
-        assert_eq!(p.curviness(&m([u16::MAX; 6]), 250, 1000.0), 0.0);
-        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 0.0), 0.0);
-        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 1.0), 1.0);
+        assert_eq!(p.curviness(&m([u16::MAX; 6]), 250, 70, 1000.0), 0.0);
+        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 70, 0.0), 0.0);
+        assert_eq!(p.curviness(&m([u16::MAX; 6]), tertiary, 70, 1.0), 1.0);
     }
 }

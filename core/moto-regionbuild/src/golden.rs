@@ -174,6 +174,9 @@ pub struct Expect {
     /// Kilometres on roads posted 100 km/h or more, at most (every loop
     /// of a round trip).
     pub max_fast_km: Option<f64>,
+    /// Kilometres on town streets (posted 40 km/h or less) at most, for a
+    /// round trip on every loop outside the home zone.
+    pub max_street_km: Option<f64>,
     /// Time over the fastest route as a ratio (1.0 = none), at most.
     /// Defaults to 1 + the detour budget.
     pub max_detour_ratio: Option<f64>,
@@ -275,6 +278,7 @@ impl Case {
         for (name, v) in [
             ("min_unpaved_km", e.min_unpaved_km),
             ("max_fast_km", e.max_fast_km),
+            ("max_street_km", e.max_street_km),
         ] {
             if let Some(km) = v
                 && !(km.is_finite() && km >= 0.0)
@@ -409,7 +413,7 @@ impl Case {
             out.failures
                 .push(format!("{:.1} min, allowed {max:.1} min", out.duration_min));
         }
-        self.check_fast(engine, "", &route, &mut out);
+        self.check_speeds(engine, "", &route, 0.0, &mut out);
         self.check_route(&route, &mut out);
         out
     }
@@ -466,7 +470,7 @@ impl Case {
                 out.failures
                     .push(format!("loop {n}: does not come back to the start"));
             }
-            self.check_fast(engine, &format!("loop {n}: "), l, out);
+            self.check_speeds(engine, &format!("loop {n}: "), l, home, out);
             if let Some(max) = self.expect.max_side_loops {
                 let (count, longest) = side_loops(&l.geometry, home);
                 if count > max {
@@ -498,16 +502,32 @@ impl Case {
         self.check_route(best, out);
     }
 
-    /// Kilometres on roads posted 100 km/h or more, against `max_fast_km`.
-    fn check_fast(&self, engine: &Engine, what: &str, route: &Route, out: &mut Outcome) {
-        let Some(max) = self.expect.max_fast_km else {
-            return;
-        };
-        let km = fast_km(engine, &route.geometry);
-        if km > max {
-            out.failures.push(format!(
-                "{what}{km:.1} km on 100+ km/h roads, expected at most {max:.1} km"
-            ));
+    /// Kilometres on roads posted 100 km/h or more, against
+    /// `max_fast_km`, and on town streets more than `home` metres from the
+    /// start, against `max_street_km`.
+    fn check_speeds(
+        &self,
+        engine: &Engine,
+        what: &str,
+        route: &Route,
+        home: f64,
+        out: &mut Outcome,
+    ) {
+        if let Some(max) = self.expect.max_fast_km {
+            let km = fast_km(engine, &route.geometry);
+            if km > max {
+                out.failures.push(format!(
+                    "{what}{km:.1} km on 100+ km/h roads, expected at most {max:.1} km"
+                ));
+            }
+        }
+        if let Some(max) = self.expect.max_street_km {
+            let km = street_km(engine, &route.geometry, home);
+            if km > max {
+                out.failures.push(format!(
+                    "{what}{km:.1} km on town streets, expected at most {max:.1} km"
+                ));
+            }
         }
     }
 
@@ -568,16 +588,35 @@ impl Case {
 /// What counts as a fast (and dull) road, km/h.
 const FAST_KMH: u32 = 100;
 
+/// What counts as a town street, km/h.
+const STREET_KMH: u32 = 40;
+
 /// Kilometres of `line` on roads posted [`FAST_KMH`] or more: each
 /// stretch between two points counts by the road under its middle.
 pub fn fast_km(engine: &Engine, line: &[LatLon]) -> f64 {
+    km_on(engine, line, 0.0, |kmh| kmh >= FAST_KMH)
+}
+
+/// Kilometres of `line` on town streets (posted [`STREET_KMH`] or less)
+/// more than `home` metres from its start.
+pub fn street_km(engine: &Engine, line: &[LatLon], home: f64) -> f64 {
+    km_on(engine, line, home, |kmh| kmh <= STREET_KMH)
+}
+
+/// Kilometres of `line` on roads whose posted speed `counts`, leaving out
+/// stretches whose middle lies within `home` metres of the start.
+fn km_on(engine: &Engine, line: &[LatLon], home: f64, counts: impl Fn(u32) -> bool) -> f64 {
+    let Some(&start) = line.first() else {
+        return 0.0;
+    };
     line.windows(2)
         .filter(|w| {
             let mid = LatLon {
                 lat: (w[0].lat + w[1].lat) / 2.0,
                 lon: (w[0].lon + w[1].lon) / 2.0,
             };
-            engine.road_at(mid).is_ok_and(|r| r.speed_kmh >= FAST_KMH)
+            (home <= 0.0 || haversine_m(mid, start) > home)
+                && engine.road_at(mid).is_ok_and(|r| counts(r.speed_kmh))
         })
         .map(|w| haversine_m(w[0], w[1]))
         .sum::<f64>()
