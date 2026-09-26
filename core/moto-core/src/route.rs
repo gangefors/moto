@@ -50,15 +50,20 @@ impl Off {
     }
 }
 
-/// Travel time of a whole edge, avoided kinds of road costing
-/// `avoid_penalty` times more.
-fn time_cost(off: &Off, e: &Edge) -> f64 {
+/// The extra cost of edge `e` for being a kind of road to avoid:
+/// `avoid_penalty - 1` times its travel time, else 0. It is added after
+/// the fun factor, so no pull makes an avoided road cheaper than that.
+fn avoid_extra(off: &Off, e: &Edge) -> f64 {
     let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
     let unpaved = is_unpaved(e);
     let ferry = e.flags & edge_flags::FERRY != 0;
     let avoided =
         off.avoid.motorways && motorway || off.unpaved && unpaved || off.avoid.ferries && ferry;
-    time_s(e) * if avoided { PARAMS.avoid_penalty } else { 1.0 }
+    if avoided {
+        time_s(e) * (PARAMS.avoid_penalty - 1.0)
+    } else {
+        0.0
+    }
 }
 
 /// What makes a road worth riding (R5, R6): the rider's favourites
@@ -132,7 +137,7 @@ impl<'a> Fun<'a> {
     }
 
     /// The dullness penalty of edge `id` for its speed band (see
-    /// `ScoringParams::fast_kmh`), before curves spare it: 1 on 51–99
+    /// `ScoringParams::fast_kmh`), before curves spare it: 1 on 51–79
     /// km/h roads, on the rider's own favourites (marked as fun, whatever
     /// their speed) and whenever nothing but favourites pulls.
     fn speed_penalty(&self, id: u32, e: &Edge) -> f64 {
@@ -140,6 +145,8 @@ impl<'a> Fun<'a> {
             1.0
         } else if e.speed_kmh >= PARAMS.fast_kmh {
             PARAMS.fast_penalty
+        } else if e.speed_kmh >= PARAMS.brisk_kmh {
+            PARAMS.brisk_penalty
         } else if e.speed_kmh <= PARAMS.slow_kmh && !(self.gravel && is_unpaved(e)) {
             PARAMS.slow_penalty
         } else {
@@ -217,14 +224,16 @@ impl Cost<'_> {
     /// Cost of whole edge `id`.
     fn edge(&self, id: u32, e: &Edge) -> f64 {
         match self {
-            Cost::Favoured(off, fun, pull) => time_cost(off, e) * fun.factor(id, e, *pull),
+            Cost::Favoured(off, fun, pull) => {
+                time_s(e) * fun.factor(id, e, *pull) + avoid_extra(off, e)
+            }
             Cost::Loop(off, fun, pull, used) => {
                 let reused = if used.contains(&e.geometry) {
                     PARAMS.reuse_penalty
                 } else {
                     1.0
                 };
-                time_cost(off, e) * fun.factor(id, e, *pull) * reused
+                (time_s(e) * fun.factor(id, e, *pull) + avoid_extra(off, e)) * reused
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }

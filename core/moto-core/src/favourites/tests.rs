@@ -56,9 +56,12 @@ fn section(ways: &[(i64, u32, u32)], rating: Rating, direction: Direction) -> Se
     }
 }
 
+/// Favourites alone: curvature off, so neither curvy nor dull roads
+/// (the fixture's straight 90 km/h roads) weigh in.
 fn detour(ratio: f64) -> RouteOptions {
     RouteOptions {
         budget: crate::TimeBudget::Extra(ratio),
+        curvy: false,
         ..RouteOptions::default()
     }
 }

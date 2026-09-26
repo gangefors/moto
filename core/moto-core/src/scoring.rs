@@ -58,6 +58,11 @@ pub struct ScoringParams {
     /// untouched.
     pub fast_kmh: u8,
     pub fast_penalty: f64,
+    /// Roads from `brisk_kmh` up to `fast_kmh` cost `brisk_penalty` at
+    /// full pull when straight (Stefan: straight 80–90 roads are dull,
+    /// curvy ones are not).
+    pub brisk_kmh: u8,
+    pub brisk_penalty: f64,
     pub slow_kmh: u8,
     pub slow_penalty: f64,
     /// What a second on a dull road takes off a route's worth, per unit
@@ -130,6 +135,8 @@ pub const PARAMS: ScoringParams = ScoringParams {
     gravel_weight: 0.8,
     fast_kmh: 100,
     fast_penalty: 3.0,
+    brisk_kmh: 80,
+    brisk_penalty: 1.25,
     slow_kmh: 50,
     slow_penalty: 1.5,
     dull_worth: 0.25,
