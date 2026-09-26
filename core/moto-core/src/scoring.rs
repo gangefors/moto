@@ -75,6 +75,13 @@ pub struct ScoringParams {
     pub loop_pull: f64,
     /// Speed used to turn a duration target into a distance, m/s.
     pub loop_speed_mps: f64,
+    /// Shuffled round trips (Stefan: don't always head the same way):
+    /// one loop heads within `loop_focus_deg` of a random direction when
+    /// it is worth at least `loop_explore_share` of the best loop, and
+    /// the others head at least `loop_apart_deg` apart.
+    pub loop_focus_deg: f64,
+    pub loop_explore_share: f64,
+    pub loop_apart_deg: f64,
 }
 
 impl ScoringParams {
@@ -131,6 +138,9 @@ pub const PARAMS: ScoringParams = ScoringParams {
     loop_detour: 1.3,
     loop_pull: 1.0,
     loop_speed_mps: 15.0,
+    loop_focus_deg: 45.0,
+    loop_explore_share: 0.6,
+    loop_apart_deg: 90.0,
 };
 
 #[cfg(test)]

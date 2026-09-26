@@ -440,3 +440,64 @@ fn a_bad_bearing_is_a_typed_error() {
         ));
     }
 }
+
+#[test]
+fn angles_wrap_around_north() {
+    assert_eq!(angle_between(10.0, 350.0), 20.0);
+    assert_eq!(angle_between(90.0, 270.0), 180.0);
+    assert_eq!(angle_between(45.0, 45.0), 0.0);
+}
+
+#[test]
+fn shuffles_look_every_way() {
+    // Focus directions spread over the compass.
+    let mut octants = [false; 8];
+    for seed in 1..40 {
+        let b = focus_bearing(seed);
+        assert!((0.0..360.0).contains(&b));
+        octants[(b / 45.0) as usize] = true;
+    }
+    assert!(octants.iter().all(|&o| o), "{octants:?}");
+}
+
+#[test]
+fn shuffled_sets_spread_out_and_keep_the_best_first() {
+    // On the uniform grid every direction is about as good, so shuffled
+    // sets should head different ways, and over a few seeds all round.
+    let e = engine(fixture::grid(13));
+    let opts = RouteOptions::default();
+    let mut octants = [0u32; 8];
+    for seed in 1..13 {
+        let shape = LoopOptions {
+            seed,
+            bearing: None,
+        };
+        let loops = e
+            .round_trip_with(CENTRE, km(20.0), &opts, &Favourites::none(), &shape)
+            .unwrap();
+        assert!(loops.len() >= 2, "seed {seed}");
+        let s = e.snap(CENTRE).unwrap();
+        let dirs: Vec<f64> = loops
+            .iter()
+            .map(|l| middle_bearing(&s, &l.geometry))
+            .collect();
+        let widest = dirs
+            .iter()
+            .flat_map(|a| dirs.iter().map(move |b| angle_between(*a, *b)))
+            .fold(0.0, f64::max);
+        assert!(widest >= 90.0, "seed {seed}: {dirs:?}");
+        for d in dirs {
+            octants[(d.rem_euclid(360.0) / 45.0) as usize] += 1;
+        }
+    }
+    assert!(
+        octants.iter().filter(|&&c| c > 0).count() >= 6,
+        "{octants:?}"
+    );
+    // Seed 0 is the standard set: the same as without a shape.
+    let standard = e.round_trip(CENTRE, km(20.0), &opts).unwrap();
+    assert_eq!(
+        standard,
+        round_trip(&e, CENTRE, km(20.0), &opts, &Favourites::none()).unwrap()
+    );
+}
