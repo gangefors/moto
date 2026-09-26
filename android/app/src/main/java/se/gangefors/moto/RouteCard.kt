@@ -18,6 +18,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -346,34 +348,42 @@ private fun CardHeader(
     }
 }
 
-/** A route's figures: distance and time, then what it is worth; or
- * [computing] while it is being found. */
+/**
+ * A route's figures: distance and time, then what it is worth. While a
+ * new route is being found, the last figures stay, dimmed, so the card
+ * keeps its size; [computing] shows only before the first one. The details
+ * always take (at least) two lines, so nothing below moves when a value
+ * changes.
+ */
 @Composable
 private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Modifier = Modifier) {
-    Column(modifier.padding(top = 8.dp)) {
-        if (summary == null) {
-            Text(computing)
+    val last = remember { mutableStateOf(summary) }
+    SideEffect { if (summary != null) last.value = summary }
+    val shown = summary ?: last.value
+    val dim = if (summary == null) Modifier.alpha(0.5f) else Modifier
+    Column(modifier.padding(top = 8.dp).then(dim)) {
+        Text(
+            if (shown == null) computing else stringResource(R.string.route_summary, shown.km, shown.minutes),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        val details = if (shown == null) {
+            emptyList()
         } else {
-            Text(
-                stringResource(R.string.route_summary, summary.km, summary.minutes),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            val details = buildList {
-                if (summary.extraMinutes > 0) add(stringResource(R.string.route_extra, summary.extraMinutes))
-                if (summary.favouritePercent > 0) {
-                    add(stringResource(R.string.route_on_favourites, summary.favouritePercent))
+            buildList {
+                if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
+                if (shown.favouritePercent > 0) {
+                    add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
                 }
-                if (summary.curvyPercent > 0) add(stringResource(R.string.route_curvy, summary.curvyPercent))
-                if (summary.gravelKm > 0.0) add(stringResource(R.string.route_gravel, summary.gravelKm))
-            }
-            if (details.isNotEmpty()) {
-                Text(
-                    details.joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
+                if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
             }
         }
+        Text(
+            details.joinToString(" · "),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            minLines = 2,
+        )
     }
 }
 
