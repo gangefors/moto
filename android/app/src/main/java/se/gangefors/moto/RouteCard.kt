@@ -25,6 +25,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Gravel
+import kotlin.math.roundToInt
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.material3.Slider
 import java.time.ZoneId
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -123,30 +126,24 @@ private fun RouteCardDetails(
                 }
             }
         }
-        Text(
-            stringResource(R.string.route_budget),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BUDGET_CHOICES.forEach { percent ->
-                FilterChip(
-                    selected = arriveBy == null && percent == budgetPercent,
-                    onClick = {
-                        onArriveBy(null)
-                        onBudget(percent)
-                    },
-                    label = {
-                        OneLine(
-                            if (percent == 0) {
-                                stringResource(R.string.route_budget_fastest)
-                            } else {
-                                stringResource(R.string.route_budget_extra, percent)
-                            },
-                        )
-                    },
-                )
-            }
+        // Extra time as a slider (0 = fastest); a set arrival replaces it.
+        StepSlider(
+            title = stringResource(R.string.route_budget),
+            steps = BUDGET_CHOICES,
+            value = budgetPercent,
+            label = { percent ->
+                if (percent == 0) {
+                    stringResource(R.string.route_budget_fastest)
+                } else {
+                    stringResource(R.string.route_budget_extra, percent)
+                }
+            },
+            onCommit = { percent ->
+                onArriveBy(null)
+                onBudget(percent)
+            },
+            dimmed = arriveBy != null,
+        ) {
             FilterChip(
                 selected = arriveBy != null,
                 onClick = { pickingTime = true },
@@ -271,26 +268,25 @@ private fun LoopCardDetails(
                 OutlinedButton(onClick = onShuffle) { OneLine(stringResource(R.string.loop_shuffle)) }
             }
         }
-        Text(
-            stringResource(R.string.loop_length),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LOOP_CHOICES.forEach { c ->
-                FilterChip(
-                    selected = c == choice,
-                    onClick = { onChoice(c) },
-                    label = {
-                        OneLine(
-                            when (c) {
-                                is LoopChoice.Hours -> stringResource(R.string.loop_hours, c.hours)
-                                is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
-                            },
-                        )
-                    },
-                )
-            }
+        // Length as a slider, in hours or kilometres.
+        StepSlider(
+            title = stringResource(R.string.loop_length),
+            steps = loopSteps(choice),
+            value = choice,
+            label = { loopLengthText(it) },
+            onCommit = onChoice,
+        ) {
+            val hours = choice is LoopChoice.Minutes
+            FilterChip(
+                selected = hours,
+                onClick = { if (!hours) onChoice(switchUnit(choice)) },
+                label = { OneLine(stringResource(R.string.loop_unit_hours)) },
+            )
+            FilterChip(
+                selected = !hours,
+                onClick = { if (hours) onChoice(switchUnit(choice)) },
+                label = { OneLine(stringResource(R.string.loop_unit_km)) },
+            )
         }
         Text(
             stringResource(R.string.loop_direction),
@@ -454,4 +450,61 @@ private fun ArriveByDialog(initial: Long?, zone: ZoneId, onDismiss: () -> Unit, 
         },
         dismissButton = { TextButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) } },
     )
+}
+
+/**
+ * A title, the value as text and a slider over [steps] below it, with
+ * [trailing] (e.g. a chip) at the end of the title row. The text follows
+ * the thumb while dragging; [onCommit] runs once, when the thumb is let
+ * go, so the route is found again only then. [dimmed] shows the value as
+ * not in use (e.g. while an arrival time is set).
+ */
+@Composable
+fun <T> StepSlider(
+    title: String,
+    steps: List<T>,
+    value: T,
+    label: @Composable (T) -> String,
+    onCommit: (T) -> Unit,
+    dimmed: Boolean = false,
+    trailing: @Composable () -> Unit = {},
+) {
+    val start = steps.indexOf(value).coerceAtLeast(0)
+    var position by remember(steps, value) { mutableFloatStateOf(start.toFloat()) }
+    val at = steps[position.roundToInt().coerceIn(0, steps.lastIndex)]
+    Column(Modifier.padding(top = 4.dp, end = 8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.labelMedium)
+            Text(
+                label(at),
+                style = MaterialTheme.typography.titleSmall,
+                color = if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            )
+            trailing()
+        }
+        Slider(
+            value = position,
+            onValueChange = { position = it },
+            onValueChangeFinished = {
+                val picked = steps[position.roundToInt().coerceIn(0, steps.lastIndex)]
+                if (picked != value || dimmed) onCommit(picked)
+            },
+            valueRange = 0f..steps.lastIndex.coerceAtLeast(1).toFloat(),
+            steps = (steps.size - 2).coerceAtLeast(0),
+        )
+    }
+}
+
+/** A loop length as text: "2 h 30 min", "45 min" or "120 km". */
+@Composable
+private fun loopLengthText(c: LoopChoice): String = when (c) {
+    is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
+    is LoopChoice.Minutes -> when {
+        c.minutes < 60 -> stringResource(R.string.loop_minutes, c.minutes)
+        c.minutes % 60 == 0 -> stringResource(R.string.loop_hours, c.minutes / 60)
+        else -> stringResource(R.string.loop_hours_minutes, c.minutes / 60, c.minutes % 60)
+    }
 }

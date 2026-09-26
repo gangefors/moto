@@ -95,6 +95,9 @@ class MapLogicTest {
         assertEquals(0, budgetPercentOf(0))
         assertEquals(40, budgetPercentOf(35))
         assertEquals(40, budgetPercentOf(-1))
+        assertEquals(100, budgetPercentOf(100))
+        assertEquals(70, budgetPercentOf(70))
+        assertEquals(40, budgetPercentOf(110))
         assertTrue(DEFAULT_BUDGET_PERCENT in BUDGET_CHOICES)
         val base = se.gangefors.moto.core.RouteOptions(
             se.gangefors.moto.core.Avoid(motorways = true, ferries = false),

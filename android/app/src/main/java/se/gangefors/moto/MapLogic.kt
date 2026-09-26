@@ -94,7 +94,7 @@ private fun percent(share: Double): Int = Math.round(share.coerceIn(0.0, 1.0) * 
  * percent; the favourites pull as hard as it allows. 0 is the fastest
  * route.
  */
-val BUDGET_CHOICES = listOf(0, 20, 40, 60)
+val BUDGET_CHOICES: List<Int> = (0..100 step 10).toList()
 
 /** The core's default budget (40 % extra). */
 const val DEFAULT_BUDGET_PERCENT = 40

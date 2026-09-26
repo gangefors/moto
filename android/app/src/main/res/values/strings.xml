@@ -60,6 +60,10 @@
     <string name="loop_length">Length</string>
     <string name="loop_hours">%1$d h</string>
     <string name="loop_km">%1$d km</string>
+    <string name="loop_minutes">%1$d min</string>
+    <string name="loop_hours_minutes">%1$d h %2$d min</string>
+    <string name="loop_unit_km">km</string>
+    <string name="loop_unit_hours">h</string>
     <string name="loop_close">Clear the loop</string>
     <string name="card_collapse">Show less</string>
     <string name="card_expand">Show more</string>
@@ -103,7 +107,7 @@
     <string name="about_notices_intro">moto is built on the open-source software listed below, with the licence texts it comes with.</string>
     <string name="about_notices_loading">Loading…</string>
     <string name="about_notices_missing">The licence notices are missing from this build.</string>
-    <string name="route_budget">Extra time for favourites</string>
+    <string name="route_budget">Extra time</string>
     <string name="route_budget_fastest">Fastest</string>
     <string name="route_budget_extra">+%1$d %%</string>
     <string name="route_close">Clear the route</string>
