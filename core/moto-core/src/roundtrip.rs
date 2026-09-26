@@ -446,7 +446,7 @@ fn loop_at(
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
             used.insert(region.edges()[p.edge as usize].geometry);
         }
-        parts.extend(leg);
+        append_leg(region, &mut parts, leg);
     }
     let mut roads: HashMap<u32, f64> = HashMap::new();
     let mut reused = 0.0;
@@ -466,6 +466,59 @@ fn loop_at(
         heading: 0,
         bearing: 0.0,
     })
+}
+
+/// Appends `leg` to `parts`, cutting out an out-and-back where they
+/// meet: at a waypoint partway along a road, the next leg may start by
+/// riding back the way the last one came (the waypoint is only a guide,
+/// not a place to visit). While the last piece so far and the leg's first
+/// piece run opposite ways along the same road, the shared stretch is
+/// removed from both.
+fn append_leg(region: &crate::region::Region, parts: &mut Vec<Partial>, leg: Vec<Partial>) {
+    const EPS: f64 = 1e-9;
+    let mut leg = leg.into_iter().peekable();
+    while let (Some(&prev), Some(&next)) = (parts.last(), leg.peek()) {
+        if prev.to - prev.from <= EPS {
+            parts.pop();
+            continue;
+        }
+        if next.to - next.from <= EPS {
+            leg.next();
+            continue;
+        }
+        let edges = region.edges();
+        let (Some(ep), Some(en)) = (edges.get(prev.edge as usize), edges.get(next.edge as usize))
+        else {
+            break;
+        };
+        // Opposite ways along one road: the twin edge, where fraction x
+        // is 1 - x of the other; and the next piece starts where the last
+        // one ends.
+        let twins = prev.edge != next.edge && ep.geometry == en.geometry;
+        if !twins || (1.0 - next.from - prev.to).abs() > 1e-6 {
+            break;
+        }
+        let back_to = 1.0 - next.to;
+        if back_to > prev.from + EPS {
+            // Turns back within the last piece: it ends there instead.
+            if let Some(last) = parts.last_mut() {
+                last.to = back_to;
+            }
+            leg.next();
+            break;
+        } else if back_to < prev.from - EPS {
+            // Rides back past the start of the last piece: that piece
+            // goes, and the next one starts where it started.
+            parts.pop();
+            if let Some(n) = leg.peek_mut() {
+                n.from = 1.0 - prev.from;
+            }
+        } else {
+            parts.pop();
+            leg.next();
+        }
+    }
+    parts.extend(leg);
 }
 
 /// Share of the loop's length on roads it had already ridden, outside
