@@ -65,6 +65,8 @@ struct Loop {
     /// Metres on roads the loop had already ridden (either way).
     reused_m: f64,
     heading: usize,
+    /// Which way the loop heads: from the start to its middle, degrees.
+    bearing: f64,
 }
 
 /// Up to [`MAX_LOOPS`] round trips from `start` of about `target`, best
@@ -145,6 +147,7 @@ pub fn loops(
             };
             if let Some(mut l) = found {
                 l.heading = heading;
+                l.bearing = middle_bearing(&s, &l.routed.route.geometry);
                 if reuse_share(&l) <= MAX_REUSE {
                     loops.push(l);
                 }
@@ -154,11 +157,12 @@ pub fn loops(
     };
     // The loops that way first; when there are fewer than two (the sea,
     // the region's edge), the best of any way fill up to two.
-    let mut kept = pick(
-        Vec::new(),
-        collect(Candidates::new(shape.seed, shape.bearing)),
-        MAX_LOOPS,
-    );
+    let found = collect(Candidates::new(shape.seed, shape.bearing));
+    let mut kept = if shape.seed != 0 && shape.bearing.is_none() {
+        pick_shuffled(found, shape.seed, MAX_LOOPS)
+    } else {
+        pick(Vec::new(), found, MAX_LOOPS)
+    };
     if shape.bearing.is_some() && kept.len() < 2 {
         kept = pick(kept, collect(Candidates::new(shape.seed, None)), 2);
     }
@@ -196,6 +200,98 @@ fn pick(mut kept: Vec<Loop>, mut loops: Vec<Loop>, max: usize) -> Vec<Loop> {
         }
     }
     kept
+}
+
+/// A shuffled set, so that a set doesn't always head the best way: the
+/// best loop; then the best loop heading within `loop_focus_deg` of a
+/// direction drawn from `seed`, if it is worth at least
+/// `loop_explore_share` of the best; then the best of the rest heading at
+/// least `loop_apart_deg` away from every kept loop; then, if still
+/// short, any that overlap little enough. Loops are returned best first.
+fn pick_shuffled(mut loops: Vec<Loop>, seed: u32, max: usize) -> Vec<Loop> {
+    loops.sort_by(|a, b| {
+        worth_per_s(b)
+            .total_cmp(&worth_per_s(a))
+            .then(a.heading.cmp(&b.heading))
+    });
+    let Some(best) = loops.first().map(worth_per_s) else {
+        return Vec::new();
+    };
+    let focus = focus_bearing(seed);
+    // At least this worth to take the focus slot: a share of the best
+    // (worth can be below 0 on dull roads).
+    let floor = best - (1.0 - PARAMS.loop_explore_share) * best.abs();
+    let fits = |kept: &[Loop], l: &Loop| kept.iter().all(|k| overlap(k, l) < MAX_OVERLAP);
+    let apart = |kept: &[Loop], l: &Loop| {
+        kept.iter()
+            .all(|k| angle_between(k.bearing, l.bearing) >= PARAMS.loop_apart_deg)
+    };
+    let mut rest: Vec<Option<Loop>> = loops.into_iter().map(Some).collect();
+    let mut kept: Vec<Loop> = Vec::new();
+    let mut take = |kept: &mut Vec<Loop>, ok: &dyn Fn(&[Loop], &Loop) -> bool| {
+        if kept.len() >= max {
+            return;
+        }
+        if let Some(slot) = rest
+            .iter_mut()
+            .find(|l| l.as_ref().is_some_and(|l| ok(kept, l)))
+        {
+            kept.extend(slot.take());
+        }
+    };
+    take(&mut kept, &|_, _| true);
+    take(&mut kept, &|k, l| {
+        angle_between(l.bearing, focus) <= PARAMS.loop_focus_deg
+            && worth_per_s(l) >= floor
+            && fits(k, l)
+    });
+    for _ in 0..max {
+        take(&mut kept, &|k, l| apart(k, l) && fits(k, l));
+    }
+    while kept.len() < max {
+        let before = kept.len();
+        take(&mut kept, &|k, l| fits(k, l));
+        if kept.len() == before {
+            break;
+        }
+    }
+    kept.sort_by(|a, b| {
+        worth_per_s(b)
+            .total_cmp(&worth_per_s(a))
+            .then(a.heading.cmp(&b.heading))
+    });
+    kept
+}
+
+/// The direction a shuffled set looks in, from its seed (not the same
+/// numbers as the candidates' own).
+fn focus_bearing(seed: u32) -> f64 {
+    let mut c = Candidates::new(seed ^ 0x5eed_f0c5, None);
+    c.unit() * 360.0
+}
+
+/// Degrees between two bearings, 0–180.
+fn angle_between(a: f64, b: f64) -> f64 {
+    let d = (a - b).rem_euclid(360.0);
+    d.min(360.0 - d)
+}
+
+/// The bearing from `start` to the middle (mean point) of `line`.
+fn middle_bearing(start: &RoadPoint, line: &[LatLon]) -> f64 {
+    if line.is_empty() {
+        return 0.0;
+    }
+    let n = line.len() as f64;
+    let (lat, lon) = line
+        .iter()
+        .fold((0.0, 0.0), |(a, b), p| (a + p.lat, b + p.lon));
+    bearing_deg(
+        start.position,
+        LatLon {
+            lat: lat / n,
+            lon: lon / n,
+        },
+    )
 }
 
 fn worth_per_s(l: &Loop) -> f64 {
@@ -355,6 +451,7 @@ fn loop_at(
         roads,
         reused_m: reused,
         heading: 0,
+        bearing: 0.0,
     })
 }
 
