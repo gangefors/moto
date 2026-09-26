@@ -46,6 +46,11 @@ const WAYPOINT_PULL_IN: [f64; 3] = [1.0, 0.8, 0.6];
 const WAYPOINT_SEARCH_M: f64 = 1_500.0;
 /// Most roads looked at for a waypoint.
 const WAYPOINT_CANDIDATES: usize = 64;
+/// A side loop (the loop coming back to a crossing it already passed) is
+/// cut out when it is at most this long, and at most `SIDE_LOOP_SHARE` of
+/// the target.
+const SIDE_LOOP_MAX_M: f64 = 5_000.0;
+const SIDE_LOOP_SHARE: f64 = 0.2;
 
 /// A favourite's middle can be a waypoint when it lies this far from the
 /// start (as a share of the waypoint radius) and within `SPREAD_DEG` of
@@ -122,6 +127,7 @@ pub fn loops(
     }
     let s = engine.snap(start)?;
     let fun = Fun::new(engine.region(), favourites, opts);
+    let side_loop_max = SIDE_LOOP_MAX_M.min(target_m * SIDE_LOOP_SHARE);
     let fits = |r: &Route| match target {
         RoundTripTarget::DistanceM(m) => (r.distance_m - m).abs() <= m * TOLERANCE,
         RoundTripTarget::DurationS(t) => (r.duration_s - t).abs() <= t * TOLERANCE,
@@ -138,7 +144,16 @@ pub fn loops(
         for (heading, c) in candidates.enumerate() {
             let at = |r: f64| {
                 loop_at(
-                    engine, &fun, opts, &s, c.bearing, c.spread, r, home, favourites,
+                    engine,
+                    &fun,
+                    opts,
+                    &s,
+                    c.bearing,
+                    c.spread,
+                    r,
+                    home,
+                    favourites,
+                    side_loop_max,
                 )
             };
             let Some(first) = at(radius * c.size) else {
@@ -395,7 +410,8 @@ impl Iterator for Candidates {
 /// The loop through two waypoints `spread` degrees either side of
 /// `bearing` at `radius`, or through a favourite near a waypoint; `None` when a
 /// waypoint has no road or a leg no route. Roads within `home` metres of
-/// the start are free to ride twice.
+/// the start are free to ride twice. Side loops up to `side_loop_max`
+/// metres are cut out (see [`cut_side_loops`]).
 #[allow(clippy::too_many_arguments)]
 fn loop_at(
     engine: &Engine,
@@ -407,6 +423,7 @@ fn loop_at(
     radius: f64,
     home: f64,
     favourites: &Favourites,
+    side_loop_max: f64,
 ) -> Option<Loop> {
     let region = engine.region();
     let at_home = |edge: u32| {
@@ -448,6 +465,7 @@ fn loop_at(
         }
         append_leg(region, &mut parts, leg);
     }
+    let parts = cut_side_loops(region, fun, parts, side_loop_max);
     let mut roads: HashMap<u32, f64> = HashMap::new();
     let mut reused = 0.0;
     for p in parts.iter().filter(|p| !at_home(p.edge)) {
@@ -519,6 +537,55 @@ fn append_leg(region: &crate::region::Region, parts: &mut Vec<Partial>, leg: Vec
         }
     }
     parts.extend(leg);
+}
+
+/// `parts` without their side loops: where the loop comes back to a
+/// crossing it already passed after at most `max_m` metres, what it rode
+/// in between is cut out. Such a stretch is a detour through town streets
+/// or out to a waypoint and back that only makes up length; a loop's
+/// length is a guide, not worth a detour that goes nowhere. Side loops
+/// that ride a favourite stay: the loop may have been led there for it.
+fn cut_side_loops(
+    region: &crate::region::Region,
+    fun: &Fun,
+    parts: Vec<Partial>,
+    max_m: f64,
+) -> Vec<Partial> {
+    const END: f64 = 1.0 - 1e-9;
+    let edges = region.edges();
+    let mut out: Vec<Partial> = Vec::with_capacity(parts.len());
+    // The crossings passed so far, each with how many parts came before it
+    // and the metres ridden to it; `at` finds a crossing on the stack.
+    let mut passed: Vec<(u32, usize, f64)> = Vec::new();
+    let mut at: HashMap<u32, usize> = HashMap::new();
+    let mut ridden = 0.0;
+    for p in parts {
+        let Some(e) = edges.get(p.edge as usize) else {
+            out.push(p);
+            continue;
+        };
+        ridden += (p.to - p.from).max(0.0) * f64::from(e.length_dm) / 10.0;
+        out.push(p);
+        if p.to < END {
+            continue;
+        }
+        let node = e.head;
+        if let Some(&i) = at.get(&node) {
+            let (_, len, before) = passed[i];
+            let favourite = out[len..].iter().any(|q| fun.is_favourite(q.edge));
+            if ridden - before <= max_m && !favourite {
+                out.truncate(len);
+                ridden = before;
+                for (n, _, _) in passed.drain(i + 1..) {
+                    at.remove(&n);
+                }
+                continue;
+            }
+        }
+        at.insert(node, passed.len());
+        passed.push((node, out.len(), ridden));
+    }
+    out
 }
 
 /// Share of the loop's length on roads it had already ridden, outside

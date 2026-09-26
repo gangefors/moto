@@ -581,3 +581,51 @@ fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
         [p(E_AB, 0.0, 0.7), p(E_AB, 0.7, 1.0)]
     );
 }
+
+#[test]
+fn side_loops_are_cut_unless_short_of_reach_or_a_favourite() {
+    use crate::fixture::{E_AB, E_BC, E_BD, E_CB};
+    let e = engine(fixture::region());
+    let region = e.region();
+    let p = |edge, from, to| Partial { edge, from, to };
+    // A to B, out to C and back to B (about 2.7 km), then on to D.
+    let parts = vec![
+        p(E_AB, 0.5, 1.0),
+        p(E_BC, 0.0, 1.0),
+        p(E_CB, 0.0, 1.0),
+        p(E_BD, 0.0, 0.5),
+    ];
+    let none = Favourites::none();
+    let opts = RouteOptions::default();
+    let fun = Fun::new(region, &none, &opts);
+    assert_eq!(
+        cut_side_loops(region, &fun, parts.clone(), 5_000.0),
+        [p(E_AB, 0.5, 1.0), p(E_BD, 0.0, 0.5)]
+    );
+    // Longer than the reach: kept.
+    assert_eq!(cut_side_loops(region, &fun, parts.clone(), 1_000.0), parts);
+    // A favourite on the side loop: kept.
+    let d = e
+        .section_between(ll(55.7005, 13.2101), ll(55.7095, 13.2101))
+        .unwrap();
+    let s = Section {
+        id: 1,
+        rider_id: LOCAL_RIDER.into(),
+        name: String::new(),
+        rating: Rating::Great,
+        direction: Direction::Both,
+        source: Source::Map,
+        status: Status::Ok,
+        created_at: 0,
+        updated_at: 0,
+        ways: d.ways,
+        geometry: d.geometry,
+    };
+    let fav = Favourites::build(&e, &[s]);
+    let fun = Fun::new(region, &fav, &opts);
+    assert!(fun.is_favourite(E_BC) || fun.is_favourite(E_CB));
+    assert_eq!(cut_side_loops(region, &fun, parts.clone(), 5_000.0), parts);
+    // Nothing to cut, and an edge the region lacks, pass through.
+    let plain = vec![p(E_AB, 0.0, 1.0), p(E_BD, 0.0, 1.0), p(u32::MAX, 0.0, 1.0)];
+    assert_eq!(cut_side_loops(region, &fun, plain.clone(), 5_000.0), plain);
+}

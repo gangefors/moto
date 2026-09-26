@@ -50,7 +50,7 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 ```
 
 - `loop` replaces `to`: `{"km": …}` or `{"minutes": …}`, optionally with the app's Shuffle `"seed"` (0 = the standard loops) and Direction `"direction"` (degrees from north), to reproduce a loop the app offered. Round trips have no time budget, so `max_detour`, `max_minutes`, `min_gain` and `max_detour_ratio` are refused.
-- Every loop returned must be within ±15 % of the target, come back to the start, and ride at most 10 % of its length twice outside the home zone (the way out of town and home, 2–5 km around the start). The runner measures reuse from the line itself, not from the core. At least `min_loops` loops (default 2) must come back.
+- Every loop returned must be within ±15 % of the target, come back to the start, and ride at most 10 % of its length twice outside the home zone (the way out of town and home, 2–5 km around the start). The runner measures reuse from the line itself, not from the core. At least `min_loops` loops (default 2) must come back. `max_side_loops` caps, for every loop, the side loops outside the home zone: places where the line comes back within 10 m of where it was 300 m – 5 km before (a detour through town or out to a waypoint and back).
 - The other expectations (`pass`, `avoid`, the shares) apply to the best loop.
 
 ## Adding cases

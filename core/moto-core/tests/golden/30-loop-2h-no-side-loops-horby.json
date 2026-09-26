@@ -1,0 +1,9 @@
+{
+  "name": "Loop of 2 hours from Hörby without side loops",
+  "description": "From a real test (2026-09-26): a 2-hour loop from Hörby turned off into Röstånga, rode south through the town's streets to its waypoint on road 13, circled a block and came back up to the crossing it had already passed. A loop's length is a guide; such a detour only makes up length. The standard set from Hörby had side loops of up to 4.4 km.",
+  "from": [55.8698193, 13.6773785],
+  "loop": { "minutes": 120 },
+  "expect": {
+    "max_side_loops": 0
+  }
+}

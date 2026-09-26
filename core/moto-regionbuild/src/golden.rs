@@ -185,6 +185,8 @@ pub struct Expect {
     pub avoid: Vec<[f64; 2]>,
     /// Round trips: the fewest loops returned (default 2, as the PRD asks).
     pub min_loops: Option<usize>,
+    /// Round trips: the most side loops in any loop (see [`side_loops`]).
+    pub max_side_loops: Option<usize>,
 }
 
 /// The figures of one case, for the report and the before/after table.
@@ -237,8 +239,8 @@ impl Case {
         }
         match (case.to, case.round_trip) {
             (Some(_), None) => {
-                if e.min_loops.is_some() {
-                    return Err("min_loops is for round trips".into());
+                if e.min_loops.is_some() || e.max_side_loops.is_some() {
+                    return Err("min_loops and max_side_loops are for round trips".into());
                 }
             }
             (None, Some(t)) => {
@@ -465,6 +467,14 @@ impl Case {
                     .push(format!("loop {n}: does not come back to the start"));
             }
             self.check_fast(engine, &format!("loop {n}: "), l, out);
+            if let Some(max) = self.expect.max_side_loops {
+                let (count, longest) = side_loops(&l.geometry, home);
+                if count > max {
+                    out.failures.push(format!(
+                        "loop {n}: {count} side loop(s), longest {longest:.0} m, expected at most {max}"
+                    ));
+                }
+            }
             let reuse = reuse_share(&l.geometry, home);
             worst = worst.max(reuse);
             if reuse > MAX_REUSE + REUSE_SLACK {
@@ -572,6 +582,52 @@ pub fn fast_km(engine: &Engine, line: &[LatLon]) -> f64 {
         .map(|w| haversine_m(w[0], w[1]))
         .sum::<f64>()
         / 1000.0
+}
+
+/// A side loop comes back within [`SIDE_LOOP_GAP_M`] of a point it passed
+/// between [`SIDE_LOOP_M`] metres earlier.
+const SIDE_LOOP_GAP_M: f64 = 10.0;
+const SIDE_LOOP_M: (f64, f64) = (300.0, 5_000.0);
+
+/// Side loops in a loop's `line` outside the home zone (`home` metres
+/// around its start): places where it comes back to where it was a short
+/// way before, a detour that goes nowhere. Returns how many and the
+/// longest, in metres.
+pub fn side_loops(line: &[LatLon], home: f64) -> (usize, f64) {
+    let Some(&start) = line.first() else {
+        return (0, 0.0);
+    };
+    let mut along = Vec::with_capacity(line.len());
+    let mut total = 0.0;
+    along.push(total);
+    for w in line.windows(2) {
+        total += haversine_m(w[0], w[1]);
+        along.push(total);
+    }
+    let (mut count, mut longest, mut i) = (0, 0.0f64, 0);
+    while i < line.len() {
+        if haversine_m(line[i], start) <= home {
+            i += 1;
+            continue;
+        }
+        // The furthest point within reach that comes back here.
+        let back = (i + 1..line.len())
+            .take_while(|&j| along[j] - along[i] <= SIDE_LOOP_M.1)
+            .filter(|&j| {
+                along[j] - along[i] >= SIDE_LOOP_M.0
+                    && haversine_m(line[i], line[j]) < SIDE_LOOP_GAP_M
+            })
+            .last();
+        match back {
+            Some(j) => {
+                count += 1;
+                longest = longest.max(along[j] - along[i]);
+                i = j;
+            }
+            None => i += 1,
+        }
+    }
+    (count, longest)
 }
 
 /// Reuse is measured on points this far apart along the line...
