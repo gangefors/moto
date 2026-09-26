@@ -83,7 +83,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.ZoneId
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
@@ -555,6 +557,15 @@ fun MapScreen() {
     var loopSeed by remember { mutableStateOf(0u) }
     // Which way the loops should head; any way again for a new start.
     var loopDirection by remember { mutableStateOf(LoopDirection.ANY) }
+    // The seed the next Shuffle uses, and its loops, found in the
+    // background while the rider looks at these so Shuffle is instant.
+    // One set ahead at most, only while the loop card is open; dropped
+    // when anything they depend on changes.
+    var nextSeed by remember { mutableStateOf(shuffleSeed()) }
+    val loopsAhead = remember {
+        OneAhead<LoopRequest, Deferred<Result<List<Route>>>> { it.cancel() }
+    }
+    DisposableEffect(Unit) { onDispose { loopsAhead.clear() } }
     // Whether the route and loop cards show all their choices or only the
     // figures (collapsed, to see more of the map); kept for new routes.
     var cardExpanded by rememberSaveable { mutableStateOf(true) }
@@ -579,10 +590,14 @@ fun MapScreen() {
         val opts = routeOptions(defaultRouteOptions(), budgetPercent, gravel)
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
-        // A newer request cancels this one; its result is then dropped.
-        val result = withContext(Dispatchers.Default) {
-            runCatching { ready.engine.roundTrip(start.toLatLon(), choice.target, opts, favs, shape) }
+        val request = LoopRequest(start, choice, opts, favs, shape)
+        val find = { r: LoopRequest ->
+            runCatching { ready.engine.roundTrip(r.start.toLatLon(), r.choice.target, r.opts, r.favourites, r.shape) }
         }
+        // Found ahead (Shuffle), or found now. A newer request cancels
+        // this one; its result is then dropped.
+        val ahead = loopsAhead.take(request)
+        val result = ahead?.await() ?: withContext(Dispatchers.Default) { find(request) }
         result.fold(
             onSuccess = { found ->
                 val first = found.firstOrNull()
@@ -594,9 +609,14 @@ fun MapScreen() {
                     loops = found
                     loopOpts = opts
                     o.route.show(start, null, first.geometry, first.favouriteParts, first.unpavedParts)
+                    val next = shuffleSeed()
+                    nextSeed = next
+                    val nextRequest = request.copy(shape = shape.copy(seed = next))
+                    loopsAhead.hold(nextRequest, scope.async(Dispatchers.Default) { find(nextRequest) })
                 }
             },
             onFailure = {
+                loopsAhead.clear()
                 loopStart = null
                 o.route.show(null, null, null)
                 message = if (classify(it) == CoreProblem.NO_ROUTE) {
@@ -980,7 +1000,7 @@ fun MapScreen() {
                     },
                     position = loopIndex,
                     count = loops.size,
-                    onShuffle = { loopSeed = shuffleSeed() },
+                    onShuffle = { loopSeed = nextSeed },
                     direction = loopDirection,
                     onDirection = { loopDirection = it },
                     onNext = {
@@ -1001,6 +1021,7 @@ fun MapScreen() {
                     },
                     onClose = {
                         loopStart = null
+                        loopsAhead.clear()
                         overlays?.route?.show(null, null, null)
                     },
                     onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
@@ -1506,3 +1527,13 @@ private fun enableLocation(context: Context, map: MapLibreMap, style: Style) {
         cameraMode = CameraMode.TRACKING
     }
 }
+
+/** What a set of loops is found for: the same request gives the same
+ * loops, so loops found ahead for it can be shown. */
+private data class LoopRequest(
+    val start: LatLng,
+    val choice: LoopChoice,
+    val opts: RouteOptions,
+    val favourites: Favourites?,
+    val shape: LoopOptions,
+)
