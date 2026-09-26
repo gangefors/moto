@@ -611,7 +611,8 @@ fn overlap(a: &Loop, b: &Loop) -> f64 {
 
 /// The nearest point near `p` on a road a loop should pass through: a
 /// main or minor through road (trunk to unclassified), open to all,
-/// posted over `slow_kmh` (not a town street), and paved unless the rider
+/// posted over `slow_kmh` and outside built-up areas (a waypoint in a
+/// town leads the loop into it), and paved unless the rider
 /// prefers gravel. Never a service road, driveway, residential street,
 /// track or ferry, which the loop would ride out to and back for nothing.
 fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<RoadPoint> {
@@ -633,12 +634,13 @@ fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<Roa
                 )
             );
             let open = e.flags & (edge_flags::DESTINATION | edge_flags::FERRY) == 0;
+            let town = e.flags & edge_flags::BUILT_UP != 0;
             let paved = Surface::from_u8(e.surface).is_none_or(Surface::is_paved);
             let prefer = opts.gravel == Gravel::Prefer;
             // Not on a town street: a waypoint there leads the loop into
             // town. Gravel roads are mostly 50 km/h, so they may be slow.
             let out_of_town = e.speed_kmh > PARAMS.slow_kmh || (prefer && !paved);
-            through && open && (prefer || paved) && out_of_town
+            through && open && !town && (prefer || paved) && out_of_town
         })
 }
 

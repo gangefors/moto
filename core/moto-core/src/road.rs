@@ -55,7 +55,7 @@ pub(crate) fn road_info(region: &Region, point: RoadPoint) -> Result<RoadInfo, C
         toll: e.flags & edge_flags::TOLL != 0,
         ferry: e.flags & edge_flags::FERRY != 0,
         destination_only: e.flags & edge_flags::DESTINATION != 0,
-        curviness: PARAMS.curviness(&m, e.class, e.speed_kmh, length_m),
+        curviness: PARAMS.curviness(&m, e.class, e.speed_kmh, e.flags, length_m),
         length_m,
         way_id: way.way_id,
     })

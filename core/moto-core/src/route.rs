@@ -122,7 +122,13 @@ impl<'a> Fun<'a> {
     /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
     fn curviness(&self, id: u32, e: &Edge) -> f64 {
         let m = self.region.curvature()[id as usize];
-        PARAMS.curviness(&m, e.class, e.speed_kmh, f64::from(e.length_dm) / 10.0)
+        PARAMS.curviness(
+            &m,
+            e.class,
+            e.speed_kmh,
+            e.flags,
+            f64::from(e.length_dm) / 10.0,
+        )
     }
 
     /// What curvature adds to edge `id`'s worth: nothing when it is off.
@@ -147,11 +153,13 @@ impl<'a> Fun<'a> {
     /// The dullness penalty of edge `id` for its speed band (see
     /// `ScoringParams::fast_kmh`), before curves spare it: 1 on 51–79
     /// km/h roads, on the rider's own favourites (marked as fun, whatever
-    /// their speed) and whenever nothing but favourites pulls.
+    /// their speed) and whenever nothing but favourites pulls. Roads in
+    /// built-up areas cost at least `built_up_penalty`.
     fn speed_penalty(&self, id: u32, e: &Edge) -> f64 {
         if !(self.curvy || self.gravel) || self.favourite_bonus(id, e) > 0.0 {
-            1.0
-        } else if e.speed_kmh >= PARAMS.fast_kmh {
+            return 1.0;
+        }
+        let band = if e.speed_kmh >= PARAMS.fast_kmh {
             PARAMS.fast_penalty
         } else if e.speed_kmh >= PARAMS.brisk_kmh {
             PARAMS.brisk_penalty
@@ -159,6 +167,11 @@ impl<'a> Fun<'a> {
             PARAMS.slow_penalty
         } else {
             1.0
+        };
+        if e.flags & edge_flags::BUILT_UP != 0 {
+            band.max(PARAMS.built_up_penalty)
+        } else {
+            band
         }
     }
 

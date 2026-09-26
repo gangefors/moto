@@ -10,9 +10,11 @@
 //! file. `--check` verifies an existing file and benchmarks it; CI compares
 //! its `--json` output between builds. `--match` map-matches a ride
 //! exported from the app, to check the matcher on real rides. `--golden`
-//! runs the golden-route regression set.
+//! runs the golden-route regression set. `--refresh` derives curvature
+//! and built-up areas afresh for an existing region file.
 
 mod bench;
+mod derive;
 mod golden;
 mod graph;
 mod hilbert;
@@ -35,6 +37,7 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
        moto-regionbuild --check <file.region> [--json <out.json>] [LAT,LON ...]
        moto-regionbuild --match <file.region> <ride.gpx> [--geojson <out.geojson>]
        moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
+       moto-regionbuild --refresh <in.region> <out.region>
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
@@ -43,7 +46,9 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
   --match  map-match a ride exported from the app and report how well it
            fits; --geojson also writes the ride and the matched pieces
   --golden run the golden routes (core/moto-core/tests/golden/*.json) and
-           check their expectations; --json also writes the figures";
+           check their expectations; --json also writes the figures
+  --refresh derive curvature and built-up areas afresh for an existing
+           region file, without the extract (to try a change to them)";
 
 /// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
 /// half of Halland, southern Småland and western Blekinge, from Trelleborg
@@ -84,6 +89,9 @@ fn main() -> ExitCode {
         }
         [flag, region, dir, out_flag, out] if flag == "--golden" && out_flag == "--json" => {
             golden::run(Path::new(region), Path::new(dir), Some(Path::new(out)))
+        }
+        [flag, input, output] if flag == "--refresh" => {
+            refresh(Path::new(input), Path::new(output))
         }
         [input, output] => build(Path::new(input), Path::new(output), SKANE_BBOX),
         [input, output, flag, bbox] if flag == "--bbox" => match parse_bbox(bbox) {
@@ -146,7 +154,7 @@ fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), S
         source_name: format!("{file_name} [{},{},{},{}]", b[0], b[1], b[2], b[3]),
     };
     let index = NodeIndex::new(osm.nodes);
-    let (data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7, MIN_NETWORK_M);
+    let (mut data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7, MIN_NETWORK_M);
     eprintln!(
         "graph     {:>7.1} s  {} ways in bbox → {} nodes, {} edges, {} geometries, {} shape points",
         t.elapsed().as_secs_f64(),
@@ -162,7 +170,36 @@ fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), S
         MIN_NETWORK_M / 1000.0,
         stats.fragment_m / 1000.0
     );
+    derive_all(&mut data);
     Ok((data, stats))
+}
+
+/// Derives curvature and built-up areas (see [`derive`]) and reports.
+fn derive_all(data: &mut RegionData) {
+    let t = Instant::now();
+    let d = derive::finish(data);
+    eprintln!(
+        "derive    {:>7.1} s  {} junctions; {:.0} of {:.0} km built up ({:.1} %)",
+        t.elapsed().as_secs_f64(),
+        d.junctions,
+        d.built_up_m / 1000.0,
+        d.road_m / 1000.0,
+        d.built_up_m / d.road_m.max(1.0) * 100.0
+    );
+}
+
+/// Opens `input` (checked like the app checks it), derives its curvature
+/// and built-up areas afresh and writes the result to `output`.
+fn refresh(input: &Path, output: &Path) -> Result<(), String> {
+    let region = moto_core::region::Region::open(input).map_err(|e| e.to_string())?;
+    region.verify_checksums().map_err(|e| e.to_string())?;
+    let mut data = derive::data_of(&region);
+    drop(region);
+    derive_all(&mut data);
+    let bytes = data.to_bytes().map_err(|e| e.to_string())?;
+    std::fs::write(output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
+    eprintln!("wrote {}", output.display());
+    Ok(())
 }
 
 fn build(input: &Path, output: &Path, b: [f64; 4]) -> Result<(), String> {

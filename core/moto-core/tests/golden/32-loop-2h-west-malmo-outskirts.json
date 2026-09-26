@@ -1,0 +1,9 @@
+{
+  "name": "Loop of 2 hours west of Sjöbo, not through Malmö's outskirts",
+  "description": "From a real test (2026-09-26): heading west, the best loop rode about 16 km along Malmö's outskirts (Bunkeflo, Husie, Kvarnby) on 50–80 km/h roads past suburbs. A city's outskirts are no fun even at country-road speeds; a town or village on the way is fine. Roads in large built-up areas now cost more and count as not curvy, and loop waypoints keep out of them.",
+  "from": [55.7276399, 13.4549951],
+  "loop": { "minutes": 120, "direction": 270 },
+  "expect": {
+    "avoid": [[55.59545, 13.09550], [55.60627, 13.06692]]
+  }
+}
