@@ -142,7 +142,7 @@ pub fn loops(
     let collect = |candidates: Candidates| {
         let mut loops = Vec::new();
         for (heading, c) in candidates.enumerate() {
-            let at = |r: f64| {
+            let at = |scale: f64| {
                 loop_at(
                     engine,
                     &fun,
@@ -150,13 +150,13 @@ pub fn loops(
                     &s,
                     c.bearing,
                     c.spread,
-                    r,
+                    (radius * c.size.0 * scale, radius * c.size.1 * scale),
                     home,
                     favourites,
                     side_loop_max,
                 )
             };
-            let Some(first) = at(radius * c.size) else {
+            let Some(first) = at(1.0) else {
                 continue;
             };
             // One resize towards the target.
@@ -164,7 +164,7 @@ pub fn loops(
                 Some(first)
             } else {
                 let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
-                at(radius * c.size * scale).filter(|l| fits(&l.routed.route))
+                at(scale).filter(|l| fits(&l.routed.route))
             };
             if let Some(mut l) = found {
                 l.heading = heading;
@@ -320,24 +320,35 @@ fn worth_per_s(l: &Loop) -> f64 {
 }
 
 /// One candidate loop: the waypoints lie `spread` degrees either side of
-/// `bearing`, at the loop radius times `size`.
+/// `bearing`, the first at the loop radius times `size.0`, the second
+/// times `size.1`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Candidate {
     bearing: f64,
     spread: f64,
-    size: f64,
+    size: (f64, f64),
 }
 
 /// Half the fan of headings tried when the loops should head one way.
 const DIRECTION_SPREAD_DEG: f64 = 60.0;
+/// A shuffled candidate's spread, degrees, and each waypoint's size, as
+/// ranges: from narrow and long to wide and round, and lopsided (one
+/// waypoint far, one near). Measured over 288 shuffled sets (2026-09-26;
+/// before: spread 15–45°, one size 0.8–1.2 for both): 12 shuffles gave
+/// 19.9 loops that differ instead of 15.4, the first loop repeated an
+/// earlier one 14 % of the time instead of 25 %, curvy share 25.9 %
+/// instead of 26.4 %.
+const SHUFFLE_SPREAD_DEG: (f64, f64) = (10.0, 70.0);
+const SHUFFLE_SIZE: (f64, f64) = (0.6, 1.3);
 
 /// The [`HEADINGS`] candidates of a seed and an optional direction. The
 /// headings are every 30° all round, or spread evenly over
 /// [`DIRECTION_SPREAD_DEG`] either side of `bearing`. Seed 0: spread
 /// [`SPREAD_DEG`], size 1 (the standard loops). Other seeds: the headings
-/// turned by up to one step, and each candidate's spread 15–45° and size
-/// 0.8–1.2, from a small deterministic generator (splitmix64), so a seed
-/// always gives the same loops.
+/// turned by up to one step, and each candidate's spread
+/// ([`SHUFFLE_SPREAD_DEG`]) and waypoint sizes ([`SHUFFLE_SIZE`]) drawn
+/// from a small deterministic generator (splitmix64), so a seed always
+/// gives the same loops.
 struct Candidates {
     seed: u32,
     state: u64,
@@ -394,11 +405,15 @@ impl Iterator for Candidates {
             return Some(Candidate {
                 bearing,
                 spread: SPREAD_DEG,
-                size: 1.0,
+                size: (1.0, 1.0),
             });
         }
-        let spread = 15.0 + 30.0 * self.unit();
-        let size = 0.8 + 0.4 * self.unit();
+        let within = |(lo, hi): (f64, f64), u: f64| lo + (hi - lo) * u;
+        let spread = within(SHUFFLE_SPREAD_DEG, self.unit());
+        let size = (
+            within(SHUFFLE_SIZE, self.unit()),
+            within(SHUFFLE_SIZE, self.unit()),
+        );
         Some(Candidate {
             bearing,
             spread,
@@ -408,7 +423,8 @@ impl Iterator for Candidates {
 }
 
 /// The loop through two waypoints `spread` degrees either side of
-/// `bearing` at `radius`, or through a favourite near a waypoint; `None` when a
+/// `bearing` at `radius` (the first, the second), or through a favourite
+/// near a waypoint; `None` when a
 /// waypoint has no road or a leg no route. Roads within `home` metres of
 /// the start are free to ride twice. Side loops up to `side_loop_max`
 /// metres are cut out (see [`cut_side_loops`]).
@@ -420,7 +436,7 @@ fn loop_at(
     start: &RoadPoint,
     bearing: f64,
     spread: f64,
-    radius: f64,
+    radius: (f64, f64),
     home: f64,
     favourites: &Favourites,
     side_loop_max: f64,
@@ -433,7 +449,7 @@ fn loop_at(
             .all(|&n| haversine_m(start.position, latlon(region.nodes()[n as usize])) <= home)
     };
     let mut taken: Vec<LatLon> = Vec::new();
-    let mut waypoint = |b: f64| -> Option<RoadPoint> {
+    let mut waypoint = |b: f64, radius: f64| -> Option<RoadPoint> {
         if let Some(p) = anchor_near(start.position, b, radius, favourites, &taken) {
             taken.push(p);
             return engine.snap(p).ok();
@@ -452,8 +468,8 @@ fn loop_at(
                 engine.snap(p).ok().inspect(|_| taken.push(p))
             })
     };
-    let w1 = waypoint(bearing - spread)?;
-    let w2 = waypoint(bearing + spread)?;
+    let w1 = waypoint(bearing - spread, radius.0)?;
+    let w2 = waypoint(bearing + spread, radius.1)?;
 
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
