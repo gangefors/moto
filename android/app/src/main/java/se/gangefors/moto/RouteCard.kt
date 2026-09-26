@@ -254,21 +254,25 @@ private fun LoopCardDetails(
     onSave: () -> Unit,
 ) {
     Column {
-        // Which loop, the next one, and a new set of loops (Shuffle).
-        if (found) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (count > 1) {
-                    Text(
-                        stringResource(R.string.loop_position, position + 1, count),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    OutlinedButton(onClick = onNext) { OneLine(stringResource(R.string.loop_next)) }
-                }
-                OutlinedButton(onClick = onShuffle) { OneLine(stringResource(R.string.loop_shuffle)) }
+        // Which loop, the next one, and a new set of loops (Shuffle). While
+        // loops are being found, the row stays with the last figures and
+        // its buttons disabled, so the card doesn't move.
+        val last = remember { mutableStateOf(position to count) }
+        SideEffect { if (found) last.value = position to count }
+        val (shownPosition, shownCount) = if (found) position to count else last.value
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (shownCount > 1) {
+                Text(
+                    stringResource(R.string.loop_position, shownPosition + 1, shownCount),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = if (found) Modifier else Modifier.alpha(0.5f),
+                )
+                OutlinedButton(onClick = onNext, enabled = found) { OneLine(stringResource(R.string.loop_next)) }
             }
+            OutlinedButton(onClick = onShuffle, enabled = found) { OneLine(stringResource(R.string.loop_shuffle)) }
         }
         // Length as a slider, in hours or kilometres.
         StepSlider(
