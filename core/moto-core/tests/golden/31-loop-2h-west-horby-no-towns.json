@@ -1,0 +1,9 @@
+{
+  "name": "Loop of 2 hours from Hörby, west, around towns",
+  "description": "From a real test (2026-09-26): heading west, the third loop left the country roads for Lund, rode 5 km of its 30–40 km/h streets to a waypoint in town and came back out. City riding is dull; a loop should ride around a town unless going through leads to better roads. Town street corners had counted as curves, and waypoints could land on town streets. Riding through a village on its main road stays fine (up to 5 km of 40 km/h streets per loop here; the Lund loop had 6).",
+  "from": [55.8551433, 13.6590523],
+  "loop": { "minutes": 120, "direction": 270 },
+  "expect": {
+    "max_street_km": 5
+  }
+}

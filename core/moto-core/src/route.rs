@@ -122,7 +122,7 @@ impl<'a> Fun<'a> {
     /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
     fn curviness(&self, id: u32, e: &Edge) -> f64 {
         let m = self.region.curvature()[id as usize];
-        PARAMS.curviness(&m, e.class, f64::from(e.length_dm) / 10.0)
+        PARAMS.curviness(&m, e.class, e.speed_kmh, f64::from(e.length_dm) / 10.0)
     }
 
     /// What curvature adds to edge `id`'s worth: nothing when it is off.

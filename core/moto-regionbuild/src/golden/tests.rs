@@ -365,6 +365,42 @@ fn fast_roads_are_counted() {
 }
 
 #[test]
+fn town_streets_are_counted_outside_the_home_zone() {
+    // All grid roads at 70 km/h: no streets.
+    let (_f, engine) = grid_engine("golden-street-none");
+    let o = Case::parse(&loop_case(r#""km":20"#, r#""max_street_km":0"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    // All at 30 km/h: every loop fails a limit of 1 km.
+    let file = TempFile::new("golden-street-all");
+    let mut data = moto_core::fixture::grid(13);
+    for e in &mut data.edges {
+        e.speed_kmh = 30;
+    }
+    std::fs::write(file.path(), data.to_bytes().unwrap()).unwrap();
+    let engine = Engine::open(file.path()).unwrap();
+    let o = Case::parse(&loop_case(r#""km":20"#, r#""max_street_km":1"#))
+        .unwrap()
+        .run(&engine);
+    assert!(
+        o.failures.iter().any(|f| f.contains("town streets")),
+        "{o:?}"
+    );
+    // The home zone doesn't count: a line that never leaves it has none.
+    let line: Vec<LatLon> = (0..10)
+        .map(|i| LatLon {
+            lat: 55.754,
+            lon: 13.496 + 0.001 * f64::from(i),
+        })
+        .collect();
+    assert!(street_km(&engine, &line, 0.0) > 0.4);
+    assert_eq!(street_km(&engine, &line, 2_000.0), 0.0);
+    assert_eq!(street_km(&engine, &[], 0.0), 0.0);
+    assert!(Case::parse(&case("", r#""max_street_km":-1"#)).is_err());
+}
+
+#[test]
 fn side_loops_are_found_outside_the_home_zone() {
     // East along lat 55.70 (1 km at about 63 m per 0.001°), then a
     // 1.4 km diamond to the north that comes back to where it turned off,

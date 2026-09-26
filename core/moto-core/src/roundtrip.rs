@@ -609,13 +609,11 @@ fn overlap(a: &Loop, b: &Loop) -> f64 {
             .max(1.0)
 }
 
-/// The best-rated favourite whose middle lies near where a waypoint at
-/// `bearing` and `radius` would go, not yet a waypoint of this loop.
 /// The nearest point near `p` on a road a loop should pass through: a
-/// main or minor through road (trunk to unclassified), open to all, and
-/// paved unless the rider prefers gravel. Never a service road, driveway,
-/// residential street, track or ferry, which the loop would ride out to
-/// and back for nothing.
+/// main or minor through road (trunk to unclassified), open to all,
+/// posted over `slow_kmh` (not a town street), and paved unless the rider
+/// prefers gravel. Never a service road, driveway, residential street,
+/// track or ferry, which the loop would ride out to and back for nothing.
 fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<RoadPoint> {
     let region = engine.region();
     crate::snap::nearby(region, p, WAYPOINT_SEARCH_M, WAYPOINT_CANDIDATES)
@@ -635,12 +633,17 @@ fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<Roa
                 )
             );
             let open = e.flags & (edge_flags::DESTINATION | edge_flags::FERRY) == 0;
-            let surface = opts.gravel == Gravel::Prefer
-                || Surface::from_u8(e.surface).is_none_or(Surface::is_paved);
-            through && open && surface
+            let paved = Surface::from_u8(e.surface).is_none_or(Surface::is_paved);
+            let prefer = opts.gravel == Gravel::Prefer;
+            // Not on a town street: a waypoint there leads the loop into
+            // town. Gravel roads are mostly 50 km/h, so they may be slow.
+            let out_of_town = e.speed_kmh > PARAMS.slow_kmh || (prefer && !paved);
+            through && open && (prefer || paved) && out_of_town
         })
 }
 
+/// The best-rated favourite whose middle lies near where a waypoint at
+/// `bearing` and `radius` would go, not yet a waypoint of this loop.
 fn anchor_near(
     start: LatLon,
     bearing: f64,
