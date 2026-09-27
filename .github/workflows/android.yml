@@ -48,6 +48,10 @@ concurrency:
 
 env:
   RUST_VERSION: "1.98.1"
+  # The OSM Sweden extract: Geofabrik's data from the openstreetmap.fr
+  # mirror. Geofabrik itself now redirects GitHub's runners to plain HTTP,
+  # which the download refuses (HTTPS only).
+  OSM_EXTRACT_URL: https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf
   CARGO_NDK_VERSION: "4.1.2"
   CARGO_DENY_VERSION: "0.20.2"
   # Must match android/app/build.gradle.kts.
@@ -100,7 +104,7 @@ jobs:
         run: cargo build --release -p moto-regionbuild
 
       # The debug APK carries the M0 region file for testing (production will
-      # download regions; ADR-0005). It is built from Geofabrik's Sweden
+      # download regions; ADR-0005). It is built from the OSM Sweden
       # extract by this commit's moto-regionbuild, so it always matches the
       # core's format, and cached per ISO week and region/builder source to
       # keep the ~800 MB download to about once a week.
@@ -120,7 +124,7 @@ jobs:
         if: steps.region-cache.outputs.cache-hit != 'true'
         run: |
           pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
-          curl -sSfL --proto '=https' --retry 3 -o "$pbf" https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+          curl -sSfL --proto '=https' --retry 3 -o "$pbf" "$OSM_EXTRACT_URL"
           mkdir -p "$RUNNER_TEMP/moto-region"
           core/target/release/moto-regionbuild "$pbf" "$RUNNER_TEMP/moto-region/m0.region"
           rm "$pbf"
