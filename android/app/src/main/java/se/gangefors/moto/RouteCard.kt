@@ -63,21 +63,29 @@ import androidx.compose.material3.Slider
 import java.time.ZoneId
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 
 /**
  * A sheet at the bottom of the map for planning a route or a loop (the
  * map shows what it plans above it). At rest it shows [header] only: the
  * figures, the actions and a line that sums up the choices. Pulled up
  * (drag the handle or the header up, or tap the handle or the summary
- * line), it shows [details] too, the choices themselves; header and
- * choices then scroll together when they don't fit in [maxHeight].
- * Dragging the handle down or Back puts it to rest.
+ * line), it shows [details] too, the choices themselves. In both states
+ * everything below the handle scrolls when it doesn't fit in [maxHeight]
+ * (large fonts); a drag the content can't scroll any further moves the
+ * sheet instead, like Android's own sheets: up opens it, down from the
+ * top puts it to rest. The handle always drags it; Back puts it to rest.
  */
 @Composable
 fun PlanSheet(
@@ -103,7 +111,7 @@ fun PlanSheet(
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
         ) {
-            val dragToOpen = Modifier.draggable(
+            val handleDrag = Modifier.draggable(
                 state = drag,
                 orientation = Orientation.Vertical,
                 onDragStarted = { dragged = 0f },
@@ -117,7 +125,7 @@ fun PlanSheet(
                 Modifier
                     .fillMaxWidth()
                     .height(SHEET_HANDLE_HEIGHT)
-                    .then(dragToOpen)
+                    .then(handleDrag)
                     .clickable(onClickLabel = handleLabel) { onExpandedChange(!expanded) }
                     .semantics { contentDescription = handleLabel },
                 contentAlignment = Alignment.Center,
@@ -128,21 +136,36 @@ fun PlanSheet(
                         .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
                 )
             }
-            if (expanded) {
-                // Pulled up, the header scrolls with the choices, so with
-                // large fonts the choices get the whole sheet, not what is
-                // left under the header. The handle stays to drag it down.
-                Column(
-                    Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    header()
+            // What the content can't scroll any further moves the sheet;
+            // the gesture's end (its fling) decides, like the handle's.
+            val overscroll = remember(onExpandedChange) {
+                object : NestedScrollConnection {
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                        if (source == NestedScrollSource.UserInput) dragged += available.y
+                        return Offset.Zero
+                    }
+
+                    override suspend fun onPreFling(available: Velocity): Velocity {
+                        if (dragged < -threshold) onExpandedChange(true)
+                        if (dragged > threshold) onExpandedChange(false)
+                        dragged = 0f
+                        return Velocity.Zero
+                    }
+                }
+            }
+            val scroll = rememberScrollState()
+            LaunchedEffect(expanded) { if (!expanded) scroll.scrollTo(0) }
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .nestedScroll(overscroll)
+                    .verticalScroll(scroll),
+            ) {
+                header()
+                if (expanded) {
                     HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp))
                     details()
                 }
-            } else {
-                Column(dragToOpen) { header() }
             }
         }
     }
