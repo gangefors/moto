@@ -472,3 +472,77 @@ fn a_section_ending_on_gravel_counts_only_its_part() {
     );
     assert!(fav.gravel().is_empty());
 }
+
+#[test]
+fn route_choices_offer_the_favourite_and_the_fastest() {
+    let e = fork();
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 0, 3)], Rating::Epic, Direction::Both)],
+    );
+    let choices = e.route_choices(FROM, &[], TO, &detour(0.5), &fav).unwrap();
+    // The favourite loop first (as route_with gives it), the fastest last.
+    assert_eq!(choices.len(), 2, "{choices:?}");
+    assert_eq!(
+        choices[0],
+        e.route_with(FROM, TO, &detour(0.5), &fav).unwrap()
+    );
+    assert!(north_of(&choices[0]));
+    let fastest = &choices[1];
+    assert!(!north_of(fastest));
+    assert!((fastest.duration_s - fastest.fastest_duration_s).abs() < 1e-6);
+    assert_eq!(choices[0].fastest_duration_s, fastest.duration_s);
+    // The same inputs give the same routes.
+    assert_eq!(
+        e.route_choices(FROM, &[], TO, &detour(0.5), &fav).unwrap(),
+        choices
+    );
+    // Nothing pulling: only the fastest.
+    let plain = e
+        .route_choices(FROM, &[], TO, &detour(0.5), &Favourites::none())
+        .unwrap();
+    assert_eq!(plain.len(), 1);
+    assert!(!north_of(&plain[0]));
+    // No budget: the favourite is too far, only the fastest.
+    let tight = e.route_choices(FROM, &[], TO, &detour(0.0), &fav).unwrap();
+    assert_eq!(tight.len(), 1);
+    // Through a via point: one route.
+    let via = e
+        .route_choices(FROM, &[ll(55.70, 13.42)], TO, &detour(0.5), &fav)
+        .unwrap();
+    assert_eq!(via.len(), 1);
+    // Bad input is refused, not a panic.
+    assert!(
+        e.route_choices(ll(f64::NAN, 13.0), &[], TO, &detour(0.5), &fav)
+            .is_err()
+    );
+}
+
+#[test]
+fn route_choices_go_different_ways() {
+    // A 5 × 5 grid, 1 km apart: from the middle of the west edge to the
+    // middle of the east one; epic roads one row north and one row south.
+    let e = engine(fixture::grid(5));
+    let (from, to) = (ll(55.718, 13.40), ll(55.718, 13.464));
+    let row = |lat: f64| {
+        let d = e.section_between(ll(lat, 13.40), ll(lat, 13.464)).unwrap();
+        Section {
+            ways: d.ways,
+            geometry: d.geometry,
+            ..section(&[], Rating::Epic, Direction::Both)
+        }
+    };
+    let fav = Favourites::build(&e, &[row(55.727), row(55.709)]);
+    let choices = e.route_choices(from, &[], to, &detour(1.0), &fav).unwrap();
+    assert_eq!(choices.len(), 3, "{choices:?}");
+    let north = |r: &Route| r.geometry.iter().any(|p| p.lat > 55.722);
+    let south = |r: &Route| r.geometry.iter().any(|p| p.lat < 55.714);
+    // One along each favourite row, then the fastest straight across.
+    assert!(north(&choices[0]) != north(&choices[1]), "{choices:?}");
+    assert!(choices[..2].iter().all(|r| north(r) || south(r)));
+    assert!(choices[..2].iter().all(|r| r.favourite_share > 0.5));
+    assert!(!north(&choices[2]) && !south(&choices[2]));
+    for r in &choices {
+        assert!(r.duration_s <= r.fastest_duration_s * 2.0 + 1e-6, "{r:?}");
+    }
+}

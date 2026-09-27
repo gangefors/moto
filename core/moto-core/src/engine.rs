@@ -168,6 +168,38 @@ impl Engine {
         Ok(crate::route::join(legs))
     }
 
+    /// Routes to choose from between `from` and `to`, like a nav app
+    /// offers: up to three worth riding (the first as [`Self::route_with`]
+    /// gives it), each sharing less than half its roads with the others,
+    /// then the fastest, always last. Through `via` points there is one
+    /// route, as [`Self::route_via`] gives it.
+    pub fn route_choices(
+        &self,
+        from: LatLon,
+        via: &[LatLon],
+        to: LatLon,
+        opts: &RouteOptions,
+        favourites: &Favourites,
+    ) -> Result<Vec<Route>, CoreError> {
+        if !via.is_empty() {
+            return Ok(vec![self.route_via(from, via, to, opts, favourites)?]);
+        }
+        from.validate()?;
+        to.validate()?;
+        opts.validate()?;
+        favourites.check(self)?;
+        let start = self.snap(from)?;
+        let end = self.snap(to)?;
+        crate::route::route_choices(
+            &self.region,
+            &start,
+            &end,
+            opts,
+            favourites,
+            self.max_speed_kmh,
+        )
+    }
+
     /// Proposes a section along the road between two points the rider picked
     /// on the map (PRD R2): the shortest road connection between them, with
     /// nothing avoided, as OSM way spans plus geometry.

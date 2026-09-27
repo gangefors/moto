@@ -523,54 +523,211 @@ pub(crate) fn route(
     favourites: &Favourites,
     max_speed_kmh: f64,
 ) -> Result<Route, CoreError> {
-    let off = Off::of(opts);
-    let fun = Fun::new(region, favourites, opts);
-    // The fastest route: pull 0 is travel time alone.
-    let parts = path(
-        region,
-        from,
-        to,
-        Cost::Favoured(off, fun, 0.0),
-        max_speed_kmh,
-    )?;
-    let fastest = build(&fun, &parts);
-    if fun.is_empty() {
-        return Ok(fastest.route);
+    let search = Search::new(region, from, to, opts, favourites, max_speed_kmh)?;
+    let Some(best) = search.best()? else {
+        return Ok(search.with_fastest(search.fastest.0.route.clone()));
+    };
+    Ok(search.with_fastest(best.0.route))
+}
+
+/// Most routes worth riding offered besides the fastest one.
+pub const MAX_CHOICES: usize = 3;
+/// Two routes are choices apart when they share less than this share of
+/// the shorter one.
+pub const MAX_CHOICE_OVERLAP: f64 = 0.5;
+/// Pulls tried, strongest first, for each further choice.
+const CHOICE_PULLS: [f64; 3] = [1.0, 0.5, 0.25];
+
+/// Routes to choose from between `from` and `to`, like a nav app offers:
+/// up to [`MAX_CHOICES`] worth riding, then the fastest. The first is
+/// [`route`]'s. Each further one is found with the roads the ones before
+/// ride costing `reuse_penalty` times more (the strongest pull in
+/// [`CHOICE_PULLS`] that passes), and kept when it stays within the time
+/// budget, buys enough (`opts.min_gain` times `choice_gain`: the rider
+/// picks, so a choice may buy less than the first) and shares less than
+/// [`MAX_CHOICE_OVERLAP`] with every route kept and the fastest. Without
+/// anything to pull (no favourites, curvy roads off, no gravel wanted)
+/// only the fastest. The same inputs always give the same routes.
+pub(crate) fn route_choices(
+    region: &Region,
+    from: &RoadPoint,
+    to: &RoadPoint,
+    opts: &RouteOptions,
+    favourites: &Favourites,
+    max_speed_kmh: f64,
+) -> Result<Vec<Route>, CoreError> {
+    let search = Search::new(region, from, to, opts, favourites, max_speed_kmh)?;
+    let mut kept: Vec<(Routed, Vec<Partial>)> = Vec::new();
+    // The first choice, unless it is the fastest route itself (offered
+    // last).
+    if let Some(best) = search.best()?
+        && best.0.route.geometry != search.fastest.0.route.geometry
+    {
+        kept.push(best);
     }
-    let fastest_s = fastest.route.duration_s;
-    let with_fastest = |mut r: Route| {
-        r.fastest_duration_s = fastest_s;
-        r
-    };
-    let (base_s, base_value_s) = (fastest.route.duration_s, fastest.value_s);
-    let limit_s = base_s + opts.budget.extra_s(base_s) + 1e-6;
-    let passes = |r: &Routed| {
-        let extra_s = r.route.duration_s - base_s;
-        r.route.duration_s <= limit_s
-            && (extra_s <= 1e-6 || (r.value_s - base_value_s) >= opts.min_gain * extra_s)
-    };
-    let pulled = |pull: f64| -> Result<Routed, CoreError> {
-        let cost = Cost::Favoured(off, fun, pull);
-        let parts = path(region, from, to, cost, max_speed_kmh)?;
-        Ok(build(&fun, &parts))
-    };
-    let full = pulled(1.0)?;
-    if passes(&full) {
-        return Ok(with_fastest(full.route));
-    }
-    let mut best = fastest;
-    let (mut lo, mut hi) = (0.0, 1.0);
-    for _ in 0..PARAMS.detour_steps {
-        let pull = (lo + hi) / 2.0;
-        let r = pulled(pull)?;
-        if passes(&r) {
-            lo = pull;
-            best = r;
-        } else {
-            hi = pull;
+    if !search.fun.is_empty() {
+        let roads_of = |parts: &[Partial]| road_metres(region, parts);
+        let fastest_roads = roads_of(&search.fastest.1);
+        let mut kept_roads: Vec<HashMap<u32, f64>> =
+            kept.iter().map(|(_, p)| roads_of(p)).collect();
+        let mut used: HashSet<u32> = kept_roads.iter().flat_map(|r| r.keys().copied()).collect();
+        used.extend(fastest_roads.keys().copied());
+        while kept.len() < MAX_CHOICES {
+            let mut found = None;
+            for pull in CHOICE_PULLS {
+                let cost = Cost::Loop(search.off, search.fun, pull, &used);
+                let parts = path(region, from, to, cost, max_speed_kmh)?;
+                let r = build(&search.fun, &parts);
+                let roads = roads_of(&parts);
+                let apart = std::iter::once(&fastest_roads)
+                    .chain(kept_roads.iter())
+                    .all(|k| overlap_share(&roads, k) < MAX_CHOICE_OVERLAP);
+                if search.passes_with(&r, PARAMS.choice_gain) && apart {
+                    found = Some((r, parts, roads));
+                    break;
+                }
+            }
+            let Some((r, parts, roads)) = found else {
+                break;
+            };
+            used.extend(roads.keys().copied());
+            kept_roads.push(roads);
+            kept.push((r, parts));
         }
     }
-    Ok(with_fastest(best.route))
+    let fastest_s = search.fastest.0.route.duration_s;
+    let mut routes: Vec<Route> = kept
+        .into_iter()
+        .map(|(r, _)| search.with_fastest(r.route))
+        .collect();
+    let mut fastest = search.fastest.0.route;
+    fastest.fastest_duration_s = fastest_s;
+    routes.push(fastest);
+    Ok(routes)
+}
+
+/// Metres of each road geometry that `parts` ride.
+fn road_metres(region: &Region, parts: &[Partial]) -> HashMap<u32, f64> {
+    let mut roads: HashMap<u32, f64> = HashMap::new();
+    for p in parts {
+        if let Some(e) = region.edges().get(p.edge as usize) {
+            *roads.entry(e.geometry).or_insert(0.0) +=
+                (p.to - p.from).max(0.0) * f64::from(e.length_dm) / 10.0;
+        }
+    }
+    roads
+}
+
+/// Share of the shorter of two routes (as [`road_metres`]) that the other
+/// rides too.
+fn overlap_share(a: &HashMap<u32, f64>, b: &HashMap<u32, f64>) -> f64 {
+    let shared: f64 = a
+        .iter()
+        .filter_map(|(g, m)| b.get(g).map(|n| m.min(*n)))
+        .sum();
+    let (la, lb): (f64, f64) = (a.values().sum(), b.values().sum());
+    shared / la.min(lb).max(1.0)
+}
+
+/// One routing request: the fastest route, and what the others are
+/// measured against.
+struct Search<'a> {
+    region: &'a Region,
+    from: &'a RoadPoint,
+    to: &'a RoadPoint,
+    opts: &'a RouteOptions,
+    off: Off,
+    fun: Fun<'a>,
+    max_speed_kmh: f64,
+    fastest: (Routed, Vec<Partial>),
+    limit_s: f64,
+}
+
+impl<'a> Search<'a> {
+    fn new(
+        region: &'a Region,
+        from: &'a RoadPoint,
+        to: &'a RoadPoint,
+        opts: &'a RouteOptions,
+        favourites: &'a Favourites,
+        max_speed_kmh: f64,
+    ) -> Result<Self, CoreError> {
+        let off = Off::of(opts);
+        let fun = Fun::new(region, favourites, opts);
+        // The fastest route: pull 0 is travel time alone.
+        let parts = path(
+            region,
+            from,
+            to,
+            Cost::Favoured(off, fun, 0.0),
+            max_speed_kmh,
+        )?;
+        let fastest = build(&fun, &parts);
+        let base_s = fastest.route.duration_s;
+        let limit_s = base_s + opts.budget.extra_s(base_s) + 1e-6;
+        Ok(Self {
+            region,
+            from,
+            to,
+            opts,
+            off,
+            fun,
+            max_speed_kmh,
+            fastest: (fastest, parts),
+            limit_s,
+        })
+    }
+
+    /// `r` with the fastest route's time to compare with.
+    fn with_fastest(&self, mut r: Route) -> Route {
+        r.fastest_duration_s = self.fastest.0.route.duration_s;
+        r
+    }
+
+    /// Whether `r` stays within the budget and its extra time buys enough.
+    fn passes(&self, r: &Routed) -> bool {
+        self.passes_with(r, 1.0)
+    }
+
+    /// [`Self::passes`] with the guard `opts.min_gain` times `share`.
+    fn passes_with(&self, r: &Routed, share: f64) -> bool {
+        let (base_s, base_value_s) = (self.fastest.0.route.duration_s, self.fastest.0.value_s);
+        let extra_s = r.route.duration_s - base_s;
+        r.route.duration_s <= self.limit_s
+            && (extra_s <= 1e-6
+                || (r.value_s - base_value_s) >= self.opts.min_gain * share * extra_s)
+    }
+
+    fn pulled(&self, pull: f64) -> Result<(Routed, Vec<Partial>), CoreError> {
+        let cost = Cost::Favoured(self.off, self.fun, pull);
+        let parts = path(self.region, self.from, self.to, cost, self.max_speed_kmh)?;
+        Ok((build(&self.fun, &parts), parts))
+    }
+
+    /// The route of the strongest pull that passes (see [`route`]), or
+    /// `None` when nothing pulls or only the fastest passes.
+    fn best(&self) -> Result<Option<(Routed, Vec<Partial>)>, CoreError> {
+        if self.fun.is_empty() {
+            return Ok(None);
+        }
+        let full = self.pulled(1.0)?;
+        if self.passes(&full.0) {
+            return Ok(Some(full));
+        }
+        let mut best = None;
+        let (mut lo, mut hi) = (0.0, 1.0);
+        for _ in 0..PARAMS.detour_steps {
+            let pull = (lo + hi) / 2.0;
+            let r = self.pulled(pull)?;
+            if self.passes(&r.0) {
+                lo = pull;
+                best = Some(r);
+            } else {
+                hi = pull;
+            }
+        }
+        Ok(best)
+    }
 }
 
 /// Cheapest path from `from` to `to` under `cost`, as edge pieces in
