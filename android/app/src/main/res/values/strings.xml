@@ -9,6 +9,11 @@
     <string name="snap_error">Snap failed: %1$s</string>
     <string name="region_loading">Loading the region…</string>
     <string name="region_missing">No map region yet: download one in My data</string>
+    <string name="busy_routes">Finding routes…</string>
+    <string name="busy_loops">Finding loops…</string>
+    <string name="busy_section">Finding the road…</string>
+    <string name="busy_sections">Fitting your sections to the map…</string>
+    <string name="busy_region">Checking and installing the map region…</string>
     <string name="region_title">Map region</string>
     <string name="region_installed">%1$s · map data from %2$s</string>
     <string name="region_bundled">Built-in test region (Skåne)</string>
