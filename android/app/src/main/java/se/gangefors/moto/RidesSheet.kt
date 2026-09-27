@@ -211,10 +211,8 @@ fun RidesSheet(
             Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
         ) {
-            item(key = "settings") {
+            item(key = "routing") {
                 Column {
-                    RegionSection()
-                    Spacer(Modifier.height(24.dp))
                     Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
                     Text(stringResource(R.string.routing_gravel), Modifier.padding(top = 8.dp))
                     GravelChips(gravel, onGravel)
@@ -223,33 +221,10 @@ fun RidesSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(24.dp))
-                    Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Box {
-                            OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
-                                OneLine(stringResource(R.string.sections_export))
-                            }
-                            DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
-                                EXPORT_FORMATS.forEach { (format, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(label)) },
-                                        onClick = {
-                                            formatMenu = false
-                                            exportFormat = format
-                                            saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
-                            OneLine(stringResource(R.string.sections_import))
-                        }
-                    }
+                }
+            }
+            item(key = "saved-routes") {
+                Column {
                     Spacer(Modifier.height(24.dp))
                     SavedRoutesList(
                         routes = routes,
@@ -267,6 +242,10 @@ fun RidesSheet(
                             }
                         },
                     )
+                }
+            }
+            item(key = "rides-title") {
+                Column {
                     Spacer(Modifier.height(24.dp))
                     Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
                     OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
@@ -338,6 +317,43 @@ fun RidesSheet(
                         }
                         HorizontalDivider()
                     }
+                }
+            }
+            item(key = "sections") {
+                Column {
+                    Spacer(Modifier.height(24.dp))
+                    Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Box {
+                            OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
+                                OneLine(stringResource(R.string.sections_export))
+                            }
+                            DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
+                                EXPORT_FORMATS.forEach { (format, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(label)) },
+                                        onClick = {
+                                            formatMenu = false
+                                            exportFormat = format
+                                            saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
+                            OneLine(stringResource(R.string.sections_import))
+                        }
+                    }
+                }
+            }
+            item(key = "region") {
+                Column {
+                    Spacer(Modifier.height(24.dp))
+                    RegionSection()
                 }
             }
             item(key = "about") {
