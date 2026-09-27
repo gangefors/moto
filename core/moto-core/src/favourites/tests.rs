@@ -506,11 +506,21 @@ fn route_choices_offer_the_favourite_and_the_fastest() {
     // No budget: the favourite is too far, only the fastest.
     let tight = e.route_choices(FROM, &[], TO, &detour(0.0), &fav).unwrap();
     assert_eq!(tight.len(), 1);
-    // Through a via point: one route.
+    // Through a via point on the straight road: the favourite can't be
+    // reached within the legs' budgets, so the route through it only.
+    let via_point = [ll(55.70, 13.42)];
     let via = e
-        .route_choices(FROM, &[ll(55.70, 13.42)], TO, &detour(0.5), &fav)
+        .route_choices(FROM, &via_point, TO, &detour(0.5), &fav)
         .unwrap();
-    assert_eq!(via.len(), 1);
+    assert_eq!(
+        via,
+        [e.route_via(FROM, &via_point, TO, &detour(0.5), &fav)
+            .unwrap()]
+    );
+    assert!(
+        e.route_choices(FROM, &[FROM; 9], TO, &detour(0.5), &fav)
+            .is_err()
+    );
     // Bad input is refused, not a panic.
     assert!(
         e.route_choices(ll(f64::NAN, 13.0), &[], TO, &detour(0.5), &fav)
@@ -544,5 +554,26 @@ fn route_choices_go_different_ways() {
     assert!(!north(&choices[2]) && !south(&choices[2]));
     for r in &choices {
         assert!(r.duration_s <= r.fastest_duration_s * 2.0 + 1e-6, "{r:?}");
+    }
+
+    // Through a via point in the middle: each leg has its own choices,
+    // joined into whole routes (each leg out along a favourite row and
+    // back to the via point); the fastest straight across, last.
+    let mid = [ll(55.718, 13.432)];
+    let through = e.route_choices(from, &mid, to, &detour(1.0), &fav).unwrap();
+    assert_eq!(through.len(), 3, "{through:?}");
+    assert!(north(&through[0]) != north(&through[1]), "{through:?}");
+    assert!(
+        through.iter().all(|r| r.geometry.contains(&mid[0])),
+        "{through:?}"
+    );
+    let fastest = through.last().unwrap();
+    assert!(!north(fastest) && !south(fastest));
+    assert!((fastest.duration_s - fastest.fastest_duration_s).abs() < 1e-6);
+    // No two are the same.
+    for (i, a) in through.iter().enumerate() {
+        for b in &through[i + 1..] {
+            assert_ne!(a.geometry, b.geometry);
+        }
     }
 }

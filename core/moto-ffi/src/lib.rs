@@ -219,8 +219,9 @@ impl Engine {
     /// Routes to choose from, like a nav app offers (PRD R5, R6): up to
     /// three worth riding over `favourites` and curvy roads within
     /// `opts.budget`, each sharing less than half its roads with the
-    /// others, then the fastest, always last. Through `via` points there
-    /// is one route, as `route` gives it.
+    /// others, then the fastest, always last. Through `via` points each
+    /// leg has its own choices, joined into whole routes (the first as
+    /// `route` gives it).
     pub fn route_choices(
         &self,
         from: LatLon,
@@ -536,7 +537,9 @@ mod tests {
         let via = engine
             .route_choices(from, vec![ll(55.705, 13.2119)], to, opts.clone(), None)
             .unwrap();
-        assert_eq!(via.len(), 1);
+        assert!(!via.is_empty());
+        let fastest = via.last().unwrap();
+        assert!((fastest.duration_s - fastest.fastest_duration_s).abs() < 1e-6);
         assert!(matches!(
             engine.route_choices(from, vec![from; 9], to, opts, None),
             Err(MotoError::InvalidInput { .. })
