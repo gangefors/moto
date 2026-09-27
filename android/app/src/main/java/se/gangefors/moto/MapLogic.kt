@@ -72,6 +72,9 @@ data class RouteSummary(
     val fastest: Boolean = false,
 )
 
+/** [vias] without the one at [index] (all of them when there is none). */
+fun <P> removeVia(vias: List<P>, index: Int): List<P> = vias.filterIndexed { i, _ -> i != index }
+
 /** Which of [count] route choices is the fastest: the last, when there is
  * more than one to choose from (the core puts it last); `null` for a lone
  * route. */

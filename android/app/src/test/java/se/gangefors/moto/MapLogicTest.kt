@@ -52,6 +52,15 @@ class MapLogicTest {
     }
 
     @Test
+    fun oneViaPointIsRemoved() {
+        assertEquals(listOf("a", "c"), removeVia(listOf("a", "b", "c"), 1))
+        assertEquals(listOf("b"), removeVia(listOf("a", "b"), 0))
+        assertEquals(emptyList<String>(), removeVia(listOf("a"), 0))
+        assertEquals(listOf("a", "b"), removeVia(listOf("a", "b"), 5))
+        assertEquals(listOf("a", "b"), removeVia(listOf("a", "b"), -1))
+    }
+
+    @Test
     fun theLastOfSeveralChoicesIsTheFastest() {
         assertEquals(3, fastestChoice(4))
         assertEquals(1, fastestChoice(2))

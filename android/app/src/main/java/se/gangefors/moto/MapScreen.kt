@@ -572,6 +572,9 @@ fun MapScreen() {
     // The via points before the last one was added, until the route
     // through it is found (restored if it can't be).
     var viasBefore by remember { mutableStateOf<List<LatLng>?>(null) }
+    // The via point the rider tapped, to remove just that one.
+    var selectedVia by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(routeEnds, vias) { selectedVia = null }
     // The time to arrive by (seconds since the epoch) in place of the
     // extra-time choice, and when the route shown was found.
     var arriveBy by remember { mutableStateOf<Long?>(null) }
@@ -802,6 +805,14 @@ fun MapScreen() {
                 if (ready == null) message = regionStatus(resources, region) else onMarkTap(ready, tap)
                 return@OnMapClickListener true
             }
+            // A via point: select it, to remove just that one; any other
+            // tap lets it go.
+            val tappedVia = if (routeEnds != null && vias.isNotEmpty()) o.route.viaAt(m, tap) else null
+            if (tappedVia != null && tappedVia in vias.indices) {
+                selectedVia = tappedVia
+                return@OnMapClickListener true
+            }
+            selectedVia = null
             // Another loop of the set, or route to choose, drawn faint:
             // show it.
             val start = loopStart
@@ -1001,7 +1012,8 @@ fun MapScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val offerLoop = startPicked != null && !marking
-            if (message != null || marking || offerLoop) Surface(
+            val via = selectedVia?.takeIf { it in vias.indices }
+            if (message != null || marking || offerLoop || via != null) Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
                 tonalElevation = 3.dp,
@@ -1009,6 +1021,17 @@ fun MapScreen() {
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     message?.let { Text(it) }
+                    if (via != null) {
+                        // A tap anywhere else on the map lets it go.
+                        Text(stringResource(R.string.route_via_selected, via + 1))
+                        OutlinedButton(
+                            onClick = {
+                                selectedVia = null
+                                vias = removeVia(vias, via)
+                            },
+                            modifier = Modifier.padding(top = 4.dp),
+                        ) { OneLine(stringResource(R.string.route_via_remove)) }
+                    }
                     if (offerLoop) {
                         OutlinedButton(
                             onClick = {

@@ -190,7 +190,9 @@ class RouteOverlay(private val style: Style, private val density: Float) {
             favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
             gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }
         }
-        via.forEach { features += feature(Point.fromLngLat(it.longitude, it.latitude), VIA) }
+        via.forEachIndexed { i, p ->
+            features += feature(Point.fromLngLat(p.longitude, p.latitude), VIA).apply { addNumberProperty(INDEX, i) }
+        }
         start?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), START) }
         end?.let { features += feature(Point.fromLngLat(it.longitude, it.latitude), END) }
         source.setGeoJson(FeatureCollection.fromFeatures(features))
@@ -198,6 +200,17 @@ class RouteOverlay(private val style: Style, private val density: Float) {
 
     private fun feature(geometry: org.maplibre.geojson.Geometry, kind: String): Feature =
         Feature.fromGeometry(geometry).apply { addStringProperty(KIND, kind) }
+
+    /** The index of the via point drawn at [point] (within a finger's
+     * width), or `null`. */
+    fun viaAt(map: MapLibreMap, point: LatLng): Int? {
+        val screen: PointF = map.projection.toScreenLocation(point)
+        val r = HIT_RADIUS_DP * density
+        val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
+        return map.queryRenderedFeatures(box, PIN_LAYER)
+            .filter { it.getStringProperty(KIND) == VIA }
+            .firstNotNullOfOrNull { it.getNumberProperty(INDEX)?.toInt() }
+    }
 
     /** Blue, or grey for the dull option (a feature's [DULL] property). */
     private fun routeColor(): Expression = Expression.switchCase(
