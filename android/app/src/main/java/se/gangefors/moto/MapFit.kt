@@ -65,17 +65,22 @@ data class FitPadding(val left: Int, val top: Int, val right: Int, val bottom: I
 /**
  * The padding to fit a route clear of [panels], plus [margin]. When the
  * panels leave less than [MIN_FREE_SHARE] of the map free either way (a
- * tall card with large fonts, a small screen), the padding that way
- * shrinks in proportion so the route is still drawn at a usable size,
- * partly under the panels.
+ * tall card with large fonts, a small screen), the margins go first, so
+ * the route still stays clear of the panels; only if that is not enough
+ * does the padding shrink in proportion, so the route is still drawn at a
+ * usable size, partly under the panels.
  */
 fun fitPadding(panels: Panels, margin: Int): FitPadding {
     fun axis(size: Int, a: Int, b: Int): Pair<Int, Int> {
-        val pa = max(a, 0) + margin
-        val pb = max(b, 0) + margin
+        val pa = max(a, 0)
+        val pb = max(b, 0)
         val most = (size * (1 - MIN_FREE_SHARE)).toInt()
         val sum = pa + pb
-        if (size <= 0 || sum <= most) return pa to pb
+        if (size <= 0) return pa + margin to pb + margin
+        if (sum <= most) {
+            val m = min(margin, (most - sum) / 2)
+            return pa + m to pb + m
+        }
         return (pa.toLong() * most / sum).toInt() to (pb.toLong() * most / sum).toInt()
     }
     val (left, right) = axis(panels.width, panels.left, panels.right)
