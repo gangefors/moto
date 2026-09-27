@@ -17,6 +17,10 @@ use moto_core::{Avoid, Engine, Favourites, Gravel, LatLon, RoundTripTarget, Rout
 pub const SNAP_POINTS: usize = 10_000;
 /// Random start/end pairs routed by the benchmark.
 pub const ROUTE_PAIRS: usize = 100;
+/// The farthest apart a pair's ends may be, as the crow flies: the
+/// longest trip the app is for (PRD). Skåne is smaller, so this only
+/// matters for larger regions such as all of Sweden.
+pub const MAX_PAIR_M: f64 = 300_000.0;
 /// Favourite sections made for routing with favourites: from random road
 /// points to the road nearest a point [`FAVOURITE_REACH_DEG`] north (less
 /// in a region under four times that tall).
@@ -190,13 +194,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
     }
     let snap_us_mean = fastest(snap_runs);
 
-    let pairs: Vec<(LatLon, LatLon)> = on_road
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .take(ROUTE_PAIRS)
-        .map(|&[a, z]| (a, z))
-        .collect();
+    let pairs = route_pairs(&on_road);
     let opts = RouteOptions::default();
     let anything = RouteOptions {
         avoid: Avoid {
@@ -675,10 +673,42 @@ fn json_escape(s: &str) -> String {
     out
 }
 
+/// Start/end pairs from consecutive snapped points, at most
+/// [`MAX_PAIR_M`] apart, the first [`ROUTE_PAIRS`] of them.
+fn route_pairs(on_road: &[LatLon]) -> Vec<(LatLon, LatLon)> {
+    on_road
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .filter(|[a, z]| moto_core::geo::haversine_m(*a, *z) <= MAX_PAIR_M)
+        .take(ROUTE_PAIRS)
+        .map(|&[a, z]| (a, z))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::built_fixture;
+
+    #[test]
+    fn route_pairs_are_at_most_the_longest_trip_apart() {
+        let at = |lat: f64, lon: f64| LatLon { lat, lon };
+        // Lund–Malmö (15 km), Malmö–Kiruna (1300 km), Lund–Göteborg (230 km).
+        let points = [
+            at(55.70, 13.19),
+            at(55.60, 13.00),
+            at(55.60, 13.00),
+            at(67.86, 20.23),
+            at(55.70, 13.19),
+            at(57.71, 11.97),
+            at(55.70, 13.19),
+        ];
+        let pairs = route_pairs(&points);
+        assert_eq!(pairs, [(points[0], points[1]), (points[4], points[5])]);
+        let many = vec![at(55.7, 13.2); 3 * ROUTE_PAIRS];
+        assert_eq!(route_pairs(&many).len(), ROUTE_PAIRS);
+    }
 
     #[test]
     fn benchmarks_a_real_region() {
