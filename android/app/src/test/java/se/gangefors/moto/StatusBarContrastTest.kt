@@ -48,4 +48,15 @@ class StatusBarContrastTest {
         assertTrue(wantsDarkIcons(0.5f, darkIconsNow = true))
         assertFalse(wantsDarkIcons(0.5f, darkIconsNow = false))
     }
+
+    @Test
+    fun navigationButtonsContrastWithThePanelBehindThem() {
+        // The light planning sheet behind the bar: dark buttons, even in
+        // dark mode (the case where they all but disappeared).
+        assertTrue(navigationIconsDark(0.95f, systemDark = true))
+        assertFalse(navigationIconsDark(0.05f, systemDark = false))
+        // No panel: the system theme's, over its scrim.
+        assertTrue(navigationIconsDark(null, systemDark = false))
+        assertFalse(navigationIconsDark(null, systemDark = true))
+    }
 }

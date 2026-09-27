@@ -103,7 +103,7 @@ fun PlanSheet(
     Surface(
         modifier = modifier.fillMaxWidth().heightIn(max = maxHeight),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        tonalElevation = 3.dp,
+        tonalElevation = PLAN_SHEET_ELEVATION,
         shadowElevation = 6.dp,
     ) {
         Column(
@@ -173,6 +173,10 @@ fun PlanSheet(
 
 /** Height of the sheet's handle, the part that drags it at any time. */
 private val SHEET_HANDLE_HEIGHT = 32.dp
+
+/** The planning sheet's tonal elevation (its colour; the navigation bar's
+ * buttons follow it). */
+val PLAN_SHEET_ELEVATION = 3.dp
 
 /** How far the sheet must be dragged to open or put it to rest. */
 private val SHEET_DRAG = 24.dp
