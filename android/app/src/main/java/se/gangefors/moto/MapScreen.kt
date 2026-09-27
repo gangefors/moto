@@ -49,6 +49,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.IconButton
@@ -670,6 +672,11 @@ fun MapScreen() {
     // Planning a route or loop: the sheet shows at the bottom, and the tag
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
+    // The planning sheet reaches down behind the navigation bar: its
+    // buttons then contrast with the sheet, not the system theme.
+    NavigationBarIconsFollow(
+        if (planning) MaterialTheme.colorScheme.surfaceColorAtElevation(PLAN_SHEET_ELEVATION) else null,
+    )
     // A new start or new route ends: the sheet starts at rest, so the map
     // shows what was found.
     LaunchedEffect(loopStart) { if (loopStart != null) cardExpanded = false }
@@ -1684,6 +1691,22 @@ private fun StatusBarIconsFollowMap(mapView: MapView, map: MapLibreMap?, statusB
             map.removeOnCameraMoveListener(onMove)
             handler.removeCallbacksAndMessages(null)
         }
+    }
+}
+
+/**
+ * Sets the navigation bar's buttons to contrast with [panel], the colour
+ * of an app panel behind the bar, or to the system theme's when there is
+ * none (the theme-coloured scrim is behind them then).
+ */
+@Composable
+private fun NavigationBarIconsFollow(panel: Color?) {
+    val window = LocalActivity.current?.window ?: return
+    val systemDark = isSystemInDarkTheme()
+    DisposableEffect(window, panel, systemDark) {
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
+            navigationIconsDark(panel?.luminance(), systemDark)
+        onDispose {}
     }
 }
 

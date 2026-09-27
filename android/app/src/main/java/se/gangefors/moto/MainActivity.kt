@@ -20,7 +20,8 @@ class MainActivity : ComponentActivity() {
         // Status bar: fully transparent; MapScreen switches its icons between
         // light and dark to contrast with the map behind them.
         // Navigation bar: icons follow the system theme, over a matching
-        // theme-coloured scrim drawn by MapScreen.
+        // theme-coloured scrim drawn by MapScreen; while the planning sheet
+        // is behind the bar they contrast with the sheet instead.
         val transparentBars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = transparentBars, navigationBarStyle = transparentBars)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

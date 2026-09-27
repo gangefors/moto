@@ -43,3 +43,12 @@ internal fun wantsDarkIcons(luma: Float, darkIconsNow: Boolean): Boolean = when 
     luma < LIGHT_ICONS_BELOW -> false
     else -> darkIconsNow
 }
+
+/**
+ * Whether the navigation bar wants dark icons: over a panel of the app's
+ * own (the planning sheet reaches down behind the bar), those that
+ * contrast with its [panelLuminance]; otherwise the system theme's, over
+ * the theme-coloured scrim.
+ */
+internal fun navigationIconsDark(panelLuminance: Float?, systemDark: Boolean): Boolean =
+    panelLuminance?.let { it > 0.5f } ?: !systemDark
