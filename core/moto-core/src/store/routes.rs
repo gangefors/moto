@@ -14,6 +14,9 @@ use crate::{CoreError, LatLon};
 /// Most points a saved route may have: a 400 km loop has about 20 000.
 pub const MAX_ROUTE_POINTS: usize = 200_000;
 
+/// A ride that ends this close to where it started is saved as a loop.
+pub const LOOP_END_M: f64 = 300.0;
+
 /// A route to save.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewRoute {
@@ -118,6 +121,45 @@ impl Store {
         let id = self.conn.last_insert_rowid();
         self.get_route(id)?
             .ok_or_else(|| CoreError::Storage(format!("route {id} vanished")))
+    }
+
+    /// Saves a finished ride as a route to ride again, named `name`: its
+    /// line (every fix, or evenly thinned to [`MAX_ROUTE_POINTS`]), its
+    /// length and riding time, and a loop when it ends within
+    /// [`LOOP_END_M`] of where it started. `None` if there is no such ride.
+    pub fn save_track_as_route(
+        &mut self,
+        track_id: i64,
+        name: &str,
+        now: i64,
+    ) -> Result<Option<SavedRoute>, CoreError> {
+        let Some(track) = self.get_track(track_id)? else {
+            return Ok(None);
+        };
+        if track.ended_at.is_none() {
+            return Err(CoreError::InvalidArgument(format!(
+                "ride {track_id} is still recording"
+            )));
+        }
+        let points = self.track_points(track_id)?.unwrap_or_default();
+        let (Some(first), Some(last)) = (points.first(), points.last()) else {
+            return Err(CoreError::InvalidArgument(format!(
+                "ride {track_id} has no points"
+            )));
+        };
+        let step = points.len().div_ceil(MAX_ROUTE_POINTS).max(1);
+        let mut geometry: Vec<LatLon> = points.iter().step_by(step).map(|p| p.position).collect();
+        if geometry.last() != Some(&last.position) {
+            geometry.push(last.position);
+        }
+        let route = NewRoute {
+            name: name.to_owned(),
+            is_loop: crate::geo::haversine_m(first.position, last.position) <= LOOP_END_M,
+            distance_m: track.distance_m,
+            duration_s: (last.time_ms - first.time_ms).max(0) as f64 / 1000.0,
+            geometry,
+        };
+        self.save_route(&route, now).map(Some)
     }
 
     pub fn get_route(&self, id: i64) -> Result<Option<SavedRoute>, CoreError> {
