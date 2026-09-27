@@ -24,19 +24,24 @@ import se.gangefors.moto.core.RegionInfo
 
 /**
  * Draws the region's bounding box as a faint dashed outline, so it is clear
- * where the loaded roads end. Drawn once per style.
+ * where the loaded roads end; moves it when another region takes over.
  */
 fun showRegionOutline(style: Style, info: RegionInfo) {
-    if (style.getSource(OUTLINE_SOURCE) != null) return
     val (sw, ne) = info.southWest to info.northEast
-    val ring = listOf(
-        Point.fromLngLat(sw.lon, sw.lat),
-        Point.fromLngLat(ne.lon, sw.lat),
-        Point.fromLngLat(ne.lon, ne.lat),
-        Point.fromLngLat(sw.lon, ne.lat),
-        Point.fromLngLat(sw.lon, sw.lat),
+    val ring = LineString.fromLngLats(
+        listOf(
+            Point.fromLngLat(sw.lon, sw.lat),
+            Point.fromLngLat(ne.lon, sw.lat),
+            Point.fromLngLat(ne.lon, ne.lat),
+            Point.fromLngLat(sw.lon, ne.lat),
+            Point.fromLngLat(sw.lon, sw.lat),
+        ),
     )
-    style.addSource(GeoJsonSource(OUTLINE_SOURCE, Feature.fromGeometry(LineString.fromLngLats(ring))))
+    style.getSourceAs<GeoJsonSource>(OUTLINE_SOURCE)?.let {
+        it.setGeoJson(Feature.fromGeometry(ring))
+        return
+    }
+    style.addSource(GeoJsonSource(OUTLINE_SOURCE, Feature.fromGeometry(ring)))
     style.addLayer(
         LineLayer(OUTLINE_LAYER, OUTLINE_SOURCE).withProperties(
             PropertyFactory.lineColor("#5f6368"),

@@ -148,14 +148,18 @@ fun MapScreen() {
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
     var hasLocation by remember { mutableStateOf(hasLocationPermission(context)) }
-    var region by remember { mutableStateOf<RegionState>(RegionState.Loading) }
+    // The routing region: a downloaded one, else the bundled one (ADR-0008).
+    val activeRegion by Regions.active.collectAsState()
+    val region = activeRegion.state
     var message by remember { mutableStateOf<String?>(null) }
     // The road the rider last tapped, shown until closed.
     var roadInfo by remember { mutableStateOf<RoadInfo?>(null) }
 
-    // Install (first start only) and open the bundled region off the main thread.
-    LaunchedEffect(Unit) {
-        region = withContext(Dispatchers.IO) { BundledRegion.open(context.applicationContext) }
+    // Open the region off the main thread (installing the bundled one on
+    // first start); the hint again whenever another region takes over.
+    LaunchedEffect(Unit) { Regions.load(context.applicationContext) }
+    LaunchedEffect(region) {
+        if (region is RegionState.Loading) return@LaunchedEffect
         message = when (val r = region) {
             is RegionState.Ready -> resources.getString(R.string.map_hint)
             else -> regionStatus(resources, r)

@@ -213,6 +213,8 @@ fun RidesSheet(
         ) {
             item(key = "settings") {
                 Column {
+                    RegionSection()
+                    Spacer(Modifier.height(24.dp))
                     Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
                     Text(stringResource(R.string.routing_gravel), Modifier.padding(top = 8.dp))
                     GravelChips(gravel, onGravel)
