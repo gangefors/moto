@@ -174,9 +174,10 @@ The same kind of 4-core cloud machine, OSM data of 2026-09-27, today's builder (
 | With favourites and curves, mean / p95 | 46 / 112 ms | 240 / 538 ms |
 | Route choices (up to 3 + the fastest), mean / p95 | 162 / 358 ms | 871 / 2363 ms |
 | Loops 50 / 100 km, mean / p95 | 169 / 347 ms | 105 / 204 ms |
+| Loops 400 km (the longest offered), mean / p95 | 689 / 923 ms | 1547 / 4630 ms |
 | Peak memory of `--check` (file mapped) | | 709 MiB |
 
-Routing scales with trip length, not region size: the whole of Sweden adds no cost to a trip of the same length. Route choices for the longest trips are the slowest query, about 2.4 s at p95 on the desktop; a phone 2–4× slower still stays within the PRD's 10 s for 300 km, but should be measured. The open questions from 2026-09-23 stand: full validation on open and the mostly empty uniform grid (5618 × 3048 cells) for a phone with a cold cache.
+Routing scales with trip length, not region size: the whole of Sweden adds no cost to a trip of the same length. Route choices for the longest trips and 400 km loops are the slowest queries, about 2.4 s and 4.6 s at p95 on the desktop; a phone 2–4× slower still stays within the PRD's 10 s for 300 km, but should be measured. The open questions from 2026-09-23 stand: full validation on open and the mostly empty uniform grid (5618 × 3048 cells) for a phone with a cold cache.
 
 ## Action Items
 
