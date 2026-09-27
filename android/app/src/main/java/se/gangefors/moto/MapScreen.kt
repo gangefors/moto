@@ -198,20 +198,6 @@ fun MapScreen() {
         right = safe.getRight(density, layoutDirection),
         bottom = safe.getBottom(density),
     )
-    LaunchedEffect(map, insets) {
-        val m = map ?: return@LaunchedEffect
-        with(density) {
-            applyControlMargins(
-                m,
-                insets,
-                CONTROL_MARGIN.roundToPx(),
-                ATTRIBUTION_OFFSET.roundToPx(),
-                compassRight = (FAB_PADDING + FAB_SIZE + COMPASS_GAP).roundToPx(),
-                compassBottom = (FAB_PADDING + (FAB_SIZE - COMPASS_SIZE) / 2).roundToPx(),
-            )
-        }
-    }
-
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
 
@@ -222,6 +208,7 @@ fun MapScreen() {
     var topPanelBottom by remember { mutableIntStateOf(0) }
     var buttonsLeft by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var sheetTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     fun fitPaddingNow(): FitPadding {
         val (w, h) = mapSize.width to mapSize.height
         val panels = Panels(
@@ -230,7 +217,7 @@ fun MapScreen() {
             left = insets.left,
             top = max(topPanelBottom, insets.top),
             right = max(w - buttonsLeft, insets.right),
-            bottom = max(h - tagTop, insets.bottom),
+            bottom = maxOf(h - tagTop, h - sheetTop, insets.bottom),
         )
         return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
     }
@@ -355,7 +342,7 @@ fun MapScreen() {
     // proposed section, the route, the snap marker.
     val overlays = remember(style) {
         style?.let { s ->
-            Overlays(SectionOverlay(s, density.density), RideOverlay(s), SectionDraftOverlay(s), RouteOverlay(s), SnapMarker(s))
+            Overlays(SectionOverlay(s, density.density), RideOverlay(s), SectionDraftOverlay(s), RouteOverlay(s, density.density), SnapMarker(s))
         }
     }
 
@@ -625,6 +612,12 @@ fun MapScreen() {
         OneAhead<LoopRequest, Deferred<Result<List<Route>>>> { it.cancel() }
     }
     DisposableEffect(Unit) { onDispose { loopsAhead.clear() } }
+    /** Shows loop [index] of [set] from [start], the others faint. */
+    fun showLoop(start: LatLng, set: List<Route>, index: Int) {
+        val r = set.getOrNull(index) ?: return
+        val others = set.mapIndexedNotNull { i, l -> if (i == index) null else i to l.geometry }
+        overlays?.route?.show(start, null, r.geometry, r.favouriteParts, r.unpavedParts, others = others)
+    }
     // Why the last search found no loop (shown on the loop card instead of
     // figures), or null.
     var loopProblem by remember { mutableStateOf<String?>(null) }
@@ -633,7 +626,30 @@ fun MapScreen() {
     var fittedFor by remember { mutableStateOf<Any?>(null) }
     // Whether the route and loop cards show all their choices or only the
     // figures (collapsed, to see more of the map); kept for new routes.
-    var cardExpanded by rememberSaveable { mutableStateOf(true) }
+    var cardExpanded by rememberSaveable { mutableStateOf(false) }
+    // Planning a route or loop: the sheet shows at the bottom, and the tag
+    // and map buttons step aside (nobody tags while planning).
+    val planning = routeEnds != null || loopStart != null
+    // A new start or new route ends: the sheet starts at rest, so the map
+    // shows what was found.
+    LaunchedEffect(loopStart) { if (loopStart != null) cardExpanded = false }
+    LaunchedEffect(routeEnds) { if (routeEnds != null) cardExpanded = false }
+    // The map's own controls (compass, logo, attribution) stay clear of
+    // the system bars, the buttons and the sheet.
+    LaunchedEffect(map, insets, planning, sheetTop, mapSize) {
+        val m = map ?: return@LaunchedEffect
+        val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
+        with(density) {
+            applyControlMargins(
+                m,
+                insets.copy(bottom = max(insets.bottom, sheet)),
+                CONTROL_MARGIN.roundToPx(),
+                ATTRIBUTION_OFFSET.roundToPx(),
+                compassRight = if (planning) CONTROL_MARGIN.roundToPx() else (FAB_PADDING + FAB_SIZE + COMPASS_GAP).roundToPx(),
+                compassBottom = if (planning) CONTROL_MARGIN.roundToPx() else (FAB_PADDING + (FAB_SIZE - COMPASS_SIZE) / 2).roundToPx(),
+            )
+        }
+    }
     // While a route or loop is shown, the sections fade so the route is the
     // one strong line (its favourite stretches glow; see RouteOverlay).
     // A saved route the rider asked to see (My data > Saved routes > Show),
@@ -681,7 +697,7 @@ fun MapScreen() {
                 } else {
                     loops = found
                     loopOpts = opts
-                    o.route.show(start, null, first.geometry, first.favouriteParts, first.unpavedParts)
+                    showLoop(start, found, 0)
                     // All the loops of the set, so Next doesn't move the map.
                     showOnMap(found.map { it.geometry } + listOf(listOf(start.toLatLon())), always = fittedFor != start)
                     fittedFor = start
@@ -745,7 +761,7 @@ fun MapScreen() {
     }
     // When the card grows or shrinks (expanded, collapsed, a message), the
     // route or loops shown stay in view.
-    LaunchedEffect(cardExpanded, topPanelBottom, mapSize) {
+    LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize) {
         val lines = when {
             loopStart != null -> loops.map { it.geometry }
             routeEnds != null -> listOfNotNull(shownRoute?.first?.geometry)
@@ -763,6 +779,14 @@ fun MapScreen() {
         val onClick = MapLibreMap.OnMapClickListener { tap ->
             if (marking) {
                 if (ready == null) message = regionStatus(resources, region) else onMarkTap(ready, tap)
+                return@OnMapClickListener true
+            }
+            // Another loop of the set, drawn faint: show it.
+            val start = loopStart
+            val other = if (start != null && loops.size > 1) o.route.otherAt(m, tap) else null
+            if (start != null && other != null && other in loops.indices) {
+                loopIndex = other
+                showLoop(start, loops, other)
                 return@OnMapClickListener true
             }
             val hit = o.sections.sectionAt(m, tap)?.let { id -> sections.firstOrNull { it.id == id } }
@@ -1028,97 +1052,118 @@ fun MapScreen() {
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            routeEnds?.let {
-                RouteCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    expanded = cardExpanded,
-                    onToggleExpanded = { cardExpanded = !cardExpanded },
-                    summary = routeSummary,
-                    budgetPercent = budgetPercent,
-                    onBudget = { percent ->
-                        budgetPercent = percent
-                        RoutePrefs.setBudgetPercent(context, percent)
-                    },
-                    gravel = gravel,
-                    onGravel = { g ->
-                        gravel = g
-                        RoutePrefs.setGravel(context, g)
-                    },
-                    onClose = {
-                        routeEnds = null
-                        vias = emptyList()
-                        addingVia = false
-                        arriveBy = null
-                        overlays?.route?.show(null, null, null)
-                    },
-                    onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
-                    onSave = { shownRoute?.let { (r, _) -> savingRoute = r to false } },
-                    viaCount = vias.size,
-                    onAddVia = {
-                        addingVia = true
-                        message = resources.getString(R.string.route_pick_via)
-                    },
-                    onClearVia = {
-                        vias = emptyList()
-                        addingVia = false
-                    },
-                    arriveBy = arriveBy,
-                    arrivalNote = arriveBy?.let { by ->
-                        shownRoute?.let { (r, _) ->
-                            val zone = ZoneId.systemDefault()
-                            val a = arrival(routeFoundAt, r.durationS, by)
-                            if (a.late) {
-                                stringResource(R.string.route_arrives_late, clockTime(by, zone), clockTime(a.atSec, zone))
-                            } else {
-                                stringResource(R.string.route_arrives, clockTime(a.atSec, zone))
-                            }
-                        }
-                    },
-                    onArriveBy = { arriveBy = it },
-                )
+        }
+        // Planning a route or loop: the sheet at the bottom; the map fits
+        // what it plans in the space above it.
+        if (planning) {
+            DisposableEffect(Unit) { onDispose { sheetTop = Int.MAX_VALUE } }
+            val sheetMaxHeight = with(density) {
+                if (mapSize.height > 0) (mapSize.height * SHEET_MAX_SHARE).toDp() else 600.dp
             }
-            loopStart?.let {
-                val shown = loops.getOrNull(loopIndex)
-                LoopCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    expanded = cardExpanded,
-                    onToggleExpanded = { cardExpanded = !cardExpanded },
-                    summary = shown?.let { r ->
-                        summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
-                    },
-                    problem = loopProblem,
-                    position = loopIndex,
-                    count = loops.size,
-                    onShuffle = { loopSeed = nextSeed },
-                    direction = loopDirection,
-                    onDirection = { loopDirection = it },
-                    onNext = {
-                        loopIndex = nextLoop(loopIndex, loops.size)
-                        loops.getOrNull(loopIndex)?.let { r ->
-                            overlays?.route?.show(it, null, r.geometry, r.favouriteParts, r.unpavedParts)
-                        }
-                    },
-                    choice = loopChoice,
-                    onChoice = { c ->
-                        loopChoice = c
-                        RoutePrefs.setLoopChoice(context, c)
-                    },
-                    gravel = gravel,
-                    onGravel = { g ->
-                        gravel = g
-                        RoutePrefs.setGravel(context, g)
-                    },
-                    onClose = {
-                        loopStart = null
-                        loopsAhead.clear()
-                        overlays?.route?.show(null, null, null)
-                    },
-                    onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
-                    onSave = { shown?.let { savingRoute = it to true } },
-                )
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .widthIn(max = TOP_BOX_MAX_WIDTH)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { sheetTop = it.boundsInRoot().top.roundToInt() },
+            ) {
+                    routeEnds?.let {
+                        RouteCard(
+                            expanded = cardExpanded,
+                            onExpandedChange = { cardExpanded = it },
+                            maxHeight = sheetMaxHeight,
+                            summary = routeSummary,
+                            budgetPercent = budgetPercent,
+                            onBudget = { percent ->
+                                budgetPercent = percent
+                                RoutePrefs.setBudgetPercent(context, percent)
+                            },
+                            gravel = gravel,
+                            onGravel = { g ->
+                                gravel = g
+                                RoutePrefs.setGravel(context, g)
+                            },
+                            onClose = {
+                                routeEnds = null
+                                vias = emptyList()
+                                addingVia = false
+                                arriveBy = null
+                                overlays?.route?.show(null, null, null)
+                            },
+                            onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
+                            onSave = { shownRoute?.let { (r, _) -> savingRoute = r to false } },
+                            viaCount = vias.size,
+                            onAddVia = {
+                                addingVia = true
+                                message = resources.getString(R.string.route_pick_via)
+                            },
+                            onClearVia = {
+                                vias = emptyList()
+                                addingVia = false
+                            },
+                            arriveBy = arriveBy,
+                            arrivalNote = arriveBy?.let { by ->
+                                shownRoute?.let { (r, _) ->
+                                    val zone = ZoneId.systemDefault()
+                                    val a = arrival(routeFoundAt, r.durationS, by)
+                                    if (a.late) {
+                                        stringResource(R.string.route_arrives_late, clockTime(by, zone), clockTime(a.atSec, zone))
+                                    } else {
+                                        stringResource(R.string.route_arrives, clockTime(a.atSec, zone))
+                                    }
+                                }
+                            },
+                            onArriveBy = { arriveBy = it },
+                        )
+                    }
+                    loopStart?.let {
+                        val shown = loops.getOrNull(loopIndex)
+                        LoopCard(
+                            expanded = cardExpanded,
+                            onExpandedChange = { cardExpanded = it },
+                            maxHeight = sheetMaxHeight,
+                            summary = shown?.let { r ->
+                                summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
+                            },
+                            problem = loopProblem,
+                            position = loopIndex,
+                            count = loops.size,
+                            onShuffle = {
+                                cardExpanded = false
+                                loopSeed = nextSeed
+                            },
+                            direction = loopDirection,
+                            onDirection = { loopDirection = it },
+                            onPrevious = {
+                                loopIndex = previousLoop(loopIndex, loops.size)
+                                showLoop(it, loops, loopIndex)
+                            },
+                            onNext = {
+                                loopIndex = nextLoop(loopIndex, loops.size)
+                                showLoop(it, loops, loopIndex)
+                            },
+                            choice = loopChoice,
+                            onChoice = { c ->
+                                loopChoice = c
+                                RoutePrefs.setLoopChoice(context, c)
+                            },
+                            gravel = gravel,
+                            onGravel = { g ->
+                                gravel = g
+                                RoutePrefs.setGravel(context, g)
+                            },
+                            onClose = {
+                                loopStart = null
+                                loopsAhead.clear()
+                                overlays?.route?.show(null, null, null)
+                            },
+                            onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
+                            onSave = { shown?.let { savingRoute = it to true } },
+                        )
+                    }
             }
         }
-        if (!marking) {
+        if (!marking && !planning) {
             DisposableEffect(Unit) { onDispose { buttonsLeft = Int.MAX_VALUE } }
             Column(
                 modifier = Modifier
@@ -1233,7 +1278,7 @@ fun MapScreen() {
         }
         // Quick-tag (PRD R3): one big button, usable with gloves, whenever the
         // map is open. Bottom left, above the map's logo and attribution.
-        if (store is StoreState.Ready && !marking) {
+        if (store is StoreState.Ready && !marking && !planning) {
             DisposableEffect(Unit) { onDispose { tagTop = Int.MAX_VALUE } }
             LargeFloatingActionButton(
                 onClick = { quickTag() },
@@ -1499,6 +1544,9 @@ private const val SAMPLE_INTERVAL_MS = 500L
 
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
+
+/** The planning sheet pulled up covers at most this share of the map. */
+private const val SHEET_MAX_SHARE = 0.6f
 
 /** Room between a fitted route and the panels around it. */
 private val FIT_MARGIN = 24.dp

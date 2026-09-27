@@ -81,6 +81,10 @@ fun shuffleSeed(random: kotlin.random.Random = kotlin.random.Random.Default): UI
  * first after the last. */
 fun nextLoop(index: Int, count: Int): Int = if (count <= 0) 0 else (index + 1).mod(count)
 
+/** The loop shown before [index] of [count]: the previous one, round to
+ * the last from the first. */
+fun previousLoop(index: Int, count: Int): Int = if (count <= 0) 0 else (index - 1).mod(count)
+
 /**
  * One result computed ahead of time for a [key] (the loops the next
  * Shuffle will show), so it is ready when asked for. Holds at most one:
