@@ -375,7 +375,8 @@ fun LoopCard(
  * and next ones, and for loops Shuffle ([onShuffle]) for another set.
  * While they are being found the row keeps the last figures, its buttons
  * off, so the sheet doesn't move; when none were found ([failed]) Shuffle
- * still works. Nothing to choose from and no Shuffle: no row.
+ * still works. With Shuffle the count always shows, 1 / 1 too, so the
+ * button never moves. Nothing to choose from and no Shuffle: no row.
  */
 @Composable
 private fun ChoiceSwitcher(
@@ -404,21 +405,26 @@ private fun ChoiceSwitcher(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        if (shownCount > 1 || failed) {
+        if (shownCount > 1 || failed || onShuffle != null) {
+            val switchable = found && shownCount > 1
             Row(
                 Modifier
                     .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     .alpha(if (found) 1f else 0.5f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onPrevious, enabled = found) {
+                IconButton(onClick = onPrevious, enabled = switchable) {
                     Icon(painterResource(R.drawable.ic_chevron_left), previousDescription)
                 }
                 Text(
-                    stringResource(R.string.loop_count, shownPosition + 1, shownCount),
+                    stringResource(
+                        R.string.loop_count,
+                        if (shownCount == 0) 0 else shownPosition + 1,
+                        shownCount,
+                    ),
                     style = MaterialTheme.typography.titleSmall,
                 )
-                IconButton(onClick = onNext, enabled = found) {
+                IconButton(onClick = onNext, enabled = switchable) {
                     Icon(painterResource(R.drawable.ic_chevron_right), nextDescription)
                 }
             }
