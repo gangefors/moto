@@ -11,6 +11,7 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -18,39 +19,84 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
+import org.maplibre.geojson.MultiLineString
+import org.maplibre.geojson.Polygon
 import org.maplibre.geojson.Point
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.RegionInfo
 
 /**
- * Draws the region's bounding box as a faint dashed outline, so it is clear
- * where the loaded roads end; moves it when another region takes over.
+ * Shows where routing works: a light grey veil over everything outside
+ * the area the region's roads cover, with a thin line along its edge
+ * ([coverage], from the core). A region file without that outline (format
+ * 1.0) shows its bounding box as a dashed line instead. Updated in place
+ * when another region takes over; drawn under the routes and sections.
  */
-fun showRegionOutline(style: Style, info: RegionInfo) {
-    val (sw, ne) = info.southWest to info.northEast
-    val ring = LineString.fromLngLats(
-        listOf(
-            Point.fromLngLat(sw.lon, sw.lat),
-            Point.fromLngLat(ne.lon, sw.lat),
-            Point.fromLngLat(ne.lon, ne.lat),
-            Point.fromLngLat(sw.lon, ne.lat),
-            Point.fromLngLat(sw.lon, sw.lat),
-        ),
-    )
-    style.getSourceAs<GeoJsonSource>(OUTLINE_SOURCE)?.let {
-        it.setGeoJson(Feature.fromGeometry(ring))
+fun showRegionOutline(style: Style, info: RegionInfo, coverage: List<List<LatLon>>) {
+    val rings = coverage.filter { it.size >= 4 }.map { ring -> ring.map { Point.fromLngLat(it.lon, it.lat) } }
+    val edge: Feature
+    val veil: Feature?
+    if (rings.isEmpty()) {
+        val (sw, ne) = info.southWest to info.northEast
+        edge = Feature.fromGeometry(
+            LineString.fromLngLats(
+                listOf(
+                    Point.fromLngLat(sw.lon, sw.lat),
+                    Point.fromLngLat(ne.lon, sw.lat),
+                    Point.fromLngLat(ne.lon, ne.lat),
+                    Point.fromLngLat(sw.lon, ne.lat),
+                    Point.fromLngLat(sw.lon, sw.lat),
+                ),
+            ),
+        )
+        veil = null
+    } else {
+        edge = Feature.fromGeometry(MultiLineString.fromLngLats(rings))
+        // The whole world with a hole for each covered area.
+        veil = Feature.fromGeometry(Polygon.fromLngLats(listOf(WORLD) + rings))
+    }
+    val veilSource = style.getSourceAs<GeoJsonSource>(VEIL_SOURCE)
+    val edgeSource = style.getSourceAs<GeoJsonSource>(OUTLINE_SOURCE)
+    if (veilSource != null && edgeSource != null) {
+        veilSource.setGeoJson(FeatureCollection.fromFeatures(listOfNotNull(veil)))
+        edgeSource.setGeoJson(edge)
+        style.getLayer(OUTLINE_LAYER)?.setProperties(
+            PropertyFactory.lineDasharray(if (veil == null) DASHES else SOLID),
+        )
         return
     }
-    style.addSource(GeoJsonSource(OUTLINE_SOURCE, Feature.fromGeometry(ring)))
-    style.addLayer(
-        LineLayer(OUTLINE_LAYER, OUTLINE_SOURCE).withProperties(
-            PropertyFactory.lineColor("#5f6368"),
-            PropertyFactory.lineOpacity(0.7f),
-            PropertyFactory.lineWidth(1.5f),
-            PropertyFactory.lineDasharray(arrayOf(4f, 3f)),
-        ),
+    style.addSource(GeoJsonSource(VEIL_SOURCE, FeatureCollection.fromFeatures(listOfNotNull(veil))))
+    style.addSource(GeoJsonSource(OUTLINE_SOURCE, edge))
+    val veilLayer = FillLayer(VEIL_LAYER, VEIL_SOURCE).withProperties(
+        PropertyFactory.fillColor("#5f6368"),
+        PropertyFactory.fillOpacity(0.28f),
     )
+    val edgeLayer = LineLayer(OUTLINE_LAYER, OUTLINE_SOURCE).withProperties(
+        PropertyFactory.lineColor("#5f6368"),
+        PropertyFactory.lineOpacity(0.7f),
+        PropertyFactory.lineWidth(1.5f),
+        PropertyFactory.lineDasharray(if (veil == null) DASHES else SOLID),
+    )
+    // Under the app's own lines (routes, sections), over the base map.
+    val firstOwn = style.layers.firstOrNull { it.id.startsWith("moto-") }?.id
+    if (firstOwn != null) {
+        style.addLayerBelow(veilLayer, firstOwn)
+        style.addLayerBelow(edgeLayer, firstOwn)
+    } else {
+        style.addLayer(veilLayer)
+        style.addLayer(edgeLayer)
+    }
 }
+
+private val WORLD = listOf(
+    Point.fromLngLat(-180.0, -85.0),
+    Point.fromLngLat(180.0, -85.0),
+    Point.fromLngLat(180.0, 85.0),
+    Point.fromLngLat(-180.0, 85.0),
+    Point.fromLngLat(-180.0, -85.0),
+)
+private val DASHES = arrayOf(4f, 3f)
+private val SOLID = arrayOf(1f, 0f)
 
 /**
  * Draws a route from the Rust core with its start and end pins. The route
@@ -267,8 +313,10 @@ class RouteOverlay(private val style: Style, private val density: Float) {
     }
 }
 
-private const val OUTLINE_SOURCE = "moto-region-outline"
-private const val OUTLINE_LAYER = "moto-region-outline"
+private const val OUTLINE_SOURCE = "region-outline"
+private const val OUTLINE_LAYER = "region-outline"
+private const val VEIL_SOURCE = "region-veil"
+private const val VEIL_LAYER = "region-veil"
 
 /**
  * Draws the ride being recorded as it grows. The line comes from the

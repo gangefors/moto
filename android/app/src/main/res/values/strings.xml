@@ -28,7 +28,7 @@
     <string name="region_network">network problem (%1$s); try again to go on where it stopped</string>
     <string name="region_hint">Regions are downloaded from the app’s GitHub page and checked before use. Map data © OpenStreetMap contributors (ODbL).</string>
     <string name="region_failed">Region failed to load: %1$s</string>
-    <string name="region_outside">Outside the region (the dashed box)</string>
+    <string name="region_outside">Outside the region: routing only works where the map isn’t greyed out</string>
     <string name="map_hint">Tap a road to see what it is, or a section to open it. Long-press twice for a route.</string>
     <string name="road_close">Close road info</string>
     <string name="road_motorway">Motorway</string>
