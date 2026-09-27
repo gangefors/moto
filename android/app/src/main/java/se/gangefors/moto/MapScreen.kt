@@ -582,7 +582,6 @@ fun MapScreen() {
     // The routes to choose from (the fastest last) and which is shown.
     var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
     var routeIndex by remember { mutableIntStateOf(0) }
-    var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
     LaunchedEffect(overlays, sections, showUnmatched, sectionGravel, gravel) {
         val hidden = hiddenForGravel(sectionGravel, gravel)
@@ -687,7 +686,7 @@ fun MapScreen() {
         loopIndex = 0
         o.route.show(start, null, null)
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), budgetPercent, gravel)
+        val opts = routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel)
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         val request = LoopRequest(start, choice, opts, favs, shape)
@@ -737,7 +736,7 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, vias, budgetPercent, arriveBy, gravel, favourites, overlays) {
+    LaunchedEffect(routeEnds, vias, arriveBy, gravel, favourites, overlays) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -751,7 +750,7 @@ fun MapScreen() {
         val opts = if (by != null) {
             arriveByOptions(defaultRouteOptions(), now, by, gravel)
         } else {
-            routeOptions(defaultRouteOptions(), budgetPercent, gravel)
+            routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel)
         }
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
@@ -1067,7 +1066,7 @@ fun MapScreen() {
                 SavedRouteCard(
                     s,
                     onShare = {
-                        shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), budgetPercent, gravel))
+                        shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel))
                     },
                     onClose = {
                         shownSaved = null
@@ -1107,11 +1106,6 @@ fun MapScreen() {
                             onExpandedChange = { cardExpanded = it },
                             maxHeight = sheetMaxHeight,
                             summary = routeSummary,
-                            budgetPercent = budgetPercent,
-                            onBudget = { percent ->
-                                budgetPercent = percent
-                                RoutePrefs.setBudgetPercent(context, percent)
-                            },
                             gravel = gravel,
                             onGravel = { g ->
                                 gravel = g

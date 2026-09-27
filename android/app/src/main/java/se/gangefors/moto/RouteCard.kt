@@ -148,16 +148,14 @@ private val SHEET_DRAG = 24.dp
 
 /**
  * The route between the two long-pressed points: its figures (or that it
- * is being found), Save, Share and the cross; at rest a line with the
- * extra time or arrival, via points and gravel; pulled up, the choices:
- * via points, extra time or a time to arrive by, and gravel. Any choice
- * finds the route again.
+ * is being found), Save, Share and the cross, and which of the routes to
+ * choose from it is; at rest a line with the arrival, via points and
+ * gravel; pulled up, the choices: via points, a time to arrive by, and
+ * gravel. Any choice finds the routes again.
  */
 @Composable
 fun RouteCard(
     summary: RouteSummary?,
-    budgetPercent: Int,
-    onBudget: (Int) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
     onClose: () -> Unit,
@@ -204,13 +202,7 @@ fun RouteCard(
             )
             if (!expanded) {
                 val parts = buildList {
-                    add(
-                        arrivalNote ?: if (budgetPercent == 0) {
-                            stringResource(R.string.route_budget_fastest)
-                        } else {
-                            stringResource(R.string.route_budget_summary, stringResource(R.string.route_budget_extra, budgetPercent))
-                        },
-                    )
+                    arrivalNote?.let { add(it) }
                     if (viaCount > 0) add(pluralStringResource(R.plurals.route_via_count, viaCount, viaCount))
                     add(gravelSummary(gravel))
                 }
@@ -219,18 +211,16 @@ fun RouteCard(
         },
         details = {
             RouteCardDetails(
-                budgetPercent, onBudget, gravel, onGravel,
+                gravel, onGravel,
                 viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
             )
         },
     )
 }
 
-/** The route's choices: via points, extra time or arrival, and gravel. */
+/** The route's choices: via points, a time to arrive by, and gravel. */
 @Composable
 private fun RouteCardDetails(
-    budgetPercent: Int,
-    onBudget: (Int) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
     viaCount: Int,
@@ -259,23 +249,10 @@ private fun RouteCardDetails(
                 }
             }
         }
-        // Extra time as a slider (0 = fastest); a set arrival replaces it.
-        StepSlider(
-            title = stringResource(R.string.route_budget),
-            steps = BUDGET_CHOICES,
-            value = budgetPercent,
-            label = { percent ->
-                if (percent == 0) {
-                    stringResource(R.string.route_budget_fastest)
-                } else {
-                    stringResource(R.string.route_budget_extra, percent)
-                }
-            },
-            onCommit = { percent ->
-                onArriveBy(null)
-                onBudget(percent)
-            },
-            dimmed = arriveBy != null,
+        // A time to arrive by: the routes then spend the time until then.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             FilterChip(
                 selected = arriveBy != null,
@@ -287,6 +264,9 @@ private fun RouteCardDetails(
                     )
                 },
             )
+            if (arriveBy != null) {
+                TextButton(onClick = { onArriveBy(null) }) { OneLine(stringResource(R.string.route_arrive_clear)) }
+            }
         }
         GravelChoice(gravel, onGravel)
         if (pickingTime) {

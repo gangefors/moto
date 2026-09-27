@@ -13,22 +13,10 @@ import se.gangefors.moto.core.Gravel
  */
 object RoutePrefs {
     private const val FILE = "route"
-    private const val BUDGET = "budget_percent"
     /** The old Allow gravel switch (a boolean), read once as a fallback. */
     private const val ALLOW_GRAVEL = "allow_gravel"
     private const val GRAVEL = "gravel"
     private const val LOOP = "loop_length"
-
-    /** The extra-time budget in percent, or the default. */
-    fun budgetPercent(context: Context): Int {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        // A value of another type throws; it counts as unset.
-        return budgetPercentOf(runCatching { prefs.getInt(BUDGET, DEFAULT_BUDGET_PERCENT) }.getOrNull())
-    }
-
-    fun setBudgetPercent(context: Context, percent: Int) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putInt(BUDGET, percent) }
-    }
 
     /** What routes do with gravel (unpaved) roads; avoided by default.
      * A value of another type throws; it counts as unset. */
