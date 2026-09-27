@@ -70,6 +70,8 @@ impl TrackPoint {
 pub struct Track {
     pub id: i64,
     pub rider_id: String,
+    /// The rider's name for it; `None` until renamed.
+    pub name: Option<String>,
     /// Seconds since the Unix epoch.
     pub started_at: i64,
     /// `None` while recording, or if the app died before the ride ended.

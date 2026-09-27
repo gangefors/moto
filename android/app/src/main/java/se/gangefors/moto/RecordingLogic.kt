@@ -202,6 +202,10 @@ fun rideTitle(startedAtSec: Long, zone: java.time.ZoneId): String =
     java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT))
 
+/** A ride's name: the rider's own, else its start in local time. */
+fun rideName(name: String?, startedAtSec: Long, zone: java.time.ZoneId): String =
+    name?.takeIf { it.isNotBlank() } ?: rideTitle(startedAtSec, zone)
+
 /** Suggested export file name: "moto-ride-2026-09-24-0730.gpx". */
 fun rideFileName(startedAtSec: Long, zone: java.time.ZoneId): String =
     "moto-ride-" + java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
