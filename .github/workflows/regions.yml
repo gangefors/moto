@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Builds the downloadable routing regions (ADR-0008) and publishes them to
+# the `regions` release: all of Sweden from Geofabrik's extract, built by
+# this commit's moto-regionbuild, gzip-compressed, with the manifest the app
+# reads. The builder writes the manifest only after the core has installed
+# every region back from its compressed file. Weekly for fresh map data, and
+# by hand (for example after a region format change, before an app that
+# reads the new format is installed).
+#
+# Only the files of the current region format are replaced; files of older
+# formats stay for older apps until removed by hand. No caches: the files
+# published are built from scratch in this job.
+name: Regions
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regions
+  cancel-in-progress: false
+
+env:
+  RUST_VERSION: "1.98.1"
+
+jobs:
+  publish:
+    name: Build and publish regions
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # to publish the regions release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+
+      - name: Build moto-regionbuild
+        working-directory: core
+        run: cargo build --release --locked -p moto-regionbuild
+
+      - name: Build Sweden
+        run: |
+          out="$RUNNER_TEMP/regions"
+          mkdir -p "$out"
+          pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
+          curl -sSfL --proto '=https' --retry 3 -o "$pbf" https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+          core/target/release/moto-regionbuild "$pbf" "$out/sweden.region" --bbox 55.0,10.5,69.2,24.3
+          rm "$pbf"
+          # -n: no file name or time in the header, so the same region
+          # always compresses to the same bytes.
+          gzip -9 -n -k "$out/sweden.region"
+
+      - name: Write and check the manifest
+        run: |
+          out="$RUNNER_TEMP/regions"
+          core/target/release/moto-regionbuild --manifest "$out/manifest.json" \
+            sweden Sweden "$out/sweden.region" "$out/sweden.region.gz"
+          major=$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["format_major"]))' "$out/manifest.json")
+          mkdir -p "$out/publish"
+          mv "$out/sweden.region.gz" "$out/publish/sweden-v$major.region.gz"
+          mv "$out/manifest.json" "$out/publish/regions-v$major.json"
+          ls -l "$out/publish"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out="$RUNNER_TEMP/regions/publish"
+          if ! gh release view regions --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create regions --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --latest=false \
+              --title "Routing regions" \
+              --notes "Routing regions for the app (ADR-0008), rebuilt weekly from OpenStreetMap data. Map data © OpenStreetMap contributors, available under the Open Database License 1.0 (https://opendatacommons.org/licenses/odbl/1-0/); the region files are built with moto-regionbuild from this repository."
+          fi
+          # The region files first, then the manifest that lists them.
+          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/*.region.gz
+          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/regions-v*.json
