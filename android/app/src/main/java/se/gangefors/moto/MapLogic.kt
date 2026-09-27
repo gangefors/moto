@@ -68,7 +68,14 @@ data class RouteSummary(
     val extraMinutes: Int = 0,
     val curvyPercent: Int = 0,
     val gravelKm: Double = 0.0,
+    /** The fastest of several routes to choose from (the dull option). */
+    val fastest: Boolean = false,
 )
+
+/** Which of [count] route choices is the fastest: the last, when there is
+ * more than one to choose from (the core puts it last); `null` for a lone
+ * route. */
+fun fastestChoice(count: Int): Int? = if (count > 1) count - 1 else null
 
 fun summarize(
     distanceM: Double,

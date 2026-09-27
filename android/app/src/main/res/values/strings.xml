@@ -58,6 +58,9 @@
     <string name="loop_direction_west">W</string>
     <string name="loop_length">Length</string>
     <string name="loop_previous">Previous loop</string>
+    <string name="route_previous">Previous route</string>
+    <string name="route_next">Next route</string>
+    <string name="route_fastest">Fastest</string>
     <string name="loop_count">%1$d / %2$d</string>
     <string name="loop_heading_any">Any direction</string>
     <string name="loop_heading_north">North</string>
