@@ -171,8 +171,10 @@ impl Engine {
     /// Routes to choose from between `from` and `to`, like a nav app
     /// offers: up to three worth riding (the first as [`Self::route_with`]
     /// gives it), each sharing less than half its roads with the others,
-    /// then the fastest, always last. Through `via` points there is one
-    /// route, as [`Self::route_via`] gives it.
+    /// then the fastest, always last. Through `via` points each leg
+    /// between two stops has its own choices: choice `k` rides each leg's
+    /// `k`-th (a leg with fewer rides its first), the fastest rides every
+    /// leg's fastest, and choices that come out the same are offered once.
     pub fn route_choices(
         &self,
         from: LatLon,
@@ -181,23 +183,63 @@ impl Engine {
         opts: &RouteOptions,
         favourites: &Favourites,
     ) -> Result<Vec<Route>, CoreError> {
-        if !via.is_empty() {
-            return Ok(vec![self.route_via(from, via, to, opts, favourites)?]);
+        if via.len() > MAX_VIA_POINTS {
+            return Err(CoreError::InvalidArgument(format!(
+                "at most {MAX_VIA_POINTS} via points, got {}",
+                via.len()
+            )));
         }
-        from.validate()?;
-        to.validate()?;
         opts.validate()?;
         favourites.check(self)?;
-        let start = self.snap(from)?;
-        let end = self.snap(to)?;
-        crate::route::route_choices(
-            &self.region,
-            &start,
-            &end,
-            opts,
-            favourites,
-            self.max_speed_kmh,
-        )
+        let stops: Vec<LatLon> = std::iter::once(from)
+            .chain(via.iter().copied())
+            .chain(std::iter::once(to))
+            .collect();
+        let mut legs: Vec<Vec<Route>> = Vec::with_capacity(stops.len() - 1);
+        for w in stops.windows(2) {
+            w[0].validate()?;
+            w[1].validate()?;
+            let start = self.snap(w[0])?;
+            let end = self.snap(w[1])?;
+            let choices = crate::route::route_choices(
+                &self.region,
+                &start,
+                &end,
+                opts,
+                favourites,
+                self.max_speed_kmh,
+            )?;
+            legs.push(choices);
+        }
+        if let [only] = legs.as_mut_slice() {
+            return Ok(std::mem::take(only));
+        }
+        // Each leg's choices worth riding (all but the last, its fastest).
+        let fun = |leg: &[Route]| leg.len().saturating_sub(1);
+        let most = legs.iter().map(|l| fun(l)).max().unwrap_or(0);
+        let mut routes: Vec<Route> = Vec::new();
+        for k in 0..most {
+            let joined = crate::route::join(
+                legs.iter()
+                    .map(|l| {
+                        // Its k-th choice, else its first, else its fastest.
+                        let i = match fun(l) {
+                            0 => l.len() - 1,
+                            f if k < f => k,
+                            _ => 0,
+                        };
+                        l[i].clone()
+                    })
+                    .collect(),
+            );
+            if routes.iter().all(|r| r.geometry != joined.geometry) {
+                routes.push(joined);
+            }
+        }
+        let fastest = crate::route::join(legs.iter().filter_map(|l| l.last().cloned()).collect());
+        routes.retain(|r| r.geometry != fastest.geometry);
+        routes.push(fastest);
+        Ok(routes)
     }
 
     /// Proposes a section along the road between two points the rider picked
