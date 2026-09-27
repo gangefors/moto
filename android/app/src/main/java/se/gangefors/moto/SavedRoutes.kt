@@ -141,9 +141,11 @@ fun SavedRoutesList(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { onShow(r) }) { OneLine(stringResource(R.string.rides_show)) }
-                    TextButton(onClick = { renaming = r }) { OneLine(stringResource(R.string.saved_route_rename)) }
+                    IconButton(onClick = { renaming = r }) {
+                        Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.saved_route_rename))
+                    }
                     DeleteButton(
                         confirming = confirmDelete == r.id,
                         onArm = { confirmDelete = r.id },
