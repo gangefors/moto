@@ -48,6 +48,8 @@ import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -1022,15 +1024,20 @@ fun MapScreen() {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     message?.let { Text(it) }
                     if (via != null) {
-                        // A tap anywhere else on the map lets it go.
-                        Text(stringResource(R.string.route_via_selected, via + 1))
-                        OutlinedButton(
-                            onClick = {
-                                selectedVia = null
-                                vias = removeVia(vias, via)
-                            },
-                            modifier = Modifier.padding(top = 4.dp),
-                        ) { OneLine(stringResource(R.string.route_via_remove)) }
+                        // The bin removes it; a tap anywhere else on the map
+                        // lets it go.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.route_via_selected, via + 1), Modifier.weight(1f))
+                            IconButton(
+                                onClick = {
+                                    selectedVia = null
+                                    vias = removeVia(vias, via)
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
+                            ) {
+                                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.route_via_remove))
+                            }
+                        }
                     }
                     if (offerLoop) {
                         OutlinedButton(

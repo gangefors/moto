@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalDensity
@@ -245,7 +246,12 @@ private fun RouteCardDetails(
                 OneLine(stringResource(R.string.route_add_via))
             }
             if (viaCount > 0) {
-                TextButton(onClick = onClearVia) {
+                TextButton(
+                    onClick = onClearVia,
+                    colors = ButtonDefaults.textButtonColors(contentColor = DELETE_COLOR),
+                ) {
+                    Icon(painterResource(R.drawable.ic_delete), contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
                     OneLine(pluralStringResource(R.plurals.route_clear_via, viaCount, viaCount))
                 }
             }
@@ -266,7 +272,9 @@ private fun RouteCardDetails(
                 },
             )
             if (arriveBy != null) {
-                TextButton(onClick = { onArriveBy(null) }) { OneLine(stringResource(R.string.route_arrive_clear)) }
+                IconButton(onClick = { onArriveBy(null) }) {
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.route_arrive_clear))
+                }
             }
         }
         GravelChoice(gravel, onGravel)
