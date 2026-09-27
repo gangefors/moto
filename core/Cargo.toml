@@ -16,6 +16,8 @@ memmap2 = "0.9.11"
 moto-core = { path = "moto-core" }
 osmpbf = "0.3.8"
 rayon = "1.12.0"
+# Region downloads (ADR-0008): SHA-256 of the file before it is unpacked.
+sha2 = { version = "0.11.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 # SQLite compiled into the core (ADR-0006); no extension loading.

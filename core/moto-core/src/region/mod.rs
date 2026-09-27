@@ -11,6 +11,7 @@
 
 pub mod format;
 mod grid;
+pub mod install;
 mod writer;
 
 use std::fs::File;
