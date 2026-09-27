@@ -97,18 +97,14 @@ fun summarize(
 private fun percent(share: Double): Int = Math.round(share.coerceIn(0.0, 1.0) * 100.0).toInt()
 
 /**
- * Extra time over the fastest route the rider can give a route, in
- * percent; the favourites pull as hard as it allows. 0 is the fastest
- * route.
+ * How much longer than the fastest route the routes to choose from may
+ * take, in percent (Stefan: no slider; the rider picks among the
+ * choices). Measured on 175 town pairs (2026-09-27): fun choices per
+ * trip +40 % 1.9, +60 % 2.4, +80 % 2.6 (three for 132 of them), +100 %
+ * 2.7; beyond +80 % hardly more, and the choices take a third longer
+ * than the fastest route on average.
  */
-val BUDGET_CHOICES: List<Int> = (0..100 step 10).toList()
-
-/** The core's default budget (40 % extra). */
-const val DEFAULT_BUDGET_PERCENT = 40
-
-/** A stored budget, or the default when it isn't one of the choices
- * (preferences are read back as untrusted input). */
-fun budgetPercentOf(stored: Int?): Int = stored?.takeIf { it in BUDGET_CHOICES } ?: DEFAULT_BUDGET_PERCENT
+const val ROUTE_EXTRA_PERCENT = 80
 
 /** The gravel choices, in the order they are offered. */
 val GRAVEL_CHOICES: List<Gravel> = listOf(Gravel.AVOID, Gravel.ALLOW, Gravel.PREFER)
