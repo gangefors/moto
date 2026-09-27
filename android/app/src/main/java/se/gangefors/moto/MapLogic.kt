@@ -10,10 +10,11 @@ import se.gangefors.moto.core.RouteOptions
 import se.gangefors.moto.core.TimeBudget
 
 /**
- * Picking a route with long-presses: the first sets the start, the second
- * the end (completing the pick), the next starts a new pick. A round trip
- * takes the start instead of waiting for an end. Pure logic,
- * independent of the map, so it can be unit tested.
+ * Picking a route with long-presses: the first sets the start, every one
+ * after it sets the end, moving it (the rider: the start stays until the
+ * route is closed, which [reset]s the pick). A round trip takes the start
+ * instead of waiting for an end. Pure logic, independent of the map, so
+ * it can be unit tested.
  */
 class RoutePicker<P> {
     sealed interface Step<P> {
@@ -30,7 +31,6 @@ class RoutePicker<P> {
             start = point
             Step.StartSet(point)
         } else {
-            start = null
             Step.Complete(s, point)
         }
     }
