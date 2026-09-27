@@ -46,6 +46,11 @@ class MapFitTest {
         val pad = fitPadding(Panels(720, 1000, left = 0, top = 700, right = 0, bottom = 200), margin = 20)
         assertEquals(650.0, (pad.top + pad.bottom).toDouble(), 1.0)
         assertTrue(pad.top > pad.bottom)
+        // A tall sheet with room for the panels but not the margins: the
+        // margins go, the route stays clear of the sheet.
+        val tall = fitPadding(Panels(1080, 2000, left = 0, top = 110, right = 0, bottom = 1160), margin = 60)
+        assertTrue(tall.bottom >= 1160)
+        assertEquals(1300.0, (tall.top + tall.bottom).toDouble(), 1.0)
         // Nonsense sizes never give negative padding.
         val odd = fitPadding(Panels(0, 0, left = -5, top = -5, right = 10, bottom = 10), margin = 0)
         assertEquals(FitPadding(0, 0, 10, 10), odd)
