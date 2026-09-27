@@ -136,7 +136,7 @@ fun PlanSheet(
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp))
+                    HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp))
                     details()
                 }
             }
