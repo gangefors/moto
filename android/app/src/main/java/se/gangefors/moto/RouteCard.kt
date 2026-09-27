@@ -183,7 +183,8 @@ fun RouteCard(
         modifier = modifier,
         header = {
             SheetTop(
-                figures = { m -> RouteFigures(summary, stringResource(R.string.route_computing), m) },
+                summary = summary,
+                computing = stringResource(R.string.route_computing),
                 found = summary != null,
                 onSave = onSave,
                 onShare = onShare,
@@ -322,13 +323,9 @@ fun LoopCard(
         modifier = modifier,
         header = {
             SheetTop(
-                figures = { m ->
-                    if (problem != null) {
-                        Problem(problem, m)
-                    } else {
-                        RouteFigures(summary, stringResource(R.string.loop_computing), m)
-                    }
-                },
+                summary = summary,
+                computing = stringResource(R.string.loop_computing),
+                problem = problem,
                 found = found,
                 onSave = onSave,
                 onShare = onShare,
@@ -485,21 +482,38 @@ private fun LoopCardDetails(
 }
 
 /**
- * The sheet's top line: the figures ([figures] gets the modifier that
- * gives it the room left), then Save, Share (both only once something is
- * found) and the cross, as icons in every state of the sheet.
+ * The sheet's top: the distance and time (or that it is being found, or
+ * [problem]: why nothing was), then Save, Share (both only once something
+ * is found) and the cross, as icons in every state of the sheet; below,
+ * across the whole width, what the route is worth (or the problem). While
+ * a new route is being found the last figures stay, dimmed, so the sheet
+ * keeps its size; [computing] shows only before the first one.
  */
 @Composable
 private fun SheetTop(
-    figures: @Composable (Modifier) -> Unit,
+    summary: RouteSummary?,
+    computing: String,
     found: Boolean,
     onSave: () -> Unit,
     onShare: () -> Unit,
     onClose: () -> Unit,
     closeDescription: String,
+    problem: String? = null,
 ) {
-    Row(verticalAlignment = Alignment.Top) {
-        figures(Modifier.weight(1f))
+    val last = remember { mutableStateOf(summary) }
+    SideEffect { if (summary != null) last.value = summary }
+    val shown = summary ?: last.value
+    val dim = if (summary == null && problem == null) Modifier.alpha(0.5f) else Modifier
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            when {
+                problem != null -> stringResource(R.string.loop_none_title)
+                shown == null -> computing
+                else -> stringResource(R.string.route_summary, shown.km, shown.minutes)
+            },
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f).then(dim),
+        )
         IconButton(onClick = onSave, enabled = found) {
             Icon(painterResource(R.drawable.ic_bookmark), stringResource(R.string.route_save))
         }
@@ -510,6 +524,25 @@ private fun SheetTop(
             Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
     }
+    val details = when {
+        problem != null -> problem
+        shown == null -> ""
+        else -> buildList {
+            if (shown.fastest) add(stringResource(R.string.route_fastest))
+            if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
+            if (shown.favouritePercent > 0) {
+                add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
+            }
+            if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
+            if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
+        }.joinToString(" · ")
+    }
+    Text(
+        details,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(end = 8.dp).then(dim),
+    )
 }
 
 /** The choices summed up in one line; tapping it pulls the sheet up. */
@@ -551,60 +584,6 @@ private fun gravelSummary(g: Gravel): String = stringResource(
         Gravel.PREFER -> R.string.gravel_summary_prefer
     },
 )
-
-/** Why nothing was found, in place of the figures and as tall as them. */
-@Composable
-private fun Problem(problem: String, modifier: Modifier = Modifier) {
-    Column(modifier.padding(top = 8.dp)) {
-        Text(stringResource(R.string.loop_none_title), style = MaterialTheme.typography.titleMedium)
-        Text(
-            problem,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            minLines = 2,
-        )
-    }
-}
-
-/**
- * A route's figures: distance and time, then what it is worth. While a
- * new route is being found, the last figures stay, dimmed, so the card
- * keeps its size; [computing] shows only before the first one. The details
- * always take (at least) two lines, so nothing below moves when a value
- * changes.
- */
-@Composable
-private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Modifier = Modifier) {
-    val last = remember { mutableStateOf(summary) }
-    SideEffect { if (summary != null) last.value = summary }
-    val shown = summary ?: last.value
-    val dim = if (summary == null) Modifier.alpha(0.5f) else Modifier
-    Column(modifier.padding(top = 8.dp).then(dim)) {
-        Text(
-            if (shown == null) computing else stringResource(R.string.route_summary, shown.km, shown.minutes),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        val details = if (shown == null) {
-            emptyList()
-        } else {
-            buildList {
-                if (shown.fastest) add(stringResource(R.string.route_fastest))
-                if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
-                if (shown.favouritePercent > 0) {
-                    add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
-                }
-                if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
-                if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
-            }
-        }
-        Text(
-            details.joinToString(" · "),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            minLines = 2,
-        )
-    }
-}
 
 /** The gravel choice (the same setting as in My data: changing it here
  * routes again, to see what gravel roads change). */
