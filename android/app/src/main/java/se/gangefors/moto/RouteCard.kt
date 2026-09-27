@@ -391,15 +391,20 @@ private fun ChoiceSwitcher(
 ) {
     val last = remember { mutableStateOf(position to count) }
     SideEffect { if (found) last.value = position to count }
-    val (shownPosition, shownCount) = if (found) position to count else last.value
-    if (shownCount <= 1 && onShuffle == null) return
+    // None found: 0 / 0, its buttons off.
+    val (shownPosition, shownCount) = when {
+        found -> position to count
+        failed -> -1 to 0
+        else -> last.value
+    }
+    if (shownCount <= 1 && !failed && onShuffle == null) return
     FlowRow(
         modifier = Modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        if (shownCount > 1) {
+        if (shownCount > 1 || failed) {
             Row(
                 Modifier
                     .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
