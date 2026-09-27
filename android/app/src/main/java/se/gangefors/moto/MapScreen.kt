@@ -874,8 +874,12 @@ fun MapScreen() {
                     startPicked = null
                     o.route.show(step.start, step.end, null)
                     message = null
-                    vias = emptyList()
-                    arriveBy = null
+                    // A new route, or the end moved: via points and an
+                    // arrival time stay only for the same start.
+                    if (routeEnds?.first != step.start) {
+                        vias = emptyList()
+                        arriveBy = null
+                    }
                     routeEnds = step.start to step.end
                 }
             }
@@ -1115,6 +1119,7 @@ fun MapScreen() {
                             },
                             onClose = {
                                 routeEnds = null
+                                picker.reset()
                                 vias = emptyList()
                                 addingVia = false
                                 arriveBy = null

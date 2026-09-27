@@ -19,12 +19,16 @@ class MapLogicTest {
     }
 
     @Test
-    fun secondLongPressCompletesTheRouteAndThirdStartsOver() {
+    fun laterLongPressesMoveTheEnd() {
         val picker = RoutePicker<String>()
         picker.onLongPress("a")
         assertEquals(RoutePicker.Step.Complete("a", "b"), picker.onLongPress("b"))
-        assertNull(picker.start)
-        assertEquals(RoutePicker.Step.StartSet("c"), picker.onLongPress("c"))
+        assertEquals("a", picker.start)
+        assertEquals(RoutePicker.Step.Complete("a", "c"), picker.onLongPress("c"))
+        assertEquals(RoutePicker.Step.Complete("a", "d"), picker.onLongPress("d"))
+        // Closing the route starts over.
+        picker.reset()
+        assertEquals(RoutePicker.Step.StartSet("e"), picker.onLongPress("e"))
     }
 
     @Test
