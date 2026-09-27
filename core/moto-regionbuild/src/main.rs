@@ -18,6 +18,7 @@ mod derive;
 mod golden;
 mod graph;
 mod hilbert;
+mod manifest;
 mod pbf;
 mod ridecheck;
 mod tags;
@@ -38,6 +39,7 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
        moto-regionbuild --match <file.region> <ride.gpx> [--geojson <out.geojson>]
        moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
        moto-regionbuild --refresh <in.region> <out.region>
+       moto-regionbuild --manifest <out.json> (<id> <name> <file.region> <file.region.gz>)...
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
@@ -48,7 +50,10 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
   --golden run the golden routes (core/moto-core/tests/golden/*.json) and
            check their expectations; --json also writes the figures
   --refresh derive curvature and built-up areas afresh for an existing
-           region file, without the extract (to try a change to them)";
+           region file, without the extract (to try a change to them)
+  --manifest write the manifest of downloadable regions (ADR-0008) for
+           their gzip-compressed files, after checking that the core
+           installs each one back to its region file";
 
 /// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
 /// half of Halland, southern Småland and western Blekinge, from Trelleborg
@@ -90,6 +95,13 @@ fn main() -> ExitCode {
         [flag, region, dir, out_flag, out] if flag == "--golden" && out_flag == "--json" => {
             golden::run(Path::new(region), Path::new(dir), Some(Path::new(out)))
         }
+        [flag, out, rest @ ..] if flag == "--manifest" => manifest::entries(rest).and_then(|e| {
+            let scratch =
+                std::env::temp_dir().join(format!("moto-manifest-{}", std::process::id()));
+            let r = manifest::run(Path::new(out), &e, &scratch);
+            let _ = std::fs::remove_dir_all(&scratch);
+            r
+        }),
         [flag, input, output] if flag == "--refresh" => {
             refresh(Path::new(input), Path::new(output))
         }
