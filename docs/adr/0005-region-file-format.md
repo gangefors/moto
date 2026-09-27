@@ -54,7 +54,7 @@ A single **little-endian binary file of aligned, typed sections**, memory-mapped
 
 **Distribution**
 
-- The download or bundled asset is zstd-compressed; the app decompresses it once on install into app storage, because a memory map needs the raw file.
+- The download is compressed (gzip, not zstd as first planned: gzip is already in the core in pure Rust; see ADR-0008); the app decompresses it once on install into app storage, because a memory map needs the raw file.
 
 ## Options Considered
 
