@@ -9,6 +9,7 @@
 //! checksums are verified separately by [`verify_file`], once, when a file
 //! is installed.
 
+mod coverage;
 pub mod format;
 mod grid;
 pub mod install;
@@ -67,6 +68,8 @@ struct Sections {
     grid_cells: Range<usize>,
     grid_edges: Range<usize>,
     way_refs: Range<usize>,
+    /// Both or neither (older files have no coverage).
+    coverage: Option<(Range<usize>, Range<usize>)>,
 }
 
 fn err(msg: impl std::fmt::Display) -> CoreError {
@@ -199,6 +202,26 @@ impl Region {
         }
     }
 
+    /// Where the region has roads: closed rings, counter-clockwise; empty
+    /// for files older than format 1.1.
+    pub fn coverage(&self) -> Vec<&[PointE7]> {
+        let Some((o, p)) = &self.sections.coverage else {
+            return Vec::new();
+        };
+        let (offsets, points): (&[u32], &[PointE7]) = (self.slice(o), self.slice(p));
+        offsets
+            .windows(2)
+            .map(|w| &points[w[0] as usize..w[1] as usize])
+            .collect()
+    }
+
+    /// Whether `p` lies in the region's coverage; `None` for files without
+    /// one (format 1.0).
+    pub fn covers(&self, p: PointE7) -> Option<bool> {
+        let (o, pts) = self.sections.coverage.as_ref()?;
+        Some(coverage::contains(self.slice(o), self.slice(pts), p))
+    }
+
     /// Edge ids listed in grid cell (`row`, `col`).
     pub fn grid_cell(&self, row: u32, col: u32) -> &[u32] {
         let meta = self.grid_meta();
@@ -329,6 +352,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         grid_cells: find(section::GRID_CELLS)?,
         grid_edges: find(section::GRID_EDGES)?,
         way_refs: find(section::WAY_REFS)?,
+        coverage: None,
     };
     let nodes: &[PointE7] = typed(bytes, &s.node_pos, section::NODE_POS)?;
     let fwd: &[u32] = typed(bytes, &s.fwd_offsets, section::FWD_OFFSETS)?;
@@ -413,6 +437,34 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         return Err(err("grid refers to a missing edge"));
     }
 
+    let coverage = match (
+        find(section::COVERAGE_OFFSETS).ok(),
+        find(section::COVERAGE_POINTS).ok(),
+    ) {
+        (None, None) => None,
+        (Some(o), Some(p)) => {
+            let offsets: &[u32] = typed(bytes, &o, section::COVERAGE_OFFSETS)?;
+            let points: &[PointE7] = typed(bytes, &p, section::COVERAGE_POINTS)?;
+            let rings = offsets
+                .len()
+                .checked_sub(1)
+                .ok_or_else(|| err("empty coverage offsets"))?;
+            check_offsets("coverage", offsets, rings, points.len())?;
+            if !points.iter().all(in_range) {
+                return Err(err("coverage coordinate out of range"));
+            }
+            let closed = |w: &[u32]| {
+                let ring = &points[w[0] as usize..w[1] as usize];
+                ring.len() >= 4 && ring.first() == ring.last()
+            };
+            if !offsets.windows(2).all(closed) {
+                return Err(err("coverage ring not closed or too short"));
+            }
+            Some((o, p))
+        }
+        _ => return Err(err("coverage needs both its sections")),
+    };
+
     let info = RegionInfo {
         osm_timestamp: header.osm_timestamp,
         bbox: header.bbox,
@@ -423,6 +475,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         info,
         Sections {
             grid_meta: *meta,
+            coverage,
             ..s
         },
     ))

@@ -73,19 +73,46 @@ impl Engine {
     }
 
     /// Snaps a point to the nearest routable road. Points outside the
-    /// region's bounding box are refused with `OutsideRegion`.
+    /// region's bounding box, or with no road nearby and outside the area
+    /// its roads cover, are refused with `OutsideRegion`.
     pub fn snap(&self, point: LatLon) -> Result<RoadPoint, CoreError> {
         point.validate()?;
         let (sw, ne) = self.bounds();
         let inside =
             (sw.lat..=ne.lat).contains(&point.lat) && (sw.lon..=ne.lon).contains(&point.lon);
+        let outside = CoreError::OutsideRegion {
+            lat: point.lat,
+            lon: point.lon,
+        };
         if !inside {
-            return Err(CoreError::OutsideRegion {
-                lat: point.lat,
-                lon: point.lon,
-            });
+            return Err(outside);
         }
-        crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M)
+        match crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M) {
+            Err(CoreError::NoRoadNearby { .. }) if self.covers(point) == Some(false) => {
+                Err(outside)
+            }
+            r => r,
+        }
+    }
+
+    /// The area the region's roads cover, as closed rings (first point
+    /// repeated last); empty for region files without one (format 1.0),
+    /// whose bounding box is all there is to show.
+    pub fn coverage(&self) -> Vec<Vec<LatLon>> {
+        self.region
+            .coverage()
+            .into_iter()
+            .map(|ring| ring.iter().map(|&p| crate::route::latlon(p)).collect())
+            .collect()
+    }
+
+    /// Whether `point` lies in the covered area; `None` without coverage.
+    pub fn covers(&self, point: LatLon) -> Option<bool> {
+        let p = crate::region::format::PointE7 {
+            lat: (point.lat * COORD_SCALE).round() as i32,
+            lon: (point.lon * COORD_SCALE).round() as i32,
+        };
+        self.region.covers(p)
     }
 
     /// Snaps `point` to the nearest road and describes that road: class,

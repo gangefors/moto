@@ -96,6 +96,12 @@ impl RegionData {
         )
         .map_err(bad)?;
 
+        let (coverage_offsets, coverage_points) = super::coverage::trace(
+            &self.edges,
+            &self.geometry_offsets,
+            &self.shape_points,
+            self.info.bbox,
+        );
         let sections: Vec<(u32, &[u8])> = vec![
             (section::NODE_POS, bytes_of(&self.nodes)),
             (section::FWD_OFFSETS, bytes_of(&fwd)),
@@ -109,6 +115,8 @@ impl RegionData {
             (section::GRID_CELLS, bytes_of(&cells)),
             (section::GRID_EDGES, bytes_of(&cell_edges)),
             (section::WAY_REFS, bytes_of(&self.way_refs)),
+            (section::COVERAGE_OFFSETS, bytes_of(&coverage_offsets)),
+            (section::COVERAGE_POINTS, bytes_of(&coverage_points)),
         ];
         let out = assemble(&self.info, &sections);
         super::Region::from_bytes(&out)?;
