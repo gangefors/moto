@@ -81,6 +81,11 @@ pub struct Report {
     pub curvy_route_ms_mean: f64,
     pub curvy_route_ms_p95: f64,
     pub curvy_gain_median: f64,
+    /// Routes to choose from over the same pairs, with the favourites (what
+    /// the app asks for): time per pair and routes offered on average.
+    pub choices_ms_mean: f64,
+    pub choices_ms_p95: f64,
+    pub choices_mean: f64,
     /// Round trips ([`LOOP_STARTS`] × [`LOOP_KM`], with the favourites):
     /// time per request, requests made, those that got two loops or more,
     /// and the mean number of loops per request.
@@ -305,6 +310,24 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let curvy_times = sorted(curvy_per_pair);
     gains.sort_by(f64::total_cmp);
 
+    // Routes to choose from, with the favourites.
+    let mut choices_per_pair = vec![Vec::new(); pairs.len()];
+    let (mut choices_found, mut choices_count) = (0usize, 0usize);
+    for round in 0..ROUNDS {
+        for (i, &(a, z)) in pairs.iter().enumerate() {
+            let t = Instant::now();
+            let r = engine.route_choices(a, &[], z, &opts, &favourites);
+            choices_per_pair[i].push(ms(t));
+            if round == 0
+                && let Ok(r) = r
+            {
+                choices_found += 1;
+                choices_count += r.len();
+            }
+        }
+    }
+    let choices_times = sorted(choices_per_pair);
+
     // Round trips from some of the starts, with the favourites.
     let loop_requests: Vec<(LatLon, f64)> = pairs
         .iter()
@@ -400,6 +423,13 @@ pub fn run(path: &Path) -> Result<Report, String> {
         curvy_route_ms_mean: mean(&curvy_times),
         curvy_route_ms_p95: pick(&curvy_times, 0.95),
         curvy_gain_median: pick(&gains, 0.5),
+        choices_ms_mean: mean(&choices_times),
+        choices_ms_p95: pick(&choices_times, 0.95),
+        choices_mean: if choices_found > 0 {
+            choices_count as f64 / choices_found as f64
+        } else {
+            0.0
+        },
         loop_ms_mean: mean(&loop_times),
         loop_ms_p95: pick(&loop_times, 0.95),
         loop_requests: loop_requests.len(),
@@ -487,6 +517,11 @@ impl Report {
             self.curvy_route_ms_mean, self.curvy_route_ms_p95, self.curvy_gain_median
         ));
         out.push(format!(
+            "choices   {:.1} ms mean, {:.1} ms p95 over the same pairs with the favourites; \
+             {:.1} routes offered each on average (the fastest included)",
+            self.choices_ms_mean, self.choices_ms_p95, self.choices_mean
+        ));
+        out.push(format!(
             "loops     {:.1} ms mean, {:.1} ms p95 over {} round trips ({} starts × {:?} km, \
              with the favourites); {} with 2+ loops, {:.1} loops each on average",
             self.loop_ms_mean,
@@ -555,6 +590,9 @@ impl Report {
             num("curvy_route_ms_mean", self.curvy_route_ms_mean),
             num("curvy_route_ms_p95", self.curvy_route_ms_p95),
             num("curvy_gain_median", self.curvy_gain_median),
+            num("choices_ms_mean", self.choices_ms_mean),
+            num("choices_ms_p95", self.choices_ms_p95),
+            num("choices_mean", self.choices_mean),
             num("loop_ms_mean", self.loop_ms_mean),
             num("loop_ms_p95", self.loop_ms_p95),
             num("loop_requests", self.loop_requests as f64),
@@ -653,7 +691,7 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 13 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 14 + r.unroutable.len());
         // The fixture is far smaller than a loop: every request is timed
         // and none finds one.
         assert_eq!(
@@ -666,6 +704,7 @@ mod tests {
             r.curvy_route_ms_mean > 0.0 && r.curvy_route_ms_p95 > 0.0,
             "{r:?}"
         );
+        assert!(r.choices_ms_mean > 0.0 && r.choices_mean >= 1.0, "{r:?}");
         assert!(r.favourite_sections > 0 && r.favourite_edges > 0, "{r:?}");
         assert!(
             r.fav_route_ms_mean > 0.0 && r.fav_route_ms_p95 > 0.0,
@@ -712,7 +751,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 40);
+        assert_eq!(json.matches(':').count(), 43);
     }
 
     #[test]

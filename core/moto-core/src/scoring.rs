@@ -84,6 +84,14 @@ pub struct ScoringParams {
     pub detour_steps: u32,
     /// Round trips (ADR-0007): cost factor on roads the loop already rides.
     pub reuse_penalty: f64,
+    /// Share of the guard (`RouteOptions::min_gain`) that routes offered
+    /// besides the first must meet (`route::route_choices`): the rider
+    /// picks among them, so they may buy less fun per extra minute.
+    /// Measured on 175 town pairs (2026-09-27): at 1 a second fun route
+    /// came for 19 of them; at 0.25 for 115 (a third for 56), 19.9 and
+    /// 17.6 % curvy against 20.5 % for the first and 5.5 % for the
+    /// fastest.
+    pub choice_gain: f64,
     /// Road length over straight-line length assumed when sizing a loop.
     pub loop_detour: f64,
     /// Pull of favourites and curvature on round-trip legs (0–1).
@@ -164,6 +172,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     dull_worth: 0.25,
     detour_steps: 5,
     reuse_penalty: 4.0,
+    choice_gain: 0.25,
     loop_detour: 1.3,
     loop_pull: 1.0,
     loop_speed_mps: 15.0,

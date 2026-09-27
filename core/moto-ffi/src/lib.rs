@@ -216,6 +216,30 @@ impl Engine {
             .into())
     }
 
+    /// Routes to choose from, like a nav app offers (PRD R5, R6): up to
+    /// three worth riding over `favourites` and curvy roads within
+    /// `opts.budget`, each sharing less than half its roads with the
+    /// others, then the fastest, always last. Through `via` points there
+    /// is one route, as `route` gives it.
+    pub fn route_choices(
+        &self,
+        from: LatLon,
+        via: Vec<LatLon>,
+        to: LatLon,
+        opts: RouteOptions,
+        favourites: Option<Arc<Favourites>>,
+    ) -> Result<Vec<Route>, MotoError> {
+        let none = moto_core::Favourites::none();
+        let fav = favourites.as_ref().map_or(&none, |f| &f.inner);
+        let via: Vec<moto_core::LatLon> = via.into_iter().map(Into::into).collect();
+        Ok(self
+            .inner
+            .route_choices(from.into(), &via, to.into(), &opts.into(), fav)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
     /// A route as GPX for a nav app (PRD R9): route points chosen so
     /// that a nav app's own routing between them stays on `geometry` (the
     /// route's line, as `route` returned it), and the line itself as a
@@ -493,6 +517,28 @@ mod tests {
         assert!(via.distance_m > direct.distance_m + 1000.0);
         assert!(matches!(
             engine.route(from, vec![from; 9], to, opts, None),
+            Err(MotoError::InvalidInput { .. })
+        ));
+    }
+
+    #[test]
+    fn route_choices_cross_the_ffi() {
+        let file = fixture_file("choices");
+        let engine = Engine::open(file.path()).unwrap();
+        let (from, to) = (ll(55.7001, 13.201), ll(55.7001, 13.219));
+        let opts = default_route_options();
+        let choices = engine
+            .route_choices(from, vec![], to, opts.clone(), None)
+            .unwrap();
+        assert!(!choices.is_empty());
+        let fastest = choices.last().unwrap();
+        assert!((fastest.duration_s - fastest.fastest_duration_s).abs() < 1e-6);
+        let via = engine
+            .route_choices(from, vec![ll(55.705, 13.2119)], to, opts.clone(), None)
+            .unwrap();
+        assert_eq!(via.len(), 1);
+        assert!(matches!(
+            engine.route_choices(from, vec![from; 9], to, opts, None),
             Err(MotoError::InvalidInput { .. })
         ));
     }
