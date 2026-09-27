@@ -48,7 +48,6 @@
     <string name="route_pick_end">Start set. Long-press where you want to go, or ride a loop from here.</string>
     <string name="loop_from_here">Loop from here</string>
     <string name="loop_computing">Finding loops…</string>
-    <string name="loop_position">Loop %1$d of %2$d</string>
     <string name="loop_next">Next loop</string>
     <string name="loop_shuffle">Shuffle</string>
     <string name="loop_direction">Direction</string>
@@ -58,6 +57,21 @@
     <string name="loop_direction_south">S</string>
     <string name="loop_direction_west">W</string>
     <string name="loop_length">Length</string>
+    <string name="loop_previous">Previous loop</string>
+    <string name="loop_count">%1$d / %2$d</string>
+    <string name="loop_heading_any">Any direction</string>
+    <string name="loop_heading_north">North</string>
+    <string name="loop_heading_east">East</string>
+    <string name="loop_heading_south">South</string>
+    <string name="loop_heading_west">West</string>
+    <string name="gravel_summary_avoid">Avoid gravel</string>
+    <string name="gravel_summary_allow">Gravel allowed</string>
+    <string name="gravel_summary_prefer">Prefer gravel</string>
+    <string name="route_budget_summary">%1$s extra time</string>
+    <plurals name="route_via_count">
+        <item quantity="one">%1$d via point</item>
+        <item quantity="other">%1$d via points</item>
+    </plurals>
     <string name="loop_hours">%1$d h</string>
     <string name="loop_km">%1$d km</string>
     <string name="loop_minutes">%1$d min</string>

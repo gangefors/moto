@@ -4,6 +4,35 @@
 package se.gangefors.moto
 
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -41,11 +70,88 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 
 /**
+ * A sheet at the bottom of the map for planning a route or a loop (the
+ * map shows what it plans above it). At rest it shows [header] only: the
+ * figures, the actions and a line that sums up the choices. Pulled up
+ * (drag the handle or the header up, or tap the handle or the summary
+ * line), it shows [details] too, the choices themselves, scrolling when
+ * they don't fit in [maxHeight]. Dragging down or Back puts it to rest.
+ */
+@Composable
+fun PlanSheet(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    maxHeight: Dp,
+    modifier: Modifier = Modifier,
+    header: @Composable ColumnScope.() -> Unit,
+    details: @Composable ColumnScope.() -> Unit,
+) {
+    val threshold = with(LocalDensity.current) { SHEET_DRAG.toPx() }
+    var dragged by remember { mutableFloatStateOf(0f) }
+    val drag = rememberDraggableState { dragged += it }
+    BackHandler(enabled = expanded) { onExpandedChange(false) }
+    Surface(
+        modifier = modifier.fillMaxWidth().heightIn(max = maxHeight),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+    ) {
+        Column(
+            Modifier
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
+        ) {
+            Column(
+                Modifier.draggable(
+                    state = drag,
+                    orientation = Orientation.Vertical,
+                    onDragStarted = { dragged = 0f },
+                    onDragStopped = {
+                        if (dragged < -threshold) onExpandedChange(true)
+                        if (dragged > threshold) onExpandedChange(false)
+                    },
+                ),
+            ) {
+                val handleLabel = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .clickable(onClickLabel = handleLabel) { onExpandedChange(!expanded) }
+                        .semantics { contentDescription = handleLabel },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 36.dp, height = 4.dp)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
+                    )
+                }
+                header()
+            }
+            if (expanded) {
+                Column(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp))
+                    details()
+                }
+            }
+        }
+    }
+}
+
+/** How far the sheet must be dragged to open or put it to rest. */
+private val SHEET_DRAG = 24.dp
+
+/**
  * The route between the two long-pressed points: its figures (or that it
- * is being found), and the extra time the rider gives it for favourites.
- * Choosing another budget, or allowing gravel roads, finds the route
- * again; Share hands it to a nav app as GPX; the cross clears it. When not
- * [expanded], only the figures show.
+ * is being found), Save, Share and the cross; at rest a line with the
+ * extra time or arrival, via points and gravel; pulled up, the choices:
+ * via points, extra time or a time to arrive by, and gravel. Any choice
+ * finds the route again.
  */
 @Composable
 fun RouteCard(
@@ -64,44 +170,55 @@ fun RouteCard(
     arrivalNote: String?,
     onArriveBy: (Long?) -> Unit,
     expanded: Boolean,
-    onToggleExpanded: () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    maxHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    PlanSheet(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+        maxHeight = maxHeight,
         modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
-    ) {
-        Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-            CardHeader(
-                summary,
-                stringResource(R.string.route_computing),
-                expanded,
-                onToggleExpanded,
-                onClose,
-                stringResource(R.string.route_close),
+        header = {
+            SheetTop(
+                figures = { m -> RouteFigures(summary, stringResource(R.string.route_computing), m) },
+                found = summary != null,
+                onSave = onSave,
+                onShare = onShare,
+                onClose = onClose,
+                closeDescription = stringResource(R.string.route_close),
             )
-            if (expanded) {
-                RouteCardDetails(
-                    budgetPercent, onBudget, gravel, onGravel, onShare, onSave, summary != null,
-                    viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
-                )
+            if (!expanded) {
+                val parts = buildList {
+                    add(
+                        arrivalNote ?: if (budgetPercent == 0) {
+                            stringResource(R.string.route_budget_fastest)
+                        } else {
+                            stringResource(R.string.route_budget_summary, stringResource(R.string.route_budget_extra, budgetPercent))
+                        },
+                    )
+                    if (viaCount > 0) add(pluralStringResource(R.plurals.route_via_count, viaCount, viaCount))
+                    add(gravelSummary(gravel))
+                }
+                SummaryLine(parts.joinToString(" · ")) { onExpandedChange(true) }
             }
-        }
-    }
+        },
+        details = {
+            RouteCardDetails(
+                budgetPercent, onBudget, gravel, onGravel,
+                viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
+            )
+        },
+    )
 }
 
-/** The route card's choices: via points, extra time, gravel and sharing. */
+/** The route's choices: via points, extra time or arrival, and gravel. */
 @Composable
 private fun RouteCardDetails(
     budgetPercent: Int,
     onBudget: (Int) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
-    onShare: () -> Unit,
-    onSave: () -> Unit,
-    shareEnabled: Boolean,
     viaCount: Int,
     onAddVia: () -> Unit,
     onClearVia: () -> Unit,
@@ -157,7 +274,7 @@ private fun RouteCardDetails(
                 },
             )
         }
-        GravelAndShare(gravel, onGravel, onShare, onSave, shareEnabled = shareEnabled)
+        GravelChoice(gravel, onGravel)
         if (pickingTime) {
             ArriveByDialog(
                 initial = arriveBy,
@@ -173,12 +290,12 @@ private fun RouteCardDetails(
 }
 
 /**
- * Round trips from a start (PRD R7): the loop shown and which of the
- * alternatives it is, Next loop to flip through them, and the length the
- * rider wants. Choosing another length, or allowing gravel, finds the
- * loops again; Share hands the loop shown to a nav app; the cross clears
- * them; Shuffle finds another set, and a direction makes them head that
- * way. When not [expanded], only the figures show.
+ * Round trips from a start (PRD R7): the loop shown (or that loops are
+ * being found, or why none were), Save, Share and the cross; which of the
+ * set it is, with the previous and next ones, and Shuffle for another
+ * set; at rest a line with the length, direction and gravel; pulled up,
+ * those choices. Any choice finds the loops again. The other loops of
+ * the set are drawn faint on the map; tapping one shows it.
  */
 @Composable
 fun LoopCard(
@@ -186,6 +303,7 @@ fun LoopCard(
     problem: String?,
     position: Int,
     count: Int,
+    onPrevious: () -> Unit,
     onNext: () -> Unit,
     onShuffle: () -> Unit,
     direction: LoopDirection,
@@ -198,86 +316,114 @@ fun LoopCard(
     onShare: () -> Unit,
     onSave: () -> Unit,
     expanded: Boolean,
-    onToggleExpanded: () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    maxHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    val found = summary != null
+    PlanSheet(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+        maxHeight = maxHeight,
         modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
-    ) {
-        Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-            CardHeader(
-                summary,
-                stringResource(R.string.loop_computing),
-                expanded,
-                onToggleExpanded,
-                onClose,
-                stringResource(R.string.loop_close),
-                problem = problem,
+        header = {
+            SheetTop(
+                figures = { m ->
+                    if (problem != null) {
+                        Problem(problem, m)
+                    } else {
+                        RouteFigures(summary, stringResource(R.string.loop_computing), m)
+                    }
+                },
+                found = found,
+                onSave = onSave,
+                onShare = onShare,
+                onClose = onClose,
+                closeDescription = stringResource(R.string.loop_close),
             )
-            if (expanded) {
-                LoopCardDetails(
-                    found = summary != null,
-                    canShuffle = summary != null || problem != null,
-                    position = position,
-                    count = count,
-                    onNext = onNext,
-                    onShuffle = onShuffle,
-                    direction = direction,
-                    onDirection = onDirection,
-                    choice = choice,
-                    onChoice = onChoice,
-                    gravel = gravel,
-                    onGravel = onGravel,
-                    onShare = onShare,
-                    onSave = onSave,
+            LoopSwitcher(found, problem != null, position, count, onPrevious, onNext, onShuffle)
+            if (!expanded) {
+                val heading = stringResource(
+                    when (direction) {
+                        LoopDirection.ANY -> R.string.loop_heading_any
+                        LoopDirection.NORTH -> R.string.loop_heading_north
+                        LoopDirection.EAST -> R.string.loop_heading_east
+                        LoopDirection.SOUTH -> R.string.loop_heading_south
+                        LoopDirection.WEST -> R.string.loop_heading_west
+                    },
                 )
+                SummaryLine(listOf(loopLengthText(choice), heading, gravelSummary(gravel)).joinToString(" · ")) {
+                    onExpandedChange(true)
+                }
             }
+        },
+        details = { LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel) },
+    )
+}
+
+/**
+ * Which loop of the set is shown, with the previous and next ones, and
+ * Shuffle for another set. While loops are being found the row keeps the
+ * last figures, its buttons off, so the sheet doesn't move; when none
+ * were found ([failed]) Shuffle still works.
+ */
+@Composable
+private fun LoopSwitcher(
+    found: Boolean,
+    failed: Boolean,
+    position: Int,
+    count: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onShuffle: () -> Unit,
+) {
+    val last = remember { mutableStateOf(position to count) }
+    SideEffect { if (found) last.value = position to count }
+    val (shownPosition, shownCount) = if (found) position to count else last.value
+    FlowRow(
+        modifier = Modifier.padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (shownCount > 1) {
+            Row(
+                Modifier
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    .alpha(if (found) 1f else 0.5f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onPrevious, enabled = found) {
+                    Icon(painterResource(R.drawable.ic_chevron_left), stringResource(R.string.loop_previous))
+                }
+                Text(
+                    stringResource(R.string.loop_count, shownPosition + 1, shownCount),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                IconButton(onClick = onNext, enabled = found) {
+                    Icon(painterResource(R.drawable.ic_chevron_right), stringResource(R.string.loop_next))
+                }
+            }
+        }
+        FilledTonalButton(onClick = onShuffle, enabled = found || failed) {
+            Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            OneLine(stringResource(R.string.loop_shuffle))
         }
     }
 }
 
-/** The loop card's choices: which loop, the length, gravel and sharing. */
+/** The loop's choices: length, direction and gravel. */
 @Composable
 private fun LoopCardDetails(
-    found: Boolean,
-    canShuffle: Boolean,
-    position: Int,
-    count: Int,
-    onNext: () -> Unit,
-    onShuffle: () -> Unit,
     direction: LoopDirection,
     onDirection: (LoopDirection) -> Unit,
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
-    onShare: () -> Unit,
-    onSave: () -> Unit,
 ) {
     Column {
-        // Which loop, the next one, and a new set of loops (Shuffle). While
-        // loops are being found, the row stays with the last figures and
-        // its buttons disabled, so the card doesn't move.
-        val last = remember { mutableStateOf(position to count) }
-        SideEffect { if (found) last.value = position to count }
-        val (shownPosition, shownCount) = if (found) position to count else last.value
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (shownCount > 1) {
-                Text(
-                    stringResource(R.string.loop_position, shownPosition + 1, shownCount),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = if (found) Modifier else Modifier.alpha(0.5f),
-                )
-                OutlinedButton(onClick = onNext, enabled = found) { OneLine(stringResource(R.string.loop_next)) }
-            }
-            OutlinedButton(onClick = onShuffle, enabled = canShuffle) { OneLine(stringResource(R.string.loop_shuffle)) }
-        }
         // Length as a slider, in hours or kilometres.
         StepSlider(
             title = stringResource(R.string.loop_length),
@@ -324,43 +470,77 @@ private fun LoopCardDetails(
                 )
             }
         }
-        GravelAndShare(gravel, onGravel, onShare, onSave, shareEnabled = found)
+        GravelChoice(gravel, onGravel)
     }
 }
 
 /**
- * A card's top line: the route's figures, a chevron to show or hide the
- * rest of the card (tapping the figures does the same), and the cross.
- * Collapsed, only this line shows, so the card covers little of the map.
+ * The sheet's top line: the figures ([figures] gets the modifier that
+ * gives it the room left), then Save, Share (both only once something is
+ * found) and the cross, as icons in every state of the sheet.
  */
 @Composable
-private fun CardHeader(
-    summary: RouteSummary?,
-    computing: String,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
+private fun SheetTop(
+    figures: @Composable (Modifier) -> Unit,
+    found: Boolean,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
     onClose: () -> Unit,
     closeDescription: String,
-    problem: String? = null,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        val figures = Modifier.weight(1f).clickable(onClick = onToggleExpanded)
-        if (problem != null) {
-            Problem(problem, figures)
-        } else {
-            RouteFigures(summary, computing, figures)
+    Row(verticalAlignment = Alignment.Top) {
+        figures(Modifier.weight(1f))
+        IconButton(onClick = onSave, enabled = found) {
+            Icon(painterResource(R.drawable.ic_bookmark), stringResource(R.string.route_save))
         }
-        IconButton(onClick = onToggleExpanded) {
-            Icon(
-                painterResource(if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
-                contentDescription = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand),
-            )
+        IconButton(onClick = onShare, enabled = found) {
+            Icon(painterResource(R.drawable.ic_share), stringResource(R.string.route_share))
         }
         IconButton(onClick = onClose) {
             Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
     }
 }
+
+/** The choices summed up in one line; tapping it pulls the sheet up. */
+@Composable
+private fun SummaryLine(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.padding(top = 8.dp, end = 8.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Icon(
+                painterResource(R.drawable.ic_expand_less),
+                contentDescription = stringResource(R.string.card_expand),
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** "Avoid gravel", "Gravel allowed" or "Prefer gravel". */
+@Composable
+private fun gravelSummary(g: Gravel): String = stringResource(
+    when (g) {
+        Gravel.AVOID -> R.string.gravel_summary_avoid
+        Gravel.ALLOW -> R.string.gravel_summary_allow
+        Gravel.PREFER -> R.string.gravel_summary_prefer
+    },
+)
 
 /** Why nothing was found, in place of the figures and as tall as them. */
 @Composable
@@ -416,15 +596,9 @@ private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Mo
 }
 
 /** The gravel choice (the same setting as in My data: changing it here
- * routes again, to see what gravel roads change), then Save and Share. */
+ * routes again, to see what gravel roads change). */
 @Composable
-private fun GravelAndShare(
-    gravel: Gravel,
-    onGravel: (Gravel) -> Unit,
-    onShare: () -> Unit,
-    onSave: () -> Unit,
-    shareEnabled: Boolean,
-) {
+private fun GravelChoice(gravel: Gravel, onGravel: (Gravel) -> Unit) {
     Column {
         Text(
             stringResource(R.string.route_gravel_label),
@@ -432,16 +606,6 @@ private fun GravelAndShare(
             modifier = Modifier.padding(top = 4.dp),
         )
         GravelChips(gravel, onGravel)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = onSave,
-                enabled = shareEnabled,
-            ) { OneLine(stringResource(R.string.route_save)) }
-            OutlinedButton(
-                onClick = onShare,
-                enabled = shareEnabled,
-            ) { OneLine(stringResource(R.string.route_share)) }
-        }
     }
 }
 

@@ -69,6 +69,16 @@ class LoopLogicTest {
     }
 
     @Test
+    fun previousLoopWrapsAround() {
+        assertEquals(2, previousLoop(0, 3))
+        assertEquals(0, previousLoop(1, 3))
+        assertEquals(1, previousLoop(2, 3))
+        assertEquals(0, previousLoop(0, 1))
+        assertEquals(0, previousLoop(0, 0))
+        assertEquals(1, previousLoop(5, 3))
+    }
+
+    @Test
     fun nextLoopWrapsAround() {
         assertEquals(1, nextLoop(0, 3))
         assertEquals(2, nextLoop(1, 3))
