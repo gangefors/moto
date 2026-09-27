@@ -136,3 +136,50 @@ fn a_damaged_row_is_a_storage_error() {
         .unwrap();
     assert!(matches!(s.list_routes(), Err(CoreError::Storage(_))));
 }
+
+#[test]
+fn saves_a_ride_as_a_route() {
+    use crate::track::tests::fix;
+    let mut s = Store::open_in_memory().unwrap();
+    // Out 20 fixes north and back: a loop, ending where it started.
+    let mut points: Vec<_> = (0..20)
+        .map(|i| fix(T0 * 1000 + i * 1000, 55.7 + i as f64 * 2e-4, 13.2))
+        .collect();
+    points.extend((0..20).map(|i| {
+        fix(
+            T0 * 1000 + (20 + i) * 1000,
+            55.7 + (19 - i) as f64 * 2e-4,
+            13.2005,
+        )
+    }));
+    let ride = s.import_track(&points).unwrap();
+    let saved = s
+        .save_track_as_route(ride.id, "Evening ride", T0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.name, "Evening ride");
+    assert!(saved.is_loop);
+    assert_eq!(saved.distance_m, ride.distance_m);
+    assert_eq!(saved.duration_s, 39.0);
+    let line = s.route_geometry(saved.id).unwrap().unwrap();
+    assert_eq!(line.len(), points.len());
+    assert!((line[5].lat - points[5].position.lat).abs() < 1e-7);
+
+    // A one-way ride is a route, not a loop.
+    let straight: Vec<_> = (0..30)
+        .map(|i| fix(T0 * 1000 + i * 1000, 55.7 + i as f64 * 2e-4, 13.2))
+        .collect();
+    let one_way = s.import_track(&straight).unwrap();
+    assert!(
+        !s.save_track_as_route(one_way.id, "To work", T0)
+            .unwrap()
+            .unwrap()
+            .is_loop
+    );
+
+    // No such ride; a ride still recording; a bad name.
+    assert_eq!(s.save_track_as_route(999, "x", T0).unwrap(), None);
+    let recording = s.start_track(T0).unwrap();
+    assert!(s.save_track_as_route(recording.id, "x", T0).is_err());
+    assert!(s.save_track_as_route(ride.id, "a\nb", T0).is_err());
+}

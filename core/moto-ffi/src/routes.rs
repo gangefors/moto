@@ -79,6 +79,20 @@ impl SectionStore {
         Ok(self.store().rename_route(id, &name)?)
     }
 
+    /// Saves a finished ride as a route to ride again, named `name`; a
+    /// loop when it ends near where it started. `None` if there is no
+    /// such ride.
+    pub fn save_track_as_route(
+        &self,
+        track_id: i64,
+        name: String,
+    ) -> Result<Option<SavedRoute>, MotoError> {
+        Ok(self
+            .store()
+            .save_track_as_route(track_id, &name, now())?
+            .map(Into::into))
+    }
+
     /// Deletes a saved route; `false` if it did not exist.
     pub fn delete_route(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_route(id)?)
