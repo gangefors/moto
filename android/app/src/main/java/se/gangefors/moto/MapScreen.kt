@@ -101,7 +101,6 @@ import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
-import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -1338,7 +1337,7 @@ fun MapScreen() {
                     }
                 }
                 if (hasLocation) {
-                    FloatingActionButton(onClick = { map?.locationComponent?.let(::followRider) }) {
+                    FloatingActionButton(onClick = { map?.let(::followRider) }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_my_location),
                             contentDescription = stringResource(R.string.my_location),
@@ -1731,17 +1730,18 @@ private fun enableLocation(context: Context, map: MapLibreMap, style: Style) {
         isLocationComponentEnabled = true
         renderMode = RenderMode.COMPASS
     }
-    followRider(map.locationComponent)
+    followRider(map)
 }
 
 /**
  * Follows the rider's position in the middle of the map. Fitting a route
  * leaves its padding on the camera, which would keep the position off
- * centre, so the padding goes back to none.
+ * centre. The padding goes back to none at once, before following
+ * starts: an animated change is cut short by following's own move.
  */
-private fun followRider(location: LocationComponent) {
-    location.cameraMode = CameraMode.TRACKING
-    location.paddingWhileTracking(doubleArrayOf(0.0, 0.0, 0.0, 0.0))
+private fun followRider(map: MapLibreMap) {
+    map.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+    map.locationComponent.cameraMode = CameraMode.TRACKING
 }
 
 /** What a set of loops is found for: the same request gives the same
