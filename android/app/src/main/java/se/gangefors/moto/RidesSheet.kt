@@ -300,6 +300,9 @@ fun RidesSheet(
                                     onClick = { onShow(t) },
                                     enabled = t.endedAt != null,
                                 ) { OneLine(stringResource(R.string.rides_show)) }
+                                TextButton(onClick = { renamingRide = t }) {
+                                    OneLine(stringResource(R.string.saved_route_rename))
+                                }
                                 TextButton(
                                     onClick = {
                                         exporting = t
@@ -307,9 +310,6 @@ fun RidesSheet(
                                     },
                                     enabled = t.endedAt != null,
                                 ) { OneLine(stringResource(R.string.rides_export)) }
-                                TextButton(onClick = { renamingRide = t }) {
-                                    OneLine(stringResource(R.string.saved_route_rename))
-                                }
                                 DeleteButton(
                                     confirming = confirmDelete == t.id,
                                     onArm = { confirmDelete = t.id },
