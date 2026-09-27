@@ -179,7 +179,7 @@ fn rejects_bad_headers() {
 
     let mut b = bytes();
     b[8..10].copy_from_slice(&2u16.to_le_bytes());
-    assert_rejected(&b, "unsupported region format 2.0");
+    assert_rejected(&b, "unsupported region format 2.");
 
     let mut b = bytes();
     b[12..16].copy_from_slice(&1000u32.to_le_bytes());

@@ -23,7 +23,7 @@ pub const MAGIC: [u8; 8] = *b"MOTOREG\0";
 /// Major format version. Files with another major version are refused.
 pub const VERSION_MAJOR: u16 = 1;
 /// Minor format version. Minor bumps only add optional sections.
-pub const VERSION_MINOR: u16 = 0;
+pub const VERSION_MINOR: u16 = 1;
 
 /// Sections start on multiples of this.
 pub const PAGE: u64 = 4096;
@@ -61,6 +61,12 @@ pub mod section {
     pub const GRID_EDGES: u32 = 11;
     /// `[WayRef]`, one per edge.
     pub const WAY_REFS: u32 = 12;
+    /// Optional (format 1.1): `[u32]`, ring count + 1: offsets into
+    /// `COVERAGE_POINTS`. Where the region has roads.
+    pub const COVERAGE_OFFSETS: u32 = 13;
+    /// Optional (format 1.1): `[PointE7]`, closed rings (first point
+    /// repeated last), counter-clockwise.
+    pub const COVERAGE_POINTS: u32 = 14;
     /// Reserved for ALT landmark distances (ADR-0005, decided in M2).
     pub const LANDMARKS: u32 = 100;
 }
