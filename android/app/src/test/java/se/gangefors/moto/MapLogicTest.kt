@@ -144,6 +144,8 @@ class MapLogicTest {
         assertEquals("moto-route-2026-09-24-1830.gpx", routeFileName(at, stockholm))
         assertEquals("moto 2026-09-24 18:30, 57.4 km", routeGpxName(at, stockholm, 57.44))
         assertTrue(isRouteFileName(routeFileName(at, stockholm)))
+        // A ride shared the same way.
+        assertTrue(isRouteFileName(rideFileName(at, stockholm)))
         for (other in listOf("moto.db", "moto-route-2026-09-24-1830.gpx.tmp", "../moto-route-2026-09-24-1830.gpx", "x.gpx", "")) {
             assertFalse(other, isRouteFileName(other))
         }

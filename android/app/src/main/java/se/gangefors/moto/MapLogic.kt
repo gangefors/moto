@@ -146,11 +146,11 @@ fun routeFileName(atSec: Long, zone: java.time.ZoneId): String =
     "moto-route-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm", java.util.Locale.ROOT)) + ".gpx"
 
-/** Whether [name] is one of our exported route files (only those are
- * cleaned up from the share folder). */
+/** Whether [name] is one of our shared route or ride files (only those
+ * are cleaned up from the share folder). */
 fun isRouteFileName(name: String): Boolean = ROUTE_FILE.matches(name)
 
-private val ROUTE_FILE = Regex("moto-route-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}\\.gpx")
+private val ROUTE_FILE = Regex("moto-(route|ride)-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}\\.gpx")
 
 /** The name a route carries inside its GPX, shown by the nav app:
  * "moto 2026-09-24 18:30, 57.4 km". */

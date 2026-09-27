@@ -129,8 +129,6 @@
     <string name="route_name">Name</string>
     <string name="route_saved">Saved as “%1$s”</string>
     <string name="route_save_failed">Saving failed: %1$s</string>
-    <string name="saved_routes_title">Saved routes</string>
-    <string name="saved_routes_none">No saved routes yet. Save a route or loop from its card.</string>
     <string name="saved_route_rename">Rename</string>
     <string name="saved_route_rename_title">Rename route</string>
     <string name="ride_rename_title">Rename ride</string>
@@ -206,9 +204,15 @@
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
     <string name="rides_open">My data</string>
-    <string name="rides_title">Rides</string>
+    <string name="library_title">Routes &amp; rides</string>
+    <string name="library_none">No routes or rides yet. Save a route or loop from its card, record a ride, or import a GPX file.</string>
+    <string name="library_route">Route · %1$.1f km · %2$s</string>
+    <string name="library_loop">Loop · %1$.1f km · %2$s</string>
+    <string name="library_ride">Ride · %1$s</string>
+    <string name="library_share">Share</string>
+    <string name="library_save_as_route">Save as route</string>
+    <string name="library_save_as_route_title">Save ride as route</string>
     <string name="rides_loading">Loading…</string>
-    <string name="rides_none">No rides recorded yet.</string>
     <string name="rides_summary">%1$.1f km · %2$s · %3$s</string>
     <string name="rides_recording">Recording · %1$s</string>
     <plurals name="gps_fixes">
