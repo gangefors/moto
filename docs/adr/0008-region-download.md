@@ -19,7 +19,8 @@ Forces:
 - **Built in CI.** A `regions` workflow builds each published region with `moto-regionbuild` from the same commit, weekly and on demand, and publishes it to a GitHub release with the tag `regions` on `gangefors/moto`. The first region is **all of Sweden** (`--bbox 55.0,10.5,69.2,24.3`).
 - **Files per format.** For region format major version *N* the release holds a manifest `regions-vN.json` and one `<id>-vN.region.gz` per region. The workflow replaces only the files of the current major version, so older apps keep their own files until they are removed by hand.
 - **Manifest** (JSON, at most 64 KiB): `format_major`, and per region `id` (`[a-z0-9-]`, 1–32), `name` (display, at most 64 characters, no control characters), `gz_bytes`, `gz_sha256`, `region_bytes`, `osm_timestamp` and the bounding box. The core parses it strictly and refuses anything else, including a `format_major` other than its own. The file name is never read from the manifest: the app builds it from the checked id and the core's major version.
-- **Fixed source.** The app only fetches `https://github.com/gangefors/moto/releases/download/regions/<name>`; redirects are followed only to HTTPS (GitHub hands out the files from its own storage hosts). Cleartext stays disallowed app-wide.
+- **Source data.** CI builds from Geofabrik's Sweden extract, fetched from the openstreetmap.fr mirror (ADR-0005).
+- **Fetched from a fixed place.** The app only fetches `https://github.com/gangefors/moto/releases/download/regions/<name>`; redirects are followed only to HTTPS (GitHub hands out the files from its own storage hosts). Cleartext stays disallowed app-wide.
 - **Download** (Kotlin, no new libraries): one region at a time, while the app is open, into a partial file in app-private cache storage; an interrupted download resumes with an HTTP range request. The download is refused if free space is short for the compressed file plus the raw file.
 - **Install** (core, `install_region`): check the downloaded file's size and SHA-256 against the manifest **before** decompressing anything; decompress to a temporary file next to the target, refusing more bytes than `region_bytes` (a gzip bomb stops there); run the full `verify_file` (section checksums and structure, ADR-0005); then rename it into place, so the old region stays usable until the new one is complete. The app passes the paths, inside its own storage, built from the checked id.
 - **Choosing the region.** The installed download is used when there is one; otherwise a debug build falls back to its bundled M0 region, and a release build asks the rider to download one. Sections are re-matched to the new region automatically (ADR-0006).
@@ -72,8 +73,8 @@ B keeps the APK small and the map fresh at no cost, and every check that protect
 
 ## Action Items
 
-- [ ] `regions` workflow: weekly and on demand, build Sweden, gzip, manifest, publish to the `regions` release.
-- [ ] Core: `RegionManifest` parsing and `install_region` with tests, including corrupt and oversized input; FFI.
-- [ ] App: My data → Map region: installed region and date, Download / Update with progress and cancel, resume, free-space check; use the installed region, else the bundled one (debug).
+- [x] `regions` workflow: weekly and on demand, build Sweden, gzip, manifest (written by `moto-regionbuild --manifest`, which first installs each region back with the core), publish to the `regions` release.
+- [x] Core: manifest parsing (`region::install::parse_manifest`) and `install_region` with tests, including corrupt and oversized input; FFI (`parse_region_manifest`, `install_region`).
+- [x] App: My data → Map region: installed region and date, Download / Update with progress and stop, resume, free-space check, a bin to remove it; use the installed region, else the bundled one (debug).
 - [ ] Measure on the phone: download, install and open time for Sweden; routing and loops on it.
 - [ ] Before other riders: sign the manifest (Ed25519, key in a GitHub environment secret, public key in the app).

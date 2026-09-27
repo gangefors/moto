@@ -140,7 +140,7 @@ Details settled while implementing the decision (`core/moto-core/src/region/`):
 - **Snapping grid** lists only edges that run along their geometry (one per road). Cells are about 280 m; snapping scans cells in rings until nothing closer can remain, up to 500 m.
 - **Validation on open is full**, not only header and lengths: CSR offsets monotonic and complete, every edge and grid entry in range, edge geometry joining its nodes, coordinates in range. Query code can then index without panicking. It costs one pass over the file (measurements below). CRC32 is checked separately by `verify_file` at install.
 - **Builder:** keeps `highway=motorway…service` (not parking aisles or driveways), tracks and ferries only when open to motor vehicles, the most specific access tag wins; maxspeed with Swedish defaults. Ways are cut at the bounding box, routing nodes are way ends and shared nodes, self-loops are split in the middle, nodes are Hilbert-ordered.
-- **Source:** CI downloads Geofabrik's Sweden extract. Geofabrik refuses Claude's sessions, so those use the same data from `https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf`.
+- **Source:** Geofabrik's Sweden extract, fetched from the mirror `https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf` (same data). Geofabrik refuses Claude's sessions, and since 2026-09-27 redirects GitHub's runners to plain HTTP, which CI refuses; so CI and Claude both use the mirror.
 - **M0 region:** Skåne plus the southern half of Halland, southern Småland and western Blekinge: `55.28,12.20,56.72,15.05`.
 
 ## Measurements (2026-09-23)
