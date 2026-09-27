@@ -62,8 +62,8 @@
     <string name="route_next">Next route</string>
     <string name="route_fastest">Fastest</string>
     <string name="route_arrive_clear">Clear arrival time</string>
-    <string name="route_via_selected">Via point %1$d</string>
-    <string name="route_via_remove">Remove this via point</string>
+    <string name="route_via_selected">Waypoint %1$d</string>
+    <string name="route_via_remove">Remove this waypoint</string>
     <string name="loop_count">%1$d / %2$d</string>
     <string name="loop_heading_any">Any direction</string>
     <string name="loop_heading_north">North</string>
@@ -74,8 +74,8 @@
     <string name="gravel_summary_allow">Gravel allowed</string>
     <string name="gravel_summary_prefer">Prefer gravel</string>
     <plurals name="route_via_count">
-        <item quantity="one">%1$d via point</item>
-        <item quantity="other">%1$d via points</item>
+        <item quantity="one">%1$d waypoint</item>
+        <item quantity="other">%1$d waypoints</item>
     </plurals>
     <string name="loop_hours">%1$d h</string>
     <string name="loop_km">%1$d km</string>
@@ -95,11 +95,11 @@
     <string name="route_arrive_set">Set</string>
     <string name="route_arrives">Arrives about %1$s</string>
     <string name="route_arrives_late">Can’t make %1$s: arrives about %2$s at the earliest</string>
-    <string name="route_add_via">Add via point</string>
+    <string name="route_add_via">Add waypoint</string>
     <string name="route_pick_via">Long-press where the route should pass.</string>
     <plurals name="route_clear_via">
-        <item quantity="one">Clear %1$d via point</item>
-        <item quantity="other">Clear %1$d via points</item>
+        <item quantity="one">Clear %1$d waypoint</item>
+        <item quantity="other">Clear %1$d waypoints</item>
     </plurals>
     <string name="route_save">Save…</string>
     <string name="route_save_title">Save to My data</string>
