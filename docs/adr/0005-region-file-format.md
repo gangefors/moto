@@ -159,6 +159,25 @@ Sweden extract from OSM data of 2026-09-23 (same data as Geofabrik's, via downlo
 
 Consequences for the "revisit if" list: the M0 file is comfortably small. For all of Sweden, full validation on open touches the whole 400 MiB, which will be slow on a phone with a cold cache, and the uniform grid is 65 MiB of mostly empty cells; both point at lazy (per-section or per-query) validation and a sparse grid or packed R-tree before Sweden ships.
 
+## Measurements (2026-09-27): routing on all of Sweden
+
+The same kind of 4-core cloud machine, OSM data of 2026-09-27, today's builder (built-up areas, junction-trimmed curvature, small networks dropped) and today's router, `--check` with route pairs at most 300 km apart (the PRD's longest trip). Desktop timings, warm; a phone is slower.
+
+| | M0 region | Sweden |
+| --- | --- | --- |
+| Routing nodes / edges | 179 k / 408 k | 1.50 M / 3.35 M |
+| File size | 37.8 MiB | 394 MiB |
+| Build time / peak memory | 9 s | 53 s / 5.1 GiB |
+| Verify / open | 9 / 7 ms | 150 / 114 ms |
+| Route pairs, mean distance | 88 km | 246 km |
+| Fastest route, mean / p95 | 13 / 36 ms | 49 / 124 ms |
+| With favourites and curves, mean / p95 | 46 / 112 ms | 240 / 538 ms |
+| Route choices (up to 3 + the fastest), mean / p95 | 162 / 358 ms | 871 / 2363 ms |
+| Loops 50 / 100 km, mean / p95 | 169 / 347 ms | 105 / 204 ms |
+| Peak memory of `--check` (file mapped) | | 709 MiB |
+
+Routing scales with trip length, not region size: the whole of Sweden adds no cost to a trip of the same length. Route choices for the longest trips are the slowest query, about 2.4 s at p95 on the desktop; a phone 2–4× slower still stays within the PRD's 10 s for 300 km, but should be measured. The open questions from 2026-09-23 stand: full validation on open and the mostly empty uniform grid (5618 × 3048 cells) for a phone with a cold cache.
+
 ## Action Items
 
 - [x] Copy this ADR to `docs/adr/0005-region-file-format.md` and add it to the index.
