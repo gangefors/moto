@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -151,6 +153,9 @@ fun MapScreen() {
     var hasLocation by remember { mutableStateOf(hasLocationPermission(context)) }
     // The routing region: a downloaded one, else the bundled one (ADR-0008).
     val activeRegion by Regions.active.collectAsState()
+    val regionDownload by Regions.download.collectAsState()
+    // What the app is waiting for, shown after a moment (BusyPill).
+    val busy = remember { BusyTasks() }
     val region = activeRegion.state
     var message by remember { mutableStateOf<String?>(null) }
     // The road the rider last tapped, shown until closed.
@@ -288,10 +293,12 @@ fun MapScreen() {
     LaunchedEffect(store, region) {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
-        val result = withContext(Dispatchers.IO) {
-            runCatching {
-                val report = s.rematch(engine)
-                report to if (report.checked > 0uL) s.list(null) else null
+        val result = busy.run(R.string.busy_sections) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val report = s.rematch(engine)
+                    report to if (report.checked > 0uL) s.list(null) else null
+                }
             }
         }
         result.fold(
@@ -468,10 +475,12 @@ fun MapScreen() {
         proposing = true
         message = resources.getString(R.string.tag_review_loading, r.position, r.size)
         scope.launch {
-            val result = withContext(Dispatchers.Default) {
-                runCatching {
-                    val track = tag.trackId?.let { ready.store.trackPoints(it) }
-                    engine.suggestSection(tag, track)
+            val result = busy.run(R.string.busy_section) {
+                withContext(Dispatchers.Default) {
+                    runCatching {
+                        val track = tag.trackId?.let { ready.store.trackPoints(it) }
+                        engine.suggestSection(tag, track)
+                    }
                 }
             }
             proposing = false
@@ -543,8 +552,10 @@ fun MapScreen() {
                 message = resources.getString(R.string.section_proposing)
                 val session = markSession
                 scope.launch {
-                    val result = withContext(Dispatchers.Default) {
-                        runCatching { ready.engine.sectionBetween(st.start.toLatLon(), st.end.toLatLon()) }
+                    val result = busy.run(R.string.busy_section) {
+                        withContext(Dispatchers.Default) {
+                            runCatching { ready.engine.sectionBetween(st.start.toLatLon(), st.end.toLatLon()) }
+                        }
                     }
                     proposing = false
                     if (!marking || session != markSession) return@launch
@@ -756,7 +767,7 @@ fun MapScreen() {
         // Found ahead (Shuffle), or found now. A newer request cancels
         // this one; its result is then dropped.
         val ahead = loopsAhead.take(request)
-        val result = ahead?.await() ?: withContext(Dispatchers.Default) { find(request) }
+        val result = busy.run(R.string.busy_loops) { ahead?.await() ?: withContext(Dispatchers.Default) { find(request) } }
         result.fold(
             onSuccess = { found ->
                 val first = found.firstOrNull()
@@ -803,8 +814,10 @@ fun MapScreen() {
             routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel)
         }
         // A newer request cancels this one; its result is then dropped.
-        val result = withContext(Dispatchers.Default) {
-            runCatching { ready.engine.routeChoices(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
+        val result = busy.run(R.string.busy_routes) {
+            withContext(Dispatchers.Default) {
+                runCatching { ready.engine.routeChoices(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
+            }
         }
         result.fold(
             onSuccess = { found ->
@@ -1047,6 +1060,15 @@ fun MapScreen() {
                 .fillMaxWidth()
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
                 .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
+        )
+        // What the app is working on, just below the top panels (not in
+        // them, so the map doesn't refit when it shows); after 300 ms only.
+        val installing = (regionDownload as? DownloadState.Installing)?.let { R.string.busy_region }
+        BusyPill(
+            busy.current ?: installing ?: R.string.region_loading.takeIf { region is RegionState.Loading },
+            Modifier
+                .align(Alignment.TopCenter)
+                .offset { IntOffset(0, max(topPanelBottom, insets.top) + 8.dp.roundToPx()) },
         )
         // Messages and the route card, across the top (the compass sits at
         // the bottom right, so nothing else is up here); on wide screens no
