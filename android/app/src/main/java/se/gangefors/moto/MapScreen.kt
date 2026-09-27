@@ -1201,10 +1201,7 @@ fun MapScreen() {
                             problem = loopProblem,
                             position = loopIndex,
                             count = loops.size,
-                            onShuffle = {
-                                cardExpanded = false
-                                loopSeed = nextSeed
-                            },
+                            onShuffle = { loopSeed = nextSeed },
                             direction = loopDirection,
                             onDirection = { loopDirection = it },
                             onPrevious = {
