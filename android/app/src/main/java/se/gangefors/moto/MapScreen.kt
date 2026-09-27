@@ -1736,13 +1736,39 @@ private fun enableLocation(context: Context, map: MapLibreMap, style: Style) {
 /**
  * Follows the rider's position in the middle of the map. Fitting a route
  * leaves its padding on the camera, which would keep the position off
- * centre. The padding goes back to none at once, before following
- * starts: an animated change is cut short by following's own move.
+ * centre. So the map first glides to the last known position with no
+ * padding, in one move, and following starts when it gets there (a
+ * separate padding change would be cut short by following's own move).
+ * Without a known position the padding goes at once. A pan during the
+ * glide leaves following off, like a pan while following.
  */
 private fun followRider(map: MapLibreMap) {
-    map.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
-    map.locationComponent.cameraMode = CameraMode.TRACKING
+    val location = map.locationComponent
+    val here = location.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
+    if (here == null) {
+        map.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+        location.cameraMode = CameraMode.TRACKING
+        return
+    }
+    val centred = CameraPosition.Builder()
+        .target(LatLng(here.latitude, here.longitude))
+        .padding(0.0, 0.0, 0.0, 0.0)
+        .build()
+    map.animateCamera(
+        CameraUpdateFactory.newCameraPosition(centred),
+        FOLLOW_GLIDE_MS,
+        object : MapLibreMap.CancelableCallback {
+            override fun onFinish() {
+                location.cameraMode = CameraMode.TRACKING
+            }
+
+            override fun onCancel() = Unit
+        },
+    )
 }
+
+/** How long the map takes to glide to the rider's position. */
+private const val FOLLOW_GLIDE_MS = 500
 
 /** What a set of loops is found for: the same request gives the same
  * loops, so loops found ahead for it can be shown. */
