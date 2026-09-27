@@ -75,8 +75,9 @@ import androidx.compose.material3.AlertDialog
  * map shows what it plans above it). At rest it shows [header] only: the
  * figures, the actions and a line that sums up the choices. Pulled up
  * (drag the handle or the header up, or tap the handle or the summary
- * line), it shows [details] too, the choices themselves, scrolling when
- * they don't fit in [maxHeight]. Dragging down or Back puts it to rest.
+ * line), it shows [details] too, the choices themselves; header and
+ * choices then scroll together when they don't fit in [maxHeight].
+ * Dragging the handle down or Back puts it to rest.
  */
 @Composable
 fun PlanSheet(
@@ -102,47 +103,53 @@ fun PlanSheet(
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
         ) {
-            Column(
-                Modifier.draggable(
-                    state = drag,
-                    orientation = Orientation.Vertical,
-                    onDragStarted = { dragged = 0f },
-                    onDragStopped = {
-                        if (dragged < -threshold) onExpandedChange(true)
-                        if (dragged > threshold) onExpandedChange(false)
-                    },
-                ),
+            val dragToOpen = Modifier.draggable(
+                state = drag,
+                orientation = Orientation.Vertical,
+                onDragStarted = { dragged = 0f },
+                onDragStopped = {
+                    if (dragged < -threshold) onExpandedChange(true)
+                    if (dragged > threshold) onExpandedChange(false)
+                },
+            )
+            val handleLabel = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(SHEET_HANDLE_HEIGHT)
+                    .then(dragToOpen)
+                    .clickable(onClickLabel = handleLabel) { onExpandedChange(!expanded) }
+                    .semantics { contentDescription = handleLabel },
+                contentAlignment = Alignment.Center,
             ) {
-                val handleLabel = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand)
                 Box(
                     Modifier
-                        .fillMaxWidth()
-                        .height(24.dp)
-                        .clickable(onClickLabel = handleLabel) { onExpandedChange(!expanded) }
-                        .semantics { contentDescription = handleLabel },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier
-                            .size(width = 36.dp, height = 4.dp)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
-                    )
-                }
-                header()
+                        .size(width = 36.dp, height = 4.dp)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
+                )
             }
             if (expanded) {
+                // Pulled up, the header scrolls with the choices, so with
+                // large fonts the choices get the whole sheet, not what is
+                // left under the header. The handle stays to drag it down.
                 Column(
                     Modifier
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
                 ) {
+                    header()
                     HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp))
                     details()
                 }
+            } else {
+                Column(dragToOpen) { header() }
             }
         }
     }
 }
+
+/** Height of the sheet's handle, the part that drags it at any time. */
+private val SHEET_HANDLE_HEIGHT = 32.dp
 
 /** How far the sheet must be dragged to open or put it to rest. */
 private val SHEET_DRAG = 24.dp
