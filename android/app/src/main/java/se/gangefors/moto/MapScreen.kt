@@ -809,7 +809,7 @@ fun MapScreen() {
         val s = style
         if (m == null || o == null || s == null) return@DisposableEffect onDispose {}
         val ready = region as? RegionState.Ready
-        ready?.let { showRegionOutline(s, it.engine.info()) }
+        ready?.let { showRegionOutline(s, it.engine.info(), it.engine.coverage()) }
         val onClick = MapLibreMap.OnMapClickListener { tap ->
             if (marking) {
                 if (ready == null) message = regionStatus(resources, region) else onMarkTap(ready, tap)

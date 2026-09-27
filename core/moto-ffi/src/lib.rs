@@ -193,6 +193,17 @@ impl Engine {
         }
     }
 
+    /// Where the region's roads are: closed rings (first point repeated
+    /// last). Empty for older region files; then the bounding box is all
+    /// there is to show.
+    pub fn coverage(&self) -> Vec<Vec<LatLon>> {
+        self.inner
+            .coverage()
+            .into_iter()
+            .map(|ring| ring.into_iter().map(Into::into).collect())
+            .collect()
+    }
+
     pub fn snap(&self, point: LatLon) -> Result<RoadPoint, MotoError> {
         Ok(self.inner.snap(point.into())?.into())
     }
@@ -494,6 +505,9 @@ mod tests {
         assert_eq!((info.north_east.lat, info.north_east.lon), (55.715, 13.225));
         assert_eq!(info.osm_timestamp, 1_790_000_000);
         assert_eq!(info.source_name, "hand-made test fixture");
+        let rings = engine.coverage();
+        assert_eq!(rings.len(), 1);
+        assert!(rings[0].len() >= 4 && rings[0].first() == rings[0].last());
     }
 
     #[test]
