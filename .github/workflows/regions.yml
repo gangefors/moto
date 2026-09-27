@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Stefan Gangefors
 #
 # Builds the downloadable routing regions (ADR-0008) and publishes them to
-# the `regions` release: all of Sweden from Geofabrik's extract, built by
+# the `regions` release: all of Sweden from the OSM extract (OSM_EXTRACT_URL), built by
 # this commit's moto-regionbuild, gzip-compressed, with the manifest the app
 # reads. The builder writes the manifest only after the core has installed
 # every region back from its compressed file. Weekly for fresh map data, and
@@ -28,6 +28,10 @@ concurrency:
 
 env:
   RUST_VERSION: "1.98.1"
+  # The OSM Sweden extract: Geofabrik's data from the openstreetmap.fr
+  # mirror. Geofabrik itself now redirects GitHub's runners to plain HTTP,
+  # which the download refuses (HTTPS only).
+  OSM_EXTRACT_URL: https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf
 
 jobs:
   publish:
@@ -55,7 +59,7 @@ jobs:
           out="$RUNNER_TEMP/regions"
           mkdir -p "$out"
           pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
-          curl -sSfL --proto '=https' --retry 3 -o "$pbf" https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+          curl -sSfL --proto '=https' --retry 3 -o "$pbf" "$OSM_EXTRACT_URL"
           core/target/release/moto-regionbuild "$pbf" "$out/sweden.region" --bbox 55.0,10.5,69.2,24.3
           rm "$pbf"
           # -n: no file name or time in the header, so the same region
