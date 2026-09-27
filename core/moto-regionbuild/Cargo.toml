@@ -14,5 +14,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+flate2.workspace = true
 # The hand-made grid region, for round-trip cases.
 moto-core = { workspace = true, features = ["fixtures"] }

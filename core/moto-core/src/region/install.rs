@@ -181,6 +181,21 @@ fn io_err(e: io::Error) -> CoreError {
     CoreError::Storage(e.to_string())
 }
 
+/// SHA-256 of a file, read in pieces.
+pub fn sha256_file(path: &Path) -> Result<[u8; 32], CoreError> {
+    let mut hasher = Sha256::new();
+    let mut input = File::open(path).map_err(io_err)?;
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        let n = input.read(&mut buf).map_err(io_err)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher.finalize().into())
+}
+
 /// Installs a downloaded region: checks `gz_path` against `offer` (size,
 /// then SHA-256), unpacks it next to `target` refusing more than
 /// `offer.region_bytes`, verifies the unpacked file (checksums and
@@ -195,17 +210,7 @@ pub fn install_region(offer: &RegionOffer, gz_path: &Path, target: &Path) -> Res
             offer.gz_bytes
         )));
     }
-    let mut hasher = Sha256::new();
-    let mut input = File::open(gz_path).map_err(io_err)?;
-    let mut buf = vec![0u8; 1 << 16];
-    loop {
-        let n = input.read(&mut buf).map_err(io_err)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    if hasher.finalize().as_slice() != offer.gz_sha256 {
+    if sha256_file(gz_path)? != offer.gz_sha256 {
         return Err(install_err("SHA-256 does not match the manifest"));
     }
 

@@ -539,6 +539,7 @@ dependencies = [
 name = "moto-regionbuild"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "moto-core",
  "osmpbf",
  "rayon",
