@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
@@ -201,69 +202,82 @@ fun RidesSheet(
 
     var showAbout by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
-            Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.routing_gravel), Modifier.padding(top = 8.dp))
-            GravelChips(gravel, onGravel)
-            Text(
-                stringResource(R.string.routing_gravel_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(24.dp))
-            Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Box {
-                    OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
-                        OneLine(stringResource(R.string.sections_export))
-                    }
-                    DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
-                        EXPORT_FORMATS.forEach { (format, label) ->
-                            DropdownMenuItem(
-                                text = { Text(stringResource(label)) },
-                                onClick = {
-                                    formatMenu = false
-                                    exportFormat = format
-                                    saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
-                                },
-                            )
+        // One list that scrolls as a whole, so every part (the rides at the
+        // bottom too) can be reached however long the others get.
+        LazyColumn(
+            Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
+        ) {
+            item(key = "settings") {
+                Column {
+                    Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.routing_gravel), Modifier.padding(top = 8.dp))
+                    GravelChips(gravel, onGravel)
+                    Text(
+                        stringResource(R.string.routing_gravel_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Box {
+                            OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
+                                OneLine(stringResource(R.string.sections_export))
+                            }
+                            DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
+                                EXPORT_FORMATS.forEach { (format, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(label)) },
+                                        onClick = {
+                                            formatMenu = false
+                                            exportFormat = format
+                                            saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
+                            OneLine(stringResource(R.string.sections_import))
                         }
                     }
-                }
-                OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
-                    OneLine(stringResource(R.string.sections_import))
-                }
-            }
-            Spacer(Modifier.height(24.dp))
-            SavedRoutesList(
-                routes = routes,
-                onShow = onShowRoute,
-                onRename = { r, name ->
-                    scope.launch {
-                        withContext(Dispatchers.IO) { runCatching { store.renameRoute(r.id, name) } }
-                        reload()
+                    Spacer(Modifier.height(24.dp))
+                    SavedRoutesList(
+                        routes = routes,
+                        onShow = onShowRoute,
+                        onRename = { r, name ->
+                            scope.launch {
+                                withContext(Dispatchers.IO) { runCatching { store.renameRoute(r.id, name) } }
+                                reload()
+                            }
+                        },
+                        onDelete = { r ->
+                            scope.launch {
+                                withContext(Dispatchers.IO) { runCatching { store.deleteRoute(r.id) } }
+                                reload()
+                            }
+                        },
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
+                    OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
+                        OneLine(stringResource(R.string.rides_import))
                     }
-                },
-                onDelete = { r ->
-                    scope.launch {
-                        withContext(Dispatchers.IO) { runCatching { store.deleteRoute(r.id) } }
-                        reload()
-                    }
-                },
-            )
-            Spacer(Modifier.height(24.dp))
-            Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
-            OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
-                OneLine(stringResource(R.string.rides_import))
+                }
             }
             val list = tracks
             when {
-                list == null -> Text(stringResource(R.string.rides_loading), Modifier.padding(vertical = 16.dp))
-                list.isEmpty() -> Text(stringResource(R.string.rides_none), Modifier.padding(vertical = 16.dp))
-                else -> LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                list == null -> item(key = "rides-loading") {
+                    Text(stringResource(R.string.rides_loading), Modifier.padding(vertical = 16.dp))
+                }
+                list.isEmpty() -> item(key = "rides-none") {
+                    Text(stringResource(R.string.rides_none), Modifier.padding(vertical = 16.dp))
+                }
+                else -> {
                     items(list, key = { it.id }) { t ->
                         // The buttons wrap under the ride's text when there
                         // is no room beside it (narrow screens, large fonts).
@@ -310,8 +324,12 @@ fun RidesSheet(
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            TextButton(onClick = { showAbout = true }) { OneLine(stringResource(R.string.about_open)) }
+            item(key = "about") {
+                TextButton(
+                    onClick = { showAbout = true },
+                    modifier = Modifier.padding(top = 16.dp),
+                ) { OneLine(stringResource(R.string.about_open)) }
+            }
         }
     }
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
