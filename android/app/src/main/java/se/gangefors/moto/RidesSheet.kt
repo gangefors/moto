@@ -50,6 +50,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.Engine
+import se.gangefors.moto.core.defaultRouteOptions
 import se.gangefors.moto.core.ExportFormat
 import se.gangefors.moto.core.ImportReport
 import se.gangefors.moto.core.SectionStore
@@ -59,19 +60,19 @@ import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.exportExtension
 
 /**
- * The rider's settings and data: what routes do with gravel roads
- * ([gravel], the same setting as on the route and loop cards), all saved
- * sections, exported as GeoJSON (plain or
- * compressed) or imported from such a file, and the recorded rides, newest
- * first, each exported as GPX or deleted (tapped twice), plus rides imported
- * from a GPX file (another app's track, or an earlier export). Files are written
- * and read only where the rider picks with the system file picker: no
- * storage permission, and nothing leaves the phone unless the rider sends
- * it. [engine] fits imported sections to the map; [onSectionsChanged]
- * reloads them after an import; the saved routes can be shown
- * ([onShowRoute]), renamed or deleted; [onShow] draws a ride on the map (to mark
- * sections along it); [onMessage] reports what happened. At the
- * bottom, About and licences opens [AboutDialog].
+ * The rider's settings and data, in this order: what routes do with
+ * gravel roads ([gravel], the same setting as on the route and loop
+ * cards); Routes & rides, saved routes and recorded or imported rides in
+ * one list, newest first, each shown on the map ([onShowRoute], [onShow]),
+ * renamed, shared (to a nav app), saved as a GPX file or deleted (tapped
+ * twice), and a ride also saved as a route to ride again, plus Import GPX
+ * for rides; all saved sections, exported as GeoJSON (plain or
+ * compressed) or imported from such a file ([engine] fits them to the
+ * map, [onSectionsChanged] reloads them); and the map region. Files are
+ * written and read only where the rider picks with the system file picker:
+ * no storage permission, and nothing leaves the phone unless the rider
+ * sends it. [onMessage] reports what happened. At the bottom, About and
+ * licences opens [AboutDialog].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,9 +92,12 @@ fun RidesSheet(
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
     var tracks by remember { mutableStateOf<List<Track>?>(null) }
-    var confirmDelete by remember { mutableLongStateOf(0L) }
-    var renamingRide by remember { mutableStateOf<Track?>(null) }
-    var exporting by remember { mutableStateOf<Track?>(null) }
+    // Routes & rides: the one armed for deleting, being renamed, being
+    // saved as a route, or being saved as a file.
+    var confirmDelete by remember { mutableStateOf<String?>(null) }
+    var renaming by remember { mutableStateOf<LibraryItem?>(null) }
+    var savingAsRoute by remember { mutableStateOf<Track?>(null) }
+    var exporting by remember { mutableStateOf<LibraryItem?>(null) }
 
     var routes by remember { mutableStateOf<List<SavedRoute>?>(null) }
 
@@ -103,17 +107,33 @@ fun RidesSheet(
     }
     LaunchedEffect(store) { reload() }
 
+    /** The GPX of a route or ride, named as listed. Call off the main thread. */
+    fun gpxOf(item: LibraryItem): String = when (item) {
+        is LibraryItem.Ride ->
+            store.exportTrackGpx(item.track.id, libraryTitle(item, zone))
+                ?: error(resources.getString(R.string.rides_gone))
+        is LibraryItem.Route -> {
+            val e = engine ?: error(resources.getString(R.string.region_missing))
+            val line = store.routeGeometry(item.route.id) ?: error(resources.getString(R.string.rides_gone))
+            e.routeGpx(line, item.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel))
+        }
+    }
+
+    fun fileNameOf(item: LibraryItem): String = when (item) {
+        is LibraryItem.Ride -> rideFileName(item.track.startedAt, zone)
+        is LibraryItem.Route -> routeFileName(item.route.createdAt, zone)
+    }
+
     val saveAs = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/gpx+xml"),
     ) { uri: Uri? ->
-        val track = exporting ?: return@rememberLauncherForActivityResult
+        val item = exporting ?: return@rememberLauncherForActivityResult
         exporting = null
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val gpx = store.exportTrackGpx(track.id, rideName(track.name, track.startedAt, zone))
-                        ?: error(resources.getString(R.string.rides_gone))
+                    val gpx = gpxOf(item)
                     context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(gpx.toByteArray()) }
                         ?: error(resources.getString(R.string.rides_cannot_write))
                 }
@@ -124,6 +144,64 @@ fun RidesSheet(
                     onFailure = { resources.getString(R.string.rides_export_failed, it.message ?: it.toString()) },
                 ),
             )
+        }
+    }
+
+    val actions = object : LibraryActions {
+        override fun show(item: LibraryItem) = when (item) {
+            is LibraryItem.Route -> onShowRoute(item.route)
+            is LibraryItem.Ride -> onShow(item.track)
+        }
+
+        override fun rename(item: LibraryItem) {
+            renaming = item
+        }
+
+        override fun share(item: LibraryItem) {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        RouteShare.prepare(
+                            context,
+                            gpxOf(item),
+                            fileNameOf(item),
+                            resources.getString(R.string.route_share_title),
+                        )
+                    }
+                }
+                result.fold(
+                    onSuccess = { context.startActivity(it) },
+                    onFailure = { onMessage(resources.getString(R.string.route_share_failed, it.message ?: it.toString())) },
+                )
+            }
+        }
+
+        override fun export(item: LibraryItem) {
+            exporting = item
+            saveAs.launch(fileNameOf(item))
+        }
+
+        override fun saveAsRoute(item: LibraryItem.Ride) {
+            savingAsRoute = item.track
+        }
+
+        override fun armDelete(item: LibraryItem) {
+            confirmDelete = item.key
+        }
+
+        override fun delete(item: LibraryItem) {
+            confirmDelete = null
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        when (item) {
+                            is LibraryItem.Route -> store.deleteRoute(item.route.id)
+                            is LibraryItem.Ride -> store.deleteTrack(item.track.id)
+                        }
+                    }
+                }
+                reload()
+            }
         }
     }
 
@@ -223,100 +301,25 @@ fun RidesSheet(
                     )
                 }
             }
-            item(key = "saved-routes") {
+            item(key = "library-title") {
                 Column {
                     Spacer(Modifier.height(24.dp))
-                    SavedRoutesList(
-                        routes = routes,
-                        onShow = onShowRoute,
-                        onRename = { r, name ->
-                            scope.launch {
-                                withContext(Dispatchers.IO) { runCatching { store.renameRoute(r.id, name) } }
-                                reload()
-                            }
-                        },
-                        onDelete = { r ->
-                            scope.launch {
-                                withContext(Dispatchers.IO) { runCatching { store.deleteRoute(r.id) } }
-                                reload()
-                            }
-                        },
-                    )
-                }
-            }
-            item(key = "rides-title") {
-                Column {
-                    Spacer(Modifier.height(24.dp))
-                    Text(stringResource(R.string.rides_title), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.library_title), style = MaterialTheme.typography.titleLarge)
                     OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
                         OneLine(stringResource(R.string.rides_import))
                     }
                 }
             }
-            val list = tracks
+            val library = libraryItems(routes, tracks)
             when {
-                list == null -> item(key = "rides-loading") {
+                library == null -> item(key = "library-loading") {
                     Text(stringResource(R.string.rides_loading), Modifier.padding(vertical = 16.dp))
                 }
-                list.isEmpty() -> item(key = "rides-none") {
-                    Text(stringResource(R.string.rides_none), Modifier.padding(vertical = 16.dp))
+                library.isEmpty() -> item(key = "library-none") {
+                    Text(stringResource(R.string.library_none), Modifier.padding(vertical = 16.dp))
                 }
-                else -> {
-                    items(list, key = { it.id }) { t ->
-                        // The buttons wrap under the ride's text when there
-                        // is no room beside it (narrow screens, large fonts).
-                        FlowRow(
-                            Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            itemVerticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.padding(end = 8.dp)) {
-                                Text(rideName(t.name, t.startedAt, zone))
-                                Text(
-                                    rideSummary(resources, t),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
-                                TextButton(
-                                    onClick = { onShow(t) },
-                                    enabled = t.endedAt != null,
-                                ) { OneLine(stringResource(R.string.rides_show)) }
-                                IconButton(onClick = { renamingRide = t }) {
-                                    Icon(
-                                        painterResource(R.drawable.ic_edit),
-                                        stringResource(R.string.saved_route_rename),
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        exporting = t
-                                        saveAs.launch(rideFileName(t.startedAt, zone))
-                                    },
-                                    enabled = t.endedAt != null,
-                                ) {
-                                    Icon(
-                                        painterResource(R.drawable.ic_export),
-                                        stringResource(R.string.rides_export),
-                                    )
-                                }
-                                DeleteButton(
-                                    confirming = confirmDelete == t.id,
-                                    onArm = { confirmDelete = t.id },
-                                    onDelete = {
-                                        confirmDelete = 0L
-                                        scope.launch {
-                                            withContext(Dispatchers.IO) { runCatching { store.deleteTrack(t.id) } }
-                                            reload()
-                                        }
-                                    },
-                                    enabled = t.endedAt != null,
-                                )
-                            }
-                        }
-                        HorizontalDivider()
-                    }
+                else -> items(library, key = { it.key }) { item ->
+                    LibraryRow(item, zone, confirmDelete == item.key, actions)
                 }
             }
             item(key = "sections") {
@@ -365,15 +368,44 @@ fun RidesSheet(
         }
     }
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
-    renamingRide?.let { t ->
+    renaming?.let { item ->
         RouteNameDialog(
-            title = stringResource(R.string.ride_rename_title),
-            initial = rideName(t.name, t.startedAt, zone),
-            onDismiss = { renamingRide = null },
+            title = stringResource(
+                if (item is LibraryItem.Ride) R.string.ride_rename_title else R.string.saved_route_rename_title,
+            ),
+            initial = libraryTitle(item, zone),
+            onDismiss = { renaming = null },
             onSave = { name ->
-                renamingRide = null
+                renaming = null
                 scope.launch {
-                    withContext(Dispatchers.IO) { runCatching { store.renameTrack(t.id, name) } }
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            when (item) {
+                                is LibraryItem.Route -> store.renameRoute(item.route.id, name)
+                                is LibraryItem.Ride -> store.renameTrack(item.track.id, name)
+                            }
+                        }
+                    }
+                    reload()
+                }
+            },
+        )
+    }
+    savingAsRoute?.let { t ->
+        RouteNameDialog(
+            title = stringResource(R.string.library_save_as_route_title),
+            initial = rideName(t.name, t.startedAt, zone),
+            onDismiss = { savingAsRoute = null },
+            onSave = { name ->
+                savingAsRoute = null
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching { store.saveTrackAsRoute(t.id, name) } }
+                    onMessage(
+                        result.fold(
+                            onSuccess = { resources.getString(R.string.route_saved, it?.name ?: name) },
+                            onFailure = { resources.getString(R.string.route_save_failed, it.message ?: it.toString()) },
+                        ),
+                    )
                     reload()
                 }
             },
@@ -381,7 +413,7 @@ fun RidesSheet(
     }
 }
 
-private fun rideSummary(res: android.content.res.Resources, t: Track): String {
+internal fun rideSummary(res: android.content.res.Resources, t: Track): String {
     val count = t.pointCount.coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
     val fixes = res.getQuantityString(R.plurals.gps_fixes, count, count)
     val ended = t.endedAt ?: return res.getString(R.string.rides_recording, fixes)
