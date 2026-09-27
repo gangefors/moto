@@ -169,6 +169,10 @@ fun RouteCard(
     arriveBy: Long?,
     arrivalNote: String?,
     onArriveBy: (Long?) -> Unit,
+    position: Int,
+    count: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
@@ -187,6 +191,16 @@ fun RouteCard(
                 onShare = onShare,
                 onClose = onClose,
                 closeDescription = stringResource(R.string.route_close),
+            )
+            ChoiceSwitcher(
+                found = summary != null,
+                failed = false,
+                position = position,
+                count = count,
+                onPrevious = onPrevious,
+                onNext = onNext,
+                previousDescription = stringResource(R.string.route_previous),
+                nextDescription = stringResource(R.string.route_next),
             )
             if (!expanded) {
                 val parts = buildList {
@@ -341,7 +355,17 @@ fun LoopCard(
                 onClose = onClose,
                 closeDescription = stringResource(R.string.loop_close),
             )
-            LoopSwitcher(found, problem != null, position, count, onPrevious, onNext, onShuffle)
+            ChoiceSwitcher(
+                found = found,
+                failed = problem != null,
+                position = position,
+                count = count,
+                onPrevious = onPrevious,
+                onNext = onNext,
+                previousDescription = stringResource(R.string.loop_previous),
+                nextDescription = stringResource(R.string.loop_next),
+                onShuffle = onShuffle,
+            )
             if (!expanded) {
                 val heading = stringResource(
                     when (direction) {
@@ -362,24 +386,28 @@ fun LoopCard(
 }
 
 /**
- * Which loop of the set is shown, with the previous and next ones, and
- * Shuffle for another set. While loops are being found the row keeps the
- * last figures, its buttons off, so the sheet doesn't move; when none
- * were found ([failed]) Shuffle still works.
+ * Which of the routes or loops to choose from is shown, with the previous
+ * and next ones, and for loops Shuffle ([onShuffle]) for another set.
+ * While they are being found the row keeps the last figures, its buttons
+ * off, so the sheet doesn't move; when none were found ([failed]) Shuffle
+ * still works. Nothing to choose from and no Shuffle: no row.
  */
 @Composable
-private fun LoopSwitcher(
+private fun ChoiceSwitcher(
     found: Boolean,
     failed: Boolean,
     position: Int,
     count: Int,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onShuffle: () -> Unit,
+    previousDescription: String,
+    nextDescription: String,
+    onShuffle: (() -> Unit)? = null,
 ) {
     val last = remember { mutableStateOf(position to count) }
     SideEffect { if (found) last.value = position to count }
     val (shownPosition, shownCount) = if (found) position to count else last.value
+    if (shownCount <= 1 && onShuffle == null) return
     FlowRow(
         modifier = Modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -394,21 +422,23 @@ private fun LoopSwitcher(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onPrevious, enabled = found) {
-                    Icon(painterResource(R.drawable.ic_chevron_left), stringResource(R.string.loop_previous))
+                    Icon(painterResource(R.drawable.ic_chevron_left), previousDescription)
                 }
                 Text(
                     stringResource(R.string.loop_count, shownPosition + 1, shownCount),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 IconButton(onClick = onNext, enabled = found) {
-                    Icon(painterResource(R.drawable.ic_chevron_right), stringResource(R.string.loop_next))
+                    Icon(painterResource(R.drawable.ic_chevron_right), nextDescription)
                 }
             }
         }
-        FilledTonalButton(onClick = onShuffle, enabled = found || failed) {
-            Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            OneLine(stringResource(R.string.loop_shuffle))
+        if (onShuffle != null) {
+            FilledTonalButton(onClick = onShuffle, enabled = found || failed) {
+                Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                OneLine(stringResource(R.string.loop_shuffle))
+            }
         }
     }
 }
@@ -578,6 +608,7 @@ private fun RouteFigures(summary: RouteSummary?, computing: String, modifier: Mo
             emptyList()
         } else {
             buildList {
+                if (shown.fastest) add(stringResource(R.string.route_fastest))
                 if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
                 if (shown.favouritePercent > 0) {
                     add(stringResource(R.string.route_on_favourites, shown.favouritePercent))

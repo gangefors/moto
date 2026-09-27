@@ -48,6 +48,14 @@ class MapLogicTest {
     }
 
     @Test
+    fun theLastOfSeveralChoicesIsTheFastest() {
+        assertEquals(3, fastestChoice(4))
+        assertEquals(1, fastestChoice(2))
+        assertNull(fastestChoice(1))
+        assertNull(fastestChoice(0))
+    }
+
+    @Test
     fun classifiesCoreErrors() {
         assertEquals(CoreProblem.OUTSIDE_REGION, classify(MotoException.OutsideRegion("x")))
         assertEquals(CoreProblem.NO_ROAD_NEARBY, classify(MotoException.NoRoadNearby("x")))

@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import android.graphics.PointF
 import android.graphics.RectF
+import androidx.core.graphics.toColorInt
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
@@ -50,8 +51,9 @@ fun showRegionOutline(style: Style, info: RegionInfo) {
  * Draws a route from the Rust core with its start and end pins. The route
  * is blue all the way; its stretches on favourite sections glow purple, and
  * on gravel it gets white dashes along its middle. Other routes to choose
- * from (a set of loops) are drawn faint underneath, and a tap on one tells
- * which (see [otherAt]).
+ * from (a set of loops, a route's choices) are drawn faint underneath, and
+ * a tap on one tells which (see [otherAt]). The fastest of a route's
+ * choices, the dull option, is grey instead of blue.
  * The map only draws; the route comes from the core.
  */
 class RouteOverlay(private val style: Style, private val density: Float) {
@@ -75,7 +77,7 @@ class RouteOverlay(private val style: Style, private val density: Float) {
                 LineLayer(OTHER_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), OTHER))
                     .withProperties(
-                        PropertyFactory.lineColor(ROUTE_COLOR),
+                        PropertyFactory.lineColor(routeColor()),
                         PropertyFactory.lineWidth(3.5f),
                         PropertyFactory.lineOpacity(0.45f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -109,7 +111,7 @@ class RouteOverlay(private val style: Style, private val density: Float) {
                 LineLayer(LINE_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), ROUTE))
                     .withProperties(
-                        PropertyFactory.lineColor(ROUTE_COLOR),
+                        PropertyFactory.lineColor(routeColor()),
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -161,7 +163,9 @@ class RouteOverlay(private val style: Style, private val density: Float) {
     /** Shows the start pin, and the end pin and route when there are any;
      * [favourites] are the route's stretches on favourite sections,
      * [gravel] those on unpaved roads, [via] the points it passes, and
-     * [others] the other routes to choose from, by their index. */
+     * [others] the other routes to choose from, by their index. The route
+     * is grey when [dull] (the fastest choice), as is the other route of
+     * index [dullOther]. */
     fun show(
         start: LatLng?,
         end: LatLng?,
@@ -170,14 +174,19 @@ class RouteOverlay(private val style: Style, private val density: Float) {
         gravel: List<List<LatLon>> = emptyList(),
         via: List<LatLng> = emptyList(),
         others: List<Pair<Int, List<LatLon>>> = emptyList(),
+        dull: Boolean = false,
+        dullOther: Int? = null,
     ) {
         val features = mutableListOf<Feature>()
         fun line(points: List<LatLon>) = LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })
         others.filter { it.second.size >= 2 }.forEach { (i, points) ->
-            features += feature(line(points), OTHER).apply { addNumberProperty(INDEX, i) }
+            features += feature(line(points), OTHER).apply {
+                addNumberProperty(INDEX, i)
+                addBooleanProperty(DULL, i == dullOther)
+            }
         }
         if (route != null && route.size >= 2) {
-            features += feature(line(route), ROUTE)
+            features += feature(line(route), ROUTE).apply { addBooleanProperty(DULL, dull) }
             favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
             gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }
         }
@@ -189,6 +198,13 @@ class RouteOverlay(private val style: Style, private val density: Float) {
 
     private fun feature(geometry: org.maplibre.geojson.Geometry, kind: String): Feature =
         Feature.fromGeometry(geometry).apply { addStringProperty(KIND, kind) }
+
+    /** Blue, or grey for the dull option (a feature's [DULL] property). */
+    private fun routeColor(): Expression = Expression.switchCase(
+        Expression.toBool(Expression.get(DULL)),
+        Expression.color(DULL_COLOR.toColorInt()),
+        Expression.color(ROUTE_COLOR.toColorInt()),
+    )
 
     /** The index of the other route drawn at [point] (within a finger's
      * width), or `null`. */
@@ -211,6 +227,9 @@ class RouteOverlay(private val style: Style, private val density: Float) {
         const val OTHER_CASING_LAYER = "moto-route-other-casing"
         const val OTHER = "other"
         const val INDEX = "index"
+        const val DULL = "dull"
+        // The fastest route: a road grey, not the blue of the fun ones.
+        const val DULL_COLOR = "#5f6368"
         // Half a fingertip: how near a tap must be to pick another route.
         const val HIT_RADIUS_DP = 16f
         const val KIND = "kind"

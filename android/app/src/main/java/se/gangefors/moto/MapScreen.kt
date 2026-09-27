@@ -579,6 +579,9 @@ fun MapScreen() {
     var routeSummary by remember { mutableStateOf<RouteSummary?>(null) }
     // The route shown and the options it was found with, for sharing.
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
+    // The routes to choose from (the fastest last) and which is shown.
+    var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
+    var routeIndex by remember { mutableIntStateOf(0) }
     var budgetPercent by remember { mutableIntStateOf(RoutePrefs.budgetPercent(context)) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
     LaunchedEffect(overlays, sections, showUnmatched, sectionGravel, gravel) {
@@ -612,6 +615,22 @@ fun MapScreen() {
         OneAhead<LoopRequest, Deferred<Result<List<Route>>>> { it.cancel() }
     }
     DisposableEffect(Unit) { onDispose { loopsAhead.clear() } }
+    /** Shows route choice [index] of [set] (found with [opts]) with its
+     * figures, the others faint; the fastest of several grey. */
+    fun showRouteChoice(start: LatLng, end: LatLng, set: List<Route>, index: Int, opts: RouteOptions) {
+        val r = set.getOrNull(index) ?: return
+        val fastest = fastestChoice(set.size)
+        val others = set.mapIndexedNotNull { i, l -> if (i == index) null else i to l.geometry }
+        overlays?.route?.show(
+            start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias,
+            others = others, dull = index == fastest, dullOther = fastest,
+        )
+        routeIndex = index
+        routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
+            .copy(fastest = index == fastest)
+        shownRoute = r to opts
+    }
+
     /** Shows loop [index] of [set] from [start], the others faint. */
     fun showLoop(start: LatLng, set: List<Route>, index: Int) {
         val r = set.getOrNull(index) ?: return
@@ -724,6 +743,8 @@ fun MapScreen() {
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
         routeSummary = null
         shownRoute = null
+        routeChoices = emptyList()
+        routeIndex = 0
         val favs = favourites
         val now = System.currentTimeMillis() / 1000
         val by = arriveBy
@@ -734,17 +755,18 @@ fun MapScreen() {
         }
         // A newer request cancels this one; its result is then dropped.
         val result = withContext(Dispatchers.Default) {
-            runCatching { ready.engine.route(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
+            runCatching { ready.engine.routeChoices(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
         }
         result.fold(
-            onSuccess = { r ->
-                o.route.show(start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias)
-                showOnMap(listOf(r.geometry), always = fittedFor != (start to end))
-                fittedFor = start to end
-                routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
-                shownRoute = r to opts
+            onSuccess = { found ->
+                if (found.isEmpty()) return@fold
+                routeChoices = found
                 routeFoundAt = now
                 viasBefore = null
+                showRouteChoice(start, end, found, 0, opts)
+                // All the choices, so switching doesn't move the map.
+                showOnMap(found.map { it.geometry }, always = fittedFor != (start to end))
+                fittedFor = start to end
             },
             onFailure = {
                 val before = viasBefore
@@ -764,7 +786,7 @@ fun MapScreen() {
     LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize) {
         val lines = when {
             loopStart != null -> loops.map { it.geometry }
-            routeEnds != null -> listOfNotNull(shownRoute?.first?.geometry)
+            routeEnds != null -> routeChoices.map { it.geometry }
             else -> emptyList()
         }
         if (lines.isNotEmpty()) showOnMap(lines, always = false)
@@ -781,12 +803,20 @@ fun MapScreen() {
                 if (ready == null) message = regionStatus(resources, region) else onMarkTap(ready, tap)
                 return@OnMapClickListener true
             }
-            // Another loop of the set, drawn faint: show it.
+            // Another loop of the set, or route to choose, drawn faint:
+            // show it.
             val start = loopStart
             val other = if (start != null && loops.size > 1) o.route.otherAt(m, tap) else null
             if (start != null && other != null && other in loops.indices) {
                 loopIndex = other
                 showLoop(start, loops, other)
+                return@OnMapClickListener true
+            }
+            val ends = routeEnds
+            val opts = shownRoute?.second
+            val choice = if (ends != null && routeChoices.size > 1) o.route.otherAt(m, tap) else null
+            if (ends != null && opts != null && choice != null && choice in routeChoices.indices) {
+                showRouteChoice(ends.first, ends.second, routeChoices, choice, opts)
                 return@OnMapClickListener true
             }
             val hit = o.sections.sectionAt(m, tap)?.let { id -> sections.firstOrNull { it.id == id } }
@@ -1114,6 +1144,20 @@ fun MapScreen() {
                                 }
                             },
                             onArriveBy = { arriveBy = it },
+                            position = routeIndex,
+                            count = routeChoices.size,
+                            onPrevious = {
+                                val opts = shownRoute?.second
+                                if (opts != null) {
+                                    showRouteChoice(it.first, it.second, routeChoices, previousLoop(routeIndex, routeChoices.size), opts)
+                                }
+                            },
+                            onNext = {
+                                val opts = shownRoute?.second
+                                if (opts != null) {
+                                    showRouteChoice(it.first, it.second, routeChoices, nextLoop(routeIndex, routeChoices.size), opts)
+                                }
+                            },
                         )
                     }
                     loopStart?.let {
