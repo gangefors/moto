@@ -67,6 +67,22 @@ class SectionMarker<P>(private val distance: (P, P) -> Double) {
         return state
     }
 
+    /**
+     * Back: takes away the last point placed (a proposal goes back to its
+     * start, a start back to nothing), or stops marking when nothing is
+     * placed. Returns the new state.
+     */
+    fun back(): State<P> {
+        moveTo(
+            when (val s = state) {
+                State.Off, State.PickStart -> State.Off
+                is State.PickEnd -> State.PickStart
+                is State.Proposed -> State.PickEnd(s.start)
+            },
+        )
+        return state
+    }
+
     /** Undoes the last tap, whose point the core could not use. */
     fun rejectLast() {
         state = previous

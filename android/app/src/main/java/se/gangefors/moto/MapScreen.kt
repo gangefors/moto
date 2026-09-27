@@ -19,6 +19,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -683,6 +684,45 @@ fun MapScreen() {
     // A saved route the rider asked to see (My data > Saved routes > Show),
     // and a route or loop being saved (its name is asked first).
     var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
+
+    fun closeRoute() {
+        routeEnds = null
+        picker.reset()
+        vias = emptyList()
+        addingVia = false
+        arriveBy = null
+        overlays?.route?.show(null, null, null)
+    }
+
+    fun closeLoop() {
+        loopStart = null
+        loopsAhead.clear()
+        overlays?.route?.show(null, null, null)
+    }
+
+    /** Back while marking: the last point placed goes, or marking (or the
+     * tag review) stops when nothing is placed. */
+    fun markBack() {
+        if (reviewTag != null) {
+            endReview(resources.getString(R.string.map_hint))
+            return
+        }
+        // A proposal still being found for the old points is dropped.
+        markSession++
+        proposing = false
+        draft = null
+        when (marker.back()) {
+            SectionMarker.State.Off -> {
+                stopMarking()
+                message = resources.getString(R.string.map_hint)
+                return
+            }
+            SectionMarker.State.PickStart -> message = resources.getString(R.string.section_pick_start)
+            is SectionMarker.State.PickEnd -> message = resources.getString(R.string.section_pick_end)
+            is SectionMarker.State.Proposed -> Unit
+        }
+        showDraft()
+    }
     var savingRoute by remember { mutableStateOf<Pair<Route, Boolean>?>(null) }
     LaunchedEffect(overlays, routeEnds, loopStart, shownSaved) {
         val routeShown = routeEnds != null || loopStart != null || shownSaved != null
@@ -1124,6 +1164,36 @@ fun MapScreen() {
                 )
             }
         }
+        // Back steps back through what is on the map before it leaves the
+        // app (a pulled-up sheet handles Back itself first).
+        BackHandler(enabled = marking || addingVia || selectedVia != null || roadInfo != null || planning ||
+            startPicked != null || shownRide != null || shownSaved != null) {
+            when {
+                marking -> markBack()
+                addingVia -> {
+                    addingVia = false
+                    message = null
+                }
+                selectedVia != null -> selectedVia = null
+                roadInfo != null -> {
+                    roadInfo = null
+                    overlays?.snap?.clear()
+                }
+                routeEnds != null -> closeRoute()
+                loopStart != null -> closeLoop()
+                startPicked != null -> {
+                    startPicked = null
+                    picker.reset()
+                    overlays?.route?.show(null, null, null)
+                    message = resources.getString(R.string.map_hint)
+                }
+                shownSaved != null -> {
+                    shownSaved = null
+                    overlays?.route?.show(null, null, null)
+                }
+                shownRide != null -> shownRide = null
+            }
+        }
         // Planning a route or loop: the sheet at the bottom; the map fits
         // what it plans in the space above it.
         if (planning) {
@@ -1149,14 +1219,7 @@ fun MapScreen() {
                                 gravel = g
                                 RoutePrefs.setGravel(context, g)
                             },
-                            onClose = {
-                                routeEnds = null
-                                picker.reset()
-                                vias = emptyList()
-                                addingVia = false
-                                arriveBy = null
-                                overlays?.route?.show(null, null, null)
-                            },
+                            onClose = { closeRoute() },
                             onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
                             onSave = { shownRoute?.let { (r, _) -> savingRoute = r to false } },
                             viaCount = vias.size,
@@ -1230,11 +1293,7 @@ fun MapScreen() {
                                 gravel = g
                                 RoutePrefs.setGravel(context, g)
                             },
-                            onClose = {
-                                loopStart = null
-                                loopsAhead.clear()
-                                overlays?.route?.show(null, null, null)
-                            },
+                            onClose = { closeLoop() },
                             onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
                             onSave = { shown?.let { savingRoute = it to true } },
                         )
