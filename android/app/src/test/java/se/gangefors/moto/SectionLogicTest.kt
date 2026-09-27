@@ -51,6 +51,25 @@ class SectionLogicTest {
     }
 
     @Test
+    fun backTakesAwayOnePointAtATime() {
+        val m = marker()
+        m.begin()
+        m.onTap(1.0)
+        m.onTap(5.0)
+        m.onTap(4.0)
+        assertEquals(State.Proposed(1.0, 4.0), m.state)
+        // A proposal goes back to its start, the start to nothing, and
+        // with nothing placed marking stops.
+        assertEquals(State.PickEnd(1.0), m.back())
+        assertEquals(State.PickStart, m.back())
+        assertEquals(State.Off, m.back())
+        assertEquals(State.Off, m.back())
+        // Marking again starts afresh.
+        m.begin()
+        assertEquals(State.PickEnd(2.0), m.onTap(2.0))
+    }
+
+    @Test
     fun rejectLastUndoesOneTap() {
         val m = marker()
         m.begin()
