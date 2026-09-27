@@ -95,6 +95,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
@@ -788,6 +789,9 @@ fun MapScreen() {
     // When the card grows or shrinks (expanded, collapsed, a message), the
     // route or loops shown stay in view.
     LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize) {
+        // Once the sheet has settled: a fit while it still grows would
+        // aim for the space above it as it was, not as it ends up.
+        delay(SETTLE_MS)
         val lines = when {
             loopStart != null -> loops.map { it.geometry }
             routeEnds != null -> routeChoices.map { it.geometry }
@@ -1616,7 +1620,10 @@ private const val SAMPLE_INTERVAL_MS = 500L
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
 /** The planning sheet pulled up covers at most this share of the map. */
-private const val SHEET_MAX_SHARE = 0.6f
+private const val SHEET_MAX_SHARE = 0.55f
+
+/** How long the panels must stay still before the map fits to them. */
+private const val SETTLE_MS = 150L
 
 /** Room between a fitted route and the panels around it. */
 private val FIT_MARGIN = 24.dp
