@@ -41,6 +41,8 @@ METRICS = [
     ("choices_ms_p95", "Route choices (with favourites), p95", 1.25, 0.0),
     ("loop_ms_mean", "Round trip (with favourites), mean", 1.25, 0.0),
     ("loop_ms_p95", "Round trip (with favourites), p95", 1.25, 0.0),
+    ("long_loop_ms_mean", "Round trip of 400 km, mean", 1.25, 0.0),
+    ("long_loop_ms_p95", "Round trip of 400 km, p95", 1.25, 0.0),
     ("match_ms_per_km", "Map matching, per km", 1.25, 0.0),
 ]
 WARNING = 1.10

@@ -1,0 +1,7 @@
+{
+  "name": "Loop of 400 km from Hörby",
+  "description": "The longest loop the app offers (400 km), from Hörby in the middle of Skåne: within 15 % of the length, not riding back the way it came, and curvy. The M0 region (Skåne and its surroundings, cut at the sea and the box) leaves room for one loop this long; all of Sweden gives three (2026-09-27), so one is enough here.",
+  "from": [55.855, 13.66],
+  "loop": {"km": 400},
+  "expect": {"min_loops": 1, "min_curvy_share": 0.25}
+}

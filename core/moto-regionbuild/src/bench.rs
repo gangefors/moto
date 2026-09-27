@@ -30,6 +30,9 @@ const FAVOURITE_REACH_DEG: f64 = 0.02;
 /// lengths, with the favourites; fewer rounds, as each is many routes.
 pub const LOOP_STARTS: usize = 10;
 pub const LOOP_KM: [f64; 2] = [50.0, 100.0];
+/// Long round trips from the same starts: the longest loop the app offers.
+/// Measured apart from the others, so their figures stay comparable.
+pub const LONG_LOOP_KM: f64 = 400.0;
 const LOOP_ROUNDS: usize = 3;
 /// Routes turned into noisy GPS tracks and map-matched by the benchmark.
 pub const MATCH_TRACKS: usize = 20;
@@ -98,6 +101,12 @@ pub struct Report {
     pub loop_requests: usize,
     pub loop_found_two: usize,
     pub loops_mean: f64,
+    /// Round trips of [`LONG_LOOP_KM`] from the same starts, likewise.
+    pub long_loop_ms_mean: f64,
+    pub long_loop_ms_p95: f64,
+    pub long_loop_requests: usize,
+    pub long_loop_found_two: usize,
+    pub long_loops_mean: f64,
     /// Map matching time per km of track (fastest round).
     pub match_ms_per_km: f64,
     pub match_tracks: usize,
@@ -332,27 +341,13 @@ pub fn run(path: &Path) -> Result<Report, String> {
         .take(LOOP_STARTS)
         .flat_map(|&(a, _)| LOOP_KM.map(|km| (a, km)))
         .collect();
-    let mut loop_per_request = vec![Vec::new(); loop_requests.len()];
-    let (mut loop_found_two, mut loop_count) = (0, 0);
-    for round in 0..LOOP_ROUNDS {
-        for (i, &(a, km)) in loop_requests.iter().enumerate() {
-            let t = Instant::now();
-            let r = engine.round_trip_with(
-                a,
-                RoundTripTarget::DistanceM(km * 1000.0),
-                &opts,
-                &favourites,
-                &Default::default(),
-            );
-            loop_per_request[i].push(ms(t));
-            if round == 0 {
-                let n = r.map_or(0, |l| l.len());
-                loop_count += n;
-                loop_found_two += usize::from(n >= 2);
-            }
-        }
-    }
-    let loop_times = sorted(loop_per_request);
+    let loops = time_loops(&engine, &loop_requests, &opts, &favourites);
+    let long_requests: Vec<(LatLon, f64)> = pairs
+        .iter()
+        .take(LOOP_STARTS)
+        .map(|&(a, _)| (a, LONG_LOOP_KM))
+        .collect();
+    let long_loops = time_loops(&engine, &long_requests, &opts, &favourites);
 
     // Map matching: noisy synthetic tracks along some of the routes.
     let mut noise = Rng(0x1234_5678_9abc_def1);
@@ -428,15 +423,16 @@ pub fn run(path: &Path) -> Result<Report, String> {
         } else {
             0.0
         },
-        loop_ms_mean: mean(&loop_times),
-        loop_ms_p95: pick(&loop_times, 0.95),
+        loop_ms_mean: loops.ms_mean,
+        loop_ms_p95: loops.ms_p95,
         loop_requests: loop_requests.len(),
-        loop_found_two,
-        loops_mean: if loop_requests.is_empty() {
-            0.0
-        } else {
-            loop_count as f64 / loop_requests.len() as f64
-        },
+        loop_found_two: loops.found_two,
+        loops_mean: loops.mean,
+        long_loop_ms_mean: long_loops.ms_mean,
+        long_loop_ms_p95: long_loops.ms_p95,
+        long_loop_requests: long_requests.len(),
+        long_loop_found_two: long_loops.found_two,
+        long_loops_mean: long_loops.mean,
         match_ms_per_km: if track_km > 0.0 {
             match_ms / track_km
         } else {
@@ -531,6 +527,15 @@ impl Report {
             self.loops_mean
         ));
         out.push(format!(
+            "long loop {:.1} ms mean, {:.1} ms p95 over {} round trips of {LONG_LOOP_KM} km \
+             (same starts); {} with 2+ loops, {:.1} loops each on average",
+            self.long_loop_ms_mean,
+            self.long_loop_ms_p95,
+            self.long_loop_requests,
+            self.long_loop_found_two,
+            self.long_loops_mean
+        ));
+        out.push(format!(
             "match     {:.2} ms per km over {} noisy tracks ({:.0} km, fix every {TRACK_STEP_M} m, \
              ±{TRACK_NOISE_M} m); {:.1} % of the length matched in {} pieces",
             self.match_ms_per_km,
@@ -596,6 +601,11 @@ impl Report {
             num("loop_requests", self.loop_requests as f64),
             num("loop_found_two", self.loop_found_two as f64),
             num("loops_mean", self.loops_mean),
+            num("long_loop_ms_mean", self.long_loop_ms_mean),
+            num("long_loop_ms_p95", self.long_loop_ms_p95),
+            num("long_loop_requests", self.long_loop_requests as f64),
+            num("long_loop_found_two", self.long_loop_found_two as f64),
+            num("long_loops_mean", self.long_loops_mean),
             num("match_ms_per_km", self.match_ms_per_km),
             num("match_tracks", self.match_tracks as f64),
             num("match_km", self.match_km),
@@ -673,6 +683,55 @@ fn json_escape(s: &str) -> String {
     out
 }
 
+/// Round-trip timings over some requests.
+struct LoopTimes {
+    ms_mean: f64,
+    ms_p95: f64,
+    found_two: usize,
+    mean: f64,
+}
+
+/// Times round trips for `requests` (start, km), the fastest of
+/// [`LOOP_ROUNDS`] each, and counts the loops found.
+fn time_loops(
+    engine: &Engine,
+    requests: &[(LatLon, f64)],
+    opts: &RouteOptions,
+    favourites: &Favourites,
+) -> LoopTimes {
+    let mut per_request = vec![Vec::new(); requests.len()];
+    let (mut found_two, mut count) = (0, 0);
+    for round in 0..LOOP_ROUNDS {
+        for (i, &(a, km)) in requests.iter().enumerate() {
+            let t = Instant::now();
+            let r = engine.round_trip_with(
+                a,
+                RoundTripTarget::DistanceM(km * 1000.0),
+                opts,
+                favourites,
+                &Default::default(),
+            );
+            per_request[i].push(ms(t));
+            if round == 0 {
+                let n = r.map_or(0, |l| l.len());
+                count += n;
+                found_two += usize::from(n >= 2);
+            }
+        }
+    }
+    let times = sorted(per_request);
+    LoopTimes {
+        ms_mean: mean(&times),
+        ms_p95: pick(&times, 0.95),
+        found_two,
+        mean: if requests.is_empty() {
+            0.0
+        } else {
+            count as f64 / requests.len() as f64
+        },
+    }
+}
+
 /// Start/end pairs from consecutive snapped points, at most
 /// [`MAX_PAIR_M`] apart, the first [`ROUTE_PAIRS`] of them.
 fn route_pairs(on_road: &[LatLon]) -> Vec<(LatLon, LatLon)> {
@@ -721,7 +780,7 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 14 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 15 + r.unroutable.len());
         // The fixture is far smaller than a loop: every request is timed
         // and none finds one.
         assert_eq!(
@@ -730,6 +789,9 @@ mod tests {
         );
         assert!(r.loop_ms_mean > 0.0 && r.loop_ms_p95 >= 0.0, "{r:?}");
         assert_eq!((r.loop_found_two, r.loops_mean), (0, 0.0));
+        assert_eq!(r.long_loop_requests, LOOP_STARTS.min(ROUTE_PAIRS));
+        assert!(r.long_loop_ms_mean > 0.0, "{r:?}");
+        assert_eq!((r.long_loop_found_two, r.long_loops_mean), (0, 0.0));
         assert!(
             r.curvy_route_ms_mean > 0.0 && r.curvy_route_ms_p95 > 0.0,
             "{r:?}"
@@ -781,7 +843,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 43);
+        assert_eq!(json.matches(':').count(), 48);
     }
 
     #[test]
