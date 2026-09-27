@@ -11,3 +11,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0005](0005-region-file-format.md) | Region file format — memory-mapped binary sections | Accepted | 2026-09-23 |
 | [0006](0006-section-and-track-storage.md) | Sections and tracks — stored by the Rust core in SQLite | Accepted | 2026-09-23 |
 | [0007](0007-round-trip-generation.md) | Round trips — waypoint loops with a reuse penalty, scored by worth | Accepted | 2026-09-24 |
+| [0008](0008-region-download.md) | Region download — built in CI, published as GitHub release files, installed by the core | Accepted | 2026-09-27 |
