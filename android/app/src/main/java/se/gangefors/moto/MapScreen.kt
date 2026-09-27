@@ -1704,8 +1704,9 @@ private fun NavigationBarIconsFollow(panel: Color?) {
     val window = LocalActivity.current?.window ?: return
     val systemDark = isSystemInDarkTheme()
     DisposableEffect(window, panel, systemDark) {
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
-            navigationIconsDark(panel?.luminance(), systemDark)
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.isAppearanceLightNavigationBars =
+            navigationIconsDark(panel?.luminance(), systemDark, controller.isAppearanceLightNavigationBars)
         onDispose {}
     }
 }
