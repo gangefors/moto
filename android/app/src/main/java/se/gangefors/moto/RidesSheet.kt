@@ -90,6 +90,7 @@ fun RidesSheet(
     val zone = remember { ZoneId.systemDefault() }
     var tracks by remember { mutableStateOf<List<Track>?>(null) }
     var confirmDelete by remember { mutableLongStateOf(0L) }
+    var renamingRide by remember { mutableStateOf<Track?>(null) }
     var exporting by remember { mutableStateOf<Track?>(null) }
 
     var routes by remember { mutableStateOf<List<SavedRoute>?>(null) }
@@ -109,7 +110,7 @@ fun RidesSheet(
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val gpx = store.exportTrackGpx(track.id, rideTitle(track.startedAt, zone))
+                    val gpx = store.exportTrackGpx(track.id, rideName(track.name, track.startedAt, zone))
                         ?: error(resources.getString(R.string.rides_gone))
                     context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(gpx.toByteArray()) }
                         ?: error(resources.getString(R.string.rides_cannot_write))
@@ -287,7 +288,7 @@ fun RidesSheet(
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.padding(end = 8.dp)) {
-                                Text(rideTitle(t.startedAt, zone))
+                                Text(rideName(t.name, t.startedAt, zone))
                                 Text(
                                     rideSummary(resources, t),
                                     style = MaterialTheme.typography.bodySmall,
@@ -306,6 +307,9 @@ fun RidesSheet(
                                     },
                                     enabled = t.endedAt != null,
                                 ) { OneLine(stringResource(R.string.rides_export)) }
+                                TextButton(onClick = { renamingRide = t }) {
+                                    OneLine(stringResource(R.string.saved_route_rename))
+                                }
                                 DeleteButton(
                                     confirming = confirmDelete == t.id,
                                     onArm = { confirmDelete = t.id },
@@ -333,6 +337,20 @@ fun RidesSheet(
         }
     }
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+    renamingRide?.let { t ->
+        RouteNameDialog(
+            title = stringResource(R.string.ride_rename_title),
+            initial = rideName(t.name, t.startedAt, zone),
+            onDismiss = { renamingRide = null },
+            onSave = { name ->
+                renamingRide = null
+                scope.launch {
+                    withContext(Dispatchers.IO) { runCatching { store.renameTrack(t.id, name) } }
+                    reload()
+                }
+            },
+        )
+    }
 }
 
 private fun rideSummary(res: android.content.res.Resources, t: Track): String {

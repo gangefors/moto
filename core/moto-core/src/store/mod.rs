@@ -102,6 +102,8 @@ const MIGRATIONS: &[&str] = &[
         duration_s  REAL    NOT NULL CHECK (duration_s >= 0),
         geometry    BLOB    NOT NULL
     ) STRICT;",
+    // 6: the rider's own name for a ride; none shows its start time.
+    "ALTER TABLE tracks ADD COLUMN name TEXT;",
 ];
 
 /// The schema version this build writes.

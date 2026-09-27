@@ -36,7 +36,7 @@ fun ShownRideCard(ride: ShownRide, onClose: () -> Unit, modifier: Modifier = Mod
     ) {
         Row(Modifier.padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                stringResource(R.string.ride_shown, rideTitle(ride.track.startedAt, zone), sectionKm(ride.track.distanceM)),
+                stringResource(R.string.ride_shown, rideName(ride.track.name, ride.track.startedAt, zone), sectionKm(ride.track.distanceM)),
                 modifier = Modifier.weight(1f).padding(vertical = 8.dp),
             )
             IconButton(onClick = onClose) {

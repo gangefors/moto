@@ -26,6 +26,8 @@ pub struct TrackPoint {
 pub struct Track {
     pub id: i64,
     pub rider_id: String,
+    /// The rider's name for it; `None` until renamed.
+    pub name: Option<String>,
     /// Seconds since the Unix epoch.
     pub started_at: i64,
     /// `None` while recording, or if the app died before the ride ended.
@@ -118,6 +120,12 @@ impl SectionStore {
         Ok(self.store().import_track(&points)?.into())
     }
 
+    /// Names a ride; a blank `name` takes the name away again. `false` if
+    /// there is no such ride.
+    pub fn rename_track(&self, id: i64, name: String) -> Result<bool, MotoError> {
+        Ok(self.store().rename_track(id, &name)?)
+    }
+
     /// Deletes a track and its fixes; `false` if it did not exist.
     pub fn delete_track(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_track(id)?)
@@ -153,6 +161,7 @@ impl From<core::Track> for Track {
         Self {
             id: t.id,
             rider_id: t.rider_id,
+            name: t.name,
             started_at: t.started_at,
             ended_at: t.ended_at,
             point_count: t.point_count,
@@ -259,6 +268,15 @@ mod tests {
             assert!((r.position.lat - b.position.lat).abs() < 1e-7);
         }
         assert_eq!(store.list_tracks().unwrap(), [done]);
+        assert!(store.rename_track(t.id, "Söderåsen".into()).unwrap());
+        assert_eq!(
+            store.get_track(t.id).unwrap().unwrap().name.as_deref(),
+            Some("Söderåsen")
+        );
+        assert!(matches!(
+            store.rename_track(t.id, "a\u{0}".into()),
+            Err(MotoError::InvalidInput { .. })
+        ));
 
         let mut bad = fix(20);
         bad.bearing_deg = Some(f64::NAN);

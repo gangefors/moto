@@ -8,17 +8,17 @@ use rusqlite::{OptionalExtension, params};
 
 use super::{Store, db_err, e7};
 use crate::region::format::COORD_SCALE;
-use crate::section::LOCAL_RIDER;
+use crate::section::{LOCAL_RIDER, validate_name};
 use crate::track::{
     Appended, MAX_BATCH_POINTS, MAX_TRACK_POINTS, Track, TrackPoint, ridden_distance_m,
 };
 use crate::{CoreError, LatLon};
 
-const TRACK_COLUMNS: &str = "id, rider_id, started_at, ended_at, point_count, distance_m";
+const TRACK_COLUMNS: &str = "id, rider_id, name, started_at, ended_at, point_count, distance_m";
 
-fn read_track(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<(i64, String, i64, Option<i64>, i64, f64)> {
+type TrackRow = (i64, String, Option<String>, i64, Option<i64>, i64, f64);
+
+fn read_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<TrackRow> {
     Ok((
         row.get(0)?,
         row.get(1)?,
@@ -26,18 +26,23 @@ fn read_track(
         row.get(3)?,
         row.get(4)?,
         row.get(5)?,
+        row.get(6)?,
     ))
 }
 
-fn to_track(r: (i64, String, i64, Option<i64>, i64, f64)) -> Result<Track, CoreError> {
-    let (id, rider_id, started_at, ended_at, count, distance_m) = r;
+fn to_track(r: TrackRow) -> Result<Track, CoreError> {
+    let (id, rider_id, name, started_at, ended_at, count, distance_m) = r;
     let corrupt = |what: &str| CoreError::Storage(format!("track {id}: invalid {what}"));
     if !(distance_m.is_finite() && distance_m >= 0.0) {
         return Err(corrupt("distance"));
     }
+    if let Some(name) = &name {
+        validate_name(name).map_err(|_| corrupt("name"))?;
+    }
     Ok(Track {
         id,
         rider_id,
+        name,
         started_at,
         ended_at,
         point_count: u64::try_from(count).map_err(|_| corrupt("point count"))?,
@@ -300,6 +305,21 @@ impl Store {
             points.push(p);
         }
         Ok(Some(points))
+    }
+
+    /// Names a ride; an empty or blank `name` takes the name away again,
+    /// so the ride shows its start time. `false` if there is no such ride.
+    pub fn rename_track(&mut self, id: i64, name: &str) -> Result<bool, CoreError> {
+        let name = name.trim();
+        validate_name(name)?;
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE tracks SET name = ?2 WHERE id = ?1",
+                params![id, (!name.is_empty()).then_some(name)],
+            )
+            .map_err(db_err)?;
+        Ok(changed > 0)
     }
 
     /// Deletes a track and its points; `false` if it did not exist.

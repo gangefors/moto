@@ -187,6 +187,15 @@ class RecordingLogicTest {
     }
 
     @Test
+    fun aNamedRideShowsItsName() {
+        val utc = java.time.ZoneOffset.UTC
+        val start = 1_790_227_800L
+        assertEquals("Söderåsen", rideName("Söderåsen", start, utc))
+        assertEquals("2026-09-24 05:30", rideName(null, start, utc))
+        assertEquals("2026-09-24 05:30", rideName("  ", start, utc))
+    }
+
+    @Test
     fun readsFilesUpToTheLimitOnly() {
         val small = ByteArray(100) { it.toByte() }
         assertEquals(small.toList(), readCapped(small.inputStream(), 100)!!.toList())

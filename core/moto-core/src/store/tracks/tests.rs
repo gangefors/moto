@@ -5,6 +5,7 @@ use rusqlite::Connection;
 
 use super::super::{MIGRATIONS, SCHEMA_VERSION, migrate, user_version};
 use super::*;
+use crate::section::MAX_NAME_CHARS;
 use crate::track::tests::fix;
 
 const T0: i64 = 1_790_000_000;
@@ -229,6 +230,7 @@ fn damaged_track_rows_are_errors_not_panics() {
         "UPDATE track_points SET bearing_deg = 400.0",
         "UPDATE track_points SET speed_mps = -1.0",
         "UPDATE tracks SET point_count = -1",
+        "UPDATE tracks SET name = 'a' || char(10) || 'b'",
     ];
     for sql in damage {
         let mut s = store();
@@ -284,4 +286,55 @@ fn a_bad_import_stores_nothing() {
         );
     }
     assert!(s.list_tracks().unwrap().is_empty());
+}
+
+#[test]
+fn names_a_ride_and_takes_the_name_away() {
+    let mut s = store();
+    let t = s.import_track(&ride(MS0, 3)).unwrap();
+    assert_eq!(t.name, None, "a new ride has no name");
+    assert!(s.rename_track(t.id, "  Kullaberg with Anna ").unwrap());
+    let named = s.get_track(t.id).unwrap().unwrap();
+    assert_eq!(named.name.as_deref(), Some("Kullaberg with Anna"));
+    assert_eq!(s.list_tracks().unwrap(), [named]);
+    // Blank: back to no name.
+    assert!(s.rename_track(t.id, "   ").unwrap());
+    assert_eq!(s.get_track(t.id).unwrap().unwrap().name, None);
+    assert!(!s.rename_track(999, "x").unwrap());
+}
+
+#[test]
+fn a_ride_name_is_checked() {
+    let mut s = store();
+    let t = s.import_track(&ride(MS0, 3)).unwrap();
+    assert!(s.rename_track(t.id, "a\u{0}b").is_err());
+    assert!(
+        s.rename_track(t.id, &"x".repeat(MAX_NAME_CHARS + 1))
+            .is_err()
+    );
+    assert!(s.rename_track(t.id, &"é".repeat(MAX_NAME_CHARS)).unwrap());
+    assert_eq!(
+        s.get_track(t.id)
+            .unwrap()
+            .unwrap()
+            .name
+            .map(|n| n.chars().count()),
+        Some(MAX_NAME_CHARS)
+    );
+}
+
+#[test]
+fn upgrades_a_schema_5_database_and_keeps_its_rides() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    migrate(&mut conn, &MIGRATIONS[..5]).unwrap();
+    conn.execute(
+        "INSERT INTO tracks (rider_id, started_at, ended_at) VALUES ('local', 1, 2)",
+        [],
+    )
+    .unwrap();
+    migrate(&mut conn, MIGRATIONS).unwrap();
+    let s = Store { conn };
+    let tracks = s.list_tracks().unwrap();
+    assert_eq!(tracks.len(), 1);
+    assert_eq!((tracks[0].started_at, tracks[0].name.as_deref()), (1, None));
 }
