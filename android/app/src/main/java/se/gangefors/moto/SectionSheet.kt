@@ -4,6 +4,7 @@
 package se.gangefors.moto
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -58,61 +59,65 @@ fun SectionSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                RATINGS.forEachIndexed { i, r ->
-                    SegmentedButton(
-                        selected = rating == r,
-                        onClick = { rating = r },
-                        shape = SegmentedButtonDefaults.itemShape(i, RATINGS.size),
-                    ) { Text(stringResource(ratingLabel(r))) }
+        Box {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    RATINGS.forEachIndexed { i, r ->
+                        SegmentedButton(
+                            selected = rating == r,
+                            onClick = { rating = r },
+                            shape = SegmentedButtonDefaults.itemShape(i, RATINGS.size),
+                        ) { Text(stringResource(ratingLabel(r))) }
+                    }
                 }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.section_one_way))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.section_one_way))
+                        Text(
+                            stringResource(R.string.section_one_way_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = oneWay, onCheckedChange = { oneWay = it })
+                }
+                if (confirmDelete) {
                     Text(
-                        stringResource(R.string.section_one_way_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        stringResource(R.string.section_delete_confirm),
+                        color = DELETE_COLOR,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                Switch(checked = oneWay, onCheckedChange = { oneWay = it })
-            }
-            if (confirmDelete) {
-                Text(
-                    stringResource(R.string.section_delete_confirm),
-                    color = DELETE_COLOR,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (onDelete != null) {
-                    DeleteButton(
-                        confirming = confirmDelete,
-                        onArm = { confirmDelete = true },
-                        onDelete = onDelete,
-                    )
-                }
-                // Wraps (right-aligned) when large text leaves no room.
-                FlowRow(
-                    Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    OutlinedButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) }
-                    Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
-                        OneLine(stringResource(R.string.section_save))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (onDelete != null) {
+                        DeleteButton(
+                            confirming = confirmDelete,
+                            onArm = { confirmDelete = true },
+                            onDelete = onDelete,
+                        )
+                    }
+                    // Wraps (right-aligned) when large text leaves no room.
+                    FlowRow(
+                        Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        OutlinedButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) }
+                        Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
+                            OneLine(stringResource(R.string.section_save))
+                        }
                     }
                 }
             }
+            // The bin's toasts, inside the sheet (its own window).
+            ToastHost(Modifier.align(Alignment.BottomCenter))
         }
     }
 }

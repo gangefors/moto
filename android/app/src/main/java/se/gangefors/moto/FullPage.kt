@@ -56,6 +56,7 @@ fun FullPage(
                     content()
                 }
                 notices?.let { SnackbarHost(it, Modifier.align(Alignment.BottomCenter)) }
+                ToastHost(Modifier.align(Alignment.BottomCenter))
             }
         }
     }

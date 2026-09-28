@@ -3,7 +3,6 @@
 
 package se.gangefors.moto
 
-import android.widget.Toast
 import se.gangefors.moto.debug.DebugTools
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -95,9 +94,7 @@ fun RidesSheet(
     // as a notice at the bottom of the page that stays until closed, so
     // its reason can be read.
     val notices = remember { SnackbarHostState() }
-    fun done(text: String) {
-        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-    }
+    fun done(text: String) = Toasts.show(text)
     fun failed(text: String) {
         scope.launch {
             notices.currentSnackbarData?.dismiss()

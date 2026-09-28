@@ -14,8 +14,9 @@ import androidx.compose.ui.res.stringResource
 
 /**
  * The app's delete action: a bin. The first tap arms it ([confirming]
- * turns it filled red), the second deletes; the caller keeps the state
- * and calls [onArm] or [onDelete].
+ * turns it filled red) with a toast saying to tap again, the second
+ * deletes with a toast saying so; the caller keeps the state and calls
+ * [onArm] or [onDelete].
  */
 @Composable
 fun DeleteButton(
@@ -25,8 +26,18 @@ fun DeleteButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val tapAgain = stringResource(R.string.delete_tap_again)
+    val deleted = stringResource(R.string.deleted)
     IconButton(
-        onClick = { if (confirming) onDelete() else onArm() },
+        onClick = {
+            if (confirming) {
+                onDelete()
+                Toasts.show(deleted)
+            } else {
+                onArm()
+                Toasts.show(tapAgain)
+            }
+        },
         enabled = enabled,
         modifier = modifier,
         colors = if (confirming) {

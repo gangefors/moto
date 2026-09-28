@@ -1717,6 +1717,7 @@ fun MapScreen() {
                 Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
             }
         }
+        ToastHost(Modifier.align(Alignment.BottomCenter))
         // The menu, over everything on the map.
         MenuDrawer(
             open = menuOpen,
