@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,7 +30,8 @@ import androidx.compose.ui.window.DialogProperties
 
 /**
  * A full-screen page over the map (a menu topic, Ride settings): a back
- * arrow and [title] at the top, then [content]; the page's short notices
+ * arrow and [title] at the top, with the page's [actions] (icons, a ⋮
+ * menu) at the end, then [content]; the page's short notices
  * ([notices]) show at its bottom. Back or the arrow closes it; everything
  * stays inside the system bars.
  */
@@ -38,6 +40,7 @@ fun FullPage(
     title: String,
     onBack: () -> Unit,
     notices: SnackbarHostState? = null,
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -45,13 +48,14 @@ fun FullPage(
             Box(Modifier.safeDrawingPadding()) {
                 Column {
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
+                        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = onBack) {
                             Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.settings_back))
                         }
-                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        actions()
                     }
                     content()
                 }
