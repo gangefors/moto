@@ -240,6 +240,7 @@ fun MapScreen() {
     var buttonsLeft by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var sheetTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var cardsTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     fun fitPaddingNow(): FitPadding {
         val (w, h) = mapSize.width to mapSize.height
         val panels = Panels(
@@ -248,7 +249,7 @@ fun MapScreen() {
             left = insets.left,
             top = max(topPanelBottom, insets.top),
             right = max(w - buttonsLeft, insets.right),
-            bottom = maxOf(h - tagTop, h - sheetTop, insets.bottom),
+            bottom = maxOf(h - tagTop, h - sheetTop, h - cardsTop, insets.bottom),
         )
         return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
     }
@@ -1220,6 +1221,28 @@ fun MapScreen() {
         }
     }
 
+    /** The task card's X: leaves the task in hand, as Back would. */
+    fun cancelTask() {
+        when {
+            marking -> if (reviewTag != null) endReview(null) else {
+                stopMarking()
+                message = null
+            }
+            addingVia -> {
+                addingVia = false
+                message = null
+            }
+            selectedVia != null -> selectedVia = null
+            startPicked != null -> {
+                startPicked = null
+                picker.reset()
+                overlays?.route?.show(null, null, null)
+                message = null
+            }
+            else -> message = null
+        }
+    }
+
     Box(Modifier.fillMaxSize().onSizeChanged { mapSize = it }) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         // Theme-coloured scrim keeps the navigation bar icons readable over any
@@ -1262,9 +1285,8 @@ fun MapScreen() {
                 modifier = Modifier.align(Alignment.TopEnd),
             )
         }
-        // Messages across the top, between the top buttons when they show
-        // (the compass sits at the bottom right); on wide screens no wider
-        // than TOP_BOX_MAX_WIDTH.
+        // Notices across the top, between the top buttons when they show;
+        // on wide screens no wider than TOP_BOX_MAX_WIDTH.
         val besideTopButtons = if (topButtons) TOP_BUTTON_MARGIN + TOP_BUTTON_SIZE + 8.dp else 16.dp
         Column(
             modifier = Modifier
@@ -1277,122 +1299,150 @@ fun MapScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             SnackbarHost(notices)
-            val offerLoop = startPicked != null && !marking
-            val via = selectedVia?.takeIf { it in vias.indices }
-            if (message != null || marking || offerLoop || via != null) Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
+        }
+        // A task in hand, the road tapped, or a ride or route shown: cards
+        // at the bottom, above the planning sheet when there is one.
+        val offerLoop = startPicked != null && !marking
+        val via = selectedVia?.takeIf { it in vias.indices }
+        val taskCard = message != null || marking || offerLoop || via != null
+        // The buttons at the bottom step aside for them, as for planning.
+        val cardsShown = taskCard || shownRide != null || shownSaved != null || roadInfo != null
+        if (cardsShown) {
+            DisposableEffect(Unit) { onDispose { cardsTop = Int.MAX_VALUE } }
+            val aboveSheet = with(density) {
+                if (planning && sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
+            }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .then(if (planning) Modifier else Modifier.safeDrawingPadding())
+                    .padding(start = 8.dp, end = 8.dp, bottom = aboveSheet + 8.dp)
+                    .widthIn(max = TOP_BOX_MAX_WIDTH)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { cardsTop = it.boundsInRoot().top.roundToInt() },
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    message?.let { Text(it) }
-                    if (via != null) {
-                        // The bin removes it; a tap anywhere else on the map
-                        // lets it go.
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.route_via_selected, via + 1), Modifier.weight(1f))
-                            IconButton(
-                                onClick = {
-                                    selectedVia = null
-                                    vias = removeVia(vias, via)
-                                },
-                                colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
+                if (taskCard) Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 3.dp,
+                ) {
+                    Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
+                        // What to do next, with the X at the top right (like
+                        // the route and loop cards): it leaves the task.
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text(
+                                message ?: via?.let { stringResource(R.string.route_via_selected, it + 1) } ?: "",
+                                modifier = Modifier.weight(1f).padding(top = 12.dp, end = 4.dp),
+                            )
+                            if (via != null && message == null) {
+                                // The bin removes the waypoint; X (or a tap
+                                // elsewhere on the map) lets it go.
+                                IconButton(
+                                    onClick = {
+                                        selectedVia = null
+                                        vias = removeVia(vias, via)
+                                    },
+                                    colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
+                                ) {
+                                    Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.route_via_remove))
+                                }
+                            }
+                            IconButton(onClick = { cancelTask() }) {
+                                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.task_close))
+                            }
+                        }
+                        if (offerLoop) {
+                            FlowRow(
+                                Modifier.padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.route_via_remove))
-                            }
-                        }
-                    }
-                    if (offerLoop) {
-                        FlowRow(
-                            Modifier.padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (hasLocation) {
-                                // The long-pressed point becomes the end; the
-                                // rider's position the start. A later
-                                // long-press moves the end, as usual.
-                                OutlinedButton(onClick = {
-                                    val from = riderStart() ?: return@OutlinedButton
-                                    val to = picker.takeStart() ?: return@OutlinedButton
-                                    picker.startAt(from)
-                                    startPicked = null
-                                    overlays?.route?.show(from, to, null)
-                                    vias = emptyList()
-                                    arriveBy = null
-                                    routeEnds = from to to
-                                }) { OneLine(stringResource(R.string.route_from_me)) }
-                            }
-                            OutlinedButton(onClick = {
-                                val start = picker.takeStart() ?: return@OutlinedButton
-                                message = null
-                                startLoop(start)
-                            }) { OneLine(stringResource(R.string.loop_from_here)) }
-                        }
-                    }
-                    if (marking) {
-                        // The banner is narrow (it keeps clear of the map controls),
-                        // so the buttons wrap onto a second line instead of
-                        // squeezing each other.
-                        FlowRow(
-                            Modifier.padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (reviewTag != null) {
-                                // Stop ends the review; tags not yet handled
-                                // stay pending. Skip leaves this one pending
-                                // and moves on to the next.
-                                OutlinedButton(onClick = { endReview(null) }) {
-                                    OneLine(stringResource(R.string.tag_review_stop))
+                                if (hasLocation) {
+                                    // The long-pressed point becomes the end; the
+                                    // rider's position the start. A later
+                                    // long-press moves the end, as usual.
+                                    OutlinedButton(onClick = {
+                                        val from = riderStart() ?: return@OutlinedButton
+                                        val to = picker.takeStart() ?: return@OutlinedButton
+                                        picker.startAt(from)
+                                        startPicked = null
+                                        overlays?.route?.show(from, to, null)
+                                        vias = emptyList()
+                                        arriveBy = null
+                                        routeEnds = from to to
+                                    }) { OneLine(stringResource(R.string.route_from_me)) }
                                 }
-                                OutlinedButton(onClick = { skipTag() }) {
-                                    OneLine(stringResource(R.string.tag_review_skip))
-                                }
-                                OutlinedButton(
-                                    onClick = { finishTag(TagStatus.DISCARDED) },
-                                    enabled = !proposing,
-                                ) { OneLine(stringResource(R.string.tag_review_discard)) }
-                            } else {
                                 OutlinedButton(onClick = {
-                                    stopMarking()
+                                    val start = picker.takeStart() ?: return@OutlinedButton
                                     message = null
-                                }) { OneLine(stringResource(R.string.cancel)) }
+                                    startLoop(start)
+                                }) { OneLine(stringResource(R.string.loop_from_here)) }
                             }
-                            Button(
-                                onClick = { savingDraft = true },
-                                enabled = draft != null && !proposing,
-                            ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
+                        }
+                        if (marking) {
+                            // The buttons wrap onto a second line when there is no
+                            // room, instead of squeezing each other.
+                            FlowRow(
+                                Modifier.padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                if (reviewTag != null) {
+                                    // Stop ends the review; tags not yet handled
+                                    // stay pending. Skip leaves this one pending
+                                    // and moves on to the next.
+                                    OutlinedButton(onClick = { endReview(null) }) {
+                                        OneLine(stringResource(R.string.tag_review_stop))
+                                    }
+                                    OutlinedButton(onClick = { skipTag() }) {
+                                        OneLine(stringResource(R.string.tag_review_skip))
+                                    }
+                                    OutlinedButton(
+                                        onClick = { finishTag(TagStatus.DISCARDED) },
+                                        enabled = !proposing,
+                                    ) { OneLine(stringResource(R.string.tag_review_discard)) }
+                                } else {
+                                    OutlinedButton(onClick = {
+                                        stopMarking()
+                                        message = null
+                                    }) { OneLine(stringResource(R.string.cancel)) }
+                                }
+                                Button(
+                                    onClick = { savingDraft = true },
+                                    enabled = draft != null && !proposing,
+                                ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
+                            }
                         }
                     }
                 }
-            }
-            shownRide?.let {
-                ShownRideCard(it, onClose = { shownRide = null }, modifier = Modifier.fillMaxWidth())
-            }
-            shownSaved?.let { s ->
-                SavedRouteCard(
-                    s,
-                    onShare = {
-                        shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel))
-                    },
-                    onClose = {
-                        shownSaved = null
-                        overlays?.route?.show(null, null, null)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            roadInfo?.let {
-                RoadInfoCard(
-                    it,
-                    onClose = {
-                        roadInfo = null
-                        overlays?.snap?.clear()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                shownRide?.let {
+                    ShownRideCard(it, onClose = { shownRide = null }, modifier = Modifier.fillMaxWidth())
+                }
+                shownSaved?.let { s ->
+                    SavedRouteCard(
+                        s,
+                        onShare = {
+                            shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel))
+                        },
+                        onClose = {
+                            shownSaved = null
+                            overlays?.route?.show(null, null, null)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                roadInfo?.let {
+                    RoadInfoCard(
+                        it,
+                        onClose = {
+                            roadInfo = null
+                            overlays?.snap?.clear()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
         // Back steps back through what is on the map before it leaves the
@@ -1528,7 +1578,7 @@ fun MapScreen() {
                     }
             }
         }
-        if (!marking && !planning) {
+        if (!marking && !planning && !cardsShown) {
             DisposableEffect(Unit) { onDispose { buttonsLeft = Int.MAX_VALUE } }
             Column(
                 modifier = Modifier
@@ -1649,7 +1699,7 @@ fun MapScreen() {
         }
         // Quick-tag (PRD R3): one big button, usable with gloves, whenever the
         // map is open. Bottom left, above the map's logo and attribution.
-        if (store is StoreState.Ready && !marking && !planning) {
+        if (store is StoreState.Ready && !marking && !planning && !cardsShown) {
             DisposableEffect(Unit) { onDispose { tagTop = Int.MAX_VALUE } }
             LargeFloatingActionButton(
                 onClick = { quickTag() },
