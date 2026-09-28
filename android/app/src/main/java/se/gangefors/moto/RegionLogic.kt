@@ -53,6 +53,22 @@ fun hasRoomFor(gzBytes: Long, have: Long, regionBytes: Long, free: Long): Boolea
 fun isUpdate(installedOsmTimestamp: Long?, offeredOsmTimestamp: Long): Boolean =
     installedOsmTimestamp != null && offeredOsmTimestamp > installedOsmTimestamp
 
+/** What an offered region's row offers. */
+enum class OfferAction { DOWNLOAD, UPDATE, INSTALLED }
+
+/** [OfferAction] for an offer ([offerId], [offerOsmTimestamp]) with the
+ * region [installedId] (its data from [installedOsmTimestamp]) on the phone. */
+fun offerAction(installedId: String?, installedOsmTimestamp: Long?, offerId: String, offerOsmTimestamp: Long): OfferAction =
+    when {
+        installedId != offerId -> OfferAction.DOWNLOAD
+        isUpdate(installedOsmTimestamp, offerOsmTimestamp) -> OfferAction.UPDATE
+        else -> OfferAction.INSTALLED
+    }
+
+/** How far a download is, 0 to 1 ([total] 0 or less reads as none). */
+fun downloadShare(done: Long, total: Long): Float =
+    if (total <= 0) 0f else (done.toDouble() / total).coerceIn(0.0, 1.0).toFloat()
+
 /** Megabytes (10⁶ bytes), one decimal, for labels. */
 fun mb(bytes: Long): Double = Math.round(bytes / 100_000.0) / 10.0
 
