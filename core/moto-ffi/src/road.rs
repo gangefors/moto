@@ -90,13 +90,14 @@ pub struct PlaceName {
 }
 
 /// A line in words: the roads it runs on most (the most first, at most
-/// two), and the places nearest its start and end. Empty on a region
-/// file without names.
+/// two), and the places nearest its start and end (none on a region
+/// file without names); and how curvy it is, 0–1, as routes count it.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct Description {
     pub roads: Vec<RoadLabel>,
     pub start: Option<PlaceName>,
     pub end: Option<PlaceName>,
+    pub curvy_share: f64,
 }
 
 #[uniffi::export]
@@ -138,6 +139,7 @@ impl From<moto_core::Description> for Description {
                 .collect(),
             start: d.start.map(place),
             end: d.end.map(place),
+            curvy_share: d.curvy_share,
         }
     }
 }
