@@ -1162,7 +1162,8 @@ fun MapScreen() {
             result.fold(
                 onSuccess = { (done, list) ->
                     sections = list
-                    notify(done)
+                    // Saved, updated, deleted: a toast, like the menu pages.
+                    Toasts.show(done)
                 },
                 onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
             )
