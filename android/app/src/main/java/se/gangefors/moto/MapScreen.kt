@@ -291,6 +291,11 @@ fun MapScreen() {
     // The rider's saved sections (ADR-0006), opened off the main thread.
     var store by remember { mutableStateOf<StoreState>(StoreState.Loading) }
     var sections by remember { mutableStateOf<List<Section>>(emptyList()) }
+    // The Sections page opens showing only sections that need attention
+    // (from the notice after a map update).
+    var sectionsAttention by remember { mutableStateOf(false) }
+    // The menu topic open as a page, if any.
+    var dataPage by remember { mutableStateOf<DataPage?>(null) }
     LaunchedEffect(Unit) {
         store = withContext(Dispatchers.IO) { SavedSections.open(context.applicationContext) }
         when (val s = store) {
@@ -326,14 +331,21 @@ fun MapScreen() {
             onSuccess = { (report, updated) ->
                 updated?.let { sections = it }
                 if (report.unmatched > 0uL) {
-                    notify(
-                        resources.getQuantityString(
-                            R.plurals.sections_unmatched,
-                            report.unmatched.toInt(),
-                            report.unmatched.toInt(),
-                        ),
-                        long = true,
-                    )
+                    // Show opens Sections with only those that need a look.
+                    noticeScope.launch {
+                        notices.currentSnackbarData?.dismiss()
+                        val n = report.unmatched.toInt()
+                        val answer = notices.showSnackbar(
+                            resources.getQuantityString(R.plurals.sections_unmatched, n, n),
+                            actionLabel = resources.getString(R.string.sections_unmatched_action),
+                            withDismissAction = true,
+                            duration = SnackbarDuration.Indefinite,
+                        )
+                        if (answer == SnackbarResult.ActionPerformed) {
+                            sectionsAttention = true
+                            dataPage = DataPage.SECTIONS
+                        }
+                    }
                 }
             },
             onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
@@ -371,7 +383,6 @@ fun MapScreen() {
     var editing by remember { mutableStateOf<Section?>(null) }
     // The menu, and the page it opened.
     var menuOpen by remember { mutableStateOf(false) }
-    var dataPage by remember { mutableStateOf<DataPage?>(null) }
     var showAbout by remember { mutableStateOf(false) }
     var showDebug by remember { mutableStateOf(false) }
     // Ride settings, one tap from the map.
@@ -400,8 +411,6 @@ fun MapScreen() {
     }
     var keepScreenOn by remember { mutableStateOf(RoutePrefs.keepScreenOn(context)) }
     // Sections that no longer fit the map are hidden unless the rider asks.
-    var showUnmatched by remember { mutableStateOf(false) }
-    var confirmDeleteUnmatched by remember { mutableStateOf(false) }
     // Quick-tags waiting for review, and the review in progress (it runs in
     // "mark section" mode, starting from each tag's suggested section).
     var pendingTags by remember { mutableIntStateOf(0) }
@@ -674,9 +683,9 @@ fun MapScreen() {
     var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
     var routeIndex by remember { mutableIntStateOf(0) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
-    LaunchedEffect(overlays, sections, showUnmatched, sectionGravel, gravel) {
+    LaunchedEffect(overlays, sections, sectionGravel, gravel) {
         val hidden = hiddenForGravel(sectionGravel, gravel)
-        val shown = visibleSections(sections, showUnmatched).filterNot { it.id in hidden }
+        val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
         overlays?.sections?.show(shown)
         overlays?.sections?.showGravel(gravelParts(sectionGravel, shown))
     }
@@ -801,6 +810,19 @@ fun MapScreen() {
     // A saved route the rider asked to see (Menu > Routes & rides > Show),
     // and a route or loop being saved (its name is asked first).
     var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
+    // A saved section the rider asked to see (Menu > Sections, a row): by
+    // id, so a change of its rating shows at once.
+    var shownSectionId by remember { mutableStateOf<Long?>(null) }
+    val shownSection = shownSectionId?.let { id -> sections.firstOrNull { it.id == id } }
+    fun hideSection() {
+        if (shownSectionId == null) return
+        shownSectionId = null
+        overlays?.route?.show(null, null, null)
+    }
+    // Planning takes the map over: the shown section goes.
+    LaunchedEffect(routeEnds, loopStart) {
+        if (routeEnds != null || loopStart != null) shownSectionId = null
+    }
 
     // The location button (LocateLogic): whether the overview of the plan
     // is on the map, untouched, and the zoom the map had on the rider
@@ -892,8 +914,8 @@ fun MapScreen() {
         showDraft()
     }
     var savingRoute by remember { mutableStateOf<Pair<Route, Boolean>?>(null) }
-    LaunchedEffect(overlays, routeEnds, loopStart, shownSaved) {
-        val routeShown = routeEnds != null || loopStart != null || shownSaved != null
+    LaunchedEffect(overlays, routeEnds, loopStart, shownSaved, shownSectionId) {
+        val routeShown = routeEnds != null || loopStart != null || shownSaved != null || shownSectionId != null
         overlays?.sections?.setLook(sectionLook(routeShown = routeShown))
     }
     LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, favourites, overlays) {
@@ -1313,7 +1335,7 @@ fun MapScreen() {
         val via = selectedVia?.takeIf { it in vias.indices }
         val taskCard = message != null || marking || offerLoop || via != null
         // The buttons at the bottom step aside for them, as for planning.
-        val cardsShown = taskCard || shownRide != null || shownSaved != null || roadInfo != null
+        val cardsShown = taskCard || shownRide != null || shownSaved != null || shownSection != null || roadInfo != null
         if (cardsShown) {
             DisposableEffect(Unit) { onDispose { cardsTop = Int.MAX_VALUE } }
             val aboveSheet = with(density) {
@@ -1442,6 +1464,15 @@ fun MapScreen() {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                shownSection?.let { s ->
+                    ShownSectionCard(
+                        s,
+                        engine = (region as? RegionState.Ready)?.engine,
+                        onEdit = { editing = s },
+                        onClose = { hideSection() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 roadInfo?.let {
                     RoadInfoCard(
                         it,
@@ -1457,7 +1488,7 @@ fun MapScreen() {
         // Back steps back through what is on the map before it leaves the
         // app (a pulled-up sheet handles Back itself first).
         BackHandler(enabled = marking || addingVia || selectedVia != null || roadInfo != null || planning ||
-            startPicked != null || shownRide != null || shownSaved != null) {
+            startPicked != null || shownRide != null || shownSaved != null || shownSectionId != null) {
             when {
                 marking -> markBack()
                 addingVia -> {
@@ -1481,6 +1512,7 @@ fun MapScreen() {
                     shownSaved = null
                     overlays?.route?.show(null, null, null)
                 }
+                shownSectionId != null -> hideSection()
                 shownRide != null -> shownRide = null
             }
         }
@@ -1598,55 +1630,6 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                val unmatched = sections.count { !fitsTheMap(it.status) }
-                val deletable = sections.count { it.status == SectionStatus.UNMATCHED }
-                if (showUnmatched && deletable > 0) {
-                    // Batch delete, confirmed by a second tap.
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            if (!confirmDeleteUnmatched) {
-                                confirmDeleteUnmatched = true
-                            } else {
-                                confirmDeleteUnmatched = false
-                                showUnmatched = false
-                                changeSections(resources.getString(R.string.unmatched_deleted)) { it.deleteUnmatched() }
-                            }
-                        },
-                        containerColor = if (confirmDeleteUnmatched) DELETE_COLOR else MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = if (confirmDeleteUnmatched) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_delete),
-                                contentDescription = stringResource(
-                                    if (confirmDeleteUnmatched) R.string.delete_confirm else R.string.delete,
-                                ),
-                            )
-                        },
-                        text = {
-                            Text(
-                                if (confirmDeleteUnmatched) {
-                                    pluralStringResource(R.plurals.unmatched_delete_confirm, deletable, deletable)
-                                } else {
-                                    pluralStringResource(R.plurals.unmatched_delete, deletable, deletable)
-                                },
-                            )
-                        },
-                    )
-                }
-                if (unmatched > 0) {
-                    ExtendedFloatingActionButton(onClick = {
-                        showUnmatched = !showUnmatched
-                        confirmDeleteUnmatched = false
-                    }) {
-                        Text(
-                            if (showUnmatched) {
-                                stringResource(R.string.unmatched_hide)
-                            } else {
-                                pluralStringResource(R.plurals.unmatched_show, unmatched, unmatched)
-                            },
-                        )
-                    }
-                }
                 // Loops from where the rider is, in one tap: a new set
                 // each time.
                 if (region is RegionState.Ready && hasLocation) {
@@ -1829,7 +1812,10 @@ fun MapScreen() {
                         .onSuccess { sections = it }
                 }
             },
-            onDismiss = { dataPage = null },
+            onDismiss = {
+                dataPage = null
+                sectionsAttention = false
+            },
             onShowRoute = { saved ->
                 dataPage = null
                 scope.launch {
@@ -1867,6 +1853,30 @@ fun MapScreen() {
                 }
             },
             gravel = gravel,
+            sections = sections,
+            sectionsAttention = sectionsAttention,
+            here = mapFix(map)?.position,
+            onShowSection = { s ->
+                dataPage = null
+                sectionsAttention = false
+                routeEnds = null
+                loopStart = null
+                startPicked = null
+                picker.reset()
+                shownSaved = null
+                roadInfo = null
+                overlays?.snap?.clear()
+                shownSectionId = s.id
+                // Drawn as a route line: it stands out from the other
+                // sections (faded meanwhile), and one that no longer fits
+                // the map shows too.
+                overlays?.route?.show(null, null, s.geometry)
+                showOnMap(listOf(s.geometry), always = true)
+            },
+            onDeleteSections = { ids ->
+                if (shownSectionId in ids) hideSection()
+                changeSections(null) { st -> ids.forEach { st.delete(it) } }
+            },
         )
     }
     if (showSettings) {
@@ -1911,6 +1921,7 @@ fun MapScreen() {
             },
             onDelete = {
                 editing = null
+                if (shownSectionId == section.id) hideSection()
                 changeSections(null) { st ->
                     st.delete(section.id)
                 }

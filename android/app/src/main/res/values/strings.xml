@@ -230,7 +230,6 @@
     <string name="task_close">Close</string>
     <string name="delete_tap_again">Tap the bin again to delete</string>
     <string name="deleted">Deleted</string>
-    <string name="sections_page_hint">Your saved sections, as a file to keep or move to another phone. Importing adds the file’s sections to yours.</string>
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>
     <string name="settings_back">Back</string>
@@ -288,26 +287,33 @@
         <item quantity="other">Review done. %1$d skipped tags stay for the next review.</item>
     </plurals>
     <plurals name="sections_unmatched">
-        <item quantity="one">%d section no longer fits the updated map; it is hidden. Show it to delete or keep it.</item>
-        <item quantity="other">%d sections no longer fit the updated map; they are hidden. Show them to delete or keep them.</item>
+        <item quantity="one">%d section no longer fits the updated map; it is left out of routes until you look at it.</item>
+        <item quantity="other">%d sections no longer fit the updated map; they are left out of routes until you look at them.</item>
     </plurals>
-    <plurals name="unmatched_show">
-        <item quantity="one">Show %d unmatched</item>
-        <item quantity="other">Show %d unmatched</item>
-    </plurals>
-    <string name="unmatched_hide">Hide unmatched</string>
-    <plurals name="unmatched_delete">
-        <item quantity="one">%d unmatched</item>
-        <item quantity="other">%d unmatched</item>
-    </plurals>
-    <plurals name="unmatched_delete_confirm">
-        <item quantity="one">Tap again to delete %d</item>
-        <item quantity="other">Tap again to delete %d</item>
-    </plurals>
-    <string name="unmatched_deleted">Unmatched sections deleted</string>
+    <string name="sections_unmatched_action">Show</string>
     <string name="sections_title">Sections</string>
-    <string name="sections_export">Export…</string>
-    <string name="sections_import">Import…</string>
+    <plurals name="sections_count">
+        <item quantity="one">%d section</item>
+        <item quantity="other">%d sections</item>
+    </plurals>
+    <string name="sections_km">%1$.1f km</string>
+    <string name="sections_epic_count">%1$d epic</string>
+    <string name="sections_empty">No sections yet. Mark a favourite road with the road button on the map, or tag one while you ride and review it after.</string>
+    <string name="sections_none_match">No sections match these filters.</string>
+    <string name="sections_sort">Sort: %1$s</string>
+    <string name="sort_rating">Rating</string>
+    <string name="sort_length">Length</string>
+    <string name="sort_curvy">Curviness</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_nearest">Nearest</string>
+    <string name="sections_attention">Needs attention (%1$d)</string>
+    <string name="section_attention_note">Doesn’t fit the updated map. Look at it, then keep it or delete it.</string>
+    <string name="section_fallback">Section · %1$.1f km</string>
+    <string name="sections_menu">More for Sections</string>
+    <string name="sections_export_as">Export as %1$s</string>
+    <string name="sections_import_menu">Import sections…</string>
+    <string name="section_hide">Hide the section</string>
+    <string name="section_edit">Change rating or direction</string>
     <string name="sections_exported">Sections exported</string>
     <string name="sections_imported">Imported: %1$d added, %3$d replaced, %2$d already there</string>
     <string name="sections_imported_unmatched">%1$s; %2$d don’t fit the map</string>

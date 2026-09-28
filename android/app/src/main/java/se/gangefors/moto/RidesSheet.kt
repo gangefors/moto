@@ -24,6 +24,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarDuration
@@ -50,6 +51,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.defaultRouteOptions
 import se.gangefors.moto.core.ExportFormat
 import se.gangefors.moto.core.ImportReport
@@ -68,9 +71,10 @@ enum class DataPage { LIBRARY, SECTIONS, REGION }
  * [onShow]), shared (to a nav app), and from its menu renamed, saved as a
  * GPX file or deleted (tapped twice), and a ride also saved as a route to
  * ride again, plus Import GPX
- * for rides; [DataPage.SECTIONS], all saved sections exported as GeoJSON
- * (plain or compressed) or imported from such a file ([engine] fits them
- * to the map, [onSectionsChanged] reloads them); [DataPage.REGION], the
+ * for rides; [DataPage.SECTIONS], the saved [sections] as a list (see
+ * [SectionsList]), with import and export (GeoJSON, plain or compressed)
+ * in the page's ⋮ menu ([engine] fits imports to the map,
+ * [onSectionsChanged] reloads them); [DataPage.REGION], the
  * map region. Files are written and read only where the rider picks with
  * the system file picker: no storage permission, and nothing leaves the
  * phone unless the rider sends it. What was done shows as a toast; a
@@ -88,6 +92,15 @@ fun RidesSheet(
     onShowRoute: (SavedRoute) -> Unit,
     /** For the route points of an exported route (the rider's setting). */
     gravel: Gravel,
+    /** The saved sections, for the Sections page. */
+    sections: List<Section> = emptyList(),
+    /** Open Sections showing only those that need attention. */
+    sectionsAttention: Boolean = false,
+    /** The rider's position, to list sections nearest first. */
+    here: LatLon? = null,
+    onShowSection: (Section) -> Unit = {},
+    onDeleteSections: (List<Long>) -> Unit = {},
+    sectionActions: @Composable (section: Section, close: () -> Unit) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -287,7 +300,54 @@ fun RidesSheet(
             DataPage.REGION -> R.string.region_title
         },
     )
-    FullPage(title, onBack = onDismiss, notices = notices) {
+    FullPage(
+        title,
+        onBack = onDismiss,
+        notices = notices,
+        actions = {
+            if (page == DataPage.SECTIONS) {
+                // Import and export are occasional: behind the page's ⋮.
+                Box {
+                    IconButton(onClick = { formatMenu = true }, enabled = !busy) {
+                        Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.sections_menu))
+                    }
+                    DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.sections_import_menu)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.ic_import), contentDescription = null) },
+                            onClick = {
+                                formatMenu = false
+                                openSections.launch(arrayOf("*/*"))
+                            },
+                        )
+                        EXPORT_FORMATS.forEach { (format, label) ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.sections_export_as, stringResource(label))) },
+                                leadingIcon = { Icon(painterResource(R.drawable.ic_export), contentDescription = null) },
+                                onClick = {
+                                    formatMenu = false
+                                    exportFormat = format
+                                    saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    ) {
+        if (page == DataPage.SECTIONS) {
+            SectionsList(
+                sections = sections,
+                engine = engine,
+                here = here,
+                initialAttention = sectionsAttention,
+                onShow = onShowSection,
+                onDelete = onDeleteSections,
+                rowActions = sectionActions,
+            )
+            return@FullPage
+        }
         val listState = rememberLazyListState()
         LazyColumn(
             Modifier.fillMaxWidth().scrollHints(listState),
@@ -309,40 +369,6 @@ fun RidesSheet(
                 }
                 else -> items(library, key = { it.key }) { item ->
                     LibraryRow(item, zone, actions)
-                }
-            }
-            if (page == DataPage.SECTIONS) item(key = "sections") {
-                Column {
-                    Text(
-                        stringResource(R.string.sections_page_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Box {
-                            OutlinedButton(onClick = { formatMenu = true }, enabled = !busy) {
-                                OneLine(stringResource(R.string.sections_export))
-                            }
-                            DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
-                                EXPORT_FORMATS.forEach { (format, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(label)) },
-                                        onClick = {
-                                            formatMenu = false
-                                            exportFormat = format
-                                            saveSections.launch(sectionsFileName(System.currentTimeMillis() / 1000, zone, exportExtension(format)))
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        OutlinedButton(onClick = { openSections.launch(arrayOf("*/*")) }, enabled = !busy) {
-                            OneLine(stringResource(R.string.sections_import))
-                        }
-                    }
                 }
             }
             if (page == DataPage.REGION) item(key = "region") { RegionSection() }
