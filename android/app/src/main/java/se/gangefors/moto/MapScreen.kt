@@ -47,6 +47,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -666,6 +667,10 @@ fun MapScreen() {
     // long-press adds one (Add via point on the route card).
     var vias by remember { mutableStateOf<List<LatLng>>(emptyList()) }
     var addingVia by remember { mutableStateOf(false) }
+    // A loop through the via points (Sections: Loop through it): the route
+    // sheet then shows loops from the start through them and back, and,
+    // when true, through them the other way round too. Null: a route.
+    var routeThrough by remember { mutableStateOf<Boolean?>(null) }
     // The via points before the last one was added, until the route
     // through it is found (restored if it can't be).
     var viasBefore by remember { mutableStateOf<List<LatLng>?>(null) }
@@ -718,7 +723,8 @@ fun MapScreen() {
      * figures, the others faint; the fastest of several grey. */
     fun showRouteChoice(start: LatLng, end: LatLng, set: List<Route>, index: Int, opts: RouteOptions) {
         val r = set.getOrNull(index) ?: return
-        val fastest = fastestChoice(set.size)
+        // Loops through a section have no fastest one.
+        val fastest = if (routeThrough != null) -1 else fastestChoice(set.size)
         val others = set.mapIndexedNotNull { i, l -> if (i == index) null else i to l.geometry }
         overlays?.route?.show(
             start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias,
@@ -877,6 +883,7 @@ fun MapScreen() {
 
     fun closeRoute() {
         routeEnds = null
+        routeThrough = null
         picker.reset()
         vias = emptyList()
         addingVia = false
@@ -980,7 +987,7 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, vias, arriveBy, gravel, favourites, overlays) {
+    LaunchedEffect(routeEnds, vias, arriveBy, gravel, favourites, overlays, routeThrough) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -1001,8 +1008,13 @@ fun MapScreen() {
             withContext(Dispatchers.Default) {
                 runCatching {
                     val via = vias.map { it.toLatLon() }
-                    DebugTools.routes(start.toLatLon(), via, end.toLatLon(), opts, favs) {
-                        ready.engine.routeChoices(start.toLatLon(), via, end.toLatLon(), opts, favs)
+                    val bothWays = routeThrough
+                    if (bothWays != null) {
+                        ready.engine.roundTripVia(start.toLatLon(), via, bothWays, opts, favs)
+                    } else {
+                        DebugTools.routes(start.toLatLon(), via, end.toLatLon(), opts, favs) {
+                            ready.engine.routeChoices(start.toLatLon(), via, end.toLatLon(), opts, favs)
+                        }
                     }
                 }
             }
@@ -1118,6 +1130,7 @@ fun MapScreen() {
             when (val step = picker.onLongPress(point)) {
                 is RoutePicker.Step.StartSet -> {
                     routeEnds = null
+                    routeThrough = null
                     loopStart = null
                     shownSaved = null
                     startPicked = null
@@ -1135,6 +1148,8 @@ fun MapScreen() {
                 }
                 is RoutePicker.Step.Complete -> {
                     startPicked = null
+                    // A new end: a route again, not a loop.
+                    routeThrough = null
                     o.route.show(step.start, step.end, null)
                     message = null
                     // A new route, or the end moved: via points and an
@@ -1236,6 +1251,41 @@ fun MapScreen() {
     fun shareRoute(r: Route, opts: RouteOptions) {
         val now = System.currentTimeMillis() / 1000
         shareLine(r.geometry, routeGpxName(now, ZoneId.systemDefault(), r.distanceM / 1000.0), opts)
+    }
+
+    /**
+     * Plans a ride of section [s] from the rider's position: a loop out
+     * through it and back ([loop]; both ways round for a two-way section),
+     * or a route to its nearer end and along it. Shown in the route sheet.
+     */
+    fun rideSection(s: Section, loop: Boolean) {
+        val from = riderStart() ?: return
+        val oneWay = isOneWay(s.direction)
+        val (near, far) = sectionEnds(s.geometry, oneWay, from.toLatLon()) ?: return
+        dataPage = null
+        sectionsAttention = false
+        hideSection()
+        shownSaved = null
+        roadInfo = null
+        overlays?.snap?.clear()
+        loopStart = null
+        startPicked = null
+        message = null
+        arriveBy = null
+        picker.reset()
+        picker.startAt(from)
+        val ends = LatLng(near.lat, near.lon) to LatLng(far.lat, far.lon)
+        if (loop) {
+            vias = listOf(ends.first, ends.second)
+            routeThrough = !oneWay
+            overlays?.route?.show(from, null, null)
+            routeEnds = from to from
+        } else {
+            vias = listOf(ends.first)
+            routeThrough = null
+            overlays?.route?.show(from, ends.second, null)
+            routeEnds = from to ends.second
+        }
     }
 
     /** Saves [r] (a loop when [isLoop]) as [name] in Routes & rides. */
@@ -1468,6 +1518,8 @@ fun MapScreen() {
                     ShownSectionCard(
                         s,
                         engine = (region as? RegionState.Ready)?.engine,
+                        onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
+                        onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
                         onEdit = { editing = s },
                         onClose = { hideSection() },
                         modifier = Modifier.fillMaxWidth(),
@@ -1543,7 +1595,7 @@ fun MapScreen() {
                             },
                             onClose = { closeRoute() },
                             onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
-                            onSave = { shownRoute?.let { (r, _) -> savingRoute = r to false } },
+                            onSave = { shownRoute?.let { (r, _) -> savingRoute = r to (routeThrough != null) } },
                             viaCount = vias.size,
                             onAddVia = {
                                 addingVia = true
@@ -1872,6 +1924,26 @@ fun MapScreen() {
                 // the map shows too.
                 overlays?.route?.show(null, null, s.geometry)
                 showOnMap(listOf(s.geometry), always = true)
+            },
+            sectionActions = { s, close ->
+                if (hasLocation) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.section_loop_through)) },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_loop), contentDescription = null) },
+                        onClick = {
+                            close()
+                            rideSection(s, loop = true)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.section_ride_from_here)) },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_directions), contentDescription = null) },
+                        onClick = {
+                            close()
+                            rideSection(s, loop = false)
+                        },
+                    )
+                }
             },
             onDeleteSections = { ids ->
                 if (shownSectionId in ids) hideSection()

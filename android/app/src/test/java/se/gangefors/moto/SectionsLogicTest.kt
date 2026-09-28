@@ -88,4 +88,16 @@ class SectionsLogicTest {
         assertTrue(needsAttention(rows[3].section))
         assertFalse(needsAttention(rows[0].section))
     }
+
+    @Test
+    fun ridesASectionFromItsNearerEndUnlessOneWay() {
+        val line = listOf(LatLon(55.70, 13.20), LatLon(55.705, 13.21), LatLon(55.71, 13.22))
+        val south = LatLon(55.60, 13.20)
+        val north = LatLon(55.80, 13.22)
+        assertEquals(line.first() to line.last(), sectionEnds(line, oneWay = false, here = south))
+        assertEquals(line.last() to line.first(), sectionEnds(line, oneWay = false, here = north))
+        // One-way: always from its start.
+        assertEquals(line.first() to line.last(), sectionEnds(line, oneWay = true, here = north))
+        assertEquals(null, sectionEnds(line.take(1), oneWay = false, here = north))
+    }
 }

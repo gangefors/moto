@@ -12,13 +12,16 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -27,6 +30,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -325,12 +329,16 @@ private fun SectionRowItem(
 /**
  * A saved section shown on the map (from the Sections page): where it
  * runs, its road and facts, a pencil to change its rating or direction
- * ([onEdit]), [actions] and the cross.
+ * ([onEdit]), [actions] and the cross; below, Loop through it ([onLoop])
+ * and Ride it from here ([onRide]) when the rider's position is known.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ShownSectionCard(
     section: Section,
     engine: Engine?,
+    onLoop: (() -> Unit)?,
+    onRide: (() -> Unit)?,
     onEdit: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -364,5 +372,25 @@ fun ShownSectionCard(
                 color = MaterialTheme.colorScheme.error,
             )
         }
+        if (onLoop != null || onRide != null) {
+            FlowRow(
+                Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                onLoop?.let { IconTextButton(R.drawable.ic_loop, stringResource(R.string.section_loop_through), it) }
+                onRide?.let { IconTextButton(R.drawable.ic_directions, stringResource(R.string.section_ride_from_here), it) }
+            }
+        }
+    }
+}
+
+/** An outlined button with an icon before its one-line label. */
+@Composable
+private fun IconTextButton(icon: Int, label: String, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+        OneLine(label)
     }
 }
