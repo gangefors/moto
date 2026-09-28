@@ -742,6 +742,8 @@ fun MapScreen() {
      * or the set of [seed]. */
     fun startLoop(start: LatLng, seed: UInt = 0u) {
         startPicked = null
+        // A plan replaces the step that led to it ("Point set…").
+        message = null
         loopChoice = defaultLoop
         loopSeed = seed
         loopDirection = LoopDirection.ANY
@@ -1371,6 +1373,7 @@ fun MapScreen() {
                                         val to = picker.takeStart() ?: return@OutlinedButton
                                         picker.startAt(from)
                                         startPicked = null
+                                        message = null
                                         overlays?.route?.show(from, to, null)
                                         vias = emptyList()
                                         arriveBy = null
