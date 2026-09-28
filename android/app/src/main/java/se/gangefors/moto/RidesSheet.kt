@@ -25,7 +25,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -52,12 +51,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.Engine
+import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.defaultRouteOptions
 import se.gangefors.moto.core.ExportFormat
 import se.gangefors.moto.core.ImportReport
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.Track
-import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.exportExtension
 
@@ -86,10 +85,8 @@ fun RidesSheet(
     onDismiss: () -> Unit,
     onShow: (Track) -> Unit,
     onShowRoute: (SavedRoute) -> Unit,
-    zooms: LocateZooms,
-    onZooms: (LocateZooms) -> Unit,
+    /** For the route points of an exported route (the rider's setting). */
     gravel: Gravel,
-    onGravel: (Gravel) -> Unit,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -293,39 +290,8 @@ fun RidesSheet(
             Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
         ) {
-            item(key = "routing") {
-                Column {
-                    Text(stringResource(R.string.routing_title), style = MaterialTheme.typography.titleLarge)
-                    Text(stringResource(R.string.routing_gravel), Modifier.padding(top = 8.dp))
-                    GravelChips(gravel, onGravel)
-                    Text(
-                        stringResource(R.string.routing_gravel_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(stringResource(R.string.locate_zooms), Modifier.padding(top = 16.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        itemVerticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ZoomStepper(stringResource(R.string.locate_zoom_area), zooms.area) {
-                            onZooms(LocateZooms.of(it, zooms.close))
-                        }
-                        ZoomStepper(stringResource(R.string.locate_zoom_close), zooms.close) {
-                            onZooms(LocateZooms.of(zooms.area, it))
-                        }
-                    }
-                    Text(
-                        stringResource(R.string.locate_zooms_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
             item(key = "library-title") {
                 Column {
-                    Spacer(Modifier.height(24.dp))
                     Text(stringResource(R.string.library_title), style = MaterialTheme.typography.titleLarge)
                     OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
                         OneLine(stringResource(R.string.rides_import))
@@ -464,17 +430,3 @@ private fun importSummary(res: android.content.res.Resources, r: ImportReport): 
         r.unmatched.toLong(),
     )
 
-/** A zoom level with − and + beside it ([MIN_ZOOM]..[MAX_ZOOM]). */
-@Composable
-private fun ZoomStepper(label: String, zoom: Int, onZoom: (Int) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label)
-        IconButton(onClick = { onZoom(zoom - 1) }, enabled = zoom > MIN_ZOOM) {
-            Text("−", style = MaterialTheme.typography.titleLarge)
-        }
-        Text("$zoom", style = MaterialTheme.typography.titleMedium)
-        IconButton(onClick = { onZoom(zoom + 1) }, enabled = zoom < MAX_ZOOM) {
-            Text("+", style = MaterialTheme.typography.titleLarge)
-        }
-    }
-}

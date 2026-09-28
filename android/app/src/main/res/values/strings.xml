@@ -213,6 +213,14 @@
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
     <string name="rides_open">My data</string>
+    <string name="menu_open">Menu</string>
+    <string name="ride_settings_open">Ride settings</string>
+    <string name="ride_settings_title">Ride settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_loop_length">New loops start at</string>
+    <string name="settings_loop_length_hint">The length a loop starts at when you plan one; change it on the loop sheet for that loop.</string>
+    <string name="settings_keep_screen_on">Keep the screen on while recording</string>
+    <string name="settings_keep_screen_on_hint">For the phone on a handlebar mount. Uses more battery.</string>
     <string name="library_title">Routes &amp; rides</string>
     <string name="library_none">No routes or rides yet. Save a route or loop from its card, record a ride, or import a GPX file.</string>
     <string name="library_route">Route · %1$.1f km · %2$s</string>

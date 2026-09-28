@@ -19,6 +19,7 @@ object RoutePrefs {
     private const val LOOP = "loop_length"
     private const val AREA_ZOOM = "locate_area_zoom"
     private const val CLOSE_ZOOM = "locate_close_zoom"
+    private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
 
     /** What routes do with gravel (unpaved) roads; avoided by default.
      * A value of another type throws; it counts as unset. */
@@ -37,12 +38,20 @@ object RoutePrefs {
         }
     }
 
-    /** The round-trip length last picked, or the default. */
+    /** The length a new loop starts at (Ride settings), or the default. */
     fun loopChoice(context: Context): LoopChoice =
         loopChoiceOf(runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(LOOP, null) }.getOrNull())
 
     fun setLoopChoice(context: Context, choice: LoopChoice) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP, choice.key) }
+    }
+
+    /** Whether the screen stays on while a ride is recording. */
+    fun keepScreenOn(context: Context): Boolean =
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEEP_SCREEN_ON, false) }.getOrDefault(false)
+
+    fun setKeepScreenOn(context: Context, on: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(KEEP_SCREEN_ON, on) }
     }
 
     /** The location button's zoom levels, as last set (defaults 10 and 14). */
