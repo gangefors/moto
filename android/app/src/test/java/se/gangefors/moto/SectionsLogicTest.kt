@@ -12,6 +12,7 @@ import se.gangefors.moto.core.Direction
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionRidden
 import se.gangefors.moto.core.SectionSource
 import se.gangefors.moto.core.SectionStatus
 
@@ -99,5 +100,21 @@ class SectionsLogicTest {
         // One-way: always from its start.
         assertEquals(line.first() to line.last(), sectionEnds(line, oneWay = true, here = north))
         assertEquals(null, sectionEnds(line.take(1), oneWay = false, here = north))
+    }
+
+    @Test
+    fun longestUnriddenComesFirstNeverRiddenFirstOfAll() {
+        fun ridden(r: SectionRow, last: Long?) = r.copy(ridden = SectionRidden(r.section.id, if (last == null) 0u else 1u, last))
+        val list = listOf(ridden(rows[0], 500), ridden(rows[1], null), ridden(rows[2], 100), ridden(rows[3], null))
+        // 2 and 4 never ridden (epic before great), then 3 (long ago), then 1.
+        assertEquals(listOf(2L, 4L, 3L, 1L), ids(sortSections(list, SectionSort.LONGEST_UNRIDDEN, null)))
+    }
+
+    @Test
+    fun rideDaysShowTheYearOnlyWhenNotThisOne() {
+        val zone = java.time.ZoneId.of("Europe/Stockholm")
+        val now = 1_790_000_000L // 2026-09-21
+        assertEquals("12 Aug", rideDay(1_786_500_000L, now, zone, java.util.Locale.ENGLISH))
+        assertEquals("12 Aug 2025", rideDay(1_754_964_000L, now, zone, java.util.Locale.ENGLISH))
     }
 }

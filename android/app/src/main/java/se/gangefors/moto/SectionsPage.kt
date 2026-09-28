@@ -55,6 +55,8 @@ import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionRidden
+import se.gangefors.moto.core.SectionStore
 
 /**
  * The core's descriptions of saved sections, kept while the same region
@@ -112,6 +114,7 @@ fun sectionFacts(row: SectionRow): String = listOfNotNull(
 @Composable
 fun SectionsList(
     sections: List<Section>,
+    store: SectionStore?,
     engine: Engine?,
     here: LatLon?,
     onShow: (Section) -> Unit,
@@ -124,11 +127,19 @@ fun SectionsList(
         val e = engine ?: return@LaunchedEffect
         described = withContext(Dispatchers.Default) { SectionDescriptions.describeAll(e, sections) }
     }
+    // How often each was ridden, counted from the rides off the main thread.
+    var ridden by remember(store) { mutableStateOf<Map<Long, SectionRidden>>(emptyMap()) }
+    LaunchedEffect(store, sections) {
+        val st = store ?: return@LaunchedEffect
+        ridden = withContext(Dispatchers.IO) {
+            runCatching { st.ridden() }.getOrDefault(emptyList()).associateBy { it.sectionId }
+        }
+    }
     var sort by rememberSaveable { mutableStateOf(SectionSort.RATING) }
     var ratings by remember { mutableStateOf(emptySet<Rating>()) }
     var attention by rememberSaveable { mutableStateOf(initialAttention) }
-    val all = remember(sections, described) {
-        sections.map { SectionRow(it, lengthM(it.geometry), described[it.id]) }
+    val all = remember(sections, described, ridden) {
+        sections.map { SectionRow(it, lengthM(it.geometry), described[it.id], ridden[it.id]) }
     }
     val summary = summarize(all)
     // Nothing left to attend to: the filter is off too.
@@ -246,6 +257,17 @@ private fun sortLabel(s: SectionSort): Int = when (s) {
     SectionSort.CURVY -> R.string.sort_curvy
     SectionSort.NEWEST -> R.string.sort_newest
     SectionSort.NEAREST -> R.string.sort_nearest
+    SectionSort.LONGEST_UNRIDDEN -> R.string.sort_longest_unridden
+}
+
+/** "Ridden 4 times · last 12 Aug" or "Not ridden yet"; null until counted. */
+@Composable
+fun riddenText(row: SectionRow): String? {
+    val r = row.ridden ?: return null
+    val last = r.lastAt ?: return stringResource(R.string.section_not_ridden)
+    val times = r.times.toInt()
+    val day = rideDay(last, System.currentTimeMillis() / 1000, java.time.ZoneId.systemDefault(), androidx.compose.ui.platform.LocalLocale.current.platformLocale)
+    return pluralStringResource(R.plurals.section_ridden, times, times, day)
 }
 
 /** A dot in the rating's map colour. */
@@ -287,6 +309,9 @@ private fun SectionRowItem(
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(sectionFacts(row), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            riddenText(row)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (needsAttention(row.section)) {
                 Text(
                     stringResource(R.string.section_attention_note),

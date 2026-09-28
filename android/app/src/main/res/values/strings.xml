@@ -306,6 +306,12 @@
     <string name="sort_curvy">Curviness</string>
     <string name="sort_newest">Newest</string>
     <string name="sort_nearest">Nearest</string>
+    <string name="sort_longest_unridden">Longest unridden</string>
+    <plurals name="section_ridden">
+        <item quantity="one">Ridden once · last %2$s</item>
+        <item quantity="other">Ridden %1$d times · last %2$s</item>
+    </plurals>
+    <string name="section_not_ridden">Not ridden yet</string>
     <string name="sections_attention">Needs attention (%1$d)</string>
     <string name="section_attention_note">Doesn’t fit the updated map. Look at it, then keep it or delete it.</string>
     <string name="section_fallback">Section · %1$.1f km</string>

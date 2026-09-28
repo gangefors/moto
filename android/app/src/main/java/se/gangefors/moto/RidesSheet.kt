@@ -339,6 +339,7 @@ fun RidesSheet(
         if (page == DataPage.SECTIONS) {
             SectionsList(
                 sections = sections,
+                store = store,
                 engine = engine,
                 here = here,
                 initialAttention = sectionsAttention,

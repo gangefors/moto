@@ -7,16 +7,23 @@ import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionRidden
 import se.gangefors.moto.core.SectionStatus
 
 /** A saved section as the Sections page lists it: its length, and the
  * core's description of it once found (null before, or with no region). */
-data class SectionRow(val section: Section, val lengthM: Double, val description: Description? = null) {
+data class SectionRow(
+    val section: Section,
+    val lengthM: Double,
+    val description: Description? = null,
+    /** How often and when last it was ridden; null until counted. */
+    val ridden: SectionRidden? = null,
+) {
     val curvyShare: Double get() = description?.curvyShare?.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.0
 }
 
 /** How the page orders sections. */
-enum class SectionSort { RATING, LENGTH, CURVY, NEWEST, NEAREST }
+enum class SectionSort { RATING, LENGTH, CURVY, NEWEST, NEAREST, LONGEST_UNRIDDEN }
 
 /** Which sections the page shows: those rated one of [ratings] (all when
  * empty), or only those that no longer fit the map ([attention]). */
@@ -40,8 +47,9 @@ private fun rank(r: Rating): Int = when (r) {
 
 /**
  * [rows] in [sort] order: best rated first (then longest), longest,
- * curviest, newest, or nearest to [here] (then as by rating; without a
- * position, as by rating). Ties keep a stable order by id.
+ * curviest, newest, nearest to [here] (then as by rating; without a
+ * position, as by rating), or longest since ridden (never ridden first).
+ * Ties keep a stable order by id.
  */
 fun sortSections(rows: List<SectionRow>, sort: SectionSort, here: LatLon?): List<SectionRow> {
     val byRating = compareBy<SectionRow>({ rank(it.section.rating) }, { -it.lengthM }, { it.section.id })
@@ -50,6 +58,8 @@ fun sortSections(rows: List<SectionRow>, sort: SectionSort, here: LatLon?): List
         SectionSort.LENGTH -> compareBy<SectionRow>({ -it.lengthM }, { it.section.id })
         SectionSort.CURVY -> compareBy<SectionRow>({ -it.curvyShare }, { rank(it.section.rating) }, { it.section.id })
         SectionSort.NEWEST -> compareBy<SectionRow>({ -it.section.createdAt }, { it.section.id })
+        // Never ridden first, then the longest since; the best of equals.
+        SectionSort.LONGEST_UNRIDDEN -> compareBy<SectionRow>({ it.ridden?.lastAt ?: Long.MIN_VALUE }).then(byRating)
         SectionSort.NEAREST -> if (here == null) {
             byRating
         } else {
@@ -95,4 +105,15 @@ fun sectionEnds(line: List<LatLon>, oneWay: Boolean, here: LatLon): Pair<LatLon,
     if (line.size < 2) return null
     val (a, b) = line.first() to line.last()
     return if (oneWay || approxDistanceM(here, a) <= approxDistanceM(here, b)) a to b else b to a
+}
+
+/**
+ * The day of a ride for a list: "12 Aug", with the year when it isn't
+ * [nowSec]'s ("12 Aug 2025"). In [zone], in [locale]'s words.
+ */
+fun rideDay(atSec: Long, nowSec: Long, zone: java.time.ZoneId, locale: java.util.Locale): String {
+    val at = java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+    val now = java.time.Instant.ofEpochSecond(nowSec).atZone(zone)
+    val pattern = if (at.year == now.year) "d MMM" else "d MMM yyyy"
+    return at.format(java.time.format.DateTimeFormatter.ofPattern(pattern, locale))
 }
