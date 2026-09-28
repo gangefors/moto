@@ -314,6 +314,8 @@
     <string name="sections_import_menu">Import sections…</string>
     <string name="section_hide">Hide the section</string>
     <string name="section_edit">Change rating or direction</string>
+    <string name="section_loop_through">Loop through it</string>
+    <string name="section_ride_from_here">Ride it from here</string>
     <string name="sections_exported">Sections exported</string>
     <string name="sections_imported">Imported: %1$d added, %3$d replaced, %2$d already there</string>
     <string name="sections_imported_unmatched">%1$s; %2$d don’t fit the map</string>

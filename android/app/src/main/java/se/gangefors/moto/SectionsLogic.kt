@@ -85,3 +85,14 @@ fun summarize(rows: List<SectionRow>): SectionsSummary = SectionsSummary(
 
 /** [ratings] with [r] added or taken out. */
 fun toggled(ratings: Set<Rating>, r: Rating): Set<Rating> = if (r in ratings) ratings - r else ratings + r
+
+/**
+ * The ends of a section to ride it from [here]: the nearer end first,
+ * then the other, so a route rides it all the way; a one-way section
+ * always from its start. Null for a line of fewer than two points.
+ */
+fun sectionEnds(line: List<LatLon>, oneWay: Boolean, here: LatLon): Pair<LatLon, LatLon>? {
+    if (line.size < 2) return null
+    val (a, b) = line.first() to line.last()
+    return if (oneWay || approxDistanceM(here, a) <= approxDistanceM(here, b)) a to b else b to a
+}
