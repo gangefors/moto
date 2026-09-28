@@ -215,6 +215,7 @@
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
     <string name="menu_open">Menu</string>
+    <string name="task_close">Close</string>
     <string name="sections_page_hint">Your saved sections, as a file to keep or move to another phone. Importing adds the file’s sections to yours.</string>
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>
