@@ -257,6 +257,35 @@ impl Store {
         rows.into_iter().map(to_track).collect()
     }
 
+    /// How often each saved section was ridden, and when last, on the
+    /// finished rides (see [`crate::ridden`]), in the order of
+    /// [`Self::list_sections`]. Reads every ride's points: call off the
+    /// main thread.
+    pub fn ridden_stats(&self) -> Result<Vec<crate::ridden::Ridden>, CoreError> {
+        let sections = self.list_sections(None)?;
+        let mut lines: Vec<(i64, Vec<crate::LatLon>)> = Vec::new();
+        for t in self
+            .list_tracks()?
+            .into_iter()
+            .filter(|t| t.ended_at.is_some())
+        {
+            if let Some(points) = self.track_points(t.id)? {
+                lines.push((
+                    t.started_at,
+                    points.into_iter().map(|p| p.position).collect(),
+                ));
+            }
+        }
+        let rides: Vec<crate::ridden::RideLine<'_>> = lines
+            .iter()
+            .map(|(started_at, line)| crate::ridden::RideLine {
+                started_at: *started_at,
+                line,
+            })
+            .collect();
+        Ok(crate::ridden::ridden(&sections, &rides))
+    }
+
     /// A track's points in recording order; `None` if there is no such
     /// track. Every point read back is validated.
     pub fn track_points(&self, id: i64) -> Result<Option<Vec<TrackPoint>>, CoreError> {
