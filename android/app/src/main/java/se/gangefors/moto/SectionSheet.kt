@@ -3,21 +3,21 @@
 
 package se.gangefors.moto
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -28,8 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Rating
 
@@ -39,7 +40,8 @@ data class SectionChoice(val rating: Rating, val oneWay: Boolean)
 /**
  * A bottom sheet to rate a section and set its direction: for a new one
  * before it is saved, or a saved one (then [onDelete] is set, shown as a
- * bin that asks for a second tap). Sections have no name the rider sees:
+ * bin on the left that asks for a second tap). X, Back or a swipe down
+ * leave it without saving. Sections have no name the rider sees:
  * they are found and changed on the map.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,35 +62,51 @@ fun SectionSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Box {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    RATINGS.forEachIndexed { i, r ->
-                        SegmentedButton(
-                            selected = rating == r,
-                            onClick = { rating = r },
-                            shape = SegmentedButtonDefaults.itemShape(i, RATINGS.size),
-                        ) { Text(stringResource(ratingLabel(r))) }
-                    }
-                }
+            Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 16.dp)) {
+                // The title, and X to leave without saving (as do Back and a
+                // swipe down).
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.section_one_way))
-                        Text(
-                            stringResource(R.string.section_one_way_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDismiss) {
+                        Icon(painterResource(R.drawable.ic_close), stringResource(R.string.task_close))
                     }
-                    Switch(checked = oneWay, onCheckedChange = { oneWay = it })
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // The choices scroll when large text makes them taller than
+                // the screen; the buttons below stay in reach.
+                val scroll = rememberScrollState()
+                Column(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .scrollHints(scroll)
+                        .verticalScroll(scroll)
+                        .padding(end = 12.dp),
+                ) {
+                    OptionHeading(stringResource(R.string.section_rating))
+                    SingleChoice(
+                        options = RATINGS,
+                        selected = rating,
+                        label = { stringResource(ratingLabel(it)) },
+                        onSelect = { rating = it },
+                    )
+                    // The whole row flips the switch.
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .toggleable(value = oneWay, role = Role.Switch, onValueChange = { oneWay = it }),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.section_one_way), modifier = Modifier.weight(1f, fill = false))
+                        InfoButton(stringResource(R.string.section_one_way), stringResource(R.string.section_one_way_hint))
+                        Spacer(Modifier.weight(1f))
+                        Switch(checked = oneWay, onCheckedChange = null)
+                    }
+                }
+                // The bin (a saved section) on the left, Save on the right.
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (onDelete != null) {
                         DeleteButton(
                             confirming = confirmDelete,
@@ -96,16 +114,9 @@ fun SectionSheet(
                             onDelete = onDelete,
                         )
                     }
-                    // Wraps (right-aligned) when large text leaves no room.
-                    FlowRow(
-                        Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        OutlinedButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) }
-                        Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
-                            OneLine(stringResource(R.string.section_save))
-                        }
+                    Spacer(Modifier.weight(1f))
+                    Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
+                        OneLine(stringResource(R.string.section_save))
                     }
                 }
             }
