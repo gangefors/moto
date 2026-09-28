@@ -14,16 +14,21 @@ import se.gangefors.moto.core.RoadInfo
 import se.gangefors.moto.core.Surface as RoadSurface
 
 /**
- * What the region file knows about the road the rider tapped: its kind,
- * surface, the speed the router assumes, how curvy it is and anything to
+ * What the region file knows about the road the rider tapped: its number
+ * and name (when the region has them), its kind, surface, the speed the router assumes, how curvy it is and anything to
  * look out for. The cross closes it.
  */
 @Composable
 fun RoadInfoCard(info: RoadInfo, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val facts = roadFacts(info)
+    // Named roads lead with their number and name ("Road 13 · Storgatan"),
+    // their kind joins the facts below.
+    val kind = stringResource(roadClassName(info.`class`))
+    val named = if (info.roadRef != null || info.name != null) roadText(info.roadRef, info.name) else null
     MapCard(
-        title = stringResource(roadClassName(info.`class`)),
-        supporting = listOf(
+        title = named ?: kind,
+        supporting = listOfNotNull(
+            kind.takeIf { named != null },
             stringResource(surfaceName(info.surface)),
             stringResource(R.string.road_speed, facts.speedKmh),
             curvinessText(facts),
