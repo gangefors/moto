@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import android.widget.Toast
 import se.gangefors.moto.debug.DebugTools
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,8 +72,8 @@ enum class DataPage { LIBRARY, SECTIONS, REGION }
  * to the map, [onSectionsChanged] reloads them); [DataPage.REGION], the
  * map region. Files are written and read only where the rider picks with
  * the system file picker: no storage permission, and nothing leaves the
- * phone unless the rider sends it. What happened shows as a notice at
- * the bottom of the page.
+ * phone unless the rider sends it. What was done shows as a toast; a
+ * failure as a notice at the bottom of the page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,12 +91,17 @@ fun RidesSheet(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    // What happened (exported, imported, failed), at the bottom of the page.
+    // What happened: done (exported, imported, saved) as a toast; a failure
+    // as a notice at the bottom of the page that stays until closed, so
+    // its reason can be read.
     val notices = remember { SnackbarHostState() }
-    fun onMessage(text: String) {
+    fun done(text: String) {
+        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+    }
+    fun failed(text: String) {
         scope.launch {
             notices.currentSnackbarData?.dismiss()
-            notices.showSnackbar(text, withDismissAction = true)
+            notices.showSnackbar(text, withDismissAction = true, duration = SnackbarDuration.Indefinite)
         }
     }
     val zone = remember { ZoneId.systemDefault() }
@@ -145,11 +152,9 @@ fun RidesSheet(
                         ?: error(resources.getString(R.string.rides_cannot_write))
                 }
             }
-            onMessage(
-                result.fold(
-                    onSuccess = { resources.getString(R.string.rides_exported) },
-                    onFailure = { resources.getString(R.string.rides_export_failed, it.message ?: it.toString()) },
-                ),
+            result.fold(
+                onSuccess = { done(resources.getString(R.string.rides_exported)) },
+                onFailure = { failed(resources.getString(R.string.rides_export_failed, it.message ?: it.toString())) },
             )
         }
     }
@@ -178,7 +183,7 @@ fun RidesSheet(
                 }
                 result.fold(
                     onSuccess = { context.startActivity(it) },
-                    onFailure = { onMessage(resources.getString(R.string.route_share_failed, it.message ?: it.toString())) },
+                    onFailure = { failed(resources.getString(R.string.route_share_failed, it.message ?: it.toString())) },
                 )
             }
         }
@@ -232,11 +237,9 @@ fun RidesSheet(
                 }
             }
             busy = false
-            onMessage(
-                result.fold(
-                    onSuccess = { resources.getString(R.string.sections_exported) },
-                    onFailure = { resources.getString(R.string.rides_export_failed, it.message ?: it.toString()) },
-                ),
+            result.fold(
+                onSuccess = { done(resources.getString(R.string.sections_exported)) },
+                onFailure = { failed(resources.getString(R.string.rides_export_failed, it.message ?: it.toString())) },
             )
         }
     }
@@ -256,11 +259,9 @@ fun RidesSheet(
             }
             busy = false
             reload()
-            onMessage(
-                result.fold(
-                    onSuccess = { t -> resources.getString(R.string.rides_imported, sectionKm(t.distanceM)) },
-                    onFailure = { resources.getString(R.string.rides_import_failed, it.message ?: it.toString()) },
-                ),
+            result.fold(
+                onSuccess = { t -> done(resources.getString(R.string.rides_imported, sectionKm(t.distanceM))) },
+                onFailure = { failed(resources.getString(R.string.rides_import_failed, it.message ?: it.toString())) },
             )
         }
     }
@@ -279,11 +280,9 @@ fun RidesSheet(
             }
             busy = false
             result.onSuccess { onSectionsChanged() }
-            onMessage(
-                result.fold(
-                    onSuccess = { r -> importSummary(resources, r) },
-                    onFailure = { resources.getString(R.string.sections_import_failed, it.message ?: it.toString()) },
-                ),
+            result.fold(
+                onSuccess = { r -> done(importSummary(resources, r)) },
+                onFailure = { failed(resources.getString(R.string.sections_import_failed, it.message ?: it.toString())) },
             )
         }
     }
@@ -386,11 +385,9 @@ fun RidesSheet(
                 savingAsRoute = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) { runCatching { store.saveTrackAsRoute(t.id, name) } }
-                    onMessage(
-                        result.fold(
-                            onSuccess = { resources.getString(R.string.route_saved, it?.name ?: name) },
-                            onFailure = { resources.getString(R.string.route_save_failed, it.message ?: it.toString()) },
-                        ),
+                    result.fold(
+                        onSuccess = { done(resources.getString(R.string.route_saved, it?.name ?: name)) },
+                        onFailure = { failed(resources.getString(R.string.route_save_failed, it.message ?: it.toString())) },
                     )
                     reload()
                 }
@@ -418,12 +415,9 @@ private val EXPORT_FORMATS = listOf(
     ExportFormat.GZIP to R.string.format_gzip,
 )
 
-private fun importSummary(res: android.content.res.Resources, r: ImportReport): String =
-    res.getString(
-        R.string.sections_imported,
-        r.added.toLong(),
-        r.skipped.toLong(),
-        r.replaced.toLong(),
-        r.unmatched.toLong(),
-    )
+/** Short enough for a toast; sections that don't fit only when there are some. */
+private fun importSummary(res: android.content.res.Resources, r: ImportReport): String {
+    val text = res.getString(R.string.sections_imported, r.added.toLong(), r.skipped.toLong(), r.replaced.toLong())
+    return if (r.unmatched > 0uL) res.getString(R.string.sections_imported_unmatched, text, r.unmatched.toLong()) else text
+}
 
