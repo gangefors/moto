@@ -1635,7 +1635,6 @@ fun MapScreen() {
                     MenuTopic.LIBRARY -> dataPage = DataPage.LIBRARY
                     MenuTopic.SECTIONS -> dataPage = DataPage.SECTIONS
                     MenuTopic.REGION -> dataPage = DataPage.REGION
-                    MenuTopic.SETTINGS -> showSettings = true
                     MenuTopic.ABOUT -> showAbout = true
                     MenuTopic.DEBUG -> showDebug = true
                 }
