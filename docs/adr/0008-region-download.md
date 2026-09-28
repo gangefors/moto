@@ -25,6 +25,8 @@ Forces:
 - **Install** (core, `install_region`): check the downloaded file's size and SHA-256 against the manifest **before** decompressing anything; decompress to a temporary file next to the target, refusing more bytes than `region_bytes` (a gzip bomb stops there); run the full `verify_file` (section checksums and structure, ADR-0005); then rename it into place, so the old region stays usable until the new one is complete. The app passes the paths, inside its own storage, built from the checked id.
 - **Choosing the region.** The installed download is used when there is one; otherwise a debug build falls back to its bundled M0 region, and a release build asks the rider to download one. Sections are re-matched to the new region automatically (ADR-0006).
 - **Updates.** My data shows the installed region and its OSM data date, and offers an update when the manifest has newer data. No background downloads in v1.
+- **Signed manifest (2026-09-28).** The manifest is published as `regions-vN.manifest`: a 64-byte Ed25519 signature followed by the manifest's JSON bytes, in one file so manifest and signature always change together (no window where a new manifest meets an old signature). The core checks the signature (`verify_strict`) against the public keys compiled into it **before** parsing the JSON, and `install_region` checks it again; a manifest without a valid signature is refused. The keys are a list, so a new key can ship in the app before the workflow switches to it. The signing key is created offline by the rider and held only as the secret `REGIONS_SIGNING_KEY` of the GitHub environment `regions` (main only), which only the regions workflow's publish job uses; it signs with `openssl pkeyutl` and checks the result with `moto-regionbuild` (the same core code and keys as the app) before uploading, so a key that doesn't match the app never publishes. As the manifest carries each file's SHA-256, the signature covers the region files too. Accepted: an old, validly signed manifest could be served again (stale map data, no other harm); the app only offers an update for newer data.
+- **Release builds carry no region (2026-09-28).** Only debug builds bundle the M0 region; a release build starts with none and asks the rider to download one.
 - **Licence.** Region files are derived from OpenStreetMap: the release notes state © OpenStreetMap contributors, ODbL 1.0, and link the builder's source.
 
 ## Options Considered
@@ -46,7 +48,7 @@ Forces:
 | --- | --- |
 | Complexity | Medium: a workflow, a manifest, an installer, a download screen |
 | Cost | None; GitHub hosts release files for public repositories |
-| Security | HTTPS from a fixed source, SHA-256 before decompressing, bounded decompression, full structure check; not yet signed (see Consequences) |
+| Security | HTTPS from a fixed source, signed manifest, SHA-256 before decompressing, bounded decompression, full structure check |
 | Portability | Checking and installing in the core; only the fetch is Kotlin |
 
 **Pros:** small APK; weekly map updates without app releases; several regions later with the same machinery. **Cons:** GitHub is a single source; a compromised release could serve a well-formed but wrong file until manifests are signed.
@@ -76,5 +78,6 @@ B keeps the APK small and the map fresh at no cost, and every check that protect
 - [x] `regions` workflow: weekly and on demand, build Sweden, gzip, manifest (written by `moto-regionbuild --manifest`, which first installs each region back with the core), publish to the `regions` release.
 - [x] Core: manifest parsing (`region::install::parse_manifest`) and `install_region` with tests, including corrupt and oversized input; FFI (`parse_region_manifest`, `install_region`).
 - [x] App: My data → Map region: installed region and date, Download / Update with progress and stop, resume, free-space check, a bin to remove it; use the installed region, else the bundled one (debug).
-- [ ] Measure on the phone: download, install and open time for Sweden; routing and loops on it.
-- [ ] Before other riders: sign the manifest (Ed25519, key in a GitHub environment secret, public key in the app).
+- [x] Measure on the phone: done 2026-09-28 (Pixel 7): removing Sweden and downloading it again took about 18 s to a ready region (download, full check, install), open by fingerprint 0.24–0.95 s (ADR-0005), routes and loops in ADR-0001.
+- [ ] Before other riders: sign the manifest (above): core verification and `regionbuild --check-manifest`, the app fetching `regions-vN.manifest`, the workflow signing; the rider creates the key and the `regions` environment. Then stop publishing the unsigned `regions-vN.json`.
+- [ ] Release builds bundle no region.
