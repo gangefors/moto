@@ -276,3 +276,9 @@ fun scaleLabels(centres: List<Int>, widths: List<Int>, total: Int, gap: Int): Li
     }
     return emptyList()
 }
+
+/** Whether [count] segments fit side by side in [availablePx]: each as
+ * wide as the widest label ([widestLabelPx]) plus [segmentPaddingPx]
+ * (segmented buttons share the width equally). */
+fun segmentsFit(widestLabelPx: Int, count: Int, segmentPaddingPx: Int, availablePx: Int): Boolean =
+    count > 0 && count * (widestLabelPx + segmentPaddingPx) <= availablePx

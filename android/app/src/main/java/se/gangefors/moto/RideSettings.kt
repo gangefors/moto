@@ -116,34 +116,6 @@ private fun Heading(title: String, info: String) {
     }
 }
 
-/**
- * An (i) that shows [text] in a rich tooltip (Material 3's way to explain
- * a control in place): it opens on a tap and stays until a tap elsewhere
- * or Back.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InfoButton(title: String, text: String) {
-    val state = rememberTooltipState(isPersistent = true)
-    val scope = rememberCoroutineScope()
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-        tooltip = {
-            RichTooltip(title = { Text(title) }) { Text(text) }
-        },
-        state = state,
-    ) {
-        IconButton(onClick = { scope.launch { state.show() } }) {
-            Icon(
-                painterResource(R.drawable.ic_info),
-                contentDescription = stringResource(R.string.settings_info, title),
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
 @Composable
 private fun Divider() {
     HorizontalDivider(Modifier.padding(vertical = 16.dp))

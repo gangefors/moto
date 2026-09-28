@@ -271,4 +271,15 @@ class MapLogicTest {
         // A label wider than the whole scale never shows.
         assertEquals(emptyList<Pair<Int, Int>>(), scaleLabels(listOf(10), listOf(400), total = 300, gap = 8))
     }
+
+    @Test
+    fun segmentsFitOnlyWhenEveryLabelHasRoom() {
+        // Avoid / Allow / Prefer: the widest label decides, all segments
+        // are equally wide.
+        assertTrue(segmentsFit(widestLabelPx = 60, count = 3, segmentPaddingPx = 28, availablePx = 264))
+        assertFalse(segmentsFit(widestLabelPx = 60, count = 3, segmentPaddingPx = 28, availablePx = 263))
+        // Largest fonts: chips instead.
+        assertFalse(segmentsFit(widestLabelPx = 140, count = 3, segmentPaddingPx = 28, availablePx = 320))
+        assertFalse(segmentsFit(widestLabelPx = 10, count = 0, segmentPaddingPx = 28, availablePx = 320))
+    }
 }
