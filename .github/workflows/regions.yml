@@ -116,8 +116,11 @@ jobs:
               --title "Routing regions" \
               --notes "Routing regions for the app (ADR-0008), rebuilt weekly from OpenStreetMap data. Map data © OpenStreetMap contributors, available under the Open Database License 1.0 (https://opendatacommons.org/licenses/odbl/1-0/); the region files are built with moto-regionbuild from this repository."
           fi
-          # The region files first, then the manifests that list them. The
-          # unsigned regions-vN.json is for app builds from before the
-          # signed manifest (ADR-0008) and goes once those are replaced.
+          # The region files first, then the signed manifest that lists them.
           gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/*.region.gz
-          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/regions-v*.manifest "$out"/regions-v*.json
+          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/regions-v*.manifest
+          # Apps read only the signed manifest now (ADR-0008); the unsigned
+          # one published before it goes.
+          for json in "$out"/regions-v*.json; do
+            gh release delete-asset regions "$(basename "$json")" --repo "$GITHUB_REPOSITORY" --yes || true
+          done
