@@ -1647,17 +1647,6 @@ fun MapScreen() {
                         )
                     }
                 }
-                if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
-                    // A flag (the spots tagged on rides) with how many wait.
-                    FloatingActionButton(onClick = { startReview() }) {
-                        BadgedBox(badge = { Badge { Text(pendingTags.toString()) } }) {
-                            Icon(
-                                painterResource(R.drawable.ic_flag),
-                                contentDescription = pluralStringResource(R.plurals.tags_review, pendingTags, pendingTags),
-                            )
-                        }
-                    }
-                }
                 // Loops from where the rider is, in one tap: a new set
                 // each time.
                 if (region is RegionState.Ready && hasLocation) {
@@ -1713,23 +1702,42 @@ fun MapScreen() {
             }
         }
         // Quick-tag (PRD R3): one big button, usable with gloves, whenever the
-        // map is open. Bottom left, above the map's logo and attribution.
+        // map is open. Bottom left, above the map's logo and attribution;
+        // the tags waiting for review above it (the right-hand column has
+        // no room to spare in landscape).
         if (store is StoreState.Ready && !marking && !planning && !cardsShown) {
             DisposableEffect(Unit) { onDispose { tagTop = Int.MAX_VALUE } }
-            LargeFloatingActionButton(
-                onClick = { quickTag() },
-                shape = CircleShape,
-                containerColor = TAG_COLOR,
-                contentColor = Color.White,
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .safeDrawingPadding()
                     .padding(start = 16.dp, bottom = 40.dp)
-                    .size(TAG_BUTTON_SIZE)
-                    .onGloballyPositioned { tagTop = it.boundsInRoot().top.roundToInt() }
-                    .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
+                    .onGloballyPositioned { tagTop = it.boundsInRoot().top.roundToInt() },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
+                if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
+                    // A flag (the spots tagged on rides) with how many wait.
+                    FloatingActionButton(onClick = { startReview() }) {
+                        BadgedBox(badge = { Badge { Text(pendingTags.toString()) } }) {
+                            Icon(
+                                painterResource(R.drawable.ic_flag),
+                                contentDescription = pluralStringResource(R.plurals.tags_review, pendingTags, pendingTags),
+                            )
+                        }
+                    }
+                }
+                LargeFloatingActionButton(
+                    onClick = { quickTag() },
+                    shape = CircleShape,
+                    containerColor = TAG_COLOR,
+                    contentColor = Color.White,
+                    modifier = Modifier
+                        .size(TAG_BUTTON_SIZE)
+                        .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
+                ) {
+                    Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
+                }
             }
         }
         ToastHost(Modifier.align(Alignment.BottomCenter))
