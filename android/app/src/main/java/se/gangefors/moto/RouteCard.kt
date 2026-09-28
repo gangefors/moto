@@ -161,6 +161,7 @@ fun PlanSheet(
             Column(
                 Modifier
                     .weight(1f, fill = false)
+                    .scrollHints(scroll)
                     .nestedScroll(overscroll)
                     .verticalScroll(scroll),
             ) {
@@ -552,15 +553,22 @@ private fun SheetTop(
     val shown = summary ?: last.value
     val dim = if (summary == null && problem == null) Modifier.alpha(0.5f) else Modifier
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            when {
-                problem != null -> stringResource(R.string.loop_none_title)
-                shown == null -> computing
-                else -> stringResource(R.string.route_summary, shown.km, shown.minutes)
-            },
-            style = MaterialTheme.typography.headlineSmall,
+        // The distance and the time, each kept on one line; with large
+        // fonts the time goes below the distance as a whole.
+        FlowRow(
             modifier = Modifier.weight(1f).then(dim),
-        )
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            val style = MaterialTheme.typography.headlineSmall
+            when {
+                problem != null -> Text(stringResource(R.string.loop_none_title), style = style)
+                shown == null -> Text(computing, style = style)
+                else -> {
+                    Text(noBreak(stringResource(R.string.route_km, shown.km)), style = style)
+                    Text(noBreak(durationText(shown.minutes)), style = style)
+                }
+            }
+        }
         IconButton(onClick = onSave, enabled = found) {
             Icon(painterResource(R.drawable.ic_bookmark), stringResource(R.string.route_save))
         }
@@ -790,9 +798,16 @@ fun LoopLengthSlider(
 @Composable
 fun loopLengthText(c: LoopChoice): String = when (c) {
     is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
-    is LoopChoice.Minutes -> when {
-        c.minutes < 60 -> stringResource(R.string.loop_minutes, c.minutes)
-        c.minutes % 60 == 0 -> stringResource(R.string.loop_hours, c.minutes / 60)
-        else -> stringResource(R.string.loop_hours_minutes, c.minutes / 60, c.minutes % 60)
-    }
+    is LoopChoice.Minutes -> durationText(c.minutes)
 }
+
+/** A riding time as text: "2 h 50 min", "3 h" or "45 min". */
+@Composable
+fun durationText(minutes: Int): String = when {
+    minutes < 60 -> stringResource(R.string.loop_minutes, minutes)
+    minutes % 60 == 0 -> stringResource(R.string.loop_hours, minutes / 60)
+    else -> stringResource(R.string.loop_hours_minutes, minutes / 60, minutes % 60)
+}
+
+/** [text] with its spaces kept from breaking ("2 h 50 min" on one line). */
+fun noBreak(text: String): String = text.replace(' ', '\u00A0')
