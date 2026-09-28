@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Gravel
 import kotlin.math.roundToInt
@@ -675,7 +676,8 @@ private fun ArriveByDialog(initial: Long?, zone: ZoneId, onDismiss: () -> Unit, 
  * go, so the route is found again only then. [dimmed] shows the value as
  * not in use (e.g. while an arrival time is set). Steps for which [mark]
  * is true get their [label] on a scale under the slider, in place of a
- * dot for every step.
+ * dot for every step. [titleStyle] suits a sheet by default; a settings
+ * page passes its headings' style.
  */
 @Composable
 fun <T> StepSlider(
@@ -687,6 +689,7 @@ fun <T> StepSlider(
     dimmed: Boolean = false,
     mark: (T) -> Boolean = { false },
     titleExtra: @Composable () -> Unit = {},
+    titleStyle: TextStyle = MaterialTheme.typography.labelMedium,
     trailing: @Composable () -> Unit = {},
 ) {
     val start = steps.indexOf(value).coerceAtLeast(0)
@@ -698,7 +701,7 @@ fun <T> StepSlider(
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.labelMedium)
+                Text(title, style = titleStyle)
                 titleExtra()
             }
             Text(
@@ -737,7 +740,7 @@ fun <T> StepSlider(
  * track, 0 to 1); labels that don't fit beside each other are left out.
  */
 @Composable
-private fun SliderScale(texts: List<String>, fractions: List<Float>) {
+fun SliderScale(texts: List<String>, fractions: List<Float>) {
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
     Layout(
         content = {
@@ -770,6 +773,7 @@ fun LoopLengthSlider(
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     info: @Composable () -> Unit = {},
+    titleStyle: TextStyle = MaterialTheme.typography.labelMedium,
 ) {
     StepSlider(
         title = title,
@@ -779,6 +783,7 @@ fun LoopLengthSlider(
         onCommit = onChoice,
         mark = ::isLoopMark,
         titleExtra = info,
+        titleStyle = titleStyle,
     ) {
         val hours = choice is LoopChoice.Minutes
         FilterChip(

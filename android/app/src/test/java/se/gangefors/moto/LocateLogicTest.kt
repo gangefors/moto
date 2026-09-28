@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,5 +62,24 @@ class LocateLogicTest {
         assertEquals(LocateZooms(12, 13), LocateZooms.of(12, 11))
         assertEquals(LocateZooms(MIN_ZOOM, MIN_ZOOM + 1), LocateZooms.of(1, 2))
         assertEquals(LocateZooms(MAX_ZOOM - 1, MAX_ZOOM), LocateZooms.of(40, 50))
+    }
+
+    @Test
+    fun rangeSliderGivesZooms() {
+        assertEquals(LocateZooms(10, 14), zoomsFromRange(10.2f, 13.8f))
+        assertEquals(LocateZooms(MIN_ZOOM, MAX_ZOOM), zoomsFromRange(2f, 30f))
+        // Thumbs meeting or crossing: no change.
+        assertNull(zoomsFromRange(12f, 12.3f))
+        assertNull(zoomsFromRange(14f, 11f))
+    }
+
+    @Test
+    fun spansReadable() {
+        assertEquals(Span.Km(18), readableSpan(17_600.0))
+        assertEquals(Span.Km(10), readableSpan(9_960.0))
+        assertEquals(Span.KmTenths(4.4), readableSpan(4_380.0))
+        assertEquals(Span.KmTenths(1.0), readableSpan(999.9))
+        assertEquals(Span.Metres(550), readableSpan(560.0))
+        assertEquals(Span.Metres(50), readableSpan(3.0))
     }
 }
