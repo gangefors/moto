@@ -3,7 +3,7 @@
 
 //! Which OSM ways a motorcycle may use, and their edge attributes.
 
-use moto_core::region::format::{RoadClass, Surface, edge_flags};
+use moto_core::region::format::{PlaceKind, RoadClass, Surface, edge_flags};
 
 /// Travel direction allowed on a way, relative to its node order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +121,65 @@ pub fn classify(tags: &[(&str, &str)]) -> Option<WayAttrs> {
         flags,
         oneway,
     })
+}
+
+/// Longest name or road number kept, in characters; longer ones are cut.
+pub const MAX_NAME_CHARS: usize = 60;
+
+/// A name from OSM data, made safe to show: control and formatting
+/// characters (bidi overrides, zero-width marks) dropped, runs of white
+/// space made one space, trimmed, cut to [`MAX_NAME_CHARS`]; `None` when
+/// nothing is left.
+pub fn clean_name(v: &str) -> Option<String> {
+    let mut out = String::new();
+    let mut space = false;
+    for c in v.chars() {
+        if c.is_whitespace() {
+            space = !out.is_empty();
+            continue;
+        }
+        if c.is_control() || is_format_char(c) {
+            continue;
+        }
+        if out.chars().count() >= MAX_NAME_CHARS {
+            break;
+        }
+        if space {
+            out.push(' ');
+            space = false;
+        }
+        out.push(c);
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// Unicode format characters that can reorder or hide text.
+fn is_format_char(c: char) -> bool {
+    matches!(c,
+        '\u{00AD}' | '\u{061C}' | '\u{180E}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
+        | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206F}' | '\u{FEFF}' | '\u{FFF9}'..='\u{FFFB}')
+}
+
+/// A road's number and name (`ref`, `name`), cleaned. Several numbers
+/// (`13;108`) keep the first.
+pub fn road_names(tags: &[(&str, &str)]) -> (Option<String>, Option<String>) {
+    let tag = |k: &str| tags.iter().find(|(key, _)| *key == k).map(|(_, v)| *v);
+    let road_ref = tag("ref").and_then(|v| clean_name(v.split(';').next().unwrap_or(v)));
+    (road_ref, tag("name").and_then(clean_name))
+}
+
+/// A named place worth naming a road by: a city, town, village or
+/// hamlet (`place=*` with a `name`).
+pub fn place(tags: &[(&str, &str)]) -> Option<(PlaceKind, String)> {
+    let tag = |k: &str| tags.iter().find(|(key, _)| *key == k).map(|(_, v)| *v);
+    let kind = match tag("place")? {
+        "city" => PlaceKind::City,
+        "town" => PlaceKind::Town,
+        "village" => PlaceKind::Village,
+        "hamlet" => PlaceKind::Hamlet,
+        _ => return None,
+    };
+    Some((kind, clean_name(tag("name")?)?))
 }
 
 /// Default speeds in km/h, from Swedish general limits.
@@ -300,5 +359,32 @@ mod tests {
         assert_eq!(surface(Some("dirt")), Surface::Dirt);
         assert_eq!(surface(Some("weird")), Surface::Unknown);
         assert_eq!(surface(None), Surface::Unknown);
+    }
+
+    #[test]
+    fn cleans_names_from_osm() {
+        assert_eq!(clean_name("  Kvärnbyvägen "), Some("Kvärnbyvägen".into()));
+        assert_eq!(clean_name("Väg\t  13\n"), Some("Väg 13".into()));
+        assert_eq!(clean_name("a\u{202E}b\u{200B}c\u{0}"), Some("abc".into()));
+        assert_eq!(clean_name(" \u{200B} "), None);
+        assert_eq!(clean_name(""), None);
+        let long = clean_name(&"é".repeat(500)).unwrap();
+        assert_eq!(long.chars().count(), MAX_NAME_CHARS);
+    }
+
+    #[test]
+    fn reads_road_numbers_names_and_places() {
+        assert_eq!(
+            road_names(&[("ref", "13;108"), ("name", "Storgatan")]),
+            (Some("13".into()), Some("Storgatan".into()))
+        );
+        assert_eq!(road_names(&[("highway", "track")]), (None, None));
+        assert_eq!(
+            place(&[("place", "town"), ("name", "Höör")]),
+            Some((PlaceKind::Town, "Höör".into()))
+        );
+        assert_eq!(place(&[("place", "village")]), None);
+        assert_eq!(place(&[("place", "island"), ("name", "Ven")]), None);
+        assert_eq!(place(&[("place", "hamlet"), ("name", "\u{202E}")]), None);
     }
 }

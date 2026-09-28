@@ -43,6 +43,49 @@ pub struct RegionData {
     pub way_refs: Vec<WayRef>,
     /// Snapping grid cell size in 1e-7 degrees (lat, lon).
     pub grid_cell: (i32, i32),
+    /// Road numbers, road names and places (format 1.2); written only
+    /// when there is a name per geometry.
+    pub names: RoadNames,
+}
+
+/// Road numbers and names per geometry, and named places, with the
+/// strings they refer to.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RoadNames {
+    pub strings: Vec<String>,
+    /// One per geometry, or none at all.
+    pub geometry_names: Vec<GeometryName>,
+    /// Sorted by latitude.
+    pub places: Vec<Place>,
+}
+
+impl RoadNames {
+    /// Checks that every index points at a string, and packs the strings.
+    fn pack(&self, geometries: usize) -> Result<(Vec<u32>, Vec<u8>), String> {
+        if self.geometry_names.len() != geometries {
+            return Err("road names need one entry per geometry".into());
+        }
+        let count = u32::try_from(self.strings.len()).map_err(|_| "too many strings")?;
+        let ok = |i: u32| i == NO_NAME || i < count;
+        if !self
+            .geometry_names
+            .iter()
+            .all(|g| ok(g.road_ref) && ok(g.name))
+            || !self.places.iter().all(|p| p.name < count)
+        {
+            return Err("name refers to a missing string".into());
+        }
+        if self.places.windows(2).any(|w| w[0].pos.lat > w[1].pos.lat) {
+            return Err("places must be sorted by latitude".into());
+        }
+        let mut offsets = vec![0u32];
+        let mut bytes = Vec::new();
+        for s in &self.strings {
+            bytes.extend_from_slice(s.as_bytes());
+            offsets.push(u32::try_from(bytes.len()).map_err(|_| "strings too long")?);
+        }
+        Ok((offsets, bytes))
+    }
 }
 
 impl RegionData {
@@ -102,7 +145,12 @@ impl RegionData {
             &self.shape_points,
             self.info.bbox,
         );
-        let sections: Vec<(u32, &[u8])> = vec![
+        let packed = if self.names.geometry_names.is_empty() {
+            None
+        } else {
+            Some(self.names.pack(geometries).map_err(bad)?)
+        };
+        let mut sections: Vec<(u32, &[u8])> = vec![
             (section::NODE_POS, bytes_of(&self.nodes)),
             (section::FWD_OFFSETS, bytes_of(&fwd)),
             (section::BWD_OFFSETS, bytes_of(&bwd)),
@@ -118,6 +166,15 @@ impl RegionData {
             (section::COVERAGE_OFFSETS, bytes_of(&coverage_offsets)),
             (section::COVERAGE_POINTS, bytes_of(&coverage_points)),
         ];
+        if let Some((offsets, bytes)) = &packed {
+            sections.push((section::NAME_OFFSETS, bytes_of(offsets)));
+            sections.push((section::NAME_BYTES, bytes));
+            sections.push((
+                section::GEOMETRY_NAMES,
+                bytes_of(&self.names.geometry_names),
+            ));
+            sections.push((section::PLACES, bytes_of(&self.names.places)));
+        }
         let out = assemble(&self.info, &sections);
         super::Region::from_bytes(&out)?;
         Ok(out)

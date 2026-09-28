@@ -360,6 +360,7 @@ fn writes_an_empty_region() {
     let d = RegionData {
         geometry_offsets: vec![0],
         grid_cell: (10_000, 10_000),
+        names: Default::default(),
         ..RegionData::default()
     };
     let r = Region::from_bytes(&d.to_bytes().unwrap()).unwrap();
@@ -517,4 +518,136 @@ fn a_fingerprint_does_not_vouch_for_a_non_region() {
         Err(CoreError::Region(_))
     ));
     std::fs::remove_file(&path).unwrap();
+}
+
+fn named_bytes() -> Vec<u8> {
+    fixture::named_region().to_bytes().unwrap()
+}
+
+#[test]
+fn round_trips_road_names_and_places() {
+    let r = Region::from_bytes(&named_bytes()).unwrap();
+    assert!(r.has_names());
+    let g = r.geometry_name(0);
+    assert_eq!(
+        (r.string(g.road_ref), r.string(g.name)),
+        (Some("13"), Some("Storgatan"))
+    );
+    assert_eq!(r.geometry_name(1).road_ref, NO_NAME);
+    assert_eq!(r.string(NO_NAME), None);
+    assert_eq!(r.geometry_name(99), GeometryName::NONE);
+    let places: Vec<Option<&str>> = r.places().iter().map(|p| r.string(p.name)).collect();
+    assert_eq!(places, [Some("Ö"), Some("Dalby"), Some("Lund")]);
+    // A file without names has none, and says so.
+    let plain = Region::from_bytes(&bytes()).unwrap();
+    assert!(!plain.has_names() && plain.places().is_empty());
+    assert_eq!(
+        (plain.string(0), plain.geometry_name(0)),
+        (None, GeometryName::NONE)
+    );
+}
+
+#[test]
+fn rejects_bad_names() {
+    let good = named_bytes();
+    let mut b = good.clone();
+    patch(&mut b, section::NAME_OFFSETS, 1, 1_000_000u32);
+    assert_rejected(&b, "name offsets");
+
+    let mut b = good.clone();
+    patch(&mut b, section::NAME_BYTES, 0, 0xFFu8);
+    assert_rejected(&b, "UTF-8");
+
+    let mut b = good.clone();
+    patch(
+        &mut b,
+        section::GEOMETRY_NAMES,
+        1,
+        GeometryName {
+            road_ref: 99,
+            name: NO_NAME,
+        },
+    );
+    assert_rejected(&b, "missing string");
+
+    let mut b = good.clone();
+    patch_entry(&mut b, section::GEOMETRY_NAMES, |e| e.len -= 8);
+    assert_rejected(&b, "one entry per geometry");
+
+    let mut b = good.clone();
+    let mut place = Region::from_bytes(&good).unwrap().places()[0];
+    place.kind = 9;
+    patch(&mut b, section::PLACES, 0, place);
+    assert_rejected(&b, "invalid place");
+
+    let mut b = good.clone();
+    place.kind = PlaceKind::Hamlet as u8;
+    place.pos.lat = 890_000_000;
+    patch(&mut b, section::PLACES, 0, place);
+    assert_rejected(&b, "not sorted");
+
+    // Three of the four sections: refused (an unknown id is ignored).
+    let mut b = good.clone();
+    patch_entry(&mut b, section::PLACES, |e| e.id = 99);
+    assert_rejected(&b, "all four");
+}
+
+#[test]
+fn writer_refuses_names_that_do_not_fit() {
+    let mut d = fixture::named_region();
+    d.names.geometry_names.pop();
+    assert!(d.to_bytes().is_err());
+    let mut d = fixture::named_region();
+    d.names.geometry_names[0].name = 50;
+    assert!(d.to_bytes().is_err());
+    let mut d = fixture::named_region();
+    d.names.places.reverse();
+    assert!(d.to_bytes().is_err());
+}
+
+/// Corrupted names are rejected or leave a region whose name lookups,
+/// road info and descriptions never panic.
+#[test]
+fn corrupted_names_never_panic() {
+    let good = named_bytes();
+    let mut state = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let spots: Vec<usize> = {
+        let (_, table) = parse_header(&good).unwrap();
+        table
+            .iter()
+            .filter(|s| (section::NAME_OFFSETS..=section::PLACES).contains(&s.id))
+            .flat_map(|s| s.offset as usize..(s.offset + s.len) as usize)
+            .collect()
+    };
+    let line = [
+        LatLon {
+            lat: 55.70,
+            lon: 13.20,
+        },
+        LatLon {
+            lat: 55.70,
+            lon: 13.22,
+        },
+    ];
+    for _ in 0..3000 {
+        let mut b = good.clone();
+        for _ in 0..1 + next() % 3 {
+            let at = spots[(next() % spots.len() as u64) as usize];
+            b[at] = next() as u8;
+        }
+        if let Ok(r) = Region::from_bytes(&b) {
+            for i in 0..8 {
+                let _ = r.string(i);
+            }
+            let engine = crate::Engine::from_region(r);
+            let _ = engine.describe(&line);
+            let _ = engine.road_at(line[0]);
+        }
+    }
 }

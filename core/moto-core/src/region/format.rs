@@ -23,7 +23,7 @@ pub const MAGIC: [u8; 8] = *b"MOTOREG\0";
 /// Major format version. Files with another major version are refused.
 pub const VERSION_MAJOR: u16 = 1;
 /// Minor format version. Minor bumps only add optional sections.
-pub const VERSION_MINOR: u16 = 1;
+pub const VERSION_MINOR: u16 = 2;
 
 /// Sections start on multiples of this.
 pub const PAGE: u64 = 4096;
@@ -67,6 +67,17 @@ pub mod section {
     /// Optional (format 1.1): `[PointE7]`, closed rings (first point
     /// repeated last), counter-clockwise.
     pub const COVERAGE_POINTS: u32 = 14;
+    /// Optional (format 1.2): `[u32]`, string count + 1: offsets into
+    /// `NAME_BYTES`. The names below refer to strings by index.
+    pub const NAME_OFFSETS: u32 = 15;
+    /// Optional (format 1.2): `[u8]`, the strings, UTF-8, one after another.
+    pub const NAME_BYTES: u32 = 16;
+    /// Optional (format 1.2): `[GeometryName]`, one per geometry: the
+    /// road's number and name.
+    pub const GEOMETRY_NAMES: u32 = 17;
+    /// Optional (format 1.2): `[Place]`, named towns and villages, sorted
+    /// by latitude.
+    pub const PLACES: u32 = 18;
     /// Reserved for ALT landmark distances (ADR-0005, decided in M2).
     pub const LANDMARKS: u32 = 100;
 }
@@ -263,6 +274,64 @@ pub struct WayRef {
     pub to_idx: u32,
 }
 
+/// A string index meaning "none" in [`GeometryName`].
+pub const NO_NAME: u32 = u32::MAX;
+
+/// A road's number and name (OSM `ref` and `name`), as indices into the
+/// strings, or [`NO_NAME`].
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Pod, Zeroable)]
+pub struct GeometryName {
+    /// E.g. `13`, `E 22`, `1177`.
+    pub road_ref: u32,
+    /// E.g. `Kvärnbyvägen`.
+    pub name: u32,
+}
+
+impl GeometryName {
+    pub const NONE: Self = Self {
+        road_ref: NO_NAME,
+        name: NO_NAME,
+    };
+}
+
+impl Default for GeometryName {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+/// A named place (OSM `place=*` node with a `name`).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Pod, Zeroable)]
+pub struct Place {
+    pub pos: PointE7,
+    /// Index into the strings.
+    pub name: u32,
+    /// A [`PlaceKind`] value.
+    pub kind: u8,
+    pub reserved: [u8; 3],
+}
+
+/// How big a place is, from OSM `place=*`.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum PlaceKind {
+    City = 0,
+    Town = 1,
+    Village = 2,
+    Hamlet = 3,
+}
+
+impl PlaceKind {
+    pub const ALL: [PlaceKind; 4] = [Self::City, Self::Town, Self::Village, Self::Hamlet];
+
+    /// `None` for values added by a newer minor version.
+    pub fn from_u8(v: u8) -> Option<Self> {
+        Self::ALL.get(usize::from(v)).copied()
+    }
+}
+
 /// Uniform snapping grid over the region.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Pod, Zeroable)]
@@ -290,6 +359,8 @@ mod tests {
         assert_eq!(size_of::<CurvatureMetrics>(), 16);
         assert_eq!(size_of::<WayRef>(), 16);
         assert_eq!(size_of::<GridMeta>(), 24);
+        assert_eq!(size_of::<GeometryName>(), 8);
+        assert_eq!(size_of::<Place>(), 16);
         assert_eq!(MAX_SECTIONS, 160);
     }
 
@@ -302,5 +373,9 @@ mod tests {
             assert_eq!(Surface::from_u8(s as u8), Some(s));
         }
         assert_eq!(RoadClass::from_u8(200), None);
+        for k in PlaceKind::ALL {
+            assert_eq!(PlaceKind::from_u8(k as u8), Some(k));
+        }
+        assert_eq!(PlaceKind::from_u8(4), None);
     }
 }

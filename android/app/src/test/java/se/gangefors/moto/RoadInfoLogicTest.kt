@@ -35,6 +35,8 @@ class RoadInfoLogicTest {
         curviness = curviness,
         lengthM = lengthM,
         wayId = 42L,
+        roadRef = null,
+        name = null,
     )
 
     @Test

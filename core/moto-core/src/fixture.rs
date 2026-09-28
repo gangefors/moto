@@ -20,7 +20,7 @@ use crate::LatLon;
 use crate::curvature::curvature_metrics;
 use crate::geo::polyline_length_m;
 use crate::region::format::*;
-use crate::region::{RegionData, RegionInfo};
+use crate::region::{RegionData, RegionInfo, RoadNames};
 
 pub const A: u32 = 0;
 pub const B: u32 = 1;
@@ -159,11 +159,58 @@ pub fn build(nodes: &[(f64, f64)], roads: &[Road], cell: i32) -> RegionData {
         curvature: drafts.iter().map(|d| d.1).collect(),
         way_refs: drafts.iter().map(|d| d.2).collect(),
         grid_cell: (cell, cell),
+        names: Default::default(),
     }
 }
 
 pub fn region() -> RegionData {
     region_with_cell(50_000)
+}
+
+/// The Lund fixture with names (format 1.2): A–B and B–D are road 13
+/// (Storgatan and Landsvägen), B–C is Bergsvägen; the town Lund lies just
+/// north-west of A, the village Dalby just east of D, and the hamlet Ö
+/// far off.
+pub fn named_region() -> RegionData {
+    let mut d = region();
+    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    let place = |lat, lon, name, kind: PlaceKind| Place {
+        pos: p(lat, lon),
+        name,
+        kind: kind as u8,
+        reserved: [0; 3],
+    };
+    d.names = RoadNames {
+        strings: s(&[
+            "13",
+            "Storgatan",
+            "Bergsvägen",
+            "Landsvägen",
+            "Lund",
+            "Dalby",
+            "Ö",
+        ]),
+        geometry_names: vec![
+            GeometryName {
+                road_ref: 0,
+                name: 1,
+            },
+            GeometryName {
+                road_ref: NO_NAME,
+                name: 2,
+            },
+            GeometryName {
+                road_ref: 0,
+                name: 3,
+            },
+        ],
+        places: vec![
+            place(55.60, 13.10, 6, PlaceKind::Hamlet),
+            place(55.70, 13.23, 5, PlaceKind::Village),
+            place(55.705, 13.19, 4, PlaceKind::Town),
+        ],
+    };
+    d
 }
 
 /// The Lund fixture with a square grid cell of `cell` × 1e-7 degrees.
