@@ -677,10 +677,11 @@ fun MapScreen() {
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
 
-    /** Loops from [start], in any direction, from the standard set. */
-    fun startLoop(start: LatLng) {
+    /** Loops from [start], in any direction: the standard set (seed 0),
+     * or the set of [seed]. */
+    fun startLoop(start: LatLng, seed: UInt = 0u) {
         startPicked = null
-        loopSeed = 0u
+        loopSeed = seed
         loopDirection = LoopDirection.ANY
         loopStart = start
     }
@@ -1519,6 +1520,16 @@ fun MapScreen() {
                         Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.rides_open))
                     }
                 }
+                // Loops from where the rider is, in one tap: a new set
+                // each time.
+                if (region is RegionState.Ready && hasLocation) {
+                    FloatingActionButton(onClick = {
+                        val start = riderStart() ?: return@FloatingActionButton
+                        picker.reset()
+                        startLoop(start, shuffleSeed())
+                    }) {
+                        Icon(painterResource(R.drawable.ic_loop), contentDescription = stringResource(R.string.loop_from_me))
+                    }
                 if (store is StoreState.Ready && region is RegionState.Ready) {
                     FloatingActionButton(onClick = {
                         marker.begin()
@@ -1531,15 +1542,6 @@ fun MapScreen() {
                         Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
                     }
                 }
-                // Loops from where the rider is, in one tap.
-                if (region is RegionState.Ready && hasLocation) {
-                    FloatingActionButton(onClick = {
-                        val start = riderStart() ?: return@FloatingActionButton
-                        picker.reset()
-                        startLoop(start)
-                    }) {
-                        Icon(painterResource(R.drawable.ic_loop), contentDescription = stringResource(R.string.loop_from_me))
-                    }
                 }
                 // Record: a red dot. While recording: a red stop square with
                 // the distance so far, readable at a glance on the bike.
