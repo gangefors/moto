@@ -391,16 +391,14 @@ fun RidesSheet(
     }
 }
 
+/** A ride's distance and riding time ("Recording" and its GPS fixes while
+ * it goes on), with times written as everywhere else ("1 h 5 min"). */
 internal fun rideSummary(res: android.content.res.Resources, t: Track): String {
-    val count = t.pointCount.coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
-    val fixes = res.getQuantityString(R.plurals.gps_fixes, count, count)
-    val ended = t.endedAt ?: return res.getString(R.string.rides_recording, fixes)
-    return res.getString(
-        R.string.rides_summary,
-        sectionKm(t.distanceM),
-        formatDuration((ended - t.startedAt) * 1000),
-        fixes,
-    )
+    val ended = t.endedAt ?: run {
+        val count = t.pointCount.coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
+        return res.getString(R.string.rides_recording, res.getQuantityString(R.plurals.gps_fixes, count, count))
+    }
+    return res.getString(R.string.rides_summary, sectionKm(t.distanceM), durationText(res, ((ended - t.startedAt) / 60).toInt()))
 }
 
 /** Export formats offered, with their labels. */

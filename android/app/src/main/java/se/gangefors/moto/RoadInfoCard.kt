@@ -4,20 +4,11 @@
 package se.gangefors.moto
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.RoadClass
 import se.gangefors.moto.core.RoadInfo
 import se.gangefors.moto.core.Surface as RoadSurface
@@ -30,37 +21,27 @@ import se.gangefors.moto.core.Surface as RoadSurface
 @Composable
 fun RoadInfoCard(info: RoadInfo, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val facts = roadFacts(info)
-    Surface(
+    MapCard(
+        title = stringResource(roadClassName(info.`class`)),
+        supporting = listOf(
+            stringResource(surfaceName(info.surface)),
+            stringResource(R.string.road_speed, facts.speedKmh),
+            curvinessText(facts),
+        ).joinToString(" · "),
+        onClose = onClose,
+        closeDescription = stringResource(R.string.road_close),
         modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
     ) {
-        Row(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-            Column(Modifier.weight(1f).padding(top = 8.dp)) {
-                Text(stringResource(roadClassName(info.`class`)), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    listOf(
-                        stringResource(surfaceName(info.surface)),
-                        stringResource(R.string.road_speed, facts.speedKmh),
-                        curvinessText(facts),
-                    ).joinToString(" · "),
-                )
-                if (facts.notes.isNotEmpty()) {
-                    Text(
-                        facts.notes.map { stringResource(noteName(it)) }.joinToString(" · "),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                val small = MaterialTheme.typography.bodySmall
-                val grey = MaterialTheme.colorScheme.onSurfaceVariant
-                Text(stringResource(R.string.road_details, facts.lengthKm, info.wayId), style = small, color = grey)
-                facts.tapOffM?.let { Text(stringResource(R.string.road_tap_off, it), style = small, color = grey) }
-            }
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.Top)) {
-                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.road_close))
-            }
+        if (facts.notes.isNotEmpty()) {
+            Text(
+                facts.notes.map { stringResource(noteName(it)) }.joinToString(" · "),
+                color = MaterialTheme.colorScheme.error,
+            )
         }
+        val small = MaterialTheme.typography.bodySmall
+        val grey = MaterialTheme.colorScheme.onSurfaceVariant
+        Text(stringResource(R.string.road_details, facts.lengthKm, info.wayId), style = small, color = grey)
+        facts.tapOffM?.let { Text(stringResource(R.string.road_tap_off, it), style = small, color = grey) }
     }
 }
 

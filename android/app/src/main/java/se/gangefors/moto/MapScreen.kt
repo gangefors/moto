@@ -436,7 +436,7 @@ fun MapScreen() {
         when (val r = recording) {
             is Recording.State.Finished -> {
                 val km = sectionKm(r.track.distanceM)
-                val time = formatDuration(((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) * 1000)
+                val time = durationText(resources, (((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) / 60).toInt())
                 Toasts.show(
                     r.batteryPerHour?.let { resources.getString(R.string.recording_saved_battery, km, time, it) }
                         ?: resources.getString(R.string.recording_saved, km, time),

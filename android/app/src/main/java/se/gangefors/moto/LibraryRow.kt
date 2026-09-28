@@ -84,7 +84,7 @@ fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
                     is LibraryItem.Route -> stringResource(
                         if (item.route.isLoop) R.string.library_loop else R.string.library_route,
                         sectionKm(item.route.distanceM),
-                        formatDuration((item.route.durationS * 1000).toLong()),
+                        durationText((item.route.durationS / 60).toInt()),
                     )
                     is LibraryItem.Ride -> stringResource(R.string.library_ride, rideSummary(res, item.track))
                 },

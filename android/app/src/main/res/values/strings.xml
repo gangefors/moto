@@ -154,7 +154,6 @@
     <string name="saved_route_rename_title">Rename route</string>
     <string name="ride_rename_title">Rename ride</string>
     <string name="saved_route_hide">Hide the saved route</string>
-    <string name="route_summary">%1$.1f km · %2$d min</string>
     <string name="route_km">%1$.1f km</string>
     <string name="route_extra">+%1$d min over the fastest</string>
     <string name="route_on_favourites">%1$d %% on favourites</string>
@@ -253,7 +252,7 @@
     <string name="library_show_on_map">Show on the map</string>
     <string name="library_save_as_route_title">Save ride as route</string>
     <string name="rides_loading">Loading…</string>
-    <string name="rides_summary">%1$.1f km · %2$s · %3$s</string>
+    <string name="rides_summary">%1$.1f km · %2$s</string>
     <string name="rides_recording">Recording · %1$s</string>
     <plurals name="gps_fixes">
         <item quantity="one">%d GPS fix</item>

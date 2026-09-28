@@ -19,7 +19,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,18 +57,29 @@ fun RouteNameDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf(initial) }
+    // The name is selected, ready to type over, with the keyboard up;
+    // the keyboard's Done saves.
+    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initial, TextRange(0, initial.length)))
+    }
+    val text = field.text
     val clean = cleanRouteName(text)
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.take(MAX_ROUTE_NAME_CHARS * 2) },
+                value = field,
+                onValueChange = {
+                    field = if (it.text.length <= MAX_ROUTE_NAME_CHARS * 2) it else it.copy(text = it.text.take(MAX_ROUTE_NAME_CHARS * 2))
+                },
                 label = { Text(stringResource(R.string.route_name)) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { clean?.let(onSave) }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
         },
         confirmButton = {
@@ -80,31 +100,24 @@ fun SavedRouteCard(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    MapCard(
+        title = shown.route.name,
+        supporting = savedRouteSummary(shown.route),
+        onClose = onClose,
+        closeDescription = stringResource(R.string.saved_route_hide),
         modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
-    ) {
-        Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(top = 8.dp)) {
-                    Text(shown.route.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        savedRouteSummary(shown.route),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.Top)) {
-                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.saved_route_hide))
-                }
+        actions = {
+            IconButton(onClick = onShare) {
+                Icon(painterResource(R.drawable.ic_share), stringResource(R.string.route_share))
             }
-            OutlinedButton(onClick = onShare) { OneLine(stringResource(R.string.route_share)) }
-        }
-    }
+        },
+    )
 }
 
 @Composable
 private fun savedRouteSummary(r: SavedRoute): String =
-    stringResource(R.string.route_summary, sectionKm(r.distanceM), (r.durationS / 60).toInt())
+    stringResource(
+        if (r.isLoop) R.string.library_loop else R.string.library_route,
+        sectionKm(r.distanceM),
+        durationText((r.durationS / 60).toInt()),
+    )
