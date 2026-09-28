@@ -3,23 +3,32 @@
 
 package se.gangefors.moto
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.ZoneId
 
@@ -30,7 +39,6 @@ interface LibraryActions {
     fun share(item: LibraryItem)
     fun export(item: LibraryItem)
     fun saveAsRoute(item: LibraryItem.Ride)
-    fun armDelete(item: LibraryItem)
     fun delete(item: LibraryItem)
 }
 
@@ -41,22 +49,36 @@ fun libraryTitle(item: LibraryItem, zone: ZoneId): String = when (item) {
 }
 
 /**
- * One route or ride: its name, what it is with its figures, and the same
- * actions for both: Show, Rename, Share, Save as file and the bin (tapped
- * twice); a ride can also be saved as a route. A ride still recording can
- * only be renamed. The buttons wrap under the text when there is no room.
+ * One route or ride, as a list row the Material way: tap it to show it on
+ * the map; Share (to a nav app, the usual next step) beside it; the rest
+ * behind the three dots: Rename, Save as file, Save as route (a ride) and
+ * Delete, which asks for a second tap in the menu. A ride still recording
+ * can only be renamed.
  */
 @Composable
-fun LibraryRow(item: LibraryItem, zone: ZoneId, confirmingDelete: Boolean, actions: LibraryActions) {
+fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
     val res = LocalResources.current
     val finished = item !is LibraryItem.Ride || item.track.endedAt != null
-    FlowRow(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        itemVerticalAlignment = Alignment.CenterVertically,
+    val title = libraryTitle(item, zone)
+    var menu by remember { mutableStateOf(false) }
+    var armed by remember(item.key) { mutableStateOf(false) }
+    fun closeMenu() {
+        menu = false
+        armed = false
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(
+                enabled = finished,
+                onClickLabel = stringResource(R.string.library_show_on_map),
+                onClick = { actions.show(item) },
+            )
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.padding(end = 8.dp)) {
-            Text(libraryTitle(item, zone))
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(title)
             Text(
                 when (item) {
                     is LibraryItem.Route -> stringResource(
@@ -70,31 +92,65 @@ fun LibraryRow(item: LibraryItem, zone: ZoneId, confirmingDelete: Boolean, actio
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { actions.show(item) }, enabled = finished) {
-                OneLine(stringResource(R.string.rides_show))
+        IconButton(onClick = { actions.share(item) }, enabled = finished) {
+            Icon(painterResource(R.drawable.ic_share), stringResource(R.string.library_share))
+        }
+        Box {
+            IconButton(onClick = { menu = true }) {
+                Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.library_more, title))
             }
-            IconButton(onClick = { actions.rename(item) }) {
-                Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.saved_route_rename))
-            }
-            IconButton(onClick = { actions.share(item) }, enabled = finished) {
-                Icon(painterResource(R.drawable.ic_share), stringResource(R.string.library_share))
-            }
-            IconButton(onClick = { actions.export(item) }, enabled = finished) {
-                Icon(painterResource(R.drawable.ic_export), stringResource(R.string.rides_export))
-            }
-            if (item is LibraryItem.Ride) {
-                IconButton(onClick = { actions.saveAsRoute(item) }, enabled = finished) {
-                    Icon(painterResource(R.drawable.ic_bookmark), stringResource(R.string.library_save_as_route))
+            DropdownMenu(expanded = menu, onDismissRequest = { closeMenu() }) {
+                MenuItem(R.drawable.ic_edit, stringResource(R.string.saved_route_rename)) {
+                    closeMenu()
+                    actions.rename(item)
+                }
+                if (finished) {
+                    MenuItem(R.drawable.ic_export, stringResource(R.string.library_save_file)) {
+                        closeMenu()
+                        actions.export(item)
+                    }
+                    if (item is LibraryItem.Ride) {
+                        MenuItem(R.drawable.ic_bookmark, stringResource(R.string.library_save_as_route)) {
+                            closeMenu()
+                            actions.saveAsRoute(item)
+                        }
+                    }
+                    // The first tap arms it (the menu stays open, saying so),
+                    // the second deletes.
+                    val deleted = stringResource(R.string.deleted)
+                    MenuItem(
+                        R.drawable.ic_delete,
+                        stringResource(if (armed) R.string.delete_confirm else R.string.delete),
+                        color = DELETE_COLOR,
+                        strong = armed,
+                    ) {
+                        if (armed) {
+                            closeMenu()
+                            actions.delete(item)
+                            Toasts.show(deleted)
+                        } else {
+                            armed = true
+                        }
+                    }
                 }
             }
-            DeleteButton(
-                confirming = confirmingDelete,
-                onArm = { actions.armDelete(item) },
-                onDelete = { actions.delete(item) },
-                enabled = finished,
-            )
         }
     }
     HorizontalDivider()
+}
+
+/** A menu entry with its icon; [color] for both, [strong] in bold. */
+@Composable
+private fun MenuItem(icon: Int, text: String, color: Color = Color.Unspecified, strong: Boolean = false, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text, color = color, fontWeight = if (strong) FontWeight.Bold else null) },
+        leadingIcon = {
+            Icon(
+                painterResource(icon),
+                contentDescription = null,
+                tint = if (color == Color.Unspecified) LocalContentColor.current else color,
+            )
+        },
+        onClick = onClick,
+    )
 }

@@ -246,6 +246,9 @@
     <string name="library_ride">Ride · %1$s</string>
     <string name="library_share">Share</string>
     <string name="library_save_as_route">Save as route</string>
+    <string name="library_save_file">Save as file</string>
+    <string name="library_more">More for %1$s</string>
+    <string name="library_show_on_map">Show on the map</string>
     <string name="library_save_as_route_title">Save ride as route</string>
     <string name="rides_loading">Loading…</string>
     <string name="rides_summary">%1$.1f km · %2$s · %3$s</string>
@@ -254,8 +257,6 @@
         <item quantity="one">%d GPS fix</item>
         <item quantity="other">%d GPS fixes</item>
     </plurals>
-    <string name="rides_export">Export</string>
-    <string name="rides_show">Show</string>
     <string name="ride_shown">Ride %1$s · %2$.1f km</string>
     <string name="ride_hide">Hide the ride</string>
     <string name="rides_import">Import GPX…</string>
