@@ -102,5 +102,5 @@ Speed-up strategy (decide during M2):
 - [x] `snap`, plain bidirectional A\* `route`, and UniFFI bindings; call them from Android (M0 slice). Done in bb42a50, d4bc3ee and d0159ea; plain one-directional A\* was fast enough (about 15 ms for 88 km routes on the build machine).
 - [x] Favourite overlay: capped bonus per edge, applied at query time. Done in 47326ef.
 - [ ] Golden-route regression set (Skåne) and timing on the rider's phone. The set is in c04e043 and runs in CI; timing on the phone is still to do.
-- [ ] Measure Sweden region: file size, load time, peak memory, 300 km query time. Decide on ALT vs CCH. File size measured (398 MiB, 6b5f282); the rest waits for the Sweden region.
+- [ ] Measure Sweden region: file size, load time, peak memory, 300 km query time. Decide on ALT vs CCH. File size measured (398 MiB, 6b5f282). On the rider's phone (2026-09-28): cold load 0.24 s by fingerprint (ADR-0005); 400 km loops mostly under 5 s, Skåne to Kiruna about 5 s, Prefer gravel under 10 s. Plain A\* meets the target, so neither ALT nor CCH is needed for now. Left: peak memory.
 - [x] Round-trip algorithm spike (R7). Decided in ADR-0007, done in dbc69a9.
