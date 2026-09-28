@@ -55,3 +55,27 @@ fun isUpdate(installedOsmTimestamp: Long?, offeredOsmTimestamp: Long): Boolean =
 
 /** Megabytes (10⁶ bytes), one decimal, for labels. */
 fun mb(bytes: Long): Double = Math.round(bytes / 100_000.0) / 10.0
+
+/** An opened region, and whether its fingerprint still needs recording. */
+data class OpenedRegion<T>(val region: T, val needsFingerprint: Boolean)
+
+/**
+ * Opens an installed region (ADR-0005): by its recorded [fingerprint]
+ * when there is one (fast), else, or when the file no longer matches it,
+ * with the full check; after a full check the caller records the file's
+ * fingerprint anew. A file that fails the full check throws.
+ */
+fun <T> openRegion(
+    fingerprint: String?,
+    openFingerprinted: (String) -> T,
+    openFull: () -> T,
+): OpenedRegion<T> {
+    if (fingerprint != null) {
+        try {
+            return OpenedRegion(openFingerprinted(fingerprint), needsFingerprint = false)
+        } catch (_: Exception) {
+            // Changed or unreadable: the full check decides.
+        }
+    }
+    return OpenedRegion(openFull(), needsFingerprint = true)
+}

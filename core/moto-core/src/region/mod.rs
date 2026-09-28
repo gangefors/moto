@@ -7,7 +7,8 @@
 //! (header, section bounds, array lengths, monotonic offsets, index ranges),
 //! so query code can index the typed slices without panicking. CRC32
 //! checksums are verified separately by [`verify_file`], once, when a file
-//! is installed.
+//! is installed. A file that passed once can be proven unchanged by its
+//! [`fingerprint`] instead ([`Region::open_fingerprinted`]).
 
 mod coverage;
 pub mod format;
@@ -76,21 +77,106 @@ fn err(msg: impl std::fmt::Display) -> CoreError {
     CoreError::Region(msg.to_string())
 }
 
+fn open_file(path: &Path) -> Result<File, CoreError> {
+    File::open(path).map_err(|e| err(format_args!("cannot open {}: {e}", path.display())))
+}
+
 fn map_file(path: &Path) -> Result<Mmap, CoreError> {
-    let file =
-        File::open(path).map_err(|e| err(format_args!("cannot open {}: {e}", path.display())))?;
-    // Opening validates the whole file, and routing reads most of it. The
-    // map is populated as it is made: the kernel reads the file in and
-    // maps every page in one go, instead of one page fault at a time as
-    // validation first touches each (on Stefan's phone 9-12 s for all of
-    // Sweden, against 0.13 s once mapped; a plain read-ahead was dropped
-    // again before validation ran).
+    map_open(&open_file(path)?, path)
+}
+
+fn map_open(file: &File, path: &Path) -> Result<Mmap, CoreError> {
     // SAFETY: the map is read-only and the app never modifies an installed
     // region file; updates are written to a new file and swapped in.
     #[allow(unsafe_code)]
-    let map = unsafe { memmap2::MmapOptions::new().populate().map(&file) }
+    let map = unsafe { Mmap::map(file) }
         .map_err(|e| err(format_args!("cannot map {}: {e}", path.display())))?;
     Ok(map)
+}
+
+/// Domain tag of [`fingerprint`]. Bump its version whenever [`validate`]
+/// gains a check, so a file proven only by an older build's validation is
+/// validated in full again.
+const FINGERPRINT_TAG: &[u8] = b"moto-region-fingerprint-v1";
+/// The file is hashed in this many parts at once.
+const FINGERPRINT_PARTS: u64 = 4;
+const FINGERPRINT_CHUNK: usize = 1 << 20;
+
+/// SHA-256 fingerprint of a region file (ADR-0005): the file length and
+/// the SHA-256 of each of four equal parts, hashed in parallel with plain
+/// reads. Recorded once a file has passed full validation, so
+/// [`Region::open_fingerprinted`] can prove a file unchanged instead of
+/// validating it again.
+pub fn fingerprint(path: impl AsRef<Path>) -> Result<[u8; 32], CoreError> {
+    let path = path.as_ref();
+    Ok(fingerprint_open(&open_file(path)?, path)?.0)
+}
+
+/// The fingerprint of an open file, and the length it covers.
+fn fingerprint_open(file: &File, path: &Path) -> Result<([u8; 32], u64), CoreError> {
+    use sha2::{Digest, Sha256};
+    let read_err = |e: std::io::Error| err(format_args!("cannot read {}: {e}", path.display()));
+    let len = file.metadata().map_err(read_err)?.len();
+    let part = len.div_ceil(FINGERPRINT_PARTS);
+    let hash_part = |i: u64| -> Result<[u8; 32], CoreError> {
+        let start = (i * part).min(len);
+        let end = start.saturating_add(part).min(len);
+        let mut hasher = Sha256::new();
+        let mut buf = vec![0u8; FINGERPRINT_CHUNK];
+        let mut at = start;
+        while at < end {
+            let n = usize::try_from(end - at)
+                .unwrap_or(usize::MAX)
+                .min(FINGERPRINT_CHUNK);
+            read_exact_at(file, &mut buf[..n], at).map_err(read_err)?;
+            hasher.update(&buf[..n]);
+            at += n as u64;
+        }
+        Ok(hasher.finalize().into())
+    };
+    let parts: Vec<Result<[u8; 32], CoreError>> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..FINGERPRINT_PARTS)
+            .map(|i| s.spawn(move || hash_part(i)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err(err("fingerprint thread failed")))
+            })
+            .collect()
+    });
+    let mut hasher = Sha256::new();
+    hasher.update(FINGERPRINT_TAG);
+    hasher.update(len.to_le_bytes());
+    for p in parts {
+        hasher.update(p?);
+    }
+    Ok((hasher.finalize().into(), len))
+}
+
+/// Reads exactly `buf.len()` bytes at `offset`; safe to call from several
+/// threads on one file.
+#[cfg(unix)]
+fn read_exact_at(file: &File, buf: &mut [u8], offset: u64) -> std::io::Result<()> {
+    std::os::unix::fs::FileExt::read_exact_at(file, buf, offset)
+}
+
+#[cfg(windows)]
+fn read_exact_at(file: &File, mut buf: &mut [u8], mut offset: u64) -> std::io::Result<()> {
+    use std::os::windows::fs::FileExt;
+    while !buf.is_empty() {
+        match file.seek_read(buf, offset) {
+            Ok(0) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+            Ok(n) => {
+                buf = &mut buf[n..];
+                offset += n as u64;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 impl Region {
@@ -98,6 +184,33 @@ impl Region {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, CoreError> {
         let map = map_file(path.as_ref())?;
         Self::new(Backing::Mmap(map))
+    }
+
+    /// Opens a region file that passed full validation before, when its
+    /// [`fingerprint`] was recorded: the file is read once with plain
+    /// reads (far faster on a phone than faulting in every page of the
+    /// map) and must match `expected`; then only the header and section
+    /// table are checked, since the bytes are the ones that were
+    /// validated. A mismatch is an error, and the caller falls back to
+    /// [`Region::open`].
+    pub fn open_fingerprinted(
+        path: impl AsRef<Path>,
+        expected: &[u8; 32],
+    ) -> Result<Self, CoreError> {
+        let path = path.as_ref();
+        let file = open_file(path)?;
+        let (actual, len) = fingerprint_open(&file, path)?;
+        let map = map_open(&file, path)?;
+        if actual != *expected || map.len() as u64 != len {
+            return Err(err("region file does not match its fingerprint"));
+        }
+        let bytes = Backing::Mmap(map);
+        let (info, sections) = validate_marked(bytes.as_bytes(), Checks::Located, &mut |_| {})?;
+        Ok(Self {
+            bytes,
+            info,
+            sections,
+        })
     }
 
     /// Validates a region file held in memory (copied to aligned storage).
@@ -256,7 +369,7 @@ pub fn profile_open(path: impl AsRef<Path>) -> Result<Vec<(String, f64)>, CoreEr
         last = now;
     };
     mark("map the file");
-    validate_marked(&map, &mut mark)?;
+    validate_marked(&map, Checks::Full, &mut mark)?;
     Ok(steps)
 }
 
@@ -335,16 +448,30 @@ fn str_field(b: &[u8]) -> String {
     String::from_utf8_lossy(&b[..end]).into_owned()
 }
 
-/// Full structural validation; everything the accessors rely on.
-fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
-    validate_marked(bytes, &mut |_| {})
+/// How much of a file [`validate_marked`] checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Checks {
+    /// Everything the accessors rely on.
+    Full,
+    /// Only what locates the sections (header, section table, whole
+    /// arrays, grid record, coverage both or neither), for a file proven
+    /// by its fingerprint to be one that passed [`Checks::Full`].
+    Located,
 }
 
-/// [`validate`], calling `mark` after each part (for [`profile_open`]).
+/// Full structural validation; everything the accessors rely on.
+fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
+    validate_marked(bytes, Checks::Full, &mut |_| {})
+}
+
+/// [`validate`] to the extent `checks` asks, calling `mark` after each
+/// part (for [`profile_open`]).
 fn validate_marked(
     bytes: &[u8],
+    checks: Checks,
     mark: &mut dyn FnMut(&'static str),
 ) -> Result<(RegionInfo, Sections), CoreError> {
+    let full = checks == Checks::Full;
     let (header, table) = parse_header(bytes)?;
 
     let mut ranges: Vec<(u32, Range<usize>)> = Vec::with_capacity(table.len());
@@ -408,10 +535,98 @@ fn validate_marked(
     if n >= u32::MAX as usize || m >= u32::MAX as usize || shape.len() >= u32::MAX as usize {
         return Err(err("arrays too large for 32-bit ids"));
     }
-    let in_range = |p: &PointE7| {
-        (-900_000_000..=900_000_000).contains(&p.lat)
-            && (-1_800_000_000..=1_800_000_000).contains(&p.lon)
+    if full {
+        check_contents(
+            nodes, fwd, bwd, bwd_edges, edges, geom, shape, curvature, way_refs, mark,
+        )?;
+    }
+
+    let [meta] = meta else {
+        return Err(err("grid meta must be exactly one record"));
     };
+    if full {
+        if meta.cell_lat <= 0 || meta.cell_lon <= 0 || meta.rows == 0 || meta.cols == 0 {
+            return Err(err("invalid grid dimensions"));
+        }
+        let cell_count = (meta.rows as usize)
+            .checked_mul(meta.cols as usize)
+            .ok_or_else(|| err("grid too large"))?;
+        check_offsets("grid", cells, cell_count, cell_edges.len())?;
+        if cell_edges.iter().any(|&e| e as usize >= m) {
+            return Err(err("grid refers to a missing edge"));
+        }
+        mark("snapping grid");
+    }
+
+    let coverage = match (
+        find(section::COVERAGE_OFFSETS).ok(),
+        find(section::COVERAGE_POINTS).ok(),
+    ) {
+        (None, None) => None,
+        (Some(o), Some(p)) => {
+            let offsets: &[u32] = typed(bytes, &o, section::COVERAGE_OFFSETS)?;
+            let points: &[PointE7] = typed(bytes, &p, section::COVERAGE_POINTS)?;
+            if full {
+                let rings = offsets
+                    .len()
+                    .checked_sub(1)
+                    .ok_or_else(|| err("empty coverage offsets"))?;
+                check_offsets("coverage", offsets, rings, points.len())?;
+                if !points.iter().all(in_range) {
+                    return Err(err("coverage coordinate out of range"));
+                }
+                let closed = |w: &[u32]| {
+                    let ring = &points[w[0] as usize..w[1] as usize];
+                    ring.len() >= 4 && ring.first() == ring.last()
+                };
+                if !offsets.windows(2).all(closed) {
+                    return Err(err("coverage ring not closed or too short"));
+                }
+            }
+            Some((o, p))
+        }
+        _ => return Err(err("coverage needs both its sections")),
+    };
+
+    mark("coverage");
+    let info = RegionInfo {
+        osm_timestamp: header.osm_timestamp,
+        bbox: header.bbox,
+        builder_version: str_field(&header.builder_version),
+        source_name: str_field(&header.source_name),
+    };
+    Ok((
+        info,
+        Sections {
+            grid_meta: *meta,
+            coverage,
+            ..s
+        },
+    ))
+}
+
+fn in_range(p: &PointE7) -> bool {
+    (-900_000_000..=900_000_000).contains(&p.lat)
+        && (-1_800_000_000..=1_800_000_000).contains(&p.lon)
+}
+
+/// The expensive part of [`Checks::Full`]: coordinates, the graph and
+/// geometry indexes, and that every edge joins its nodes.
+#[allow(clippy::too_many_arguments)]
+fn check_contents(
+    nodes: &[PointE7],
+    fwd: &[u32],
+    bwd: &[u32],
+    bwd_edges: &[u32],
+    edges: &[Edge],
+    geom: &[u32],
+    shape: &[PointE7],
+    curvature: &[CurvatureMetrics],
+    way_refs: &[WayRef],
+    mark: &mut dyn FnMut(&'static str),
+) -> Result<(), CoreError> {
+    let n = nodes.len();
+    let m = edges.len();
     if !nodes.iter().all(in_range) || !shape.iter().all(in_range) {
         return Err(err("coordinate out of range"));
     }
@@ -462,64 +677,7 @@ fn validate_marked(
     }
 
     mark("edges join their nodes");
-    let [meta] = meta else {
-        return Err(err("grid meta must be exactly one record"));
-    };
-    if meta.cell_lat <= 0 || meta.cell_lon <= 0 || meta.rows == 0 || meta.cols == 0 {
-        return Err(err("invalid grid dimensions"));
-    }
-    let cell_count = (meta.rows as usize)
-        .checked_mul(meta.cols as usize)
-        .ok_or_else(|| err("grid too large"))?;
-    check_offsets("grid", cells, cell_count, cell_edges.len())?;
-    if cell_edges.iter().any(|&e| e as usize >= m) {
-        return Err(err("grid refers to a missing edge"));
-    }
-
-    mark("snapping grid");
-    let coverage = match (
-        find(section::COVERAGE_OFFSETS).ok(),
-        find(section::COVERAGE_POINTS).ok(),
-    ) {
-        (None, None) => None,
-        (Some(o), Some(p)) => {
-            let offsets: &[u32] = typed(bytes, &o, section::COVERAGE_OFFSETS)?;
-            let points: &[PointE7] = typed(bytes, &p, section::COVERAGE_POINTS)?;
-            let rings = offsets
-                .len()
-                .checked_sub(1)
-                .ok_or_else(|| err("empty coverage offsets"))?;
-            check_offsets("coverage", offsets, rings, points.len())?;
-            if !points.iter().all(in_range) {
-                return Err(err("coverage coordinate out of range"));
-            }
-            let closed = |w: &[u32]| {
-                let ring = &points[w[0] as usize..w[1] as usize];
-                ring.len() >= 4 && ring.first() == ring.last()
-            };
-            if !offsets.windows(2).all(closed) {
-                return Err(err("coverage ring not closed or too short"));
-            }
-            Some((o, p))
-        }
-        _ => return Err(err("coverage needs both its sections")),
-    };
-
-    mark("coverage");
-    let info = RegionInfo {
-        osm_timestamp: header.osm_timestamp,
-        bbox: header.bbox,
-        builder_version: str_field(&header.builder_version),
-        source_name: str_field(&header.source_name),
-    };
-    Ok((
-        info,
-        Sections {
-            grid_meta: *meta,
-            coverage,
-            ..s
-        },
-    ))
+    Ok(())
 }
 
 /// CSR offsets: `count + 1` entries from 0 to `total`, never decreasing.

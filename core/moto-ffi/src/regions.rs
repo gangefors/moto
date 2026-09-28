@@ -65,25 +65,43 @@ pub fn parse_region_manifest(manifest: Vec<u8>) -> Result<Vec<RegionOffer>, Moto
 /// manifest before unpacking, unpacked to at most the promised size,
 /// verified, then moved into place. The manifest is read again here, so
 /// nothing about the download is taken from the caller but paths in its
-/// own storage.
+/// own storage. Returns the installed file's fingerprint (as from
+/// `region_fingerprint`), to keep for `Engine.open_fingerprinted`.
 #[uniffi::export]
 pub fn install_region(
     manifest: Vec<u8>,
     id: String,
     gz_path: String,
     target_path: String,
-) -> Result<(), MotoError> {
+) -> Result<String, MotoError> {
     let offer = core::parse_manifest(&manifest)?
         .into_iter()
         .find(|o| o.id == id)
         .ok_or_else(|| {
             moto_core::CoreError::InvalidArgument(format!("no region {id} in the manifest"))
         })?;
-    Ok(core::install_region(
-        &offer,
-        Path::new(&gz_path),
-        Path::new(&target_path),
-    )?)
+    let fp = core::install_region(&offer, Path::new(&gz_path), Path::new(&target_path))?;
+    Ok(hex(&fp))
+}
+
+/// The fingerprint of a region file, 64 hex digits. Take it only of a file
+/// that just opened with `Engine.open` (fully checked), and keep it in
+/// app-private storage: `Engine.open_fingerprinted` trusts that a file
+/// matching it is the one that was checked.
+#[uniffi::export]
+pub fn region_fingerprint(path: String) -> Result<String, MotoError> {
+    Ok(hex(&moto_core::region::fingerprint(path)?))
+}
+
+fn hex(bytes: &[u8; 32]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Reads a fingerprint made by [`hex`].
+pub(crate) fn parse_fingerprint(s: &str) -> Result<[u8; 32], MotoError> {
+    Ok(core::parse_sha256(s).ok_or_else(|| {
+        moto_core::CoreError::InvalidArgument("fingerprint is not 64 hex digits".into())
+    })?)
 }
 
 #[cfg(test)]

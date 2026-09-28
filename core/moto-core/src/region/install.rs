@@ -159,7 +159,7 @@ fn check_offer(r: RawOffer) -> Result<RegionOffer, CoreError> {
 }
 
 /// 64 lowercase or uppercase hex digits.
-fn parse_sha256(hex: &str) -> Option<[u8; 32]> {
+pub fn parse_sha256(hex: &str) -> Option<[u8; 32]> {
     let bytes = hex.as_bytes();
     if bytes.len() != 64 {
         return None;
@@ -201,8 +201,14 @@ pub fn sha256_file(path: &Path) -> Result<[u8; 32], CoreError> {
 /// `offer.region_bytes`, verifies the unpacked file (checksums and
 /// structure) and only then renames it over `target`. On any failure the
 /// installed region is left as it was and the temporary file is removed.
-/// `gz_path` is left for the caller to delete.
-pub fn install_region(offer: &RegionOffer, gz_path: &Path, target: &Path) -> Result<(), CoreError> {
+/// `gz_path` is left for the caller to delete. Returns the installed
+/// file's [`fingerprint`](super::fingerprint), for
+/// [`Region::open_fingerprinted`](super::Region::open_fingerprinted).
+pub fn install_region(
+    offer: &RegionOffer,
+    gz_path: &Path,
+    target: &Path,
+) -> Result<[u8; 32], CoreError> {
     let size = fs::metadata(gz_path).map_err(io_err)?.len();
     if size != offer.gz_bytes {
         return Err(install_err(format_args!(
@@ -222,7 +228,8 @@ pub fn install_region(offer: &RegionOffer, gz_path: &Path, target: &Path) -> Res
     let tmp = target.with_file_name(tmp_name);
     let result = unpack(offer, gz_path, &tmp)
         .and_then(|()| super::verify_file(&tmp))
-        .and_then(|()| fs::rename(&tmp, target).map_err(io_err));
+        .and_then(|()| super::fingerprint(&tmp))
+        .and_then(|fp| fs::rename(&tmp, target).map_err(io_err).map(|()| fp));
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
     }
