@@ -44,6 +44,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -1388,37 +1390,38 @@ fun MapScreen() {
                             }
                         }
                         if (marking) {
-                            // The buttons wrap onto a second line when there is no
-                            // room, instead of squeezing each other.
-                            FlowRow(
-                                Modifier.padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                if (reviewTag != null) {
-                                    // Stop ends the review; tags not yet handled
-                                    // stay pending. Skip leaves this one pending
-                                    // and moves on to the next.
-                                    OutlinedButton(onClick = { endReview(null) }) {
-                                        OneLine(stringResource(R.string.tag_review_stop))
-                                    }
-                                    OutlinedButton(onClick = { skipTag() }) {
-                                        OneLine(stringResource(R.string.tag_review_skip))
-                                    }
-                                    OutlinedButton(
-                                        onClick = { finishTag(TagStatus.DISCARDED) },
+                            val tag = reviewTag
+                            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (tag != null) {
+                                    // Discards this tag (second tap) and moves on;
+                                    // X or Back ends the review, leaving the tags
+                                    // not yet handled pending.
+                                    var confirming by remember(tag.id) { mutableStateOf(false) }
+                                    DeleteButton(
+                                        confirming = confirming,
+                                        onArm = { confirming = true },
+                                        onDelete = { finishTag(TagStatus.DISCARDED) },
                                         enabled = !proposing,
-                                    ) { OneLine(stringResource(R.string.tag_review_discard)) }
-                                } else {
-                                    OutlinedButton(onClick = {
-                                        stopMarking()
-                                        message = null
-                                    }) { OneLine(stringResource(R.string.cancel)) }
+                                    )
                                 }
-                                Button(
-                                    onClick = { savingDraft = true },
-                                    enabled = draft != null && !proposing,
-                                ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
+                                // The buttons wrap onto a second line when there is
+                                // no room, instead of squeezing each other.
+                                FlowRow(
+                                    Modifier.weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    if (tag != null) {
+                                        // Leaves this one pending and moves on.
+                                        OutlinedButton(onClick = { skipTag() }) {
+                                            OneLine(stringResource(R.string.tag_review_skip))
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { savingDraft = true },
+                                        enabled = draft != null && !proposing,
+                                    ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
+                                }
                             }
                         }
                     }
@@ -1645,8 +1648,14 @@ fun MapScreen() {
                     }
                 }
                 if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
-                    ExtendedFloatingActionButton(onClick = { startReview() }) {
-                        Text(stringResource(R.string.tags_review, pendingTags))
+                    // A flag (the spots tagged on rides) with how many wait.
+                    FloatingActionButton(onClick = { startReview() }) {
+                        BadgedBox(badge = { Badge { Text(pendingTags.toString()) } }) {
+                            Icon(
+                                painterResource(R.drawable.ic_flag),
+                                contentDescription = pluralStringResource(R.plurals.tags_review, pendingTags, pendingTags),
+                            )
+                        }
                     }
                 }
                 // Loops from where the rider is, in one tap: a new set

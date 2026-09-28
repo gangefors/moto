@@ -261,18 +261,19 @@
     <string name="tag_saved">Tagged. Review it after the ride.</string>
     <string name="tag_no_fix">No GPS position yet; nothing tagged.</string>
     <string name="tag_failed">Tag not saved: %1$s</string>
-    <string name="tags_review">Review tags (%1$d)</string>
+    <plurals name="tags_review">
+        <item quantity="one">Review %1$d tag</item>
+        <item quantity="other">Review %1$d tags</item>
+    </plurals>
     <string name="tag_review_suggested">Tag %1$d of %2$d · %3$.1f km. Tap near an end to trim it.</string>
-    <string name="tag_review_none">Tag %1$d of %2$d: no suggestion (%3$s). Tap the start to mark it yourself, or discard it.</string>
+    <string name="tag_review_none">Tag %1$d of %2$d: no suggestion (%3$s). Tap the start to mark it yourself, or discard it with the bin.</string>
     <string name="tag_review_loading">Tag %1$d of %2$d…</string>
     <string name="tag_review_done">All tags reviewed.</string>
-    <string name="tag_review_stop">Stop</string>
     <string name="tag_review_skip">Skip</string>
     <plurals name="tag_review_done_skipped">
         <item quantity="one">Review done. %1$d skipped tag stays for the next review.</item>
         <item quantity="other">Review done. %1$d skipped tags stay for the next review.</item>
     </plurals>
-    <string name="tag_review_discard">Discard</string>
     <plurals name="sections_unmatched">
         <item quantity="one">%d section no longer fits the updated map; it is hidden. Show it to delete or keep it.</item>
         <item quantity="other">%d sections no longer fit the updated map; they are hidden. Show them to delete or keep them.</item>
