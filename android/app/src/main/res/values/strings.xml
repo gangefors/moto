@@ -190,7 +190,6 @@
     <string name="section_one_way_hint">Only good in the direction it was marked (arrows)</string>
     <string name="delete">Delete</string>
     <string name="delete_confirm">Tap again to delete</string>
-    <string name="section_delete_confirm">Tap the bin again to delete this section.</string>
     <string name="section_saved">Section saved</string>
     <string name="section_covered">Not saved: a section on this road, rated at least as high, already covers it</string>
     <plurals name="section_saved_replacing">
