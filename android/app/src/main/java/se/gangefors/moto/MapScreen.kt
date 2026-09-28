@@ -54,6 +54,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
@@ -161,20 +165,29 @@ fun MapScreen() {
     // What the app is waiting for, shown after a moment (BusyPill).
     val busy = remember { BusyTasks() }
     val region = activeRegion.state
+    // The step of a task in hand (e.g. "Long-press where you want to
+    // go"), shown until the step changes.
     var message by remember { mutableStateOf<String?>(null) }
+    // Short notices: a snackbar at the top that goes by itself; errors
+    // stay longer and can be closed.
+    val notices = remember { SnackbarHostState() }
+    val noticeScope = rememberCoroutineScope()
+    fun notify(text: String, long: Boolean = false) {
+        noticeScope.launch {
+            notices.currentSnackbarData?.dismiss()
+            notices.showSnackbar(
+                text,
+                withDismissAction = long,
+                duration = if (long) SnackbarDuration.Long else SnackbarDuration.Short,
+            )
+        }
+    }
     // The road the rider last tapped, shown until closed.
     var roadInfo by remember { mutableStateOf<RoadInfo?>(null) }
 
     // Open the region off the main thread (installing the bundled one on
-    // first start); the hint again whenever another region takes over.
+    // first start).
     LaunchedEffect(Unit) { Regions.load(context.applicationContext) }
-    LaunchedEffect(region) {
-        if (region is RegionState.Loading) return@LaunchedEffect
-        message = when (val r = region) {
-            is RegionState.Ready -> resources.getString(R.string.map_hint)
-            else -> regionStatus(resources, r)
-        }
-    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -284,8 +297,8 @@ fun MapScreen() {
                 runCatching { s.store.list(null) }
             }
                 .onSuccess { sections = it }
-                .onFailure { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) }
-            is StoreState.Failed -> message = resources.getString(R.string.sections_failed, s.message)
+                .onFailure { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) }
+            is StoreState.Failed -> notify(resources.getString(R.string.sections_failed, s.message), long = true)
             StoreState.Loading -> Unit
         }
     }
@@ -310,14 +323,17 @@ fun MapScreen() {
             onSuccess = { (report, updated) ->
                 updated?.let { sections = it }
                 if (report.unmatched > 0uL) {
-                    message = resources.getQuantityString(
-                        R.plurals.sections_unmatched,
-                        report.unmatched.toInt(),
-                        report.unmatched.toInt(),
+                    notify(
+                        resources.getQuantityString(
+                            R.plurals.sections_unmatched,
+                            report.unmatched.toInt(),
+                            report.unmatched.toInt(),
+                        ),
+                        long = true,
                     )
                 }
             },
-            onFailure = { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) },
+            onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
         )
     }
 
@@ -338,7 +354,7 @@ fun MapScreen() {
                 favourites = f
                 sectionGravel = g
             }
-            .onFailure { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) }
+            .onFailure { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) }
     }
 
     // "Mark section" mode: tap start, tap end, adjust, save.
@@ -359,6 +375,26 @@ fun MapScreen() {
     var showSettings by remember { mutableStateOf(false) }
     // The length a new loop starts at (Ride settings).
     var defaultLoop by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    // How to use the map, as a notice on the first few starts (after that
+    // it is under About); no region: a notice that stays, with a way to
+    // download one.
+    LaunchedEffect(region) {
+        when (val r = region) {
+            RegionState.Loading -> Unit
+            is RegionState.Ready -> if (RoutePrefs.takeMapHint(context)) notify(resources.getString(R.string.map_hint), long = true)
+            RegionState.Missing -> noticeScope.launch {
+                notices.currentSnackbarData?.dismiss()
+                val result = notices.showSnackbar(
+                    resources.getString(R.string.region_missing),
+                    actionLabel = resources.getString(R.string.region_missing_action),
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Indefinite,
+                )
+                if (result == SnackbarResult.ActionPerformed) dataPage = DataPage.REGION
+            }
+            is RegionState.Failed -> notify(regionStatus(resources, r), long = true)
+        }
+    }
     var keepScreenOn by remember { mutableStateOf(RoutePrefs.keepScreenOn(context)) }
     // Sections that no longer fit the map are hidden unless the rider asks.
     var showUnmatched by remember { mutableStateOf(false) }
@@ -398,10 +434,13 @@ fun MapScreen() {
             is Recording.State.Finished -> {
                 val km = sectionKm(r.track.distanceM)
                 val time = formatDuration(((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) * 1000)
-                message = r.batteryPerHour?.let { resources.getString(R.string.recording_saved_battery, km, time, it) }
-                    ?: resources.getString(R.string.recording_saved, km, time)
+                notify(
+                    r.batteryPerHour?.let { resources.getString(R.string.recording_saved_battery, km, time, it) }
+                        ?: resources.getString(R.string.recording_saved, km, time),
+                    long = true,
+                )
             }
-            is Recording.State.Failed -> message = resources.getString(R.string.recording_failed, r.message)
+            is Recording.State.Failed -> notify(resources.getString(R.string.recording_failed, r.message), long = true)
             else -> Unit
         }
     }
@@ -411,9 +450,9 @@ fun MapScreen() {
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             hasLocation = true
             RecordingService.start(context)
-            message = resources.getString(R.string.recording_started)
+            notify(resources.getString(R.string.recording_started))
         } else {
-            message = resources.getString(R.string.recording_no_permission)
+            notify(resources.getString(R.string.recording_no_permission), long = true)
         }
     }
 
@@ -453,15 +492,15 @@ fun MapScreen() {
         val fix = chooseTagFix(active?.lastFix, mapFix(map), System.currentTimeMillis())
         if (fix == null) {
             buzz(context, ok = false)
-            message = resources.getString(R.string.tag_no_fix)
+            notify(resources.getString(R.string.tag_no_fix), long = true)
             return
         }
         scope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { ready.store.addTag(newTag(fix, active?.trackId)) } }
             buzz(context, ok = result.isSuccess)
-            message = result.fold(
-                onSuccess = { resources.getString(R.string.tag_saved) },
-                onFailure = { resources.getString(R.string.tag_failed, it.message ?: it.toString()) },
+            result.fold(
+                onSuccess = { notify(resources.getString(R.string.tag_saved)) },
+                onFailure = { notify(resources.getString(R.string.tag_failed, it.message ?: it.toString()), long = true) },
             )
             refreshPendingTags()
         }
@@ -471,7 +510,8 @@ fun MapScreen() {
         stopMarking()
         review = null
         reviewTag = null
-        text?.let { message = it }
+        message = null
+        text?.let { notify(it) }
         refreshPendingTags()
     }
 
@@ -564,7 +604,7 @@ fun MapScreen() {
                 val problem = runCatching { DebugTools.query("snap") { ready.engine.snap(point.toLatLon()) } }.exceptionOrNull()
                 if (problem != null) {
                     marker.rejectLast()
-                    message = coreErrorMessage(resources, problem)
+                    notify(coreErrorMessage(resources, problem), long = true)
                 } else {
                     message = resources.getString(R.string.section_pick_end)
                 }
@@ -590,7 +630,8 @@ fun MapScreen() {
                         },
                         onFailure = { e ->
                             marker.rejectLast()
-                            message = coreErrorMessage(resources, e)
+                            message = resources.getString(R.string.section_pick_end)
+                            notify(coreErrorMessage(resources, e), long = true)
                         },
                     )
                     showDraft()
@@ -712,16 +753,13 @@ fun MapScreen() {
     fun riderStart(): LatLng? {
         val active = recording as? Recording.State.Active
         val fix = when (val p = riderPosition(active?.lastFix, mapFix(map), System.currentTimeMillis())) {
-            is RiderPosition.Fresh -> {
-                message = null
-                p.fix
-            }
+            is RiderPosition.Fresh -> p.fix
             is RiderPosition.LastKnown -> {
-                message = resources.getString(R.string.plan_last_known)
+                notify(resources.getString(R.string.plan_last_known))
                 p.fix
             }
             RiderPosition.None -> {
-                message = resources.getString(R.string.plan_waiting_gps)
+                notify(resources.getString(R.string.plan_waiting_gps))
                 return null
             }
         }
@@ -828,7 +866,7 @@ fun MapScreen() {
      * tag review) stops when nothing is placed. */
     fun markBack() {
         if (reviewTag != null) {
-            endReview(resources.getString(R.string.map_hint))
+            endReview(null)
             return
         }
         // A proposal still being found for the old points is dropped.
@@ -838,7 +876,7 @@ fun MapScreen() {
         when (marker.back()) {
             SectionMarker.State.Off -> {
                 stopMarking()
-                message = resources.getString(R.string.map_hint)
+                message = null
                 return
             }
             SectionMarker.State.PickStart -> message = resources.getString(R.string.section_pick_start)
@@ -961,7 +999,7 @@ fun MapScreen() {
                 } else {
                     routeEnds = null
                 }
-                message = coreErrorMessage(resources, it)
+                notify(coreErrorMessage(resources, it), long = true)
             },
         )
     }
@@ -987,7 +1025,7 @@ fun MapScreen() {
         ready?.let { showRegionOutline(s, it.engine.info(), it.engine.coverage()) }
         val onClick = MapLibreMap.OnMapClickListener { tap ->
             if (marking) {
-                if (ready == null) message = regionStatus(resources, region) else onMarkTap(ready, tap)
+                if (ready == null) notify(regionStatus(resources, region), long = true) else onMarkTap(ready, tap)
                 return@OnMapClickListener true
             }
             // A via point: select it, to remove just that one; any other
@@ -1018,7 +1056,7 @@ fun MapScreen() {
             if (hit != null) {
                 editing = hit
             } else if (ready == null) {
-                message = regionStatus(resources, region)
+                notify(regionStatus(resources, region), long = true)
             } else {
                 try {
                     val info = DebugTools.query("road info") { ready.engine.roadAt(tap.toLatLon()) }
@@ -1028,7 +1066,8 @@ fun MapScreen() {
                 } catch (e: MotoException) {
                     o.snap.show(tap, null)
                     roadInfo = null
-                    message = coreErrorMessage(resources, e)
+                    message = null
+                    notify(coreErrorMessage(resources, e))
                 }
             }
             true
@@ -1036,7 +1075,7 @@ fun MapScreen() {
         val onLongClick = MapLibreMap.OnMapLongClickListener { point ->
             if (marking) return@OnMapLongClickListener false
             if (ready == null) {
-                message = regionStatus(resources, region)
+                notify(regionStatus(resources, region), long = true)
                 return@OnMapLongClickListener true
             }
             val ends = routeEnds
@@ -1058,7 +1097,8 @@ fun MapScreen() {
                     val problem = runCatching { DebugTools.query("snap") { ready.engine.snap(point.toLatLon()) } }.exceptionOrNull()
                     if (problem != null) {
                         picker.reset()
-                        message = coreErrorMessage(resources, problem)
+                        message = null
+                        notify(coreErrorMessage(resources, problem), long = true)
                     } else {
                         o.route.show(point, null, null)
                         startPicked = point
@@ -1121,9 +1161,9 @@ fun MapScreen() {
             result.fold(
                 onSuccess = { (done, list) ->
                     sections = list
-                    message = done
+                    notify(done)
                 },
-                onFailure = { message = resources.getString(R.string.sections_failed, it.message ?: it.toString()) },
+                onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
             )
         }
     }
@@ -1155,7 +1195,7 @@ fun MapScreen() {
             result.fold(
                 onSuccess = { context.startActivity(it) },
                 onFailure = {
-                    message = resources.getString(R.string.route_share_failed, it.message ?: it.toString())
+                    notify(resources.getString(R.string.route_share_failed, it.message ?: it.toString()), long = true)
                 },
             )
         }
@@ -1173,9 +1213,9 @@ fun MapScreen() {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { ready.store.saveRoute(name, isLoop, r) } }
-            message = result.fold(
-                onSuccess = { resources.getString(R.string.route_saved, it.name) },
-                onFailure = { resources.getString(R.string.route_save_failed, it.message ?: it.toString()) },
+            result.fold(
+                onSuccess = { notify(resources.getString(R.string.route_saved, it.name)) },
+                onFailure = { notify(resources.getString(R.string.route_save_failed, it.message ?: it.toString()), long = true) },
             )
         }
     }
@@ -1236,6 +1276,7 @@ fun MapScreen() {
                 .onGloballyPositioned { topPanelBottom = it.boundsInRoot().bottom.roundToInt() },
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            SnackbarHost(notices)
             val offerLoop = startPicked != null && !marking
             val via = selectedVia?.takeIf { it in vias.indices }
             if (message != null || marking || offerLoop || via != null) Surface(
@@ -1303,7 +1344,7 @@ fun MapScreen() {
                                 // Stop ends the review; tags not yet handled
                                 // stay pending. Skip leaves this one pending
                                 // and moves on to the next.
-                                OutlinedButton(onClick = { endReview(resources.getString(R.string.map_hint)) }) {
+                                OutlinedButton(onClick = { endReview(null) }) {
                                     OneLine(stringResource(R.string.tag_review_stop))
                                 }
                                 OutlinedButton(onClick = { skipTag() }) {
@@ -1316,7 +1357,7 @@ fun MapScreen() {
                             } else {
                                 OutlinedButton(onClick = {
                                     stopMarking()
-                                    message = resources.getString(R.string.map_hint)
+                                    message = null
                                 }) { OneLine(stringResource(R.string.cancel)) }
                             }
                             Button(
@@ -1375,7 +1416,7 @@ fun MapScreen() {
                     startPicked = null
                     picker.reset()
                     overlays?.route?.show(null, null, null)
-                    message = resources.getString(R.string.map_hint)
+                    message = null
                 }
                 shownSaved != null -> {
                     shownSaved = null
@@ -1714,7 +1755,6 @@ fun MapScreen() {
                         .onSuccess { sections = it }
                 }
             },
-            onMessage = { message = it },
             onDismiss = { dataPage = null },
             onShowRoute = { saved ->
                 dataPage = null
@@ -1723,7 +1763,7 @@ fun MapScreen() {
                         runCatching { readyStore.store.routeGeometry(saved.id) }.getOrNull()
                     }
                     if (line.isNullOrEmpty()) {
-                        message = resources.getString(R.string.rides_gone)
+                        notify(resources.getString(R.string.rides_gone), long = true)
                     } else {
                         routeEnds = null
                         loopStart = null
@@ -1745,7 +1785,7 @@ fun MapScreen() {
                     }
                     val line = points?.map { it.position }
                     if (line.isNullOrEmpty()) {
-                        message = resources.getString(R.string.rides_gone)
+                        notify(resources.getString(R.string.rides_gone), long = true)
                     } else {
                         shownRide = ShownRide(track, line)
                         showOnMap(listOf(line), always = true)

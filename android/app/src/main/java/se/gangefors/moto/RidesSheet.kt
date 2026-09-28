@@ -25,6 +25,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,7 +70,8 @@ enum class DataPage { LIBRARY, SECTIONS, REGION }
  * to the map, [onSectionsChanged] reloads them); [DataPage.REGION], the
  * map region. Files are written and read only where the rider picks with
  * the system file picker: no storage permission, and nothing leaves the
- * phone unless the rider sends it. [onMessage] reports what happened.
+ * phone unless the rider sends it. What happened shows as a notice at
+ * the bottom of the page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +80,6 @@ fun RidesSheet(
     store: SectionStore,
     engine: Engine?,
     onSectionsChanged: () -> Unit,
-    onMessage: (String) -> Unit,
     onDismiss: () -> Unit,
     onShow: (Track) -> Unit,
     onShowRoute: (SavedRoute) -> Unit,
@@ -88,6 +89,14 @@ fun RidesSheet(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    // What happened (exported, imported, failed), at the bottom of the page.
+    val notices = remember { SnackbarHostState() }
+    fun onMessage(text: String) {
+        scope.launch {
+            notices.currentSnackbarData?.dismiss()
+            notices.showSnackbar(text, withDismissAction = true)
+        }
+    }
     val zone = remember { ZoneId.systemDefault() }
     var tracks by remember { mutableStateOf<List<Track>?>(null) }
     // Routes & rides: the one armed for deleting, being renamed, being
@@ -286,7 +295,7 @@ fun RidesSheet(
             DataPage.REGION -> R.string.region_title
         },
     )
-    FullPage(title, onBack = onDismiss) {
+    FullPage(title, onBack = onDismiss, notices = notices) {
         LazyColumn(
             Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
