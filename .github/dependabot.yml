@@ -3,7 +3,9 @@
 #
 # Dependabot version and security updates (see Versions and Security in
 # CLAUDE.md). Version updates wait for a release to be at least a week old
-# (cooldown); security updates skip the cooldown, and CLAUDE.md lets a
+# (cooldown; for Gradle, whose Google Maven releases carry no date for
+# Dependabot, the Dependency age workflow checks it and marks the pull
+# request); security updates skip the cooldown, and CLAUDE.md lets a
 # reviewed security fix in once it is a day old. One grouped pull request
 # per ecosystem keeps the noise down. Pull requests are reviewed (release
 # date, changelog, licence), checked locally and merged only on green CI,

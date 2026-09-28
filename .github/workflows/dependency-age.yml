@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Release age of Dependabot's Gradle updates (CLAUDE.md, Versions).
+# Dependabot's cooldown can't hold for Gradle dependencies from Google's
+# Maven repository, which gives it no release dates, so this checks them
+# itself: every six hours it reads the version catalog of each open
+# Dependabot pull request, looks up when each changed version was
+# published, and sets the "Dependency age" status on the pull request: red
+# until every release is a week old (with the day it will be), then green.
+# Nothing from the pull request is run; its catalog is only parsed as TOML.
+name: Dependency age
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-age
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check Dependabot's Gradle updates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # to list Dependabot's pull requests
+      statuses: write # to set the "Dependency age" status
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Check and set statuses
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          catalog=android/gradle/libs.versions.toml
+          work="$RUNNER_TEMP/age"
+          mkdir -p "$work"
+          gh pr list --author app/dependabot --state open --json number,headRefOid,baseRefName,files \
+            --jq ".[] | select(any(.files[]; .path == \"$catalog\")) | [.number, .headRefOid, .baseRefName] | @tsv" \
+            > "$work/prs.tsv"
+          while IFS=$'\t' read -r number head base; do
+            gh api "repos/$GH_REPO/contents/$catalog?ref=$base" --jq .content | base64 -d > "$work/base.toml"
+            gh api "repos/$GH_REPO/contents/$catalog?ref=$head" --jq .content | base64 -d > "$work/head.toml"
+            if python3 .github/scripts/dependency_age.py --base "$work/base.toml" --head "$work/head.toml" > "$work/result.json"; then
+              ok=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ok"])' "$work/result.json")
+              description=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["description"])' "$work/result.json")
+              python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["lines"]))' "$work/result.json"
+            else
+              ok=False
+              description="Could not read the version catalog"
+            fi
+            state=failure
+            [ "$ok" = True ] && state=success
+            echo "#$number: $state: $description" | tee -a "$GITHUB_STEP_SUMMARY"
+            gh api -X POST "repos/$GH_REPO/statuses/$head" \
+              -f state="$state" -f context="Dependency age" \
+              -f description="$description" -f target_url="$RUN_URL" > /dev/null
+          done < "$work/prs.tsv"
