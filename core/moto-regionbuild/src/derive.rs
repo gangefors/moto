@@ -258,6 +258,35 @@ pub fn data_of(region: &Region) -> RegionData {
         curvature: region.curvature().to_vec(),
         way_refs: region.way_refs().to_vec(),
         grid_cell: (grid.cell_lat, grid.cell_lon),
+        names: names_of(region),
+    }
+}
+
+/// The road names and places of an opened region file, as written (none
+/// for a file before format 1.2).
+fn names_of(region: &Region) -> moto_core::region::RoadNames {
+    if !region.has_names() {
+        return moto_core::region::RoadNames::default();
+    }
+    let geometries = region.geometry_offsets().len().saturating_sub(1) as u32;
+    let geometry_names: Vec<_> = (0..geometries).map(|g| region.geometry_name(g)).collect();
+    // Strings are numbered from 0 up to the highest index in use.
+    let highest = geometry_names
+        .iter()
+        .flat_map(|g| [g.road_ref, g.name])
+        .chain(region.places().iter().map(|p| p.name))
+        .filter(|&i| i != moto_core::region::format::NO_NAME)
+        .max();
+    let strings = match highest {
+        Some(h) => (0..=h)
+            .map(|i| region.string(i).unwrap_or_default().to_owned())
+            .collect(),
+        None => Vec::new(),
+    };
+    moto_core::region::RoadNames {
+        strings,
+        geometry_names,
+        places: region.places().to_vec(),
     }
 }
 

@@ -133,6 +133,13 @@ impl Engine {
         crate::road::road_info(&self.region, self.snap(point)?)
     }
 
+    /// Which roads `line` runs on and which places it runs between, for
+    /// naming a section, route or ride (see [`crate::describe`]). Empty
+    /// on a region file without names.
+    pub fn describe(&self, line: &[LatLon]) -> Result<crate::Description, CoreError> {
+        crate::describe::describe(&self.region, line)
+    }
+
     /// Fastest route from `from` to `to` under `opts.avoid` and
     /// `opts.gravel` (preferred gravel counts as allowed): no
     /// favourites, no curvature, the budget unused. The reference that

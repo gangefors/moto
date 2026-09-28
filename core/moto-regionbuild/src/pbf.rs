@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use moto_core::region::format::{BBoxE7, PointE7};
+use moto_core::region::format::{BBoxE7, PlaceKind, PointE7};
 use osmpbf::{BlobDecode, BlobReader, Element};
 use rayon::prelude::*;
 
@@ -20,6 +20,8 @@ pub struct Osm {
     pub nodes: Vec<(i64, PointE7)>,
     /// Routable ways from the whole file, sorted by id.
     pub ways: Vec<RawWay>,
+    /// Named places inside the bounding box (see [`tags::place`]).
+    pub places: Vec<(PointE7, PlaceKind, String)>,
     /// The extract's replication timestamp, if its header has one.
     pub timestamp: Option<i64>,
 }
@@ -45,22 +47,35 @@ pub fn read(path: &Path, bbox: &BBoxE7) -> Result<Osm, String> {
                     Element::DenseNode(n) => {
                         let (lat, lon) = (n.decimicro_lat(), n.decimicro_lon());
                         if inside(lat, lon) {
-                            out.nodes.push((n.id(), PointE7 { lat, lon }));
+                            let pos = PointE7 { lat, lon };
+                            out.nodes.push((n.id(), pos));
+                            let tags: Vec<(&str, &str)> = n.tags().collect();
+                            if let Some((kind, name)) = tags::place(&tags) {
+                                out.places.push((pos, kind, name));
+                            }
                         }
                     }
                     Element::Node(n) => {
                         let (lat, lon) = (n.decimicro_lat(), n.decimicro_lon());
                         if inside(lat, lon) {
-                            out.nodes.push((n.id(), PointE7 { lat, lon }));
+                            let pos = PointE7 { lat, lon };
+                            out.nodes.push((n.id(), pos));
+                            let tags: Vec<(&str, &str)> = n.tags().collect();
+                            if let Some((kind, name)) = tags::place(&tags) {
+                                out.places.push((pos, kind, name));
+                            }
                         }
                     }
                     Element::Way(w) => {
                         let tags: Vec<(&str, &str)> = w.tags().collect();
                         if let Some(attrs) = tags::classify(&tags) {
+                            let (road_ref, name) = tags::road_names(&tags);
                             out.ways.push(RawWay {
                                 id: w.id(),
                                 refs: w.refs().collect(),
                                 attrs,
+                                road_ref,
+                                name,
                             });
                         }
                     }
@@ -76,10 +91,13 @@ pub fn read(path: &Path, bbox: &BBoxE7) -> Result<Osm, String> {
     for mut p in parts {
         all.nodes.append(&mut p.nodes);
         all.ways.append(&mut p.ways);
+        all.places.append(&mut p.places);
         all.timestamp = all.timestamp.or(p.timestamp);
     }
     // Blob order is lost in parallel; keep the output deterministic.
     all.ways.sort_unstable_by_key(|w| w.id);
+    all.places
+        .sort_unstable_by(|a, b| (a.0.lat, a.0.lon, a.1, &a.2).cmp(&(b.0.lat, b.0.lon, b.1, &b.2)));
     Ok(all)
 }
 

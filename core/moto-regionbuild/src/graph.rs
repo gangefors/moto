@@ -10,10 +10,13 @@
 use moto_core::LatLon;
 use moto_core::curvature::curvature_metrics;
 use moto_core::geo::polyline_length_m;
+use std::collections::HashMap;
+
 use moto_core::region::format::{
-    BBoxE7, COORD_SCALE, CurvatureMetrics, Edge, PointE7, WayRef, edge_flags,
+    BBoxE7, COORD_SCALE, CurvatureMetrics, Edge, GeometryName, NO_NAME, Place, PlaceKind, PointE7,
+    WayRef, edge_flags,
 };
-use moto_core::region::{RegionData, RegionInfo};
+use moto_core::region::{RegionData, RegionInfo, RoadNames};
 
 use crate::hilbert;
 use crate::tags::{Oneway, WayAttrs};
@@ -24,6 +27,57 @@ pub struct RawWay {
     pub id: i64,
     pub refs: Vec<i64>,
     pub attrs: WayAttrs,
+    /// Its road number (`ref`) and name, cleaned.
+    pub road_ref: Option<String>,
+    pub name: Option<String>,
+}
+
+/// Numbers the strings of the names, each once.
+#[derive(Default)]
+struct Strings {
+    ids: HashMap<String, u32>,
+    list: Vec<String>,
+}
+
+impl Strings {
+    fn from(list: Vec<String>) -> Self {
+        let ids = list
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.clone(), i as u32))
+            .collect();
+        Self { ids, list }
+    }
+
+    fn id(&mut self, s: Option<&str>) -> u32 {
+        let Some(s) = s else { return NO_NAME };
+        if let Some(&id) = self.ids.get(s) {
+            return id;
+        }
+        let id = self.list.len() as u32;
+        self.ids.insert(s.to_owned(), id);
+        self.list.push(s.to_owned());
+        id
+    }
+}
+
+/// Adds the named `places` to `names`, sorted by latitude (then by
+/// position and name, so the file doesn't depend on input order).
+pub fn add_places(names: &mut RoadNames, places: &[(PointE7, PlaceKind, String)]) {
+    let mut strings = Strings::from(std::mem::take(&mut names.strings));
+    let mut list: Vec<Place> = places
+        .iter()
+        .map(|(pos, kind, name)| Place {
+            pos: *pos,
+            name: strings.id(Some(name)),
+            kind: *kind as u8,
+            reserved: [0; 3],
+        })
+        .collect();
+    list.sort_by_key(|p| (p.pos.lat, p.pos.lon, p.kind, p.name));
+    list.dedup();
+    names.places = list;
+    names.strings = strings.list;
 }
 
 /// Node positions sorted by OSM id (only nodes inside the region).
@@ -184,6 +238,8 @@ pub fn build(
         way_ref: WayRef,
     }
     let mut drafts: Vec<Draft> = Vec::new();
+    let mut strings = Strings::default();
+    let mut geometry_names: Vec<GeometryName> = Vec::new();
     let mut geometry_offsets = vec![0u32];
     let mut shape_points: Vec<PointE7> = Vec::new();
     for s in &segments {
@@ -209,6 +265,10 @@ pub fn build(
         let curvature = curvature_metrics(&line);
         shape_points.extend_from_slice(&pts);
         geometry_offsets.push(shape_points.len() as u32);
+        geometry_names.push(GeometryName {
+            road_ref: strings.id(way.road_ref.as_deref()),
+            name: strings.id(way.name.as_deref()),
+        });
 
         let edge = |tail, head, reversed: bool| Edge {
             tail,
@@ -261,6 +321,11 @@ pub fn build(
         curvature: drafts.iter().map(|d| d.curvature).collect(),
         way_refs: drafts.iter().map(|d| d.way_ref).collect(),
         grid_cell,
+        names: RoadNames {
+            strings: strings.list,
+            geometry_names,
+            places: Vec::new(),
+        },
     };
     (data, stats)
 }
@@ -419,11 +484,15 @@ mod tests {
                 id: 10,
                 refs: vec![1, 2, 3, 4],
                 attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
             },
             RawWay {
                 id: 11,
                 refs: vec![2, 5, 6],
                 attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
             },
         ];
         let (r, stats) = build_region(&ways);
@@ -452,11 +521,15 @@ mod tests {
                 id: 20,
                 refs: vec![1, 2],
                 attrs: attrs(Oneway::Forward),
+                road_ref: None,
+                name: None,
             },
             RawWay {
                 id: 21,
                 refs: vec![3, 4],
                 attrs: attrs(Oneway::Backward),
+                road_ref: None,
+                name: None,
             },
         ];
         let (r, _) = build_region(&ways);
@@ -487,11 +560,15 @@ mod tests {
                 id: 30,
                 refs: vec![5, 6, 9, 8, 7, 5],
                 attrs: attrs(Oneway::Forward),
+                road_ref: None,
+                name: None,
             },
             RawWay {
                 id: 31,
                 refs: vec![1, 2, 99, 3, 4],
                 attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
             },
         ];
         let (r, _) = build_region(&ways);
@@ -517,6 +594,8 @@ mod tests {
             id: 40,
             refs: vec![1, 2, 3, 4],
             attrs: attrs(Oneway::No),
+            road_ref: None,
+            name: None,
         }];
         let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
         let keys: Vec<u64> = data
@@ -537,11 +616,15 @@ mod tests {
                 id: 10,
                 refs: vec![1, 2, 3, 4],
                 attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
             },
             RawWay {
                 id: 11,
                 refs: vec![7, 8],
                 attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
             },
         ];
         let (_, all) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
@@ -559,6 +642,8 @@ mod tests {
                 id: 12,
                 refs: vec![2, 5, 7],
                 attrs: attrs(Oneway::Forward),
+                road_ref: None,
+                name: None,
             },
         ];
         let (_, s) = build(&joined, &index(), info(), (5_000, 5_000), 1_000.0);
@@ -566,5 +651,46 @@ mod tests {
         // Everything too short: the largest network still stays.
         let (_, one) = build(&ways, &index(), info(), (5_000, 5_000), 1e9);
         assert_eq!((one.fragments, one.segments), (1, 1));
+    }
+
+    #[test]
+    fn names_each_geometry_once_per_string() {
+        let named = |id, refs: Vec<i64>, r: Option<&str>, n: Option<&str>| RawWay {
+            id,
+            refs,
+            attrs: attrs(Oneway::No),
+            road_ref: r.map(Into::into),
+            name: n.map(Into::into),
+        };
+        let ways = [
+            named(10, vec![1, 2, 3, 4], Some("13"), Some("Storgatan")),
+            named(11, vec![2, 5, 6], Some("13"), None),
+            named(12, vec![4, 8], None, None),
+        ];
+        let (mut data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
+        add_places(
+            &mut data.names,
+            &[
+                (p(55.52, 13.53), PlaceKind::Village, "Dalby".into()),
+                (p(55.50, 13.50), PlaceKind::Town, "Lund".into()),
+                (p(55.50, 13.50), PlaceKind::Town, "Lund".into()),
+            ],
+        );
+        let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+        // "13" is stored once, for both roads.
+        assert_eq!(data.names.strings, ["13", "Storgatan", "Dalby", "Lund"]);
+        for (e, w) in r.edges().iter().zip(r.way_refs()) {
+            let g = r.geometry_name(e.geometry);
+            let got = (r.string(g.road_ref), r.string(g.name));
+            let want = match w.way_id {
+                10 => (Some("13"), Some("Storgatan")),
+                11 => (Some("13"), None),
+                _ => (None, None),
+            };
+            assert_eq!(got, want, "way {}", w.way_id);
+        }
+        // Places sorted by latitude, duplicates dropped.
+        let places: Vec<_> = r.places().iter().map(|q| r.string(q.name)).collect();
+        assert_eq!(places, [Some("Lund"), Some("Dalby")]);
     }
 }

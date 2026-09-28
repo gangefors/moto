@@ -25,7 +25,7 @@ use memmap2::Mmap;
 
 use crate::CoreError;
 use format::*;
-pub use writer::{RegionData, RegionInfo};
+pub use writer::{RegionData, RegionInfo, RoadNames};
 
 #[cfg(target_endian = "big")]
 compile_error!("region files are little-endian and read zero-copy");
@@ -71,6 +71,17 @@ struct Sections {
     way_refs: Range<usize>,
     /// Both or neither (older files have no coverage).
     coverage: Option<(Range<usize>, Range<usize>)>,
+    /// All four or none (files before format 1.2 have no names).
+    names: Option<NameSections>,
+}
+
+/// Validated byte ranges of the name sections (format 1.2).
+#[derive(Debug, Clone)]
+struct NameSections {
+    offsets: Range<usize>,
+    bytes: Range<usize>,
+    geometry_names: Range<usize>,
+    places: Range<usize>,
 }
 
 fn err(msg: impl std::fmt::Display) -> CoreError {
@@ -97,7 +108,7 @@ fn map_open(file: &File, path: &Path) -> Result<Mmap, CoreError> {
 /// Domain tag of [`fingerprint`]. Bump its version whenever [`validate`]
 /// gains a check, so a file proven only by an older build's validation is
 /// validated in full again.
-const FINGERPRINT_TAG: &[u8] = b"moto-region-fingerprint-v1";
+const FINGERPRINT_TAG: &[u8] = b"moto-region-fingerprint-v2";
 /// The file is hashed in this many parts at once.
 const FINGERPRINT_PARTS: u64 = 4;
 const FINGERPRINT_CHUNK: usize = 1 << 20;
@@ -341,6 +352,47 @@ impl Region {
         Some(coverage::contains(self.slice(o), self.slice(pts), p))
     }
 
+    /// String `id` of the names; `None` for [`NO_NAME`], an index out of
+    /// range or a file without names. Never panics, even on a file only
+    /// located (fingerprinted), not validated in full.
+    pub fn string(&self, id: u32) -> Option<&str> {
+        let n = self.sections.names.as_ref()?;
+        let offsets: &[u32] = self.slice(&n.offsets);
+        let (a, b) = (
+            *offsets.get(id as usize)? as usize,
+            *offsets.get(id as usize + 1)? as usize,
+        );
+        let bytes = self.bytes.as_bytes().get(n.bytes.clone())?;
+        std::str::from_utf8(bytes.get(a..b)?).ok()
+    }
+
+    /// The number and name of the road geometry `geometry` belongs to;
+    /// [`GeometryName::NONE`] when it has none or the file has no names.
+    pub fn geometry_name(&self, geometry: u32) -> GeometryName {
+        self.sections
+            .names
+            .as_ref()
+            .and_then(|n| {
+                self.slice::<GeometryName>(&n.geometry_names)
+                    .get(geometry as usize)
+                    .copied()
+            })
+            .unwrap_or(GeometryName::NONE)
+    }
+
+    /// Named places, sorted by latitude; empty for files without names.
+    pub fn places(&self) -> &[Place] {
+        match &self.sections.names {
+            Some(n) => self.slice(&n.places),
+            None => &[],
+        }
+    }
+
+    /// Whether the file has road names and places (format 1.2).
+    pub fn has_names(&self) -> bool {
+        self.sections.names.is_some()
+    }
+
     /// Edge ids listed in grid cell (`row`, `col`).
     pub fn grid_cell(&self, row: u32, col: u32) -> &[u32] {
         let meta = self.grid_meta();
@@ -514,6 +566,7 @@ fn validate_marked(
         grid_edges: find(section::GRID_EDGES)?,
         way_refs: find(section::WAY_REFS)?,
         coverage: None,
+        names: None,
     };
     mark("header and section table");
     let nodes: &[PointE7] = typed(bytes, &s.node_pos, section::NODE_POS)?;
@@ -589,6 +642,38 @@ fn validate_marked(
     };
 
     mark("coverage");
+    let names = match [
+        section::NAME_OFFSETS,
+        section::NAME_BYTES,
+        section::GEOMETRY_NAMES,
+        section::PLACES,
+    ]
+    .map(|id| find(id).ok())
+    {
+        [None, None, None, None] => None,
+        [Some(o), Some(b), Some(g), Some(p)] => {
+            let offsets: &[u32] = typed(bytes, &o, section::NAME_OFFSETS)?;
+            let geometry_names: &[GeometryName] = typed(bytes, &g, section::GEOMETRY_NAMES)?;
+            let places: &[Place] = typed(bytes, &p, section::PLACES)?;
+            if full {
+                check_names(
+                    offsets,
+                    &bytes[b.clone()],
+                    geometry_names,
+                    geom.len(),
+                    places,
+                )?;
+                mark("names");
+            }
+            Some(NameSections {
+                offsets: o,
+                bytes: b,
+                geometry_names: g,
+                places: p,
+            })
+        }
+        _ => return Err(err("names need all four of their sections")),
+    };
     let info = RegionInfo {
         osm_timestamp: header.osm_timestamp,
         bbox: header.bbox,
@@ -600,6 +685,7 @@ fn validate_marked(
         Sections {
             grid_meta: *meta,
             coverage,
+            names,
             ..s
         },
     ))
@@ -677,6 +763,50 @@ fn check_contents(
     }
 
     mark("edges join their nodes");
+    Ok(())
+}
+
+/// The names (format 1.2): every string valid UTF-8, one name per
+/// geometry (`geometry_offsets` has one more entry than there are),
+/// every index a string or [`NO_NAME`], places in range, of a known kind,
+/// sorted by latitude.
+fn check_names(
+    offsets: &[u32],
+    bytes: &[u8],
+    geometry_names: &[GeometryName],
+    geometry_offsets: usize,
+    places: &[Place],
+) -> Result<(), CoreError> {
+    let count = offsets
+        .len()
+        .checked_sub(1)
+        .ok_or_else(|| err("empty name offsets"))?;
+    check_offsets("name", offsets, count, bytes.len())?;
+    if offsets
+        .windows(2)
+        .any(|w| std::str::from_utf8(&bytes[w[0] as usize..w[1] as usize]).is_err())
+    {
+        return Err(err("name is not valid UTF-8"));
+    }
+    if geometry_names.len() + 1 != geometry_offsets {
+        return Err(err("road names need one entry per geometry"));
+    }
+    let known = |i: u32| i == NO_NAME || (i as usize) < count;
+    if !geometry_names
+        .iter()
+        .all(|g| known(g.road_ref) && known(g.name))
+    {
+        return Err(err("road name refers to a missing string"));
+    }
+    let place_ok = |p: &Place| {
+        in_range(&p.pos) && (p.name as usize) < count && PlaceKind::from_u8(p.kind).is_some()
+    };
+    if !places.iter().all(place_ok) {
+        return Err(err("invalid place"));
+    }
+    if places.windows(2).any(|w| w[0].pos.lat > w[1].pos.lat) {
+        return Err(err("places not sorted by latitude"));
+    }
     Ok(())
 }
 

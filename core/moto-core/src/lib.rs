@@ -11,6 +11,7 @@
 #![deny(unsafe_code)]
 
 pub mod curvature;
+pub mod describe;
 mod draft;
 mod engine;
 mod error;
@@ -37,6 +38,7 @@ pub mod tag;
 pub mod track;
 mod types;
 
+pub use describe::Description;
 pub use draft::SectionDraft;
 pub use engine::{Engine, MAX_VIA_POINTS, SNAP_MAX_DISTANCE_M};
 pub use error::CoreError;

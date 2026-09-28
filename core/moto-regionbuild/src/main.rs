@@ -41,6 +41,7 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
        moto-regionbuild --refresh <in.region> <out.region>
        moto-regionbuild --manifest <out.json> (<id> <name> <file.region> <file.region.gz>)...
        moto-regionbuild --check-manifest <signed.manifest> <manifest.json>
+       moto-regionbuild --describe <file.region> LAT,LON LAT,LON [LAT,LON ...]
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
@@ -56,7 +57,9 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
            their gzip-compressed files, after checking that the core
            installs each one back to its region file
   --check-manifest check a signed manifest (signature, then the JSON) with
-           the app's keys, and that it carries exactly <manifest.json>";
+           the app's keys, and that it carries exactly <manifest.json>
+  --describe name the fastest route through the points as the app names
+           sections: its roads and the places at its ends";
 
 /// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
 /// half of Halland, southern Småland and western Blekinge, from Trelleborg
@@ -107,6 +110,9 @@ fn main() -> ExitCode {
         }),
         [flag, signed, json] if flag == "--check-manifest" => {
             manifest::check_signed(Path::new(signed), Path::new(json))
+        }
+        [flag, region, points @ ..] if flag == "--describe" && points.len() >= 2 => {
+            describe(Path::new(region), points)
         }
         [flag, input, output] if flag == "--refresh" => {
             refresh(Path::new(input), Path::new(output))
@@ -173,6 +179,7 @@ fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), S
     };
     let index = NodeIndex::new(osm.nodes);
     let (mut data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7, MIN_NETWORK_M);
+    graph::add_places(&mut data.names, &osm.places);
     eprintln!(
         "graph     {:>7.1} s  {} ways in bbox → {} nodes, {} edges, {} geometries, {} shape points",
         t.elapsed().as_secs_f64(),
@@ -187,6 +194,21 @@ fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), S
         stats.fragments,
         MIN_NETWORK_M / 1000.0,
         stats.fragment_m / 1000.0
+    );
+    let named = data
+        .names
+        .geometry_names
+        .iter()
+        .filter(|g| {
+            g.road_ref != moto_core::region::format::NO_NAME
+                || g.name != moto_core::region::format::NO_NAME
+        })
+        .count();
+    eprintln!(
+        "names              {named} of {} road geometries named, {} strings, {} places",
+        data.names.geometry_names.len(),
+        data.names.strings.len(),
+        data.names.places.len()
     );
     derive_all(&mut data);
     Ok((data, stats))
@@ -263,6 +285,50 @@ fn check(path: &Path, json: Option<&Path>, probes: &[String]) -> Result<(), Stri
     Ok(())
 }
 
+/// Describes the fastest route through `points` (see [`moto_core::describe`]).
+fn describe(path: &Path, points: &[String]) -> Result<(), String> {
+    let stops: Vec<LatLon> = points
+        .iter()
+        .map(|p| parse_point(p).ok_or_else(|| format!("bad point '{p}', expected LAT,LON")))
+        .collect::<Result<_, _>>()?;
+    let engine = Engine::open(path).map_err(|e| e.to_string())?;
+    let (first, rest) = stops.split_first().ok_or("no points")?;
+    let (last, via) = rest.split_last().ok_or("need two points")?;
+    let route = engine
+        .route_via(
+            *first,
+            via,
+            *last,
+            &moto_core::RouteOptions::default(),
+            &moto_core::Favourites::none(),
+        )
+        .map_err(|e| e.to_string())?;
+    let d = engine
+        .describe(&route.geometry)
+        .map_err(|e| e.to_string())?;
+    println!("{:.1} km", route.distance_m / 1000.0);
+    for road in &d.roads {
+        println!(
+            "road  {:>3.0} %  ref {:?}  name {:?}",
+            road.share * 100.0,
+            road.road_ref,
+            road.name
+        );
+    }
+    for (end, place) in [("start", &d.start), ("end", &d.end)] {
+        match place {
+            Some(p) => println!(
+                "{end:<5} {} ({:?}, {:.1} km)",
+                p.name,
+                p.kind,
+                p.distance_m / 1000.0
+            ),
+            None => println!("{end:<5} -"),
+        }
+    }
+    Ok(())
+}
+
 /// Where `p` snaps to, with the road's OSM way and attributes.
 fn describe_snap(engine: &Engine, p: LatLon) -> String {
     match engine.snap(p) {
@@ -270,8 +336,9 @@ fn describe_snap(engine: &Engine, p: LatLon) -> String {
             let region = engine.region();
             let e = region.edges()[r.edge as usize];
             let w = region.way_refs()[r.edge as usize];
+            let names = region.geometry_name(e.geometry);
             format!(
-                "{:.6},{:.6} ({:.1} m) edge {} offset {:.3}, way {} [{}..{}], {:?} {:?} {} km/h",
+                "{:.6},{:.6} ({:.1} m) edge {} offset {:.3}, way {} [{}..{}], {:?} {:?} {} km/h, ref {:?} name {:?}",
                 r.position.lat,
                 r.position.lon,
                 r.distance_m,
@@ -282,7 +349,9 @@ fn describe_snap(engine: &Engine, p: LatLon) -> String {
                 w.to_idx,
                 RoadClass::from_u8(e.class),
                 Surface::from_u8(e.surface),
-                e.speed_kmh
+                e.speed_kmh,
+                region.string(names.road_ref),
+                region.string(names.name)
             )
         }
         Err(e) => e.to_string(),
@@ -399,6 +468,9 @@ mod tests {
             snapped.contains("Residential") && snapped.contains("Sett"),
             "{snapped}"
         );
+        // The street's name comes from OSM (format 1.2).
+        assert!(engine.region().has_names());
+        assert!(!snapped.contains("name None"), "{snapped}");
         let outside = describe_snap(
             &engine,
             LatLon {

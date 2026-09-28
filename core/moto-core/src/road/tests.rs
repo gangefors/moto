@@ -125,3 +125,23 @@ fn a_bad_edge_is_a_typed_error() {
         Err(CoreError::Region(_))
     ));
 }
+
+#[test]
+fn a_named_road_gives_its_number_and_name() {
+    let e = engine(fixture::named_region());
+    let info = e.road_at(ll(55.7002, 13.205)).unwrap();
+    assert_eq!(
+        (info.road_ref.as_deref(), info.name.as_deref()),
+        (Some("13"), Some("Storgatan"))
+    );
+    let bend = e.road_at(ll(55.705, 13.2125)).unwrap();
+    assert_eq!(
+        (bend.road_ref, bend.name.as_deref()),
+        (None, Some("Bergsvägen"))
+    );
+    // No names in the file: none on the road.
+    let plain = engine(fixture::region())
+        .road_at(ll(55.7002, 13.205))
+        .unwrap();
+    assert_eq!((plain.road_ref, plain.name), (None, None));
+}

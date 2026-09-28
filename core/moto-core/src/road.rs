@@ -35,6 +35,10 @@ pub struct RoadInfo {
     pub length_m: f64,
     /// The OSM way the stretch belongs to.
     pub way_id: i64,
+    /// The road's number as signed (`13`, `E22`) and its name, when the
+    /// region file has them (format 1.2).
+    pub road_ref: Option<String>,
+    pub name: Option<String>,
 }
 
 /// The road under an already snapped point. The point's edge must come
@@ -58,6 +62,12 @@ pub(crate) fn road_info(region: &Region, point: RoadPoint) -> Result<RoadInfo, C
         curviness: PARAMS.curviness(&m, e.class, e.speed_kmh, e.flags, length_m),
         length_m,
         way_id: way.way_id,
+        road_ref: region
+            .string(region.geometry_name(e.geometry).road_ref)
+            .map(crate::describe::signed_ref),
+        name: region
+            .string(region.geometry_name(e.geometry).name)
+            .map(str::to_owned),
     })
 }
 
