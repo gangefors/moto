@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -77,7 +78,7 @@ fun ToastHost(modifier: Modifier = Modifier) {
         visible = visible,
         enter = fadeIn(),
         exit = fadeOut(),
-        modifier = modifier.safeDrawingPadding().padding(start = 24.dp, end = 24.dp, bottom = 48.dp),
+        modifier = modifier.safeDrawingPadding().padding(start = 24.dp, end = 24.dp, bottom = 48.dp).widthIn(max = 480.dp),
     ) {
         Surface(
             shape = RoundedCornerShape(50),
