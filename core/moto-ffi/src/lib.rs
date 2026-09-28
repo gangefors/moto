@@ -176,6 +176,23 @@ pub fn prefetch_region_file(path: String) -> Result<u64, MotoError> {
     Ok(moto_core::region::prefetch(path)?)
 }
 
+/// One timed step of opening a region (see `profile_region_open`).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct OpenStep {
+    pub name: String,
+    pub ms: f64,
+}
+
+/// Opens and validates a region file like `Engine.open`, timing each
+/// step, to find what makes opening slow on a device.
+#[uniffi::export]
+pub fn profile_region_open(path: String) -> Result<Vec<OpenStep>, MotoError> {
+    Ok(moto_core::region::profile_open(path)?
+        .into_iter()
+        .map(|(name, ms)| OpenStep { name, ms })
+        .collect())
+}
+
 /// A loaded routing region. Thread-safe; share one instance per region.
 #[derive(Debug, uniffi::Object)]
 pub struct Engine {

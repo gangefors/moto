@@ -28,6 +28,7 @@ import se.gangefors.moto.core.RegionOffer
 import se.gangefors.moto.core.installRegion
 import se.gangefors.moto.core.parseRegionManifest
 import se.gangefors.moto.core.prefetchRegionFile
+import se.gangefors.moto.core.profileRegionOpen
 import se.gangefors.moto.core.regionManifestFileName
 
 /** Which region the app routes on, and where it came from. */
@@ -162,6 +163,23 @@ object Regions {
                 if (e is se.gangefors.moto.core.MotoException) part.delete()
                 _download.value = DownloadState.Failed(describe(app, e), offers)
             }
+        }
+    }
+
+    /**
+     * Debug: times the region check twice in a row on the downloaded
+     * region, step by step (a fast second run means the phone keeps the
+     * file cached). Lines to show; empty without a downloaded region. Call
+     * off the main thread.
+     */
+    fun profileOpen(context: Context): List<String> {
+        val file = installed(context.applicationContext)
+        if (!file.isFile) return emptyList()
+        return (1..2).flatMap { run ->
+            val steps = profileRegionOpen(file.path)
+            val total = steps.sumOf { it.ms }
+            listOf("Run $run: ${"%.2f".format(java.util.Locale.ROOT, total / 1000)} s") +
+                steps.map { "  ${it.name}: ${"%.2f".format(java.util.Locale.ROOT, it.ms / 1000)} s" }
         }
     }
 
