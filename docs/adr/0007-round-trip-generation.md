@@ -74,9 +74,11 @@ Option A trades the theoretical best loop for predictable, testable work: a fixe
 - The route cost gains a reuse term (an edge set per loop); one-way routes are unaffected.
 - The golden routes get round-trip cases (target, expected length band, reuse limit, loops returned), and the benchmark a round-trip metric.
 - Loop shapes are triangles; if rides show that too limiting, a quadrilateral pass can be added without API changes.
+- **Loops through given points (2026-09-28):** the same legs can run through points the rider chose instead of generated waypoints: `round_trip_via(start, stops, both_ways)` rides from the start through the stops in order and back, each leg avoiding the roads the earlier ones took (the reuse penalty, home zone and side-loop cut as above, sized by the rough length out to the farthest stop and back). For a two-way stretch it also tries the stops the other way round and returns both, best first. The app uses it to ride a favourite section from where the rider is (Sections → Loop through it: the section's two ends as the stops), shown in the route sheet. There is no length target: the stops set the size.
 
 ## Action Items
 
 - [x] Core: candidates, reuse penalty, size correction, scoring, variety filter; unit tests on fixtures; golden cases; benchmark metric. Done in dbc69a9: six golden loop cases; on the M0 region 157 ms mean, 340 ms p95 for 50 and 100 km loops with favourites.
 - [x] FFI + app: "Loop from here", target choice, flip between alternatives, GPX share. Done in acdfe2f.
+- [x] Loops through given points (`round_trip_via`), for riding a saved section from here.
 - [ ] Ride-check loops on the phone; bad loops become golden cases.
