@@ -17,7 +17,19 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    paths:
+      - "android/**"
+      - "core/**"
+      - ".github/**"
+      # Documentation alone has no code to scan; the weekly run covers the rest.
+      - "!**/*.md"
   pull_request:
+    paths:
+      - "android/**"
+      - "core/**"
+      - ".github/**"
+      # Documentation alone has no code to scan; the weekly run covers the rest.
+      - "!**/*.md"
   schedule:
     # Weekly, so new queries also look at code that hasn't changed.
     - cron: "17 4 * * 1"
