@@ -17,7 +17,7 @@ class DescriptionsTest {
     private fun place(name: String) = PlaceName(name, PlaceKind.TOWN, 500.0)
 
     private fun d(start: String?, end: String?, vararg roads: RoadLabel) =
-        Description(roads.toList(), start?.let(::place), end?.let(::place))
+        Description(roads.toList(), start?.let(::place), end?.let(::place), 0.0)
 
     @Test
     fun placesReadAsFromToOrNear() {

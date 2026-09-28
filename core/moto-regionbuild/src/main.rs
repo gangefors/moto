@@ -306,7 +306,11 @@ fn describe(path: &Path, points: &[String]) -> Result<(), String> {
     let d = engine
         .describe(&route.geometry)
         .map_err(|e| e.to_string())?;
-    println!("{:.1} km", route.distance_m / 1000.0);
+    println!(
+        "{:.1} km, {:.0} % curvy",
+        route.distance_m / 1000.0,
+        d.curvy_share * 100.0
+    );
     for road in &d.roads {
         println!(
             "road  {:>3.0} %  ref {:?}  name {:?}",

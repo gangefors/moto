@@ -79,9 +79,9 @@ fn off_the_roads_and_without_names_there_is_nothing_to_say() {
     let d = describe(&region(true), &[ll(55.69, 13.20), ll(55.69, 13.21)]).unwrap();
     assert!(d.roads.is_empty(), "{d:?}");
     assert_eq!(d.start.unwrap().name, "Lund");
-    // A file without names (format 1.1): an empty description.
+    // A file without names (format 1.1): no words, only curviness.
     let d = describe(&region(false), &[ll(55.70, 13.20), ll(55.70, 13.22)]).unwrap();
-    assert_eq!(d, Description::default());
+    assert_eq!(d, Description::default(), "straight roads: 0 curvy");
 }
 
 #[test]
@@ -143,4 +143,45 @@ fn hamlets_only_when_nothing_bigger_is_in_reach() {
     data.names.places.sort_by_key(|p| p.pos.lat);
     let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
     assert_eq!(nearest_place(&r, ll(55.70, 13.20)).unwrap().name, "Lund");
+}
+
+#[test]
+fn curviness_is_measured_like_a_routes() {
+    use crate::fixture::Road;
+    use crate::region::format::RoadClass;
+    // A zigzag secondary road with a bend every 50 m, then a straight one.
+    let via = (1..20)
+        .map(|i| {
+            (
+                55.70 + if i % 2 == 0 { 0.0 } else { 0.0003 },
+                13.20 + f64::from(i) * 0.0005,
+            )
+        })
+        .collect();
+    let zigzag = Road {
+        via,
+        ..Road::new(0, 1, RoadClass::Secondary, 70, 1)
+    };
+    let straight = Road::new(1, 2, RoadClass::Secondary, 70, 2);
+    let data = fixture::build(
+        &[(55.70, 13.20), (55.70, 13.21), (55.70, 13.22)],
+        &[zigzag, straight],
+        5_000,
+    );
+    let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+    let curvy = describe(&r, &[ll(55.7001, 13.2005), ll(55.7001, 13.2095)])
+        .unwrap()
+        .curvy_share;
+    let flat = describe(&r, &[ll(55.70, 13.2105), ll(55.70, 13.2195)])
+        .unwrap()
+        .curvy_share;
+    let both = describe(
+        &r,
+        &[ll(55.7001, 13.2005), ll(55.70, 13.21), ll(55.70, 13.2195)],
+    )
+    .unwrap()
+    .curvy_share;
+    assert!(curvy > 0.5, "{curvy}");
+    assert_eq!(flat, 0.0);
+    assert!(both > flat && both < curvy, "{both}");
 }

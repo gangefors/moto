@@ -44,6 +44,9 @@ pub struct Description {
     /// short line or a loop).
     pub start: Option<PlaceName>,
     pub end: Option<PlaceName>,
+    /// How curvy the roads under it are, 0–1, as a route's `curvy_share`
+    /// counts it. Known on every region file, names or not.
+    pub curvy_share: f64,
 }
 
 /// Most roads named for one line.
@@ -80,14 +83,53 @@ pub(crate) fn describe(region: &Region, line: &[LatLon]) -> Result<Description, 
     for p in line {
         p.validate()?;
     }
+    let under = roads_under(region, line);
+    let curvy_share = curvy_share(region, &under);
     if !region.has_names() {
-        return Ok(Description::default());
+        return Ok(Description {
+            curvy_share,
+            ..Description::default()
+        });
     }
     Ok(Description {
-        roads: roads(region, line),
+        roads: roads(region, &under),
         start: nearest_place(region, line[0]),
         end: nearest_place(region, line[line.len() - 1]),
+        curvy_share,
     })
+}
+
+/// The edge under each sample of `line` (`None` where it is off the
+/// roads).
+fn roads_under(region: &Region, line: &[LatLon]) -> Vec<Option<u32>> {
+    samples(line)
+        .into_iter()
+        .map(|p| {
+            crate::snap::snap(region, p, SNAP_M)
+                .ok()
+                .map(|at| at.edge)
+                .filter(|&e| (e as usize) < region.edge_count())
+        })
+        .collect()
+}
+
+/// The curviness of the edges under the samples, averaged over all of
+/// them (a sample off the roads counts as straight).
+fn curvy_share(region: &Region, under: &[Option<u32>]) -> f64 {
+    if under.is_empty() {
+        return 0.0;
+    }
+    let sum: f64 = under
+        .iter()
+        .flatten()
+        .filter_map(|&id| {
+            let e = region.edges().get(id as usize)?;
+            let m = region.curvature().get(id as usize)?;
+            let length_m = f64::from(e.length_dm) / 10.0;
+            Some(crate::scoring::PARAMS.curviness(m, e.class, e.speed_kmh, e.flags, length_m))
+        })
+        .sum();
+    (sum / under.len() as f64).clamp(0.0, 1.0)
 }
 
 /// Points spread evenly along `line`, each standing for the same length.
@@ -121,18 +163,18 @@ fn samples(line: &[LatLon]) -> Vec<LatLon> {
 /// its share of the line, and the shares of the names along it.
 type Found = (u32, u32, f64, Vec<(u32, f64)>);
 
-/// The roads `line` runs on most. A numbered road is one road whatever
-/// its streets are called along the way (a road through a town).
-fn roads(region: &Region, line: &[LatLon]) -> Vec<RoadLabel> {
-    let points = samples(line);
-    let each = 1.0 / points.len() as f64;
+/// The roads the samples lie on most (`under`, see [`roads_under`]). A
+/// numbered road is one road whatever its streets are called along the
+/// way (a road through a town).
+fn roads(region: &Region, under: &[Option<u32>]) -> Vec<RoadLabel> {
+    if under.is_empty() {
+        return Vec::new();
+    }
+    let each = 1.0 / under.len() as f64;
     // Per road (by number, else by name): its share, and its names' shares.
     let mut found: Vec<Found> = Vec::new();
-    for p in points {
-        let Ok(at) = crate::snap::snap(region, p, SNAP_M) else {
-            continue;
-        };
-        let Some(edge) = region.edges().get(at.edge as usize) else {
+    for &id in under.iter().flatten() {
+        let Some(edge) = region.edges().get(id as usize) else {
             continue;
         };
         let g = region.geometry_name(edge.geometry);
