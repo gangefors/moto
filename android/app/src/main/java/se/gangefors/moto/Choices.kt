@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +53,20 @@ fun OptionHeading(text: String, info: String? = null, modifier: Modifier = Modif
         )
         info?.let { InfoButton(text, it) }
     }
+}
+
+/** A group's name on a settings-like page, in the accent colour as
+ * Android's own settings show them, with a divider above all but the
+ * [first]. */
+@Composable
+fun SettingsGroup(title: String, first: Boolean = false) {
+    if (!first) HorizontalDivider(Modifier.padding(top = 24.dp))
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = if (first) 8.dp else 16.dp, bottom = 4.dp),
+    )
 }
 
 /**

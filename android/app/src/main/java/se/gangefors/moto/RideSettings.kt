@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Switch
@@ -53,7 +52,7 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
     FullPage(stringResource(R.string.ride_settings_title), onBack = onDismiss) {
         val scroll = rememberScrollState()
         Column(Modifier.scrollHints(scroll).verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 8.dp)) {
-            Group(stringResource(R.string.settings_group_routing), first = true)
+            SettingsGroup(stringResource(R.string.settings_group_routing), first = true)
             Heading(stringResource(R.string.routing_gravel), stringResource(R.string.routing_gravel_hint))
             GravelChips(settings.gravel) { onChange(settings.copy(gravel = it)) }
             val loopTitle = stringResource(R.string.settings_loop_length)
@@ -68,11 +67,11 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                 )
             }
 
-            Group(stringResource(R.string.settings_group_map))
+            SettingsGroup(stringResource(R.string.settings_group_map))
             Heading(stringResource(R.string.locate_zooms), stringResource(R.string.locate_zooms_hint))
             ZoomRange(settings.zooms) { onChange(settings.copy(zooms = it)) }
 
-            Group(stringResource(R.string.settings_group_recording))
+            SettingsGroup(stringResource(R.string.settings_group_recording))
             // The whole row toggles, not just the switch: easier with gloves.
             Row(
                 Modifier
@@ -92,19 +91,6 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
             }
         }
     }
-}
-
-/** A group's name, in the accent colour as Android's settings show them,
- * with a divider above all but the [first]. */
-@Composable
-private fun Group(title: String, first: Boolean = false) {
-    if (!first) HorizontalDivider(Modifier.padding(top = 24.dp))
-    Text(
-        title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = if (first) 8.dp else 16.dp, bottom = 4.dp),
-    )
 }
 
 /** A setting's name with an (i) after it that explains it. */

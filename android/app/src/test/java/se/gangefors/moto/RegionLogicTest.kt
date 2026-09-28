@@ -81,4 +81,21 @@ class RegionLogicTest {
             openRegion<String>("stale", fast) { error("corrupt") }
         }
     }
+
+    @Test
+    fun offerRowsOfferTheRightAction() {
+        assertEquals(OfferAction.DOWNLOAD, offerAction(null, null, "sweden", 200))
+        assertEquals(OfferAction.DOWNLOAD, offerAction("skane", 300, "sweden", 200))
+        assertEquals(OfferAction.UPDATE, offerAction("sweden", 100, "sweden", 200))
+        assertEquals(OfferAction.INSTALLED, offerAction("sweden", 200, "sweden", 200))
+        assertEquals(OfferAction.INSTALLED, offerAction("sweden", 300, "sweden", 200))
+    }
+
+    @Test
+    fun downloadShareStaysInRange() {
+        assertEquals(0.5f, downloadShare(50, 100))
+        assertEquals(1f, downloadShare(150, 100))
+        assertEquals(0f, downloadShare(-5, 100))
+        assertEquals(0f, downloadShare(10, 0))
+    }
 }
