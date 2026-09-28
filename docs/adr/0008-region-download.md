@@ -79,5 +79,5 @@ B keeps the APK small and the map fresh at no cost, and every check that protect
 - [x] Core: manifest parsing (`region::install::parse_manifest`) and `install_region` with tests, including corrupt and oversized input; FFI (`parse_region_manifest`, `install_region`).
 - [x] App: My data → Map region: installed region and date, Download / Update with progress and stop, resume, free-space check, a bin to remove it; use the installed region, else the bundled one (debug).
 - [x] Measure on the phone: done 2026-09-28 (Pixel 7): removing Sweden and downloading it again took about 18 s to a ready region (download, full check, install), open by fingerprint 0.24–0.95 s (ADR-0005), routes and loops in ADR-0001.
-- [ ] Before other riders: sign the manifest (above): core verification and `regionbuild --check-manifest`, the app fetching `regions-vN.manifest`, the workflow signing; the rider creates the key and the `regions` environment. Then stop publishing the unsigned `regions-vN.json`.
-- [ ] Release builds bundle no region.
+- [x] Before other riders: sign the manifest (above): core verification and `regionbuild --check-manifest`, the app fetching `regions-vN.manifest`, the workflow signing; the rider created the key and the `regions` environment (2026-09-28, c793d6a); a signed download checked on the phone; the unsigned `regions-vN.json` is no longer published.
+- [x] Release builds bundle no region (dc3abe8).
