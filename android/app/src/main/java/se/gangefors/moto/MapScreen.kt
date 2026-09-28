@@ -350,7 +350,11 @@ fun MapScreen() {
     var proposing by remember { mutableStateOf(false) }
     var savingDraft by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Section?>(null) }
-    var showRides by remember { mutableStateOf(false) }
+    // The menu, and the page it opened.
+    var menuOpen by remember { mutableStateOf(false) }
+    var dataPage by remember { mutableStateOf<DataPage?>(null) }
+    var showAbout by remember { mutableStateOf(false) }
+    var showDebug by remember { mutableStateOf(false) }
     // Ride settings, one tap from the map.
     var showSettings by remember { mutableStateOf(false) }
     // The length a new loop starts at (Ride settings).
@@ -383,7 +387,7 @@ fun MapScreen() {
         view.keepScreenOn = screenOn
         onDispose { view.keepScreenOn = false }
     }
-    // A saved ride the rider asked to see (My data > Rides > Show), to
+    // A saved ride the rider asked to see (Menu > Routes & rides > Show), to
     // mark sections along it; the ride being recorded takes its place.
     var shownRide by remember { mutableStateOf<ShownRide?>(null) }
     LaunchedEffect(overlays, recording, shownRide) {
@@ -750,7 +754,7 @@ fun MapScreen() {
     }
     // While a route or loop is shown, the sections fade so the route is the
     // one strong line (its favourite stretches glow; see RouteOverlay).
-    // A saved route the rider asked to see (My data > Saved routes > Show),
+    // A saved route the rider asked to see (Menu > Routes & rides > Show),
     // and a route or loop being saved (its name is asked first).
     var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
 
@@ -758,7 +762,7 @@ fun MapScreen() {
     // is on the map, untouched, and the zoom the map had on the rider
     // before it.
     var overviewShown by remember { mutableStateOf(false) }
-    // The location button's zoom levels (My data).
+    // The location button's zoom levels (Ride settings).
     var locateZooms by remember { mutableStateOf(RoutePrefs.locateZooms(context)) }
     var zoomBeforeOverview by remember { mutableStateOf<Double?>(null) }
 
@@ -1164,7 +1168,7 @@ fun MapScreen() {
         shareLine(r.geometry, routeGpxName(now, ZoneId.systemDefault(), r.distanceM / 1000.0), opts)
     }
 
-    /** Saves [r] (a loop when [isLoop]) as [name] in My data. */
+    /** Saves [r] (a loop when [isLoop]) as [name] in Routes & rides. */
     fun saveRoute(r: Route, isLoop: Boolean, name: String) {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
@@ -1207,7 +1211,7 @@ fun MapScreen() {
                 TopMapButton(
                     icon = R.drawable.ic_menu,
                     description = stringResource(R.string.menu_open),
-                    onClick = { showRides = true },
+                    onClick = { menuOpen = true },
                     modifier = Modifier.align(Alignment.TopStart),
                 )
             }
@@ -1622,7 +1626,24 @@ fun MapScreen() {
                 Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
             }
         }
+        // The menu, over everything on the map.
+        MenuDrawer(
+            open = menuOpen,
+            onClose = { menuOpen = false },
+            onPick = { topic ->
+                when (topic) {
+                    MenuTopic.LIBRARY -> dataPage = DataPage.LIBRARY
+                    MenuTopic.SECTIONS -> dataPage = DataPage.SECTIONS
+                    MenuTopic.REGION -> dataPage = DataPage.REGION
+                    MenuTopic.SETTINGS -> showSettings = true
+                    MenuTopic.ABOUT -> showAbout = true
+                    MenuTopic.DEBUG -> showDebug = true
+                }
+            },
+        )
     }
+    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+    if (showDebug) DebugTools.Page(onDismiss = { showDebug = false })
 
     // Rate and save the proposed section (its name is generated).
     val proposed = draft
@@ -1682,8 +1703,10 @@ fun MapScreen() {
 
     // Recorded rides: export as GPX or delete.
     val readyStore = store as? StoreState.Ready
-    if (showRides && readyStore != null) {
+    val page = dataPage
+    if (page != null && readyStore != null) {
         RidesSheet(
+            page = page,
             store = readyStore.store,
             engine = (region as? RegionState.Ready)?.engine,
             onSectionsChanged = {
@@ -1693,9 +1716,9 @@ fun MapScreen() {
                 }
             },
             onMessage = { message = it },
-            onDismiss = { showRides = false },
+            onDismiss = { dataPage = null },
             onShowRoute = { saved ->
-                showRides = false
+                dataPage = null
                 scope.launch {
                     val line = withContext(Dispatchers.IO) {
                         runCatching { readyStore.store.routeGeometry(saved.id) }.getOrNull()
@@ -1716,7 +1739,7 @@ fun MapScreen() {
                 }
             },
             onShow = { track ->
-                showRides = false
+                dataPage = null
                 scope.launch {
                     val points = withContext(Dispatchers.IO) {
                         runCatching { readyStore.store.trackPoints(track.id) }.getOrNull()

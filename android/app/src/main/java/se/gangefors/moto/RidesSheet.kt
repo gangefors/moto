@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,11 +24,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,24 +55,26 @@ import se.gangefors.moto.core.Track
 import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.exportExtension
 
+/** The topics of the menu that are pages of the rider's data. */
+enum class DataPage { LIBRARY, SECTIONS, REGION }
+
 /**
- * The rider's settings and data, in this order: what routes do with
- * gravel roads ([gravel], the same setting as on the route and loop
- * cards); Routes & rides, saved routes and recorded or imported rides in
- * one list, newest first, each shown on the map ([onShowRoute], [onShow]),
+ * A page of the rider's data, opened from the menu: [DataPage.LIBRARY],
+ * Routes & rides, saved routes and recorded or imported rides in one
+ * list, newest first, each shown on the map ([onShowRoute], [onShow]),
  * renamed, shared (to a nav app), saved as a GPX file or deleted (tapped
  * twice), and a ride also saved as a route to ride again, plus Import GPX
- * for rides; all saved sections, exported as GeoJSON (plain or
- * compressed) or imported from such a file ([engine] fits them to the
- * map, [onSectionsChanged] reloads them); and the map region. Files are
- * written and read only where the rider picks with the system file picker:
- * no storage permission, and nothing leaves the phone unless the rider
- * sends it. [onMessage] reports what happened. At the bottom, About and
- * licences opens [AboutDialog].
+ * for rides; [DataPage.SECTIONS], all saved sections exported as GeoJSON
+ * (plain or compressed) or imported from such a file ([engine] fits them
+ * to the map, [onSectionsChanged] reloads them); [DataPage.REGION], the
+ * map region. Files are written and read only where the rider picks with
+ * the system file picker: no storage permission, and nothing leaves the
+ * phone unless the rider sends it. [onMessage] reports what happened.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RidesSheet(
+    page: DataPage,
     store: SectionStore,
     engine: Engine?,
     onSectionsChanged: () -> Unit,
@@ -282,24 +279,25 @@ fun RidesSheet(
         }
     }
 
-    var showAbout by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
-        // One list that scrolls as a whole, so every part (the rides at the
-        // bottom too) can be reached however long the others get.
+    val title = stringResource(
+        when (page) {
+            DataPage.LIBRARY -> R.string.library_title
+            DataPage.SECTIONS -> R.string.sections_title
+            DataPage.REGION -> R.string.region_title
+        },
+    )
+    FullPage(title, onBack = onDismiss) {
         LazyColumn(
             Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
         ) {
-            item(key = "library-title") {
-                Column {
-                    Text(stringResource(R.string.library_title), style = MaterialTheme.typography.titleLarge)
-                    OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
-                        OneLine(stringResource(R.string.rides_import))
-                    }
+            if (page == DataPage.LIBRARY) item(key = "library-import") {
+                OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
+                    OneLine(stringResource(R.string.rides_import))
                 }
             }
             val library = libraryItems(routes, tracks)
-            when {
+            if (page == DataPage.LIBRARY) when {
                 library == null -> item(key = "library-loading") {
                     Text(stringResource(R.string.rides_loading), Modifier.padding(vertical = 16.dp))
                 }
@@ -310,10 +308,13 @@ fun RidesSheet(
                     LibraryRow(item, zone, confirmDelete == item.key, actions)
                 }
             }
-            item(key = "sections") {
+            if (page == DataPage.SECTIONS) item(key = "sections") {
                 Column {
-                    Spacer(Modifier.height(24.dp))
-                    Text(stringResource(R.string.sections_title), style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        stringResource(R.string.sections_page_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -341,22 +342,9 @@ fun RidesSheet(
                     }
                 }
             }
-            item(key = "region") {
-                Column {
-                    Spacer(Modifier.height(24.dp))
-                    RegionSection()
-                }
-            }
-            item(key = "about") {
-                TextButton(
-                    onClick = { showAbout = true },
-                    modifier = Modifier.padding(top = 16.dp),
-                ) { OneLine(stringResource(R.string.about_open)) }
-            }
-            item(key = "debug") { DebugTools.MenuEntry() }
+            if (page == DataPage.REGION) item(key = "region") { RegionSection() }
         }
     }
-    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
     renaming?.let { item ->
         RouteNameDialog(
             title = stringResource(

@@ -4,7 +4,6 @@
 package se.gangefors.moto.debug
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.LoopOptions
@@ -44,5 +43,8 @@ object DebugTools {
     fun <T> query(kind: String, block: () -> T): T = block()
 
     @Composable
-    fun MenuEntry(modifier: Modifier = Modifier) = Unit
+    fun MenuEntry(onOpen: () -> Unit) = Unit
+
+    @Composable
+    fun Page(onDismiss: () -> Unit) = Unit
 }

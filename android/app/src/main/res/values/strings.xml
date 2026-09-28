@@ -8,7 +8,7 @@
     <string name="my_location">My location</string>
     <string name="snap_error">Snap failed: %1$s</string>
     <string name="region_loading">Loading the region…</string>
-    <string name="region_missing">No map region yet: download one in My data</string>
+    <string name="region_missing">No map region yet: download one from the menu, Map region</string>
     <string name="busy_routes">Finding routes…</string>
     <string name="busy_loops">Finding loops…</string>
     <string name="busy_section">Finding the road…</string>
@@ -134,7 +134,7 @@
         <item quantity="other">Clear %1$d waypoints</item>
     </plurals>
     <string name="route_save">Save…</string>
-    <string name="route_save_title">Save to My data</string>
+    <string name="route_save_title">Save to Routes &amp; rides</string>
     <string name="route_name">Name</string>
     <string name="route_saved">Saved as “%1$s”</string>
     <string name="route_save_failed">Saving failed: %1$s</string>
@@ -164,7 +164,6 @@
     <string name="gravel_avoid">Avoid</string>
     <string name="gravel_allow">Allow</string>
     <string name="gravel_prefer">Prefer</string>
-    <string name="routing_title">Routing</string>
     <string name="routing_gravel">Gravel roads</string>
     <string name="routing_gravel_hint">Avoid keeps routes off gravel and other unpaved roads where it can, and hides your sections that are mostly gravel. Prefer seeks them out, within the extra time you give a route. Gravel on your sections has a dashed centre line.</string>
     <string name="route_share_title">Open the route in</string>
@@ -212,8 +211,9 @@
     <string name="recording_failed">Recording stopped: %1$s</string>
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
-    <string name="rides_open">My data</string>
     <string name="menu_open">Menu</string>
+    <string name="sections_page_hint">Your saved sections, as a file to keep or move to another phone. Importing adds the file’s sections to yours.</string>
+    <string name="menu_settings">Settings</string>
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>
     <string name="settings_back">Back</string>

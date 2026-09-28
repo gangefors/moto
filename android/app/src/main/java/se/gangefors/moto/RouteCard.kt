@@ -622,7 +622,7 @@ private fun gravelSummary(g: Gravel): String = stringResource(
     },
 )
 
-/** The gravel choice (the same setting as in My data: changing it here
+/** The gravel choice (the same setting as in Ride settings: changing it here
  * routes again, to see what gravel roads change). */
 @Composable
 private fun GravelChoice(gravel: Gravel, onGravel: (Gravel) -> Unit) {

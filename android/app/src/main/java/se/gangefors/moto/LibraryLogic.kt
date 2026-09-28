@@ -7,7 +7,7 @@ import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.Track
 
 /**
- * One entry of My data → Routes & rides: a saved route (planned, to ride
+ * One entry of Menu → Routes & rides: a saved route (planned, to ride
  * again) or a ride (recorded or imported). They are stored apart (a ride
  * keeps every GPS fix; a route only its line) but listed and handled
  * alike.
