@@ -63,6 +63,7 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                     { onChange(settings.copy(loopLength = it)) },
                     info = { InfoButton(loopTitle, stringResource(R.string.settings_loop_length_hint)) },
                     titleStyle = MaterialTheme.typography.titleMedium,
+                    titleColor = MaterialTheme.colorScheme.onSurface,
                     titleAlone = true,
                 )
             }

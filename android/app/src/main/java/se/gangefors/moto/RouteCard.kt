@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -488,7 +489,8 @@ private fun ChoiceSwitcher(
             }
         }
         if (onShuffle != null) {
-            FilledTonalButton(onClick = onShuffle, enabled = found || failed) {
+            // As tall as the switcher beside it.
+            FilledTonalButton(onClick = onShuffle, enabled = found || failed, modifier = Modifier.heightIn(min = 48.dp)) {
                 Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 OneLine(stringResource(R.string.loop_shuffle))
@@ -687,9 +689,11 @@ private fun ArriveByDialog(initial: Long?, zone: ZoneId, onDismiss: () -> Unit, 
  * go, so the route is found again only then. [dimmed] shows the value as
  * not in use (e.g. while an arrival time is set). Steps for which [mark]
  * is true get their [label] on a scale under the slider, in place of a
- * dot for every step. [titleStyle] suits a sheet by default; a settings
- * page passes its headings' style, and [titleAlone] to put the title on
- * a line of its own, the value and [trailing] below it.
+ * dot for every step. The title looks like the sheet's other option
+ * headings by default; a settings page passes its headings' [titleStyle]
+ * and [titleColor], and [titleAlone] to put the title on a line of its
+ * own, [trailing] and the value below it. [trailing] comes before the
+ * value, so it stays put while the value changes.
  */
 @Composable
 fun <T> StepSlider(
@@ -701,32 +705,34 @@ fun <T> StepSlider(
     dimmed: Boolean = false,
     mark: (T) -> Boolean = { false },
     titleExtra: @Composable () -> Unit = {},
-    titleStyle: TextStyle = MaterialTheme.typography.labelMedium,
+    titleStyle: TextStyle = MaterialTheme.typography.labelLarge,
+    titleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     titleAlone: Boolean = false,
     trailing: @Composable () -> Unit = {},
 ) {
     val start = steps.indexOf(value).coerceAtLeast(0)
     var position by remember(steps, value) { mutableFloatStateOf(start.toFloat()) }
     val at = steps[position.roundToInt().coerceIn(0, steps.lastIndex)]
-    Column(Modifier.padding(top = 4.dp, end = 8.dp)) {
+    Column(Modifier.padding(top = if (titleAlone) 0.dp else 12.dp, end = 8.dp)) {
         val titleRow = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = titleStyle)
+                Text(title, style = titleStyle, color = titleColor)
                 titleExtra()
             }
         }
         if (titleAlone) titleRow()
+        // The chips before the value, so they stay put while it changes.
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             if (!titleAlone) titleRow()
+            trailing()
             Text(
                 label(at),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
             )
-            trailing()
         }
         Slider(
             value = position,
@@ -790,7 +796,8 @@ fun LoopLengthSlider(
     choice: LoopChoice,
     onChoice: (LoopChoice) -> Unit,
     info: @Composable () -> Unit = {},
-    titleStyle: TextStyle = MaterialTheme.typography.labelMedium,
+    titleStyle: TextStyle = MaterialTheme.typography.labelLarge,
+    titleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     titleAlone: Boolean = false,
 ) {
     StepSlider(
@@ -802,6 +809,7 @@ fun LoopLengthSlider(
         mark = ::isLoopMark,
         titleExtra = info,
         titleStyle = titleStyle,
+        titleColor = titleColor,
         titleAlone = titleAlone,
     ) {
         val hours = choice is LoopChoice.Minutes
@@ -827,10 +835,13 @@ fun loopLengthText(c: LoopChoice): String = when (c) {
 
 /** A riding time as text: "2 h 50 min", "3 h" or "45 min". */
 @Composable
-fun durationText(minutes: Int): String = when {
-    minutes < 60 -> stringResource(R.string.loop_minutes, minutes)
-    minutes % 60 == 0 -> stringResource(R.string.loop_hours, minutes / 60)
-    else -> stringResource(R.string.loop_hours_minutes, minutes / 60, minutes % 60)
+fun durationText(minutes: Int): String = durationText(LocalResources.current, minutes)
+
+/** [durationText] outside composition. */
+fun durationText(res: android.content.res.Resources, minutes: Int): String = when {
+    minutes < 60 -> res.getString(R.string.loop_minutes, minutes.coerceAtLeast(0))
+    minutes % 60 == 0 -> res.getString(R.string.loop_hours, minutes / 60)
+    else -> res.getString(R.string.loop_hours_minutes, minutes / 60, minutes % 60)
 }
 
 /** [text] with its spaces kept from breaking ("2 h 50 min" on one line). */
