@@ -688,7 +688,8 @@ private fun ArriveByDialog(initial: Long?, zone: ZoneId, onDismiss: () -> Unit, 
  * not in use (e.g. while an arrival time is set). Steps for which [mark]
  * is true get their [label] on a scale under the slider, in place of a
  * dot for every step. [titleStyle] suits a sheet by default; a settings
- * page passes its headings' style.
+ * page passes its headings' style, and [titleAlone] to put the title on
+ * a line of its own, the value and [trailing] below it.
  */
 @Composable
 fun <T> StepSlider(
@@ -701,20 +702,25 @@ fun <T> StepSlider(
     mark: (T) -> Boolean = { false },
     titleExtra: @Composable () -> Unit = {},
     titleStyle: TextStyle = MaterialTheme.typography.labelMedium,
+    titleAlone: Boolean = false,
     trailing: @Composable () -> Unit = {},
 ) {
     val start = steps.indexOf(value).coerceAtLeast(0)
     var position by remember(steps, value) { mutableFloatStateOf(start.toFloat()) }
     val at = steps[position.roundToInt().coerceIn(0, steps.lastIndex)]
     Column(Modifier.padding(top = 4.dp, end = 8.dp)) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
+        val titleRow = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = titleStyle)
                 titleExtra()
             }
+        }
+        if (titleAlone) titleRow()
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (!titleAlone) titleRow()
             Text(
                 label(at),
                 style = MaterialTheme.typography.titleSmall,
@@ -785,6 +791,7 @@ fun LoopLengthSlider(
     onChoice: (LoopChoice) -> Unit,
     info: @Composable () -> Unit = {},
     titleStyle: TextStyle = MaterialTheme.typography.labelMedium,
+    titleAlone: Boolean = false,
 ) {
     StepSlider(
         title = title,
@@ -795,6 +802,7 @@ fun LoopLengthSlider(
         mark = ::isLoopMark,
         titleExtra = info,
         titleStyle = titleStyle,
+        titleAlone = titleAlone,
     ) {
         val hours = choice is LoopChoice.Minutes
         FilterChip(

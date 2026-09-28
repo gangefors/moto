@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RangeSlider
@@ -65,6 +64,7 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                     { onChange(settings.copy(loopLength = it)) },
                     info = { InfoButton(loopTitle, stringResource(R.string.settings_loop_length_hint)) },
                     titleStyle = MaterialTheme.typography.titleMedium,
+                    titleAlone = true,
                 )
             }
 
@@ -118,23 +118,25 @@ private fun Heading(title: String, info: String) {
 
 /**
  * The location button's two zooms as one range slider (Material's control
- * for a low and a high value): the left thumb is the area, the right one
- * close by. Each shows as how wide the map is on this screen, not as a
- * zoom number. The zooms are saved when a thumb is let go.
+ * for a low and a high value), laid out by how much the map shows: the
+ * left thumb is close by, the right one the area, wider to the right
+ * (lower zooms, so the slider runs over [flipZoom]ed values). Each shows
+ * as how wide the map is on this screen, not as a zoom number. The zooms
+ * are saved when a thumb is let go.
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ZoomRange(zooms: LocateZooms, onZooms: (LocateZooms) -> Unit) {
-    var range by remember(zooms) { mutableStateOf(zooms.area.toFloat()..zooms.close.toFloat()) }
+    var range by remember(zooms) { mutableStateOf(flipZoom(zooms.close.toFloat())..flipZoom(zooms.area.toFloat())) }
     val shown = zoomsFromRange(range.start, range.endInclusive) ?: zooms
     val widthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toDouble() }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_area), spanText(shown.area, widthDp))),
+            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_close), spanText(shown.close, widthDp))),
             style = MaterialTheme.typography.titleSmall,
         )
         Text(
-            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_close), spanText(shown.close, widthDp))),
+            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_area), spanText(shown.area, widthDp))),
             style = MaterialTheme.typography.titleSmall,
         )
     }
@@ -149,7 +151,7 @@ private fun ZoomRange(zooms: LocateZooms, onZooms: (LocateZooms) -> Unit) {
         steps = MAX_ZOOM - MIN_ZOOM - 1,
     )
     SliderScale(
-        listOf(stringResource(R.string.locate_zoom_wider), stringResource(R.string.locate_zoom_closer)),
+        listOf(stringResource(R.string.locate_zoom_closer), stringResource(R.string.locate_zoom_wider)),
         listOf(0f, 1f),
     )
 }

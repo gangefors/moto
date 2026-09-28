@@ -66,11 +66,15 @@ class LocateLogicTest {
 
     @Test
     fun rangeSliderGivesZooms() {
-        assertEquals(LocateZooms(10, 14), zoomsFromRange(10.2f, 13.8f))
-        assertEquals(LocateZooms(MIN_ZOOM, MAX_ZOOM), zoomsFromRange(2f, 30f))
+        // Close by on the left, the area (wider) on the right.
+        assertEquals(LocateZooms(10, 14), zoomsFromRange(flipZoom(14f) + 0.2f, flipZoom(10f) - 0.2f))
+        assertEquals(LocateZooms(MIN_ZOOM, MAX_ZOOM), zoomsFromRange(-5f, 40f))
         // Thumbs meeting or crossing: no change.
         assertNull(zoomsFromRange(12f, 12.3f))
         assertNull(zoomsFromRange(14f, 11f))
+        // The flip is its own inverse.
+        assertEquals(10f, flipZoom(flipZoom(10f)))
+        assertEquals(MIN_ZOOM.toFloat(), flipZoom(MAX_ZOOM.toFloat()))
     }
 
     @Test
