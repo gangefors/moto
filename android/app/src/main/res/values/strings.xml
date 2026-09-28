@@ -165,7 +165,7 @@
     <string name="gravel_allow">Allow</string>
     <string name="gravel_prefer">Prefer</string>
     <string name="routing_gravel">Gravel roads</string>
-    <string name="routing_gravel_hint">Avoid keeps routes off gravel and other unpaved roads where it can, and hides your sections that are mostly gravel. Prefer seeks them out, within the extra time you give a route. Gravel on your sections has a dashed centre line.</string>
+    <string name="routing_gravel_hint">Avoid: stay off unpaved roads where possible and hide your mostly-gravel sections. Prefer: seek them out within a route’s extra time. Gravel shows as a dashed centre line.</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
@@ -213,7 +213,6 @@
     <string name="recording_no_store">the ride database can’t be opened</string>
     <string name="menu_open">Menu</string>
     <string name="sections_page_hint">Your saved sections, as a file to keep or move to another phone. Importing adds the file’s sections to yours.</string>
-    <string name="menu_settings">Settings</string>
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>
     <string name="settings_back">Back</string>
