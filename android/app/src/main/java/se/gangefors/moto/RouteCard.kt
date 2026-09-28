@@ -286,7 +286,19 @@ private fun RouteCardDetails(
             TextButton(onClick = onAddVia, enabled = viaCount < MAX_VIA_POINTS) {
                 OneLine(stringResource(R.string.route_add_via))
             }
-            if (viaCount > 0) {
+            if (viaCount > 1) {
+                // Several go at once: a second tap confirms, like every bin
+                // that deletes more than one thing.
+                var confirming by remember(viaCount) { mutableStateOf(false) }
+                DeleteButton(
+                    confirming = confirming,
+                    onArm = { confirming = true },
+                    onDelete = {
+                        confirming = false
+                        onClearVia()
+                    },
+                )
+            } else if (viaCount == 1) {
                 IconButton(
                     onClick = onClearVia,
                     colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
