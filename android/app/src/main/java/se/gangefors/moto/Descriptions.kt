@@ -6,6 +6,7 @@ package se.gangefors.moto
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import se.gangefors.moto.core.Description
+import se.gangefors.moto.core.LatLon
 
 /*
  * Sections, routes and rides in words the rider recognises, from the
@@ -73,4 +74,56 @@ fun roadText(d: Description?): String? = roadWords(d)
 fun roadText(number: String?, name: String?): String {
     val n = number?.let { if (isPlainRoadNumber(it)) stringResource(R.string.road_number, it) else it }
     return listOfNotNull(n, name).joinToString(" · ")
+}
+
+/** What to call a saved route or loop, from where it runs. */
+sealed interface PlanName {
+    /** A route between two places: "Lund → Höör". */
+    data class Between(val from: String, val to: String) : PlanName
+
+    /** A loop from a place out to another: "Loop from Lund via Höör". */
+    data class LoopVia(val from: String, val via: String) : PlanName
+
+    /** A loop that stays by its start: "Loop from Lund". */
+    data class LoopFrom(val from: String) : PlanName
+
+    /** A route without places at both ends, along a road: "Along Road 13". */
+    data class Along(val road: RoadWords) : PlanName
+}
+
+/**
+ * A name for a route or loop ([isLoop]) described as [d]; for a loop,
+ * [farthest] describes the point farthest from its start (the place it
+ * goes out to). Null when there is nothing to name it by.
+ */
+fun planName(isLoop: Boolean, d: Description?, farthest: Description?): PlanName? {
+    val from = d?.start?.name
+    if (isLoop) {
+        from ?: return null
+        val via = farthest?.start?.name
+        return if (via != null && via != from) PlanName.LoopVia(from, via) else PlanName.LoopFrom(from)
+    }
+    val to = d?.end?.name
+    if (from != null && to != null && from != to) return PlanName.Between(from, to)
+    return roadWords(d).firstOrNull()?.let { PlanName.Along(it) }
+}
+
+/** The point of [line] farthest from its first, or null for an empty line. */
+fun farthestPoint(line: List<LatLon>): LatLon? {
+    val start = line.firstOrNull() ?: return null
+    return line.maxByOrNull { approxDistanceM(start, it) }
+}
+
+/** [name] in words. */
+fun planNameText(res: android.content.res.Resources, name: PlanName): String = when (name) {
+    is PlanName.Between -> res.getString(R.string.place_between, name.from, name.to)
+    is PlanName.LoopVia -> res.getString(R.string.loop_name_via, name.from, name.via)
+    is PlanName.LoopFrom -> res.getString(R.string.loop_name_from, name.from)
+    is PlanName.Along -> res.getString(
+        R.string.route_name_along,
+        listOfNotNull(
+            name.road.number?.let { if (isPlainRoadNumber(it)) res.getString(R.string.road_number, it) else it },
+            name.road.name,
+        ).joinToString(" · "),
+    )
 }

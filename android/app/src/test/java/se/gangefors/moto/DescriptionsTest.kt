@@ -51,4 +51,30 @@ class DescriptionsTest {
         assertFalse(isPlainRoadNumber("E22"))
         assertFalse(isPlainRoadNumber(""))
     }
+
+    @Test
+    fun routesAndLoopsAreNamedByTheirPlaces() {
+        val road = RoadLabel("13", "Storgatan", 0.8)
+        assertEquals(PlanName.Between("Lund", "Höör"), planName(false, d("Lund", "Höör"), null))
+        // Same place at both ends, or none: by its road.
+        assertEquals(PlanName.Along(RoadWords("13", "Storgatan")), planName(false, d("Lund", "Lund", road), null))
+        assertNull(planName(false, d(null, null), null))
+        // Loops: from the start, via the place farthest out.
+        assertEquals(PlanName.LoopVia("Lund", "Höör"), planName(true, d("Lund", "Lund"), d("Höör", "Höör")))
+        assertEquals(PlanName.LoopFrom("Lund"), planName(true, d("Lund", "Lund"), d("Lund", "Lund")))
+        assertEquals(PlanName.LoopFrom("Lund"), planName(true, d("Lund", "Lund"), null))
+        assertNull(planName(true, d(null, null), d("Höör", "Höör")))
+    }
+
+    @Test
+    fun theFarthestPointOfALoop() {
+        val line = listOf(
+            se.gangefors.moto.core.LatLon(55.70, 13.20),
+            se.gangefors.moto.core.LatLon(55.80, 13.30),
+            se.gangefors.moto.core.LatLon(55.75, 13.25),
+            se.gangefors.moto.core.LatLon(55.70, 13.20),
+        )
+        assertEquals(line[1], farthestPoint(line))
+        assertNull(farthestPoint(emptyList()))
+    }
 }

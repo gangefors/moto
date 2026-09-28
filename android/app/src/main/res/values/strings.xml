@@ -72,6 +72,9 @@
     <string name="road_number">Road %1$s</string>
     <string name="place_between">%1$s → %2$s</string>
     <string name="place_near">Near %1$s</string>
+    <string name="loop_name_via">Loop from %1$s via %2$s</string>
+    <string name="loop_name_from">Loop from %1$s</string>
+    <string name="route_name_along">Along %1$s</string>
     <string name="road_speed">about %1$d km/h</string>
     <string name="road_straight">Straight</string>
     <string name="road_gentle">Gentle bends (%1$d%%)</string>
