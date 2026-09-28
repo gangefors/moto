@@ -470,6 +470,8 @@ fun MapScreen() {
         marking = false
         draft = null
         savingDraft = false
+        // The marking steps ("10 km. Tap near an end…") end with it.
+        message = null
         showDraft()
     }
 

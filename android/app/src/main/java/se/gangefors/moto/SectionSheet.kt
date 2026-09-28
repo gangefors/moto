@@ -88,13 +88,6 @@ fun SectionSheet(
                     }
                     Switch(checked = oneWay, onCheckedChange = { oneWay = it })
                 }
-                if (confirmDelete) {
-                    Text(
-                        stringResource(R.string.section_delete_confirm),
-                        color = DELETE_COLOR,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (onDelete != null) {
                         DeleteButton(
