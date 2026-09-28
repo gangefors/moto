@@ -167,6 +167,15 @@ pub fn verify_region_file(path: String) -> Result<(), MotoError> {
     Ok(moto_core::region::verify_file(path)?)
 }
 
+/// Reads a region file once, start to end in large pieces and in parts
+/// at the same time, so opening it afterwards finds it cached; on a phone
+/// this is much faster than the page-by-page reads opening does on a cold
+/// file. Returns the bytes read.
+#[uniffi::export]
+pub fn prefetch_region_file(path: String) -> Result<u64, MotoError> {
+    Ok(moto_core::region::prefetch(path)?)
+}
+
 /// A loaded routing region. Thread-safe; share one instance per region.
 #[derive(Debug, uniffi::Object)]
 pub struct Engine {
@@ -499,6 +508,7 @@ mod tests {
     fn opens_verifies_and_describes_a_region() {
         let file = fixture_file("info");
         verify_region_file(file.path()).unwrap();
+        assert!(prefetch_region_file(file.path()).unwrap() > 0);
         let engine = Engine::open(file.path()).unwrap();
         let info = engine.info();
         assert_eq!((info.south_west.lat, info.south_west.lon), (55.695, 13.195));
