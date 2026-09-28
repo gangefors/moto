@@ -12,8 +12,8 @@ class LocateLogicTest {
     @Test
     fun awayFromTheRiderATapFollowsAndFixesOnlyAFarOffZoom() {
         // Europe in view, or single houses: to the neighbourhood.
-        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ELSEWHERE, 5.0, false, null))
-        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ELSEWHERE, 18.0, true, null))
+        assertEquals(LocateAction.Follow(10.0), onLocateTap(LocateView.ELSEWHERE, 5.0, false, null))
+        assertEquals(LocateAction.Follow(10.0), onLocateTap(LocateView.ELSEWHERE, 18.0, true, null))
         // A sensible zoom is kept.
         assertEquals(LocateAction.Follow(null), onLocateTap(LocateView.ELSEWHERE, 12.5, true, null))
     }
@@ -22,10 +22,14 @@ class LocateLogicTest {
     fun onTheRiderATapSwitchesAreaAndCloseByWithNothingPlanned() {
         // Each tap on the rider switches, however the map got there (the
         // taps that "did nothing" on the phone).
-        assertEquals(LocateAction.Follow(CLOSE_ZOOM), onLocateTap(LocateView.ON_RIDER, AREA_ZOOM, false, null))
-        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ON_RIDER, CLOSE_ZOOM, false, null))
-        assertEquals(LocateAction.Follow(CLOSE_ZOOM), onLocateTap(LocateView.ON_RIDER, 9.0, false, null))
-        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ON_RIDER, 16.0, false, null))
+        assertEquals(LocateAction.Follow(14.0), onLocateTap(LocateView.ON_RIDER, 10.0, false, null))
+        assertEquals(LocateAction.Follow(10.0), onLocateTap(LocateView.ON_RIDER, 14.0, false, null))
+        assertEquals(LocateAction.Follow(14.0), onLocateTap(LocateView.ON_RIDER, 9.0, false, null))
+        assertEquals(LocateAction.Follow(10.0), onLocateTap(LocateView.ON_RIDER, 16.0, false, null))
+        // The rider's own zooms.
+        val mine = LocateZooms(area = 9, close = 15)
+        assertEquals(LocateAction.Follow(15.0), onLocateTap(LocateView.ON_RIDER, 9.0, false, null, mine))
+        assertEquals(LocateAction.Follow(9.0), onLocateTap(LocateView.ELSEWHERE, 3.0, false, null, mine))
     }
 
     @Test
@@ -47,5 +51,15 @@ class LocateLogicTest {
         // Zoom 11 on a 400 dp map in Skåne: about 8.6 km across.
         assertEquals(8_615.0, spanAtZoom(11.0, 400.0, 55.7), 10.0)
         assertEquals(spanAtZoom(11.0, 400.0, 55.7) / 2, spanAtZoom(12.0, 400.0, 55.7), 1e-6)
+    }
+
+    @Test
+    fun zoomSettingsStaySensible() {
+        assertEquals(LocateZooms(10, 14), LocateZooms.of(null, null))
+        assertEquals(LocateZooms(9, 15), LocateZooms.of(9, 15))
+        // Close always at least a step closer than the area, both in range.
+        assertEquals(LocateZooms(12, 13), LocateZooms.of(12, 11))
+        assertEquals(LocateZooms(MIN_ZOOM, MIN_ZOOM + 1), LocateZooms.of(1, 2))
+        assertEquals(LocateZooms(MAX_ZOOM - 1, MAX_ZOOM), LocateZooms.of(40, 50))
     }
 }

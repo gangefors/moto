@@ -14,6 +14,10 @@
     <string name="busy_section">Finding the road…</string>
     <string name="busy_sections">Fitting your sections to the map…</string>
     <string name="busy_region">Checking and installing the map region…</string>
+    <string name="locate_zooms">Location button zoom</string>
+    <string name="locate_zoom_area">Area</string>
+    <string name="locate_zoom_close">Close by</string>
+    <string name="locate_zooms_hint">The app starts at the area zoom; tapping the location button on your position switches between the two. Higher is closer.</string>
     <string name="region_title">Map region</string>
     <string name="region_installed">%1$s · map data from %2$s</string>
     <string name="region_bundled">Built-in test region (Skåne)</string>

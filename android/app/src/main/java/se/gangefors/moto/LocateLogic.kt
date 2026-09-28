@@ -4,8 +4,8 @@
 package se.gangefors.moto
 
 /*
- * The location button (the rider's option C, 2026-09-28; zoom levels
- * 2026-09-28). The first tap follows the rider, fixing the zoom only when
+ * The location button (the rider's option C, 2026-09-28; zoom levels set
+ * by the rider, 10 and 14 by default). The first tap follows the rider, fixing the zoom only when
  * it is far off; with the map on the rider, the next tap shows the planned
  * route or loop with the rider (or, with nothing planned, switches between
  * the area and close by); the tap after an overview follows again at the
@@ -17,11 +17,32 @@ package se.gangefors.moto
  * remembered state then made taps do nothing.
  */
 
-/** Zoom when following after a zoom far off: the neighbourhood. */
-const val AREA_ZOOM = 11.0
+/**
+ * The two zoom levels the location button uses, set by the rider in My
+ * data: [area] (the neighbourhood; also where the app starts) and [close]
+ * (junctions and small roads readable). [of] keeps them sensible.
+ */
+data class LocateZooms(val area: Int = DEFAULT_AREA_ZOOM, val close: Int = DEFAULT_CLOSE_ZOOM) {
+    companion object {
+        /** Zooms from settings: each within [MIN_ZOOM]..[MAX_ZOOM], close
+         * at least a step closer than area, defaults for anything missing. */
+        fun of(area: Int?, close: Int?): LocateZooms {
+            val a = (area ?: DEFAULT_AREA_ZOOM).coerceIn(MIN_ZOOM, MAX_ZOOM - 1)
+            val c = (close ?: DEFAULT_CLOSE_ZOOM).coerceIn(a + 1, MAX_ZOOM)
+            return LocateZooms(a, c)
+        }
+    }
+}
 
-/** Zoom close by: junctions and small roads readable. */
-const val CLOSE_ZOOM = 14.0
+/** Default zoom for the area: about 17 km across a phone in Skåne. */
+const val DEFAULT_AREA_ZOOM = 10
+
+/** Default zoom close by. */
+const val DEFAULT_CLOSE_ZOOM = 14
+
+/** The zooms a rider can pick for the location button. */
+const val MIN_ZOOM = 6
+const val MAX_ZOOM = 18
 
 /** At or below this zoom the map is far out (a country or more). */
 const val FAR_OUT_ZOOM = 8.0
@@ -55,18 +76,27 @@ sealed interface LocateAction {
  * [hasPlan] when a route or loop is on the map; [zoomBeforeOverview] is the
  * zoom the map had on the rider before the overview.
  */
-fun onLocateTap(view: LocateView, zoom: Double, hasPlan: Boolean, zoomBeforeOverview: Double?): LocateAction =
-    when (view) {
+fun onLocateTap(
+    view: LocateView,
+    zoom: Double,
+    hasPlan: Boolean,
+    zoomBeforeOverview: Double?,
+    zooms: LocateZooms = LocateZooms(),
+): LocateAction {
+    val area = zooms.area.toDouble()
+    val close = zooms.close.toDouble()
+    return when (view) {
         LocateView.ELSEWHERE ->
-            LocateAction.Follow(if (zoom <= FAR_OUT_ZOOM || zoom >= FAR_IN_ZOOM) AREA_ZOOM else null)
+            LocateAction.Follow(if (zoom <= FAR_OUT_ZOOM || zoom >= FAR_IN_ZOOM) area else null)
         LocateView.ON_RIDER -> when {
             hasPlan -> LocateAction.ShowPlan
             // Close by when nearer the area's zoom, else the area.
-            zoom < (AREA_ZOOM + CLOSE_ZOOM) / 2 -> LocateAction.Follow(CLOSE_ZOOM)
-            else -> LocateAction.Follow(AREA_ZOOM)
+            zoom < (area + close) / 2 -> LocateAction.Follow(close)
+            else -> LocateAction.Follow(area)
         }
         LocateView.OVERVIEW -> LocateAction.Follow(zoomBeforeOverview)
     }
+}
 
 /**
  * Whether the map is centred on the rider: the camera's centre within a

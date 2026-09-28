@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -84,6 +85,8 @@ fun RidesSheet(
     onDismiss: () -> Unit,
     onShow: (Track) -> Unit,
     onShowRoute: (SavedRoute) -> Unit,
+    zooms: LocateZooms,
+    onZooms: (LocateZooms) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
 ) {
@@ -299,6 +302,24 @@ fun RidesSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Text(stringResource(R.string.locate_zooms), Modifier.padding(top = 16.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ZoomStepper(stringResource(R.string.locate_zoom_area), zooms.area) {
+                            onZooms(LocateZooms.of(it, zooms.close))
+                        }
+                        ZoomStepper(stringResource(R.string.locate_zoom_close), zooms.close) {
+                            onZooms(LocateZooms.of(zooms.area, it))
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.locate_zooms_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             item(key = "library-title") {
@@ -440,3 +461,18 @@ private fun importSummary(res: android.content.res.Resources, r: ImportReport): 
         r.replaced.toLong(),
         r.unmatched.toLong(),
     )
+
+/** A zoom level with − and + beside it ([MIN_ZOOM]..[MAX_ZOOM]). */
+@Composable
+private fun ZoomStepper(label: String, zoom: Int, onZoom: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label)
+        IconButton(onClick = { onZoom(zoom - 1) }, enabled = zoom > MIN_ZOOM) {
+            Text("−", style = MaterialTheme.typography.titleLarge)
+        }
+        Text("$zoom", style = MaterialTheme.typography.titleMedium)
+        IconButton(onClick = { onZoom(zoom + 1) }, enabled = zoom < MAX_ZOOM) {
+            Text("+", style = MaterialTheme.typography.titleLarge)
+        }
+    }
+}

@@ -710,6 +710,8 @@ fun MapScreen() {
     // is on the map, untouched, and the zoom the map had on the rider
     // before it.
     var overviewShown by remember { mutableStateOf(false) }
+    // The location button's zoom levels (My data).
+    var locateZooms by remember { mutableStateOf(RoutePrefs.locateZooms(context)) }
     var zoomBeforeOverview by remember { mutableStateOf<Double?>(null) }
 
     fun mapWidthDp(): Double = (mapSize.width / density.density).toDouble().coerceAtLeast(1.0)
@@ -741,7 +743,7 @@ fun MapScreen() {
         val here = m.locationComponent.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
         val plan = planLines().filter { it.isNotEmpty() }
         val zoom = m.cameraPosition.zoom
-        when (val action = onLocateTap(locateView(m, here), zoom, plan.isNotEmpty(), zoomBeforeOverview)) {
+        when (val action = onLocateTap(locateView(m, here), zoom, plan.isNotEmpty(), zoomBeforeOverview, locateZooms)) {
             is LocateAction.Follow -> {
                 overviewShown = false
                 followRider(m, action.zoom)
@@ -1033,7 +1035,8 @@ fun MapScreen() {
         val s = style
         if (m == null || s == null || !hasLocation) return@DisposableEffect onDispose {}
         enableLocation(context, m, s)
-        followRider(m)
+        // Start at the area's zoom, on the rider.
+        followRider(m, locateZooms.area.toDouble())
         val moved = MapLibreMap.OnCameraMoveStartedListener { reason ->
             if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) overviewShown = false
         }
@@ -1630,6 +1633,11 @@ fun MapScreen() {
                         showOnMap(listOf(line), always = true)
                     }
                 }
+            },
+            zooms = locateZooms,
+            onZooms = { z ->
+                locateZooms = z
+                RoutePrefs.setLocateZooms(context, z)
             },
             gravel = gravel,
             onGravel = { g ->
