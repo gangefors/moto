@@ -84,6 +84,12 @@ fn map_file(path: &Path) -> Result<Mmap, CoreError> {
     #[allow(unsafe_code)]
     let map = unsafe { Mmap::map(&file) }
         .map_err(|e| err(format_args!("cannot map {}: {e}", path.display())))?;
+    // Opening validates the whole file, and routing reads most of it: ask
+    // the kernel to read it ahead in large chunks now, rather than a page
+    // at a time as each is first touched (slow on a phone's flash when the
+    // file isn't cached). Only a hint; if it fails, pages load on demand.
+    #[cfg(unix)]
+    let _ = map.advise(memmap2::Advice::WillNeed);
     Ok(map)
 }
 
