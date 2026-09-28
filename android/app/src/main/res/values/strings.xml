@@ -289,7 +289,8 @@
     <string name="sections_export">Export…</string>
     <string name="sections_import">Import…</string>
     <string name="sections_exported">Sections exported</string>
-    <string name="sections_imported">Import done. Added: %1$d · already there: %2$d · replaced: %3$d · don’t fit the map: %4$d</string>
+    <string name="sections_imported">Imported: %1$d added, %3$d replaced, %2$d already there</string>
+    <string name="sections_imported_unmatched">%1$s; %2$d don’t fit the map</string>
     <string name="sections_import_failed">Import failed: %1$s</string>
     <string name="sections_cannot_read">can’t read the chosen file</string>
     <string name="sections_file_too_large">the file is larger than %1$d MiB</string>
