@@ -1835,10 +1835,27 @@ fun MapScreen() {
         )
     }
 
-    savingRoute?.let { (r, isLoop) ->
-        val initial = remember(r) {
-            defaultRouteName(System.currentTimeMillis() / 1000, ZoneId.systemDefault(), r.distanceM / 1000.0, isLoop)
+    // The name offered for a route or loop being saved: from where it runs
+    // ("Lund → Höör", "Loop from Lund via Höör") when the region has
+    // names, else its time and length. Found off the main thread first.
+    var savingName by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(savingRoute) {
+        savingName = null
+        val (r, isLoop) = savingRoute ?: return@LaunchedEffect
+        val engine = (region as? RegionState.Ready)?.engine
+        val named = engine?.let { e ->
+            withContext(Dispatchers.Default) {
+                runCatching {
+                    val far = if (isLoop) farthestPoint(r.geometry)?.let { p -> e.describe(listOf(p, p)) } else null
+                    planName(isLoop, e.describe(r.geometry), far)
+                }.getOrNull()
+            }
         }
+        savingName = named?.let { planNameText(resources, it) }
+            ?: defaultRouteName(System.currentTimeMillis() / 1000, ZoneId.systemDefault(), r.distanceM / 1000.0, isLoop)
+    }
+    savingRoute?.let { (r, isLoop) ->
+        val initial = savingName ?: return@let
         RouteNameDialog(
             title = stringResource(R.string.route_save_title),
             initial = initial,
