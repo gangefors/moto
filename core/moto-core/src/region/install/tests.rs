@@ -180,10 +180,12 @@ fn installs_a_checked_region() {
     let (src, target) = (d.join("dl.gz"), d.join("sweden.region"));
     fs::write(&src, &gz).unwrap();
     fs::write(&target, b"the old region").unwrap();
-    install_region(&offer, &src, &target).unwrap();
+    let fp = install_region(&offer, &src, &target).unwrap();
     assert_eq!(fs::read(&target).unwrap(), raw);
     assert!(!d.join("sweden.region.tmp").exists());
     super::super::Region::open(&target).unwrap();
+    assert_eq!(fp, super::super::fingerprint(&target).unwrap());
+    super::super::Region::open_fingerprinted(&target, &fp).unwrap();
 }
 
 #[test]

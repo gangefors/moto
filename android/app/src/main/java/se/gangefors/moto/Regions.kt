@@ -28,6 +28,7 @@ import se.gangefors.moto.core.RegionOffer
 import se.gangefors.moto.core.installRegion
 import se.gangefors.moto.core.parseRegionManifest
 import se.gangefors.moto.core.profileRegionOpen
+import se.gangefors.moto.core.regionFingerprint
 import se.gangefors.moto.core.regionManifestFileName
 
 /** Which region the app routes on, and where it came from. */
@@ -56,6 +57,8 @@ object Regions {
     private const val DIR = "regions"
     private const val FILE = "downloaded.region"
     private const val PREFS = "regions"
+    /** Fingerprint of the installed file, recorded once it passed the full check. */
+    private const val FINGERPRINT = "fingerprint"
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
 
@@ -63,6 +66,8 @@ object Regions {
     private val lock = Mutex()
     private var job: Job? = null
     private var manifest: ByteArray? = null
+    /** Counts installs and removals, so a stale fingerprint is never recorded. */
+    @Volatile private var installs = 0
 
     private val _active = MutableStateFlow(ActiveRegion(RegionState.Loading, null))
     val active: StateFlow<ActiveRegion> = _active.asStateFlow()
@@ -88,7 +93,14 @@ object Regions {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (file.isFile) {
             try {
-                val engine = StartupTimes.measure("region open (${file.length() / 1_000_000} MB)") { Engine.open(file.path) }
+                val size = "${file.length() / 1_000_000} MB"
+                val opened = openRegion(
+                    prefs.getString(FINGERPRINT, null),
+                    { fp -> StartupTimes.measure("region open by fingerprint ($size)") { Engine.openFingerprinted(file.path, fp) } },
+                    { StartupTimes.measure("region open, full check ($size)") { Engine.open(file.path) } },
+                )
+                val engine = opened.region
+                if (opened.needsFingerprint) recordFingerprint(context, file)
                 val meta = DownloadedRegion(
                     id = prefs.getString("id", null) ?: "",
                     name = prefs.getString("name", null) ?: "",
@@ -98,10 +110,33 @@ object Regions {
             } catch (_: Exception) {
                 // A file that no longer opens is dropped; the bundled region
                 // (debug builds) takes over and the rider can download again.
+                prefs.edit().remove(FINGERPRINT).apply()
                 file.delete()
             }
         }
         return ActiveRegion(BundledRegion.open(context), null)
+    }
+
+    /**
+     * Records the fingerprint of [file], which just passed the full check,
+     * so the next start can open it quickly. In the background: it reads
+     * the whole file once. Skipped if the file was replaced or removed
+     * meanwhile (an install records its own).
+     */
+    private fun recordFingerprint(context: Context, file: File) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().remove(FINGERPRINT).apply()
+        val generation = installs
+        scope.launch {
+            val fp = try {
+                regionFingerprint(file.path)
+            } catch (_: Exception) {
+                return@launch
+            }
+            lock.withLock {
+                if (installs == generation && file.isFile) prefs.edit().putString(FINGERPRINT, fp).apply()
+            }
+        }
     }
 
     /** Fetches the list of regions this app can read. */
@@ -140,13 +175,15 @@ object Regions {
                 fetchFile(regionUrl(offer.fileName), part, offer)
                 _download.value = DownloadState.Installing(offer)
                 val target = installed(app).apply { parentFile?.mkdirs() }
-                installRegion(bytes, offer.id, part.path, target.path)
+                installs++
+                val fp = installRegion(bytes, offer.id, part.path, target.path)
                 part.delete()
-                app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                    .putString("id", offer.id).putString("name", offer.name).apply()
                 lock.withLock {
+                    app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                        .putString("id", offer.id).putString("name", offer.name)
+                        .putString(FINGERPRINT, fp).apply()
                     _active.value = ActiveRegion(
-                        RegionState.Ready(Engine.open(target.path)),
+                        RegionState.Ready(Engine.openFingerprinted(target.path, fp)),
                         DownloadedRegion(offer.id, offer.name, offer.osmTimestamp),
                     )
                 }
@@ -190,6 +227,8 @@ object Regions {
         if (job?.isActive == true) return
         job = scope.launch {
             lock.withLock {
+                installs++
+                app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(FINGERPRINT).apply()
                 installed(app).delete()
                 _active.value = ActiveRegion(BundledRegion.open(app), null)
             }

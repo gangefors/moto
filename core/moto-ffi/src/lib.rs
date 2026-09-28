@@ -198,6 +198,17 @@ impl Engine {
         Ok(Arc::new(Self { inner }))
     }
 
+    /// Opens a region file that passed `Engine.open` or `install_region`
+    /// before, proven unchanged by the `fingerprint` recorded then (see
+    /// `region_fingerprint`): much faster than a full check. A file that
+    /// does not match is refused; open it with `Engine.open` instead.
+    #[uniffi::constructor]
+    pub fn open_fingerprinted(path: String, fingerprint: String) -> Result<Arc<Self>, MotoError> {
+        let fp = regions::parse_fingerprint(&fingerprint)?;
+        let inner = moto_core::Engine::open_fingerprinted(path, &fp)?;
+        Ok(Arc::new(Self { inner }))
+    }
+
     /// The region's bounds and data source.
     pub fn info(&self) -> RegionInfo {
         let (sw, ne) = self.inner.bounds();
@@ -525,6 +536,28 @@ mod tests {
         let rings = engine.coverage();
         assert_eq!(rings.len(), 1);
         assert!(rings[0].len() >= 4 && rings[0].first() == rings[0].last());
+    }
+
+    #[test]
+    fn opens_by_fingerprint_across_the_ffi() {
+        let file = fixture_file("fingerprint");
+        let fp = regions::region_fingerprint(file.path()).unwrap();
+        assert_eq!(fp.len(), 64);
+        let engine = Engine::open_fingerprinted(file.path(), fp.clone()).unwrap();
+        assert_eq!(engine.info().osm_timestamp, 1_790_000_000);
+        let other = format!(
+            "{}{}",
+            if fp.starts_with('0') { '1' } else { '0' },
+            &fp[1..]
+        );
+        assert!(matches!(
+            Engine::open_fingerprinted(file.path(), other),
+            Err(MotoError::Region { .. })
+        ));
+        assert!(matches!(
+            Engine::open_fingerprinted(file.path(), "not hex".into()),
+            Err(MotoError::InvalidInput { .. })
+        ));
     }
 
     #[test]

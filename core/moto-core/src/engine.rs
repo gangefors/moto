@@ -45,6 +45,18 @@ impl Engine {
         Ok(Self::from_region(Region::open(path)?))
     }
 
+    /// Opens a region file proven by its fingerprint to be one that was
+    /// validated before (see [`Region::open_fingerprinted`]).
+    pub fn open_fingerprinted(
+        path: impl AsRef<Path>,
+        fingerprint: &[u8; 32],
+    ) -> Result<Self, CoreError> {
+        Ok(Self::from_region(Region::open_fingerprinted(
+            path,
+            fingerprint,
+        )?))
+    }
+
     /// Wraps an already opened region.
     pub fn from_region(region: Region) -> Self {
         let max_speed_kmh = region

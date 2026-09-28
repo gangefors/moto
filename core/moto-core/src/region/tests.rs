@@ -430,3 +430,91 @@ fn profile_open_times_each_step() {
     assert!(steps.iter().all(|(_, ms)| *ms >= 0.0));
     std::fs::remove_file(&path).unwrap();
 }
+
+fn temp_region(name: &str, b: &[u8]) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("moto-fp-{name}-{}.region", std::process::id()));
+    std::fs::write(&path, b).unwrap();
+    path
+}
+
+#[test]
+fn fingerprint_is_stable_and_sees_every_byte() {
+    let b = bytes();
+    let path = temp_region("stable", &b);
+    let fp = fingerprint(&path).unwrap();
+    assert_eq!(fingerprint(&path).unwrap(), fp);
+    // A flip anywhere, including in each of the four parts and at both
+    // ends, changes it.
+    for at in [
+        0,
+        b.len() / 4,
+        b.len() / 2,
+        3 * b.len() / 4 + 1,
+        b.len() - 1,
+    ] {
+        let mut c = b.clone();
+        c[at] ^= 1;
+        std::fs::write(&path, &c).unwrap();
+        assert_ne!(fingerprint(&path).unwrap(), fp, "flip at {at}");
+    }
+    // So does the length, even with the same leading bytes.
+    std::fs::write(&path, &b[..b.len() - 1]).unwrap();
+    assert_ne!(fingerprint(&path).unwrap(), fp);
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn fingerprints_tiny_and_empty_files() {
+    let path = temp_region("tiny", b"");
+    let empty = fingerprint(&path).unwrap();
+    for len in 1..=9 {
+        std::fs::write(&path, vec![7u8; len]).unwrap();
+        assert_ne!(fingerprint(&path).unwrap(), empty, "{len} bytes");
+    }
+    std::fs::remove_file(&path).unwrap();
+    assert!(matches!(fingerprint(&path), Err(CoreError::Region(_))));
+}
+
+#[test]
+fn opens_a_fingerprinted_region_only_when_it_matches() {
+    let b = bytes();
+    let path = temp_region("open", &b);
+    let fp = fingerprint(&path).unwrap();
+    let full = Region::open(&path).unwrap();
+    let fast = Region::open_fingerprinted(&path, &fp).unwrap();
+    assert_eq!(fast.nodes(), full.nodes());
+    assert_eq!(fast.edges(), full.edges());
+    assert_eq!(fast.shape_points(), full.shape_points());
+    assert_eq!(fast.grid_meta(), full.grid_meta());
+    assert_eq!(fast.grid_cells(), full.grid_cells());
+    assert_eq!(fast.coverage(), full.coverage());
+    assert_eq!(fast.info(), full.info());
+
+    let mut other = fp;
+    other[0] ^= 1;
+    match Region::open_fingerprinted(&path, &other) {
+        Err(CoreError::Region(msg)) => assert!(msg.contains("fingerprint"), "{msg}"),
+        r => panic!("expected a mismatch, got {r:?}"),
+    }
+    // A changed file no longer matches the fingerprint taken before.
+    let mut c = b.clone();
+    let shape = entry(&b, section::SHAPE_POINTS);
+    c[shape.offset as usize + 3 * 8] ^= 1;
+    std::fs::write(&path, &c).unwrap();
+    assert!(Region::open_fingerprinted(&path, &fp).is_err());
+    std::fs::remove_file(&path).unwrap();
+}
+
+/// Even with a matching fingerprint, the header and section table are
+/// still checked, so a fingerprint of a file that is no region never
+/// opens one.
+#[test]
+fn a_fingerprint_does_not_vouch_for_a_non_region() {
+    let path = temp_region("junk", &vec![0u8; 3 * PAGE as usize]);
+    let fp = fingerprint(&path).unwrap();
+    assert!(matches!(
+        Region::open_fingerprinted(&path, &fp),
+        Err(CoreError::Region(_))
+    ));
+    std::fs::remove_file(&path).unwrap();
+}

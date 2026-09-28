@@ -58,4 +58,27 @@ class RegionLogicTest {
         assertEquals(155.1, mb(155_056_303), 0.0)
         assertEquals("2026-09-27", osmDate(1_790_471_426, java.time.ZoneOffset.UTC))
     }
+
+    @Test
+    fun opensByFingerprintAndFallsBackToTheFullCheck() {
+        val calls = mutableListOf<String>()
+        val fast = { fp: String -> calls += "fast $fp"; if (fp == "good") "region" else error("mismatch") }
+        val full = { calls += "full"; "region" }
+
+        assertEquals(OpenedRegion("region", needsFingerprint = false), openRegion("good", fast, full))
+        assertEquals(listOf("fast good"), calls)
+
+        calls.clear()
+        assertEquals(OpenedRegion("region", needsFingerprint = true), openRegion("stale", fast, full))
+        assertEquals(listOf("fast stale", "full"), calls)
+
+        calls.clear()
+        assertEquals(OpenedRegion("region", needsFingerprint = true), openRegion(null, fast, full))
+        assertEquals(listOf("full"), calls)
+
+        // A file that fails the full check is not opened.
+        assertThrows(IllegalStateException::class.java) {
+            openRegion<String>("stale", fast) { error("corrupt") }
+        }
+    }
 }
