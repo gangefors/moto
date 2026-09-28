@@ -13,10 +13,10 @@ import org.junit.Test
 class RegionLogicTest {
     @Test
     fun onlyRegionFileNamesMakeUrls() {
-        assertEquals(REGIONS_BASE_URL + "regions-v1.json", regionUrl("regions-v1.json"))
+        assertEquals(REGIONS_BASE_URL + "regions-v1.manifest", regionUrl("regions-v1.manifest"))
         assertEquals(REGIONS_BASE_URL + "sweden-v1.region.gz", regionUrl("sweden-v1.region.gz"))
         assertTrue(REGIONS_BASE_URL.startsWith("https://"))
-        for (bad in listOf("../x.json", "a/b.region.gz", "x.apk", "", "https://evil/x.json", "X.json", "a.json?x")) {
+        for (bad in listOf("regions-v1.json", "../x.manifest", "a/b.region.gz", "x.apk", "", "https://evil/x.json", "X.json", "a.json?x")) {
             assertThrows(bad, IllegalArgumentException::class.java) { regionUrl(bad) }
         }
     }

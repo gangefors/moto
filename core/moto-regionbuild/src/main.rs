@@ -40,6 +40,7 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
        moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
        moto-regionbuild --refresh <in.region> <out.region>
        moto-regionbuild --manifest <out.json> (<id> <name> <file.region> <file.region.gz>)...
+       moto-regionbuild --check-manifest <signed.manifest> <manifest.json>
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
@@ -53,7 +54,9 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
            region file, without the extract (to try a change to them)
   --manifest write the manifest of downloadable regions (ADR-0008) for
            their gzip-compressed files, after checking that the core
-           installs each one back to its region file";
+           installs each one back to its region file
+  --check-manifest check a signed manifest (signature, then the JSON) with
+           the app's keys, and that it carries exactly <manifest.json>";
 
 /// M0 region (ADR-0005; a polygon comes later): Skåne plus the southern
 /// half of Halland, southern Småland and western Blekinge, from Trelleborg
@@ -102,6 +105,9 @@ fn main() -> ExitCode {
             let _ = std::fs::remove_dir_all(&scratch);
             r
         }),
+        [flag, signed, json] if flag == "--check-manifest" => {
+            manifest::check_signed(Path::new(signed), Path::new(json))
+        }
         [flag, input, output] if flag == "--refresh" => {
             refresh(Path::new(input), Path::new(output))
         }

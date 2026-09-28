@@ -71,7 +71,7 @@ fn reads_a_manifest() {
     assert_eq!(o.file_name(), format!("sweden-v{VERSION_MAJOR}.region.gz"));
     assert_eq!(
         manifest_file_name(),
-        format!("regions-v{VERSION_MAJOR}.json")
+        format!("regions-v{VERSION_MAJOR}.manifest")
     );
     // Upper-case hex is fine too; no regions is an empty list.
     assert!(parse_manifest(manifest(&sweden(&"AB".repeat(32))).as_bytes()).is_ok());
@@ -257,4 +257,90 @@ fn a_missing_download_is_a_storage_error() {
     let offer = offer_for(&gzip(&raw), &raw);
     let r = install_region(&offer, &d.join("none.gz"), &d.join("sweden.region"));
     assert!(matches!(r, Err(CoreError::Storage(_))), "{r:?}");
+}
+
+/// A test signing key (never a real one).
+fn test_key(seed: u8) -> ed25519_dalek::SigningKey {
+    ed25519_dalek::SigningKey::from_bytes(&[seed; 32])
+}
+
+fn sign(key: &ed25519_dalek::SigningKey, json: &[u8]) -> Vec<u8> {
+    use ed25519_dalek::Signer;
+    let mut signed = key.sign(json).to_bytes().to_vec();
+    signed.extend_from_slice(json);
+    signed
+}
+
+#[test]
+fn reads_a_signed_manifest() {
+    let json = manifest(&sweden(&"ab".repeat(32)));
+    let key = test_key(7);
+    let keys = [
+        test_key(9).verifying_key().to_bytes(),
+        key.verifying_key().to_bytes(),
+    ];
+    let signed = sign(&key, json.as_bytes());
+    assert_eq!(
+        verify_signed_manifest(&signed, &keys).unwrap(),
+        json.as_bytes()
+    );
+    assert_eq!(
+        parse_signed_manifest(&signed, &keys).unwrap()[0].id,
+        "sweden"
+    );
+}
+
+#[test]
+fn refuses_unsigned_and_tampered_manifests() {
+    let json = manifest(&sweden(&"ab".repeat(32)));
+    let key = test_key(7);
+    let keys = [key.verifying_key().to_bytes()];
+    let signed = sign(&key, json.as_bytes());
+    let refused = |bytes: &[u8], keys: &[[u8; 32]]| match verify_signed_manifest(bytes, keys) {
+        Err(CoreError::InvalidArgument(msg)) => msg,
+        other => panic!("expected a refusal, got {other:?}"),
+    };
+    // Any changed byte, in the signature or the manifest.
+    for at in [0, 31, 63, 64, signed.len() / 2, signed.len() - 1] {
+        let mut t = signed.clone();
+        t[at] ^= 1;
+        assert!(refused(&t, &keys).contains("signature"), "flip at {at}");
+    }
+    // Another key, no keys, a bad key, the manifest alone, too short.
+    assert!(refused(&signed, &[test_key(8).verifying_key().to_bytes()]).contains("signature"));
+    assert!(refused(&signed, &[]).contains("signature"));
+    assert!(refused(&signed, &[[0xff; 32]]).contains("signature"));
+    assert!(refused(json.as_bytes(), &keys).contains("signature"));
+    assert!(refused(&signed[..63], &keys).contains("too short"));
+    assert!(refused(&[], &keys).contains("too short"));
+    // A signed manifest that says too much is refused before any check.
+    let big = sign(&key, &vec![b' '; MAX_MANIFEST_BYTES + 1]);
+    assert!(refused(&big, &keys).contains("too large"));
+    // A valid signature over something that isn't a manifest still fails
+    // the strict parse.
+    let junk = sign(&key, b"not json");
+    assert!(parse_signed_manifest(&junk, &keys).is_err());
+}
+
+#[test]
+fn garbage_signed_manifests_never_panic() {
+    let key = test_key(7);
+    let keys = [key.verifying_key().to_bytes()];
+    let base = sign(&key, manifest(&sweden(&"ab".repeat(32))).as_bytes());
+    for i in 0..base.len() {
+        let mut m = base.clone();
+        m[i] = m[i].wrapping_add(1);
+        assert!(parse_signed_manifest(&m, &keys).is_err());
+        let _ = parse_signed_manifest(&base[..i], &keys);
+    }
+}
+
+#[test]
+fn the_app_has_valid_manifest_keys() {
+    assert!(!MANIFEST_KEYS.is_empty());
+    for key in MANIFEST_KEYS {
+        assert!(ed25519_dalek::VerifyingKey::from_bytes(key).is_ok());
+    }
+    // Test keys are never among them.
+    assert!(!MANIFEST_KEYS.contains(&test_key(7).verifying_key().to_bytes()));
 }

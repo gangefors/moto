@@ -14,6 +14,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+ed25519-dalek.workspace = true
 flate2.workspace = true
 # The hand-made grid region, for round-trip cases.
 moto-core = { workspace = true, features = ["fixtures"] }
