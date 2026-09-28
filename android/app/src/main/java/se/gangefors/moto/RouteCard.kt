@@ -27,7 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalDensity
@@ -42,8 +41,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -245,7 +245,7 @@ fun RouteCard(
                     if (viaCount > 0) add(pluralStringResource(R.plurals.route_via_count, viaCount, viaCount))
                     add(gravelSummary(gravel))
                 }
-                SummaryLine(parts.joinToString(" · ")) { onExpandedChange(true) }
+                OptionChips(parts) { onExpandedChange(true) }
             }
         },
         details = {
@@ -257,7 +257,8 @@ fun RouteCard(
     )
 }
 
-/** The route's choices: via points, a time to arrive by, and gravel. */
+/** The route's choices, one labelled row each: waypoints, a time to
+ * arrive by, and gravel. */
 @Composable
 private fun RouteCardDetails(
     gravel: Gravel,
@@ -271,50 +272,56 @@ private fun RouteCardDetails(
 ) {
     var pickingTime by remember { mutableStateOf(false) }
     val zone = remember { ZoneId.systemDefault() }
-    Column {
-        arrivalNote?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-        }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedButton(onClick = onAddVia, enabled = viaCount < MAX_VIA_POINTS) {
+    Column(Modifier.padding(end = 8.dp)) {
+        OptionHeading(stringResource(R.string.route_waypoints_title))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (viaCount > 0) {
+                    pluralStringResource(R.plurals.route_via_count, viaCount, viaCount)
+                } else {
+                    stringResource(R.string.route_waypoints_none)
+                },
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onAddVia, enabled = viaCount < MAX_VIA_POINTS) {
                 OneLine(stringResource(R.string.route_add_via))
             }
             if (viaCount > 0) {
-                TextButton(
+                IconButton(
                     onClick = onClearVia,
-                    colors = ButtonDefaults.textButtonColors(contentColor = DELETE_COLOR),
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
                 ) {
-                    Icon(painterResource(R.drawable.ic_delete), contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    OneLine(pluralStringResource(R.plurals.route_clear_via, viaCount, viaCount))
+                    Icon(
+                        painterResource(R.drawable.ic_delete),
+                        contentDescription = pluralStringResource(R.plurals.route_clear_via, viaCount, viaCount),
+                    )
                 }
             }
         }
         // A time to arrive by: the routes then spend the time until then.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilterChip(
-                selected = arriveBy != null,
-                onClick = { pickingTime = true },
-                label = {
-                    OneLine(
-                        arriveBy?.let { stringResource(R.string.route_arrive_by_time, clockTime(it, zone)) }
-                            ?: stringResource(R.string.route_arrive_by),
-                    )
-                },
-            )
-            if (arriveBy != null) {
+        OptionHeading(stringResource(R.string.route_arrive_heading))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (arriveBy == null) {
+                Text(stringResource(R.string.route_arrive_none), Modifier.weight(1f))
+                TextButton(onClick = { pickingTime = true }) { OneLine(stringResource(R.string.route_arrive_pick)) }
+            } else {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable(onClickLabel = stringResource(R.string.route_arrive_pick)) { pickingTime = true },
+                ) {
+                    Text(clockTime(arriveBy, zone), style = MaterialTheme.typography.titleMedium)
+                    arrivalNote?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 IconButton(onClick = { onArriveBy(null) }) {
                     Icon(painterResource(R.drawable.ic_close), stringResource(R.string.route_arrive_clear))
                 }
             }
         }
-        GravelChoice(gravel, onGravel)
+        OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
+        GravelChips(gravel, onGravel)
         if (pickingTime) {
             ArriveByDialog(
                 initial = arriveBy,
@@ -398,9 +405,7 @@ fun LoopCard(
                         LoopDirection.WEST -> R.string.loop_heading_west
                     },
                 )
-                SummaryLine(listOf(loopLengthText(choice), heading, gravelSummary(gravel)).joinToString(" · ")) {
-                    onExpandedChange(true)
-                }
+                OptionChips(listOf(loopLengthText(choice), heading, gravelSummary(gravel))) { onExpandedChange(true) }
             }
         },
         details = { LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel) },
@@ -476,7 +481,8 @@ private fun ChoiceSwitcher(
     }
 }
 
-/** The loop's choices: length, direction and gravel. */
+/** The loop's choices, one labelled row each: length, direction and
+ * gravel. */
 @Composable
 private fun LoopCardDetails(
     direction: LoopDirection,
@@ -486,35 +492,27 @@ private fun LoopCardDetails(
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
 ) {
-    Column {
+    Column(Modifier.padding(end = 8.dp)) {
         LoopLengthSlider(stringResource(R.string.loop_length), choice, onChoice)
-        Text(
-            stringResource(R.string.loop_direction),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LoopDirection.entries.forEach { d ->
-                FilterChip(
-                    selected = d == direction,
-                    onClick = { onDirection(d) },
-                    label = {
-                        OneLine(
-                            stringResource(
-                                when (d) {
-                                    LoopDirection.ANY -> R.string.loop_direction_any
-                                    LoopDirection.NORTH -> R.string.loop_direction_north
-                                    LoopDirection.EAST -> R.string.loop_direction_east
-                                    LoopDirection.SOUTH -> R.string.loop_direction_south
-                                    LoopDirection.WEST -> R.string.loop_direction_west
-                                },
-                            ),
-                        )
+        OptionHeading(stringResource(R.string.loop_direction))
+        SingleChoice(
+            options = LoopDirection.entries,
+            selected = direction,
+            label = {
+                stringResource(
+                    when (it) {
+                        LoopDirection.ANY -> R.string.loop_direction_any
+                        LoopDirection.NORTH -> R.string.loop_direction_north
+                        LoopDirection.EAST -> R.string.loop_direction_east
+                        LoopDirection.SOUTH -> R.string.loop_direction_south
+                        LoopDirection.WEST -> R.string.loop_direction_west
                     },
                 )
-            }
-        }
-        GravelChoice(gravel, onGravel)
+            },
+            onSelect = onDirection,
+        )
+        OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
+        GravelChips(gravel, onGravel)
     }
 }
 
@@ -548,7 +546,7 @@ private fun SheetTop(
                 shown == null -> computing
                 else -> stringResource(R.string.route_summary, shown.km, shown.minutes)
             },
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.weight(1f).then(dim),
         )
         IconButton(onClick = onSave, enabled = found) {
@@ -561,53 +559,60 @@ private fun SheetTop(
             Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
     }
-    val details = when {
-        problem != null -> problem
-        shown == null -> ""
-        else -> buildList {
-            if (shown.fastest) add(stringResource(R.string.route_fastest))
-            if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
-            if (shown.favouritePercent > 0) {
-                add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
-            }
-            if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
-            if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
-        }.joinToString(" · ")
+    if (problem != null) {
+        Text(
+            problem,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        return
     }
-    Text(
-        details,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(end = 8.dp).then(dim),
-    )
+    if (shown == null) return
+    // What the route is worth, as small chips that wrap.
+    val stats = buildList {
+        if (shown.fastest) add(stringResource(R.string.route_fastest))
+        if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
+        if (shown.favouritePercent > 0) add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
+        if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
+        if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
+    }
+    FlowRow(
+        modifier = Modifier.padding(top = 4.dp, end = 8.dp).then(dim),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        stats.forEach { StatChip(it) }
+    }
 }
 
-/** The choices summed up in one line; tapping it pulls the sheet up. */
+/** A figure about the route or loop, e.g. "+22 min" (not a button). */
 @Composable
-private fun SummaryLine(text: String, onClick: () -> Unit) {
+private fun StatChip(text: String) {
     Surface(
-        onClick = onClick,
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = Modifier.padding(top = 8.dp, end = 8.dp),
     ) {
-        Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Icon(
-                painterResource(R.drawable.ic_expand_less),
-                contentDescription = stringResource(R.string.card_expand),
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+/** The choices as chips, then an arrow; tapping any pulls the sheet up
+ * to change them. */
+@Composable
+private fun OptionChips(labels: List<String>, onClick: () -> Unit) {
+    FlowRow(
+        modifier = Modifier.padding(top = 4.dp, end = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        labels.forEach { SuggestionChip(onClick = onClick, label = { OneLine(it) }) }
+        IconButton(onClick = onClick) {
+            Icon(painterResource(R.drawable.ic_expand_less), contentDescription = stringResource(R.string.card_expand))
         }
     }
 }
@@ -621,44 +626,6 @@ private fun gravelSummary(g: Gravel): String = stringResource(
         Gravel.PREFER -> R.string.gravel_summary_prefer
     },
 )
-
-/** The gravel choice (the same setting as in Ride settings: changing it here
- * routes again, to see what gravel roads change). */
-@Composable
-private fun GravelChoice(gravel: Gravel, onGravel: (Gravel) -> Unit) {
-    Column {
-        Text(
-            stringResource(R.string.route_gravel_label),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        GravelChips(gravel, onGravel)
-    }
-}
-
-/** Avoid / Allow / Prefer gravel, one of them selected. */
-@Composable
-fun GravelChips(gravel: Gravel, onGravel: (Gravel) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GRAVEL_CHOICES.forEach { g ->
-            FilterChip(
-                selected = g == gravel,
-                onClick = { onGravel(g) },
-                label = {
-                    OneLine(
-                        stringResource(
-                            when (g) {
-                                Gravel.AVOID -> R.string.gravel_avoid
-                                Gravel.ALLOW -> R.string.gravel_allow
-                                Gravel.PREFER -> R.string.gravel_prefer
-                            },
-                        ),
-                    )
-                },
-            )
-        }
-    }
-}
 
 /** Picks the time to arrive by: the next time the clock shows it. */
 @OptIn(ExperimentalMaterial3Api::class)
