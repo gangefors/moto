@@ -55,6 +55,13 @@ fun loopSteps(choice: LoopChoice): List<LoopChoice> = when (choice) {
     is LoopChoice.Km -> LOOP_KM.map { LoopChoice.Km(it) }
 }
 
+/** Whether [step] gets a number on the slider's scale: whole hours, or
+ * hundreds of kilometres. */
+fun isLoopMark(step: LoopChoice): Boolean = when (step) {
+    is LoopChoice.Minutes -> step.minutes % 60 == 0
+    is LoopChoice.Km -> step.km % 100 == 0
+}
+
 /** About the same loop in the other unit, on its nearest step. */
 fun switchUnit(choice: LoopChoice): LoopChoice = when (choice) {
     is LoopChoice.Minutes -> LoopChoice.Km(nearestStep(LOOP_KM, choice.minutes / 60.0 * LOOP_KMH))

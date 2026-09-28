@@ -249,4 +249,26 @@ class MapLogicTest {
         assertEquals(Arrival(now + 3_600, late = false), arrival(now, 3_599.6, now + 3_600))
         assertEquals(Arrival(now + 3_601, late = true), arrival(now, 3_601.0, now + 3_600))
     }
+
+    @Test
+    fun scaleLabelsSitOnTheirPointsInsideTheScale() {
+        // 300 px scale, labels 30 px wide at 0 %, 50 % and 100 %.
+        val shown = scaleLabels(listOf(0, 150, 300), listOf(30, 30, 30), total = 300, gap = 8)
+        assertEquals(listOf(0 to 0, 1 to 135, 2 to 270), shown)
+    }
+
+    @Test
+    fun scaleLabelsThatWouldTouchAreLeftOut() {
+        // Large fonts: 70 px labels every 50 px (1 h to 7 h); every
+        // second one doesn't fit either, every third does: 1, 4 and 7 h.
+        val centres = (0..6).map { it * 50 }
+        val shown = scaleLabels(centres, List(7) { 70 }, total = 300, gap = 8)
+        assertEquals(listOf(0, 3, 6), shown.map { it.first })
+        // Narrower labels: every second one, 1, 3, 5 and 7 h.
+        assertEquals(listOf(0, 2, 4, 6), scaleLabels(centres, List(7) { 40 }, total = 300, gap = 8).map { it.first })
+        shown.zipWithNext().forEach { (a, b) -> assertTrue(b.second >= a.second + 70 + 8) }
+        shown.forEach { assertTrue(it.second in 0..230) }
+        // A label wider than the whole scale never shows.
+        assertEquals(emptyList<Pair<Int, Int>>(), scaleLabels(listOf(10), listOf(400), total = 300, gap = 8))
+    }
 }

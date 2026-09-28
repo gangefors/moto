@@ -137,4 +137,12 @@ class OneAheadTest {
         assertEquals(2, dropped.size)
         assertNull(ahead.take(2))
     }
+
+    @Test
+    fun theScaleShowsWholeHoursAndHundredsOfKm() {
+        val hours = loopSteps(LoopChoice.Minutes(120)).filter(::isLoopMark).map { (it as LoopChoice.Minutes).minutes / 60 }
+        assertEquals((1..7).toList(), hours)
+        val km = loopSteps(LoopChoice.Km(120)).filter(::isLoopMark).map { (it as LoopChoice.Km).km }
+        assertEquals(listOf(100, 200, 300, 400), km)
+    }
 }
