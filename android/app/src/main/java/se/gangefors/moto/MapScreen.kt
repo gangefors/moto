@@ -676,6 +676,37 @@ fun MapScreen() {
     // Planning a route or loop: the sheet shows at the bottom, and the tag
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
+
+    /** Loops from [start], in any direction, from the standard set. */
+    fun startLoop(start: LatLng) {
+        startPicked = null
+        loopSeed = 0u
+        loopDirection = LoopDirection.ANY
+        loopStart = start
+    }
+
+    /**
+     * Where the rider is, to plan from: their newest fix, with a note when
+     * it is an older one; null, saying it waits for GPS, without one.
+     */
+    fun riderStart(): LatLng? {
+        val active = recording as? Recording.State.Active
+        val fix = when (val p = riderPosition(active?.lastFix, mapFix(map), System.currentTimeMillis())) {
+            is RiderPosition.Fresh -> {
+                message = null
+                p.fix
+            }
+            is RiderPosition.LastKnown -> {
+                message = resources.getString(R.string.plan_last_known)
+                p.fix
+            }
+            RiderPosition.None -> {
+                message = resources.getString(R.string.plan_waiting_gps)
+                return null
+            }
+        }
+        return LatLng(fix.position.lat, fix.position.lon)
+    }
     // The planning sheet reaches down behind the navigation bar: its
     // buttons then contrast with the sheet, not the system theme.
     NavigationBarIconsFollow(
@@ -1011,7 +1042,7 @@ fun MapScreen() {
                     } else {
                         o.route.show(point, null, null)
                         startPicked = point
-                        message = resources.getString(R.string.route_pick_end)
+                        message = resources.getString(if (hasLocation) R.string.route_pick_end_or_me else R.string.route_pick_end)
                     }
                 }
                 is RoutePicker.Step.Complete -> {
@@ -1191,17 +1222,32 @@ fun MapScreen() {
                         }
                     }
                     if (offerLoop) {
-                        OutlinedButton(
-                            onClick = {
-                                val start = picker.takeStart()
-                                startPicked = null
+                        FlowRow(
+                            Modifier.padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (hasLocation) {
+                                // The long-pressed point becomes the end; the
+                                // rider's position the start. A later
+                                // long-press moves the end, as usual.
+                                OutlinedButton(onClick = {
+                                    val from = riderStart() ?: return@OutlinedButton
+                                    val to = picker.takeStart() ?: return@OutlinedButton
+                                    picker.startAt(from)
+                                    startPicked = null
+                                    overlays?.route?.show(from, to, null)
+                                    vias = emptyList()
+                                    arriveBy = null
+                                    routeEnds = from to to
+                                }) { OneLine(stringResource(R.string.route_from_me)) }
+                            }
+                            OutlinedButton(onClick = {
+                                val start = picker.takeStart() ?: return@OutlinedButton
                                 message = null
-                                loopSeed = 0u
-                                loopDirection = LoopDirection.ANY
-                                loopStart = start
-                            },
-                            modifier = Modifier.padding(top = 4.dp),
-                        ) { OneLine(stringResource(R.string.loop_from_here)) }
+                                startLoop(start)
+                            }) { OneLine(stringResource(R.string.loop_from_here)) }
+                        }
                     }
                     if (marking) {
                         // The banner is narrow (it keeps clear of the map controls),
@@ -1483,6 +1529,16 @@ fun MapScreen() {
                         message = resources.getString(R.string.section_pick_start)
                     }) {
                         Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
+                    }
+                }
+                // Loops from where the rider is, in one tap.
+                if (region is RegionState.Ready && hasLocation) {
+                    FloatingActionButton(onClick = {
+                        val start = riderStart() ?: return@FloatingActionButton
+                        picker.reset()
+                        startLoop(start)
+                    }) {
+                        Icon(painterResource(R.drawable.ic_loop), contentDescription = stringResource(R.string.loop_from_me))
                     }
                 }
                 // Record: a red dot. While recording: a red stop square with

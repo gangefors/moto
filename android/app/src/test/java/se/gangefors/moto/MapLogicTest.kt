@@ -32,6 +32,19 @@ class MapLogicTest {
     }
 
     @Test
+    fun aStartGivenByTheAppActsLikeALongPress() {
+        // "Route here from my position": the long-pressed point becomes the
+        // end, the rider's position the start, and further long-presses
+        // move the end.
+        val picker = RoutePicker<String>()
+        picker.onLongPress("goal")
+        picker.reset()
+        picker.startAt("me")
+        assertEquals("me", picker.start)
+        assertEquals(RoutePicker.Step.Complete("me", "other"), picker.onLongPress("other"))
+    }
+
+    @Test
     fun resetForgetsTheStart() {
         val picker = RoutePicker<String>()
         picker.onLongPress("a")

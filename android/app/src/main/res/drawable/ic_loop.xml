@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- A loop: most of a circle, clockwise from the top, with an arrow
+         head where it comes back round. -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M12,5 A7,7 0 1,1 5.94,8.5" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M7.3,6.1 L7.8,10.3 L3.5,7.8 Z" />
+</vector>

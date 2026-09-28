@@ -39,6 +39,12 @@ class RoutePicker<P> {
      * (null when there is none). */
     fun takeStart(): P? = start.also { start = null }
 
+    /** Makes [point] the start, as if it had been long-pressed: the next
+     * long-press picks the end (a route from the rider's position). */
+    fun startAt(point: P) {
+        start = point
+    }
+
     /** Forgets a start that turned out to be unusable. */
     fun reset() {
         start = null
