@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Stefan Gangefors
 
 [versions]
-agp = "9.4.0"
+agp = "9.4.1"
 kotlin = "2.4.20"
 activity-compose = "1.13.0"
 compose-bom = "2026.09.00"
