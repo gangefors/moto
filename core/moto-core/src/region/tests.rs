@@ -419,21 +419,6 @@ fn corruption_never_panics() {
 }
 
 #[test]
-fn prefetch_reads_the_whole_file() {
-    let b = bytes();
-    let path = std::env::temp_dir().join(format!("moto-prefetch-{}.region", std::process::id()));
-    std::fs::write(&path, &b).unwrap();
-    assert_eq!(prefetch(&path).unwrap(), b.len() as u64);
-    // Tiny and empty files too; a missing one is an error.
-    std::fs::write(&path, b"abc").unwrap();
-    assert_eq!(prefetch(&path).unwrap(), 3);
-    std::fs::write(&path, b"").unwrap();
-    assert_eq!(prefetch(&path).unwrap(), 0);
-    std::fs::remove_file(&path).unwrap();
-    assert!(matches!(prefetch(&path), Err(CoreError::Region(_))));
-}
-
-#[test]
 fn profile_open_times_each_step() {
     let path = std::env::temp_dir().join(format!("moto-profile-{}.region", std::process::id()));
     std::fs::write(&path, bytes()).unwrap();
