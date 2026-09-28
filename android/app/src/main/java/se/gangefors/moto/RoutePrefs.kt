@@ -21,6 +21,7 @@ object RoutePrefs {
     private const val CLOSE_ZOOM = "locate_close_zoom"
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
     private const val MAP_HINTS = "map_hints_shown"
+    private const val SECTIONS_SORT = "sections_sort"
 
     /** How many starts show how to use the map. */
     private const val MAP_HINT_STARTS = 3
@@ -80,5 +81,15 @@ object RoutePrefs {
             putInt(AREA_ZOOM, zooms.area)
             putInt(CLOSE_ZOOM, zooms.close)
         }
+    }
+
+    /** The order the Sections page lists in, as last chosen (by rating
+     * at first, or for an unknown value). */
+    fun sectionsSort(context: Context): SectionSort = sectionSortOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(SECTIONS_SORT, null) }.getOrNull(),
+    )
+
+    fun setSectionsSort(context: Context, sort: SectionSort) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(SECTIONS_SORT, sort.name) }
     }
 }

@@ -25,6 +25,9 @@ data class SectionRow(
 /** How the page orders sections. */
 enum class SectionSort { RATING, LENGTH, CURVY, NEWEST, NEAREST, LONGEST_UNRIDDEN }
 
+/** A sort stored by name; rating for none or an unknown one. */
+fun sectionSortOf(name: String?): SectionSort = SectionSort.entries.firstOrNull { it.name == name } ?: SectionSort.RATING
+
 /** Which sections the page shows: those rated one of [ratings] (all when
  * empty), or only those that no longer fit the map ([attention]). */
 data class SectionFilter(val ratings: Set<Rating> = emptySet(), val attention: Boolean = false)

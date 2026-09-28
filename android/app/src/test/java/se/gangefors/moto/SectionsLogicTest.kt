@@ -117,4 +117,11 @@ class SectionsLogicTest {
         assertEquals("12 Aug", rideDay(1_786_500_000L, now, zone, java.util.Locale.ENGLISH))
         assertEquals("12 Aug 2025", rideDay(1_754_964_000L, now, zone, java.util.Locale.ENGLISH))
     }
+
+    @Test
+    fun aStoredSortReadsBack() {
+        SectionSort.entries.forEach { assertEquals(it, sectionSortOf(it.name)) }
+        assertEquals(SectionSort.RATING, sectionSortOf(null))
+        assertEquals(SectionSort.RATING, sectionSortOf("SIDEWAYS"))
+    }
 }

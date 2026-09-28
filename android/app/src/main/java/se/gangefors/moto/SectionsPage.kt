@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -135,7 +136,9 @@ fun SectionsList(
             runCatching { st.ridden() }.getOrDefault(emptyList()).associateBy { it.sectionId }
         }
     }
-    var sort by rememberSaveable { mutableStateOf(SectionSort.RATING) }
+    // The order last chosen, kept between visits.
+    val context = LocalContext.current
+    var sort by rememberSaveable { mutableStateOf(RoutePrefs.sectionsSort(context)) }
     var ratings by remember { mutableStateOf(emptySet<Rating>()) }
     var attention by rememberSaveable { mutableStateOf(initialAttention) }
     val all = remember(sections, described, ridden) {
@@ -189,7 +192,10 @@ fun SectionsList(
                         colors = FilterChipDefaults.filterChipColors(labelColor = MaterialTheme.colorScheme.error),
                     )
                 }
-                SortButton(sort, canNearest = here != null) { sort = it }
+                SortButton(sort, canNearest = here != null) {
+                    sort = it
+                    RoutePrefs.setSectionsSort(context, it)
+                }
             }
         }
         if (onlyAttention) {
