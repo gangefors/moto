@@ -125,6 +125,17 @@ fun RegionSection() {
             }
         }
     }
+    // Debug builds: how long the steps of this start took.
+    val debuggable = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+    val times by StartupTimes.steps.collectAsState()
+    if (debuggable && times.isNotEmpty()) {
+        Text(
+            times.joinToString("\n"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
     Text(
         stringResource(R.string.region_hint),
         style = MaterialTheme.typography.bodySmall,

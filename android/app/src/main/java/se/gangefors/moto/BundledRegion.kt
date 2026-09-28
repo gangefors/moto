@@ -48,7 +48,7 @@ object BundledRegion {
             install(context, installed)
             stamp.writeText(version)
         }
-        RegionState.Ready(Engine.open(installed.path))
+        RegionState.Ready(StartupTimes.measure("built-in region open") { Engine.open(installed.path) })
     } catch (_: FileNotFoundException) {
         RegionState.Missing
     } catch (e: Exception) {
