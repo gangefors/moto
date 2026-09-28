@@ -435,10 +435,9 @@ fun MapScreen() {
             is Recording.State.Finished -> {
                 val km = sectionKm(r.track.distanceM)
                 val time = formatDuration(((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) * 1000)
-                notify(
+                Toasts.show(
                     r.batteryPerHour?.let { resources.getString(R.string.recording_saved_battery, km, time, it) }
                         ?: resources.getString(R.string.recording_saved, km, time),
-                    long = true,
                 )
             }
             is Recording.State.Failed -> notify(resources.getString(R.string.recording_failed, r.message), long = true)
@@ -451,7 +450,7 @@ fun MapScreen() {
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             hasLocation = true
             RecordingService.start(context)
-            notify(resources.getString(R.string.recording_started))
+            Toasts.show(resources.getString(R.string.recording_started))
         } else {
             notify(resources.getString(R.string.recording_no_permission), long = true)
         }
@@ -500,7 +499,7 @@ fun MapScreen() {
             val result = withContext(Dispatchers.IO) { runCatching { ready.store.addTag(newTag(fix, active?.trackId)) } }
             buzz(context, ok = result.isSuccess)
             result.fold(
-                onSuccess = { notify(resources.getString(R.string.tag_saved)) },
+                onSuccess = { Toasts.show(resources.getString(R.string.tag_saved)) },
                 onFailure = { notify(resources.getString(R.string.tag_failed, it.message ?: it.toString()), long = true) },
             )
             refreshPendingTags()
@@ -1150,7 +1149,7 @@ fun MapScreen() {
      * Runs [action] on the store off the main thread, then reloads the
      * sections and shows the message [action] returns.
      */
-    fun changeSectionsThen(action: (SectionStore) -> String) {
+    fun changeSectionsThen(action: (SectionStore) -> String?) {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -1162,8 +1161,9 @@ fun MapScreen() {
             result.fold(
                 onSuccess = { (done, list) ->
                     sections = list
-                    // Saved, updated, deleted: a toast, like the menu pages.
-                    Toasts.show(done)
+                    // Saved or updated: a toast, like the menu pages (a
+                    // delete has none: the bin already said "Deleted").
+                    done?.let { Toasts.show(it) }
                 },
                 onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
             )
@@ -1171,7 +1171,7 @@ fun MapScreen() {
     }
 
     /** Runs [action] on the store off the main thread, then reloads the sections. */
-    fun changeSections(done: String, action: (SectionStore) -> Unit) = changeSectionsThen {
+    fun changeSections(done: String?, action: (SectionStore) -> Unit) = changeSectionsThen {
         action(it)
         done
     }
@@ -1216,7 +1216,7 @@ fun MapScreen() {
         scope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { ready.store.saveRoute(name, isLoop, r) } }
             result.fold(
-                onSuccess = { notify(resources.getString(R.string.route_saved, it.name)) },
+                onSuccess = { Toasts.show(resources.getString(R.string.route_saved, it.name)) },
                 onFailure = { notify(resources.getString(R.string.route_save_failed, it.message ?: it.toString()), long = true) },
             )
         }
@@ -1889,7 +1889,7 @@ fun MapScreen() {
             },
             onDelete = {
                 editing = null
-                changeSections(resources.getString(R.string.section_deleted)) { st ->
+                changeSections(null) { st ->
                     st.delete(section.id)
                 }
             },
