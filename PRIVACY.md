@@ -25,7 +25,7 @@ moto is a motorcycle routing app made by Stefan Gangefors as a hobby project. It
 ## What leaves your phone
 
 - **Map tiles from [OpenFreeMap](https://openfreemap.org).** To draw the map, the app downloads map tiles and the map style. OpenFreeMap's servers receive your IP address and which tiles are requested, which shows roughly which area of the map you are looking at (not necessarily where you are). Their handling of this is covered by their own privacy policy.
-- **Map regions from GitHub.** When you look for or download a region (My data → Map region), the app fetches the region list and the region file from this repository's releases on [GitHub](https://github.com). GitHub receives your IP address and which file was fetched, under [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement). The developer only sees how many times each file was downloaded, never who downloaded it.
+- **Map regions from GitHub.** When you look for or download a region (Menu → Map region), the app fetches the region list and the region file from this repository's releases on [GitHub](https://github.com). GitHub receives your IP address and which file was fetched, under [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement). The developer only sees how many times each file was downloaded, never who downloaded it.
 - **What you share yourself.** When you share or save a route, ride or sections (GPX, GeoJSON), the file goes only where you send it, for example your navigation app or a folder you pick.
 
 Nothing else is sent. The app talks to no other servers.
