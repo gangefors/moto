@@ -51,6 +51,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The debug tools (src/debug) report which commit the APK was built from.
+            val commit = runCatching {
+                providers.exec { commandLine("git", "rev-parse", "--short=7", "HEAD") }
+                    .standardOutput.asText.get().trim()
+            }.getOrNull()?.takeIf { it.isNotEmpty() } ?: "unknown"
+            resValue("string", "debug_commit", commit)
+        }
         release {
             isMinifyEnabled = false
         }
@@ -63,6 +71,7 @@ android {
 
     buildFeatures {
         compose = true
+        resValues = true
     }
 }
 

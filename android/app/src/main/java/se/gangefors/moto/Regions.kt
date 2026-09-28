@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.debug.DebugTools
 import android.content.Context
 import android.os.StatFs
 import java.io.File
@@ -27,7 +28,6 @@ import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.RegionOffer
 import se.gangefors.moto.core.installRegion
 import se.gangefors.moto.core.parseRegionManifest
-import se.gangefors.moto.core.profileRegionOpen
 import se.gangefors.moto.core.regionFingerprint
 import se.gangefors.moto.core.regionManifestFileName
 
@@ -83,9 +83,9 @@ object Regions {
     /** Opens the region at app start: the downloaded one, else the bundled one. */
     suspend fun load(context: Context) = lock.withLock {
         if (_active.value.state !is RegionState.Loading) return@withLock
-        StartupTimes.record("region load started")
+        DebugTools.mark("region load started")
         _active.value = withContext(Dispatchers.IO) { open(context.applicationContext) }
-        StartupTimes.record("region ready")
+        DebugTools.mark("region ready")
     }
 
     private fun open(context: Context): ActiveRegion {
@@ -96,8 +96,8 @@ object Regions {
                 val size = "${file.length() / 1_000_000} MB"
                 val opened = openRegion(
                     prefs.getString(FINGERPRINT, null),
-                    { fp -> StartupTimes.measure("region open by fingerprint ($size)") { Engine.openFingerprinted(file.path, fp) } },
-                    { StartupTimes.measure("region open, full check ($size)") { Engine.open(file.path) } },
+                    { fp -> DebugTools.startup("region open by fingerprint ($size)") { Engine.openFingerprinted(file.path, fp) } },
+                    { DebugTools.startup("region open, full check ($size)") { Engine.open(file.path) } },
                 )
                 val engine = opened.region
                 if (opened.needsFingerprint) recordFingerprint(context, file)
@@ -199,22 +199,8 @@ object Regions {
         }
     }
 
-    /**
-     * Debug: times the region check twice in a row on the downloaded
-     * region, step by step (a fast second run means the phone keeps the
-     * file cached). Lines to show; empty without a downloaded region. Call
-     * off the main thread.
-     */
-    fun profileOpen(context: Context): List<String> {
-        val file = installed(context.applicationContext)
-        if (!file.isFile) return emptyList()
-        return (1..2).flatMap { run ->
-            val steps = profileRegionOpen(file.path)
-            val total = steps.sumOf { it.ms }
-            listOf("Run $run: ${"%.2f".format(java.util.Locale.ROOT, total / 1000)} s") +
-                steps.map { "  ${it.name}: ${"%.2f".format(java.util.Locale.ROOT, it.ms / 1000)} s" }
-        }
-    }
+    /** The installed downloaded region's file (it may not exist). */
+    fun installedFile(context: Context): File = installed(context.applicationContext)
 
     /** Stops a download; what has arrived is kept to resume later. */
     fun cancel() {

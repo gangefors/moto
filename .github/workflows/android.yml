@@ -264,7 +264,9 @@ jobs:
 
       - name: Build, lint and test
         working-directory: android
-        run: ./gradlew assembleDebug lintDebug testDebugUnitTest
+        # compileReleaseKotlin: the release build's do-nothing debug tools
+        # (src/release) must keep matching the real ones (src/debug).
+        run: ./gradlew assembleDebug lintDebug testDebugUnitTest compileReleaseKotlin
 
       - name: Check APK signer
         run: |

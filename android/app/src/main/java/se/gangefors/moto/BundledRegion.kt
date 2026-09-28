@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.debug.DebugTools
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -48,7 +49,7 @@ object BundledRegion {
             install(context, installed)
             stamp.writeText(version)
         }
-        RegionState.Ready(StartupTimes.measure("built-in region open") { Engine.open(installed.path) })
+        RegionState.Ready(DebugTools.startup("built-in region open") { Engine.open(installed.path) })
     } catch (_: FileNotFoundException) {
         RegionState.Missing
     } catch (e: Exception) {
