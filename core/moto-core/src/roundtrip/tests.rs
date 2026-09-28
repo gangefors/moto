@@ -639,3 +639,66 @@ fn side_loops_are_cut_unless_short_of_reach_or_a_favourite() {
     let plain = vec![p(E_AB, 0.0, 1.0), p(E_BD, 0.0, 1.0), p(u32::MAX, 0.0, 1.0)];
     assert_eq!(cut_side_loops(region, &fun, plain.clone(), 5_000.0), plain);
 }
+
+#[test]
+fn loops_through_given_points_ride_out_through_them_and_back() {
+    let e = engine(fixture::grid(13));
+    let opts = RouteOptions::default();
+    // A stretch 4 km north of the centre, from 3 km west to straight north.
+    let (a, b) = (ll(55.790, 13.448), ll(55.790, 13.496));
+    let loops = round_trip_via(&e, CENTRE, &[a, b], true, &opts, &Favourites::none()).unwrap();
+    assert!(!loops.is_empty() && loops.len() <= 2, "{}", loops.len());
+    let start = e.snap(CENTRE).unwrap().position;
+    let near = |r: &Route, p: LatLon| {
+        r.geometry
+            .iter()
+            .map(|&g| haversine_m(g, p))
+            .fold(f64::INFINITY, f64::min)
+    };
+    for l in &loops {
+        assert!(
+            haversine_m(l.geometry[0], start) < 1.0,
+            "starts at the start"
+        );
+        assert!(
+            haversine_m(*l.geometry.last().unwrap(), start) < 1.0,
+            "and ends there"
+        );
+        assert!(
+            near(l, a) < 50.0 && near(l, b) < 50.0,
+            "through both points"
+        );
+        // The shortest loop through both is 14 km (7 out, 3 along, 4
+        // back); the way back keeps off the roads out, so a little more,
+        // never twice the way out.
+        assert!(
+            l.distance_m >= 13_900.0 && l.distance_m < 1.4 * 14_000.0,
+            "{}",
+            l.distance_m
+        );
+        assert_eq!(l.fastest_duration_s, l.duration_s);
+    }
+    // One way only: the points in the order given (the way out may pass
+    // b on its way to a, but b comes again after a).
+    let one = round_trip_via(&e, CENTRE, &[a, b], false, &opts, &Favourites::none()).unwrap();
+    assert_eq!(one.len(), 1);
+    let g = &one[0].geometry;
+    let first_a = g.iter().position(|&p| haversine_m(p, a) < 50.0).unwrap();
+    let last_b = g.iter().rposition(|&p| haversine_m(p, b) < 50.0).unwrap();
+    assert!(first_a < last_b, "a before b");
+}
+
+#[test]
+fn loops_through_points_refuse_bad_input() {
+    let e = engine(fixture::grid(13));
+    let opts = RouteOptions::default();
+    let none = Favourites::none();
+    assert!(round_trip_via(&e, CENTRE, &[], true, &opts, &none).is_err());
+    let many = vec![CENTRE; crate::MAX_VIA_POINTS + 1];
+    assert!(round_trip_via(&e, CENTRE, &many, true, &opts, &none).is_err());
+    let bad = ll(f64::NAN, 13.4);
+    assert!(round_trip_via(&e, CENTRE, &[bad], true, &opts, &none).is_err());
+    assert!(round_trip_via(&e, bad, &[CENTRE], true, &opts, &none).is_err());
+    // Far outside the region: no road to go through.
+    assert!(round_trip_via(&e, CENTRE, &[ll(60.0, 18.0)], true, &opts, &none).is_err());
+}

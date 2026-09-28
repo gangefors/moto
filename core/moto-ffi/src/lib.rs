@@ -321,6 +321,27 @@ impl Engine {
         )?;
         Ok(routes.into_iter().map(Into::into).collect())
     }
+
+    /// Loops from `start` through `stops` in order and back (at most 8),
+    /// e.g. a favourite section's two ends to ride it from here; with
+    /// `both_ways` also through them the other way round. Best first; the
+    /// way back keeps off the roads out, as every loop does.
+    pub fn round_trip_via(
+        &self,
+        start: LatLon,
+        stops: Vec<LatLon>,
+        both_ways: bool,
+        opts: RouteOptions,
+        favourites: Option<Arc<Favourites>>,
+    ) -> Result<Vec<Route>, MotoError> {
+        let none = moto_core::Favourites::none();
+        let fav = favourites.as_ref().map_or(&none, |f| &f.inner);
+        let stops: Vec<moto_core::LatLon> = stops.into_iter().map(Into::into).collect();
+        let routes =
+            self.inner
+                .round_trip_via(start.into(), &stops, both_ways, &opts.into(), fav)?;
+        Ok(routes.into_iter().map(Into::into).collect())
+    }
 }
 
 // --- conversions between FFI records and core types ---
@@ -703,6 +724,34 @@ mod tests {
             outside.to_string().contains("outside the loaded region"),
             "{outside}"
         );
+    }
+
+    #[test]
+    fn loops_through_points_cross_the_ffi() {
+        let file = TempRegion::new("via", &moto_core::fixture::grid(13).to_bytes().unwrap());
+        let engine = Engine::open(file.path()).unwrap();
+        let stops = vec![ll(55.790, 13.448), ll(55.790, 13.496)];
+        let loops = engine
+            .round_trip_via(
+                ll(55.754, 13.496),
+                stops.clone(),
+                true,
+                default_route_options(),
+                None,
+            )
+            .unwrap();
+        assert!(!loops.is_empty() && loops.len() <= 2);
+        assert_eq!(loops[0].geometry.first(), loops[0].geometry.last());
+        let err = engine
+            .round_trip_via(
+                ll(55.754, 13.496),
+                vec![],
+                true,
+                default_route_options(),
+                None,
+            )
+            .unwrap_err();
+        assert!(matches!(err, MotoError::InvalidInput { .. }), "{err:?}");
     }
 
     #[test]

@@ -358,6 +358,20 @@ impl Engine {
         crate::roundtrip::loops(self, start, target, opts, favourites, shape)
     }
 
+    /// Loops from `start` through `stops` in order and back (and, when
+    /// `both_ways`, the other way round too), best first: e.g. to ride a
+    /// favourite section from home (see [`crate::roundtrip::round_trip_via`]).
+    pub fn round_trip_via(
+        &self,
+        start: LatLon,
+        stops: &[LatLon],
+        both_ways: bool,
+        opts: &RouteOptions,
+        favourites: &Favourites,
+    ) -> Result<Vec<Route>, CoreError> {
+        crate::roundtrip::round_trip_via(self, start, stops, both_ways, opts, favourites)
+    }
+
     /// The highest edge speed, which bounds the A* estimate.
     pub(crate) fn max_speed_kmh(&self) -> f64 {
         self.max_speed_kmh

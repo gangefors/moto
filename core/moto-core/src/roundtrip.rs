@@ -203,6 +203,73 @@ pub fn loops(
         .collect())
 }
 
+/// Loops from `start` through `stops` in order and back (at most
+/// [`crate::MAX_VIA_POINTS`]), e.g. the ends of a favourite section to
+/// ride: the loop through them as given and, when `both_ways`, through
+/// them the other way round, the better (worth per second) first. Each
+/// leg avoids the roads the earlier ones took, as every loop does, so the
+/// way back isn't the way out. The home zone and side-loop cut are sized
+/// by the loop's rough length (out to the farthest stop and back).
+pub fn round_trip_via(
+    engine: &Engine,
+    start: LatLon,
+    stops: &[LatLon],
+    both_ways: bool,
+    opts: &RouteOptions,
+    favourites: &Favourites,
+) -> Result<Vec<Route>, CoreError> {
+    start.validate()?;
+    opts.validate()?;
+    favourites.check(engine)?;
+    if stops.is_empty() || stops.len() > crate::MAX_VIA_POINTS {
+        return Err(CoreError::InvalidArgument(format!(
+            "a loop through points needs 1–{} of them, got {}",
+            crate::MAX_VIA_POINTS,
+            stops.len()
+        )));
+    }
+    for p in stops {
+        p.validate()?;
+    }
+    let s = engine.snap(start)?;
+    let snapped: Vec<RoadPoint> = stops
+        .iter()
+        .map(|&p| engine.snap(p))
+        .collect::<Result<_, _>>()?;
+    let fun = Fun::new(engine.region(), favourites, opts);
+    let reach = snapped
+        .iter()
+        .map(|p| haversine_m(s.position, p.position))
+        .fold(0.0, f64::max);
+    let rough = (2.0 * reach * PARAMS.loop_detour).max(MIN_TARGET_M);
+    let home = home_radius_m(rough);
+    let side_loop_max = SIDE_LOOP_MAX_M.min(rough * SIDE_LOOP_SHARE);
+    let mut orders = vec![snapped.clone()];
+    if both_ways && snapped.len() > 1 {
+        orders.push(snapped.iter().rev().cloned().collect());
+    }
+    let mut found: Vec<Loop> = orders
+        .iter()
+        .filter_map(|o| ride_loop(engine, &fun, opts, &s, o, home, side_loop_max))
+        .collect();
+    found.sort_by(|a, b| worth_per_s(b).total_cmp(&worth_per_s(a)));
+    found.dedup_by(|a, b| a.routed.route.geometry == b.routed.route.geometry);
+    if found.is_empty() {
+        return Err(CoreError::NoRoute(
+            "no loop through those points from here".into(),
+        ));
+    }
+    Ok(found
+        .into_iter()
+        .map(|l| {
+            let mut r = l.routed.route;
+            // A loop has no fastest route to compare with.
+            r.fastest_duration_s = r.duration_s;
+            r
+        })
+        .collect())
+}
+
 /// `kept` plus the best of `loops` (worth per second; ties by heading, so
 /// results are stable) that overlap every kept loop by less than
 /// [`MAX_OVERLAP`], up to `max` loops in all.
@@ -441,13 +508,6 @@ fn loop_at(
     favourites: &Favourites,
     side_loop_max: f64,
 ) -> Option<Loop> {
-    let region = engine.region();
-    let at_home = |edge: u32| {
-        let e = region.edges()[edge as usize];
-        [e.tail, e.head]
-            .iter()
-            .all(|&n| haversine_m(start.position, latlon(region.nodes()[n as usize])) <= home)
-    };
     let mut taken: Vec<LatLon> = Vec::new();
     let mut waypoint = |b: f64, radius: f64| -> Option<RoadPoint> {
         if let Some(p) = anchor_near(start.position, b, radius, favourites, &taken) {
@@ -470,10 +530,36 @@ fn loop_at(
     };
     let w1 = waypoint(bearing - spread, radius.0)?;
     let w2 = waypoint(bearing + spread, radius.1)?;
+    ride_loop(engine, fun, opts, start, &[w1, w2], home, side_loop_max)
+}
 
+/// The loop from `start` through `stops` in order and back, each leg
+/// avoiding the roads the earlier ones took (outside the home zone of
+/// radius `home`), side loops up to `side_loop_max` metres cut out.
+fn ride_loop(
+    engine: &Engine,
+    fun: &Fun,
+    opts: &RouteOptions,
+    start: &RoadPoint,
+    stops: &[RoadPoint],
+    home: f64,
+    side_loop_max: f64,
+) -> Option<Loop> {
+    let region = engine.region();
+    let at_home = |edge: u32| {
+        let e = region.edges()[edge as usize];
+        [e.tail, e.head]
+            .iter()
+            .all(|&n| haversine_m(start.position, latlon(region.nodes()[n as usize])) <= home)
+    };
+    let points: Vec<&RoadPoint> = std::iter::once(start)
+        .chain(stops)
+        .chain(std::iter::once(start))
+        .collect();
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
-    for (from, to) in [(start, &w1), (&w1, &w2), (&w2, start)] {
+    for w in points.windows(2) {
+        let (from, to) = (w[0], w[1]);
         let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &used);
         let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
