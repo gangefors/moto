@@ -130,7 +130,7 @@ val uniffiBindings = tasks.register<UniffiBindgen>("uniffiBindings") {
 }
 
 /**
- * Copies a region file into the APK's assets as `regions/m0.region`, for
+ * Copies a region file into a debug APK's assets as `regions/m0.region`, for
  * testing (production will download regions; ADR-0005). The file comes from
  * the `moto.regionFile` Gradle property or the `MOTO_REGION_FILE` environment
  * variable (CI builds it with moto-regionbuild); without one the app starts
@@ -322,7 +322,11 @@ val rustTargetOfAbi = mapOf("arm64-v8a" to "aarch64-linux-android", "x86_64" to 
 androidComponents {
     onVariants { variant ->
         variant.sources.kotlin?.addGeneratedSourceDirectory(uniffiBindings, UniffiBindgen::outputDir)
-        variant.sources.assets?.addGeneratedSourceDirectory(bundleRegion, BundleRegion::outputDir)
+        // Only debug builds carry the M0 test region; a release build starts
+        // without one and the rider downloads a region (ADR-0008).
+        if (variant.buildType == "debug") {
+            variant.sources.assets?.addGeneratedSourceDirectory(bundleRegion, BundleRegion::outputDir)
+        }
         val licences = tasks.register<ThirdPartyLicenses>("${variant.name}ThirdPartyLicenses") {
             group = "moto"
             coreDir.set(rustCoreDir)
