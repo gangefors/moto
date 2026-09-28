@@ -161,7 +161,6 @@
     <string name="route_gravel">%1$.1f km gravel</string>
     <string name="about_open">About and licences</string>
     <string name="about_title">About moto</string>
-    <string name="about_close">Close</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_howto_title">How to use</string>
     <string name="about_howto">• Tap a road to see what it is, or a section to open it.\n• Long-press a place, then: long-press where you want to go, route there from your position, or ride a loop from it.\n• The loop button plans loops from where you are.\n• Mark a section (+) to save a road you like; TAG saves the spot you are on, to review after the ride.\n• The red dot records your ride.</string>
