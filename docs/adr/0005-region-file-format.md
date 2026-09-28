@@ -190,4 +190,4 @@ Routing scales with trip length, not region size: the whole of Sweden adds no co
 - [x] `Engine::open` and `snap` on the real file; tap → snap → marker on the map (verified on the phone, region bundled in the debug APK).
 - [x] Measure the Skåne and Sweden files: size, open time, peak memory, snap time (peak memory on the phone still to measure).
 - [x] Road names and places (format 1.2): builder, reader with validation and corruption tests, `Engine::describe`, road info.
-- [ ] Measure format 1.2 on all of Sweden once the weekly regions build publishes it (size and download).
+- [x] Measure format 1.2 on all of Sweden (2026-09-28, local build): 1 024 950 of 1 748 975 geometries named, 124 417 strings, 42 672 places; 410.2 MiB instead of 394.3 (+4.0 %), gzip download 157.9 MB instead of 155.1 (+1.9 %).
