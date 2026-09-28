@@ -64,9 +64,10 @@ enum class DataPage { LIBRARY, SECTIONS, REGION }
 /**
  * A page of the rider's data, opened from the menu: [DataPage.LIBRARY],
  * Routes & rides, saved routes and recorded or imported rides in one
- * list, newest first, each shown on the map ([onShowRoute], [onShow]),
- * renamed, shared (to a nav app), saved as a GPX file or deleted (tapped
- * twice), and a ride also saved as a route to ride again, plus Import GPX
+ * list, newest first, each shown on the map with a tap ([onShowRoute],
+ * [onShow]), shared (to a nav app), and from its menu renamed, saved as a
+ * GPX file or deleted (tapped twice), and a ride also saved as a route to
+ * ride again, plus Import GPX
  * for rides; [DataPage.SECTIONS], all saved sections exported as GeoJSON
  * (plain or compressed) or imported from such a file ([engine] fits them
  * to the map, [onSectionsChanged] reloads them); [DataPage.REGION], the
@@ -104,9 +105,8 @@ fun RidesSheet(
     }
     val zone = remember { ZoneId.systemDefault() }
     var tracks by remember { mutableStateOf<List<Track>?>(null) }
-    // Routes & rides: the one armed for deleting, being renamed, being
-    // saved as a route, or being saved as a file.
-    var confirmDelete by remember { mutableStateOf<String?>(null) }
+    // Routes & rides: the one being renamed, being saved as a route, or
+    // being saved as a file.
     var renaming by remember { mutableStateOf<LibraryItem?>(null) }
     var savingAsRoute by remember { mutableStateOf<Track?>(null) }
     var exporting by remember { mutableStateOf<LibraryItem?>(null) }
@@ -195,12 +195,7 @@ fun RidesSheet(
             savingAsRoute = item.track
         }
 
-        override fun armDelete(item: LibraryItem) {
-            confirmDelete = item.key
-        }
-
         override fun delete(item: LibraryItem) {
-            confirmDelete = null
             scope.launch {
                 withContext(Dispatchers.IO) {
                     runCatching {
@@ -313,7 +308,7 @@ fun RidesSheet(
                     Text(stringResource(R.string.library_none), Modifier.padding(vertical = 16.dp))
                 }
                 else -> items(library, key = { it.key }) { item ->
-                    LibraryRow(item, zone, confirmDelete == item.key, actions)
+                    LibraryRow(item, zone, actions)
                 }
             }
             if (page == DataPage.SECTIONS) item(key = "sections") {
