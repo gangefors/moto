@@ -111,14 +111,18 @@ private const val CENTRED_SHARE = 0.05
 /** Metres per logical pixel at zoom 0 on the equator (512-pixel tiles). */
 private const val METRES_PER_PX_AT_ZOOM_0 = 78_271.517
 
+/** A zoom on a slider that runs from close ([MAX_ZOOM]) on the left to
+ * wide ([MIN_ZOOM]) on the right, and back: the same both ways. */
+fun flipZoom(zoom: Float): Float = MIN_ZOOM + MAX_ZOOM - zoom
+
 /**
- * The zooms a range slider (thumbs at [start] and [end], zoom levels as
- * floats) stands for; null when the thumbs would meet or cross, so the
- * close zoom always stays a step closer than the area.
+ * The zooms a range slider over [flipZoom]ed values stands for: the left
+ * thumb ([start]) close by, the right one ([end]) the area; null when the
+ * thumbs would meet or cross, so close by always stays a step closer.
  */
 fun zoomsFromRange(start: Float, end: Float): LocateZooms? {
-    val a = kotlin.math.round(start).toInt().coerceIn(MIN_ZOOM, MAX_ZOOM)
-    val c = kotlin.math.round(end).toInt().coerceIn(MIN_ZOOM, MAX_ZOOM)
+    val c = kotlin.math.round(flipZoom(start)).toInt().coerceIn(MIN_ZOOM, MAX_ZOOM)
+    val a = kotlin.math.round(flipZoom(end)).toInt().coerceIn(MIN_ZOOM, MAX_ZOOM)
     return if (c > a) LocateZooms(a, c) else null
 }
 

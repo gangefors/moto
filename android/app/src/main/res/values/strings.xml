@@ -18,7 +18,7 @@
     <string name="locate_zooms">Location button zoom</string>
     <string name="locate_zoom_area">Area</string>
     <string name="locate_zoom_close">Close by</string>
-    <string name="locate_zooms_hint">The app starts at the area zoom; tapping the location button on your position switches between the two. Drag the left mark for the area and the right one for close by. Widths are across this screen in southern Sweden.</string>
+    <string name="locate_zooms_hint">The app starts at the area zoom; tapping the location button on your position switches between the two. Drag the left mark for close by and the right one for the area. Widths are across this screen in southern Sweden.</string>
     <string name="locate_zoom_value">%1$s: %2$s across</string>
     <string name="locate_zoom_wider">Wider</string>
     <string name="locate_zoom_closer">Closer</string>
