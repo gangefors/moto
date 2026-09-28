@@ -195,7 +195,6 @@
         <item quantity="other">Section saved. It replaces %d sections it covers.</item>
     </plurals>
     <string name="section_updated">Section updated</string>
-    <string name="section_deleted">Section deleted</string>
     <string name="rating_good">Good</string>
     <string name="rating_great">Great</string>
     <string name="rating_epic">Epic</string>
