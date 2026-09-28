@@ -108,7 +108,6 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
-import org.maplibre.android.location.OnCameraTrackingChangedListener
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
@@ -707,18 +706,13 @@ fun MapScreen() {
     // and a route or loop being saved (its name is asked first).
     var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
 
-    // The location button (LocateLogic): following, an overview of the
-    // plan, or neither.
-    var locate by remember { mutableStateOf<LocateState>(LocateState.Idle) }
-    // Gliding to the rider before following starts (not "stopped following").
-    var gliding by remember { mutableStateOf(false) }
+    // The location button (LocateLogic): whether the overview of the plan
+    // is on the map, untouched, and the zoom the map had on the rider
+    // before it.
+    var overviewShown by remember { mutableStateOf(false) }
+    var zoomBeforeOverview by remember { mutableStateOf<Double?>(null) }
 
     fun mapWidthDp(): Double = (mapSize.width / density.density).toDouble().coerceAtLeast(1.0)
-
-    fun currentSpan(m: MapLibreMap): Double {
-        val cam = m.cameraPosition
-        return spanAtZoom(cam.zoom, mapWidthDp(), cam.target?.latitude ?: DEFAULT_LATITUDE)
-    }
 
     /** The route, loops, saved route or ride on the map, if any. */
     fun planLines(): List<List<LatLon>> = when {
@@ -727,24 +721,36 @@ fun MapScreen() {
         else -> listOfNotNull(shownSaved?.line ?: shownRide?.line)
     }
 
+    /** What the map shows now, for the location button. */
+    fun locateView(m: MapLibreMap, here: android.location.Location?): LocateView {
+        if (overviewShown) return LocateView.OVERVIEW
+        val cam = m.cameraPosition
+        val target = cam.target ?: return LocateView.ELSEWHERE
+        if (here == null) {
+            val tracking = m.locationComponent.takeIf { it.isLocationComponentActivated }?.cameraMode
+            return if (tracking == CameraMode.TRACKING) LocateView.ON_RIDER else LocateView.ELSEWHERE
+        }
+        val offset = FloatArray(1)
+        android.location.Location.distanceBetween(target.latitude, target.longitude, here.latitude, here.longitude, offset)
+        val width = spanAtZoom(cam.zoom, mapWidthDp(), target.latitude)
+        return if (isCentredOnRider(offset[0].toDouble(), width)) LocateView.ON_RIDER else LocateView.ELSEWHERE
+    }
+
     fun onLocateTap() {
         val m = map ?: return
         val here = m.locationComponent.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
         val plan = planLines().filter { it.isNotEmpty() }
-        val (next, action) = onLocateTap(locate, currentSpan(m), plan.isNotEmpty())
-        locate = next
-        when (action) {
+        val zoom = m.cameraPosition.zoom
+        when (val action = onLocateTap(locateView(m, here), zoom, plan.isNotEmpty(), zoomBeforeOverview)) {
             is LocateAction.Follow -> {
-                val latitude = here?.latitude ?: m.cameraPosition.target?.latitude ?: DEFAULT_LATITUDE
-                gliding = true
-                followRider(m, action.spanM?.let { zoomForSpan(it, mapWidthDp(), latitude) }) { followed ->
-                    gliding = false
-                    if (!followed) locate = LocateState.Idle
-                }
+                overviewShown = false
+                followRider(m, action.zoom)
             }
             LocateAction.ShowPlan -> {
+                zoomBeforeOverview = zoom
                 val rider = here?.let { listOf(LatLon(it.latitude, it.longitude)) }
                 showOnMap(plan + listOfNotNull(rider), always = true)
+                overviewShown = true
             }
         }
     }
@@ -1020,41 +1026,19 @@ fun MapScreen() {
     }
 
     // Show the GPS position as soon as both the style and the permission
-    // are there, following it; a pan or pinch, or a route fitted to the
-    // map, stops following (the location button starts it again).
+    // are there, following it. A pan or pinch leaves an overview of the
+    // plan (the location button then starts from its first step).
     DisposableEffect(map, style, hasLocation) {
         val m = map
         val s = style
         if (m == null || s == null || !hasLocation) return@DisposableEffect onDispose {}
         enableLocation(context, m, s)
-        locate = LocateState.Following(currentSpan(m))
-        gliding = true
-        followRider(m) { followed ->
-            gliding = false
-            if (!followed) locate = LocateState.Idle
-        }
-        val tracking = object : OnCameraTrackingChangedListener {
-            override fun onCameraTrackingDismissed() {
-                if (locate is LocateState.Following) locate = LocateState.Idle
-            }
-
-            override fun onCameraTrackingChanged(mode: Int) {
-                if (mode == CameraMode.NONE && locate is LocateState.Following && !gliding) {
-                    locate = LocateState.Idle
-                }
-            }
-        }
+        followRider(m)
         val moved = MapLibreMap.OnCameraMoveStartedListener { reason ->
-            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE && locate is LocateState.Overview) {
-                locate = LocateState.Idle
-            }
+            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) overviewShown = false
         }
-        m.locationComponent.addOnCameraTrackingChangedListener(tracking)
         m.addOnCameraMoveStartedListener(moved)
-        onDispose {
-            m.locationComponent.removeOnCameraTrackingChangedListener(tracking)
-            m.removeOnCameraMoveStartedListener(moved)
-        }
+        onDispose { m.removeOnCameraMoveStartedListener(moved) }
     }
 
     /**
@@ -1933,16 +1917,14 @@ private fun enableLocation(context: Context, map: MapLibreMap, style: Style) {
  * gets there (a separate padding change would be cut short by following's
  * own move). Without a known position the padding goes at once. A pan
  * during the glide leaves following off, like a pan while following.
- * [done] says whether following started.
  */
-private fun followRider(map: MapLibreMap, zoom: Double? = null, done: (Boolean) -> Unit = {}) {
+private fun followRider(map: MapLibreMap, zoom: Double? = null) {
     val location = map.locationComponent
     val here = location.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
     if (here == null) {
         map.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
         zoom?.let { map.moveCamera(CameraUpdateFactory.zoomTo(it)) }
         location.cameraMode = CameraMode.TRACKING
-        done(true)
         return
     }
     // Not following during the glide, so the two moves don't fight.
@@ -1958,16 +1940,12 @@ private fun followRider(map: MapLibreMap, zoom: Double? = null, done: (Boolean) 
         object : MapLibreMap.CancelableCallback {
             override fun onFinish() {
                 location.cameraMode = CameraMode.TRACKING
-                done(true)
             }
 
-            override fun onCancel() = done(false)
+            override fun onCancel() = Unit
         },
     )
 }
-
-/** Where the map is when nothing better is known: southern Sweden. */
-private const val DEFAULT_LATITUDE = 56.0
 
 /** How long the map takes to glide to the rider's position. */
 private const val FOLLOW_GLIDE_MS = 500

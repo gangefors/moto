@@ -4,51 +4,48 @@
 package se.gangefors.moto
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocateLogicTest {
     @Test
-    fun theFirstTapFollowsAndFixesOnlyAFarOffZoom() {
-        // Europe in view: to the neighbourhood.
-        assertEquals(
-            LocateState.Following(AREA_SPAN_M) to LocateAction.Follow(AREA_SPAN_M),
-            onLocateTap(LocateState.Idle, 2_000_000.0, hasPlan = false),
-        )
-        // Single houses: out to the neighbourhood too.
-        assertEquals(LocateAction.Follow(AREA_SPAN_M), onLocateTap(LocateState.Idle, 300.0, hasPlan = true).second)
+    fun awayFromTheRiderATapFollowsAndFixesOnlyAFarOffZoom() {
+        // Europe in view, or single houses: to the neighbourhood.
+        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ELSEWHERE, 5.0, false, null))
+        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ELSEWHERE, 18.0, true, null))
         // A sensible zoom is kept.
-        assertEquals(
-            LocateState.Following(20_000.0) to LocateAction.Follow(null),
-            onLocateTap(LocateState.Idle, 20_000.0, hasPlan = true),
-        )
+        assertEquals(LocateAction.Follow(null), onLocateTap(LocateView.ELSEWHERE, 12.5, true, null))
     }
 
     @Test
-    fun theNextTapShowsThePlanThenFollowsAgain() {
-        val (overview, show) = onLocateTap(LocateState.Following(20_000.0), 20_000.0, hasPlan = true)
-        assertEquals(LocateState.Overview(20_000.0) to LocateAction.ShowPlan, overview to show)
-        // Back to following at the zoom from before, whatever the overview's.
-        assertEquals(
-            LocateState.Following(20_000.0) to LocateAction.Follow(20_000.0),
-            onLocateTap(overview, 120_000.0, hasPlan = true),
-        )
+    fun onTheRiderATapSwitchesAreaAndCloseByWithNothingPlanned() {
+        // Each tap on the rider switches, however the map got there (the
+        // taps that "did nothing" on the phone).
+        assertEquals(LocateAction.Follow(CLOSE_ZOOM), onLocateTap(LocateView.ON_RIDER, AREA_ZOOM, false, null))
+        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ON_RIDER, CLOSE_ZOOM, false, null))
+        assertEquals(LocateAction.Follow(CLOSE_ZOOM), onLocateTap(LocateView.ON_RIDER, 9.0, false, null))
+        assertEquals(LocateAction.Follow(AREA_ZOOM), onLocateTap(LocateView.ON_RIDER, 16.0, false, null))
     }
 
     @Test
-    fun withNothingPlannedTheNextTapSwitchesAreaAndCloseBy() {
-        val (close, toClose) = onLocateTap(LocateState.Following(AREA_SPAN_M), AREA_SPAN_M, hasPlan = false)
-        assertEquals(LocateAction.Follow(CLOSE_SPAN_M), toClose)
-        assertEquals(LocateAction.Follow(AREA_SPAN_M), onLocateTap(close, CLOSE_SPAN_M, hasPlan = false).second)
-        // From a width of its own: whichever of the two is further away.
-        assertEquals(LocateAction.Follow(CLOSE_SPAN_M), onLocateTap(LocateState.Following(30_000.0), 30_000.0, false).second)
-        assertEquals(LocateAction.Follow(AREA_SPAN_M), onLocateTap(LocateState.Following(8_000.0), 8_000.0, false).second)
+    fun withAPlanTheRiderAndTheOverviewTakeTurns() {
+        assertEquals(LocateAction.ShowPlan, onLocateTap(LocateView.ON_RIDER, 13.0, true, null))
+        assertEquals(LocateAction.Follow(13.0), onLocateTap(LocateView.OVERVIEW, 9.5, true, 13.0))
+        // An overview without a remembered zoom follows at the current one.
+        assertEquals(LocateAction.Follow(null), onLocateTap(LocateView.OVERVIEW, 9.5, true, null))
     }
 
     @Test
-    fun zoomAndWidthConvertBothWays() {
-        // About 50 km across a 400 dp map in Skåne is zoom 8.46.
-        val z = zoomForSpan(50_000.0, 400.0, 55.7)
-        assertEquals(8.46, z, 0.01)
-        assertEquals(50_000.0, spanAtZoom(z, 400.0, 55.7), 1.0)
+    fun centredMeansWithinAFewPercentOfTheMapWidth() {
+        assertTrue(isCentredOnRider(100.0, 10_000.0))
+        assertFalse(isCentredOnRider(1_000.0, 10_000.0))
+    }
+
+    @Test
+    fun mapWidthAtAZoom() {
+        // Zoom 11 on a 400 dp map in Skåne: about 8.6 km across.
+        assertEquals(8_615.0, spanAtZoom(11.0, 400.0, 55.7), 10.0)
+        assertEquals(spanAtZoom(11.0, 400.0, 55.7) / 2, spanAtZoom(12.0, 400.0, 55.7), 1e-6)
     }
 }
