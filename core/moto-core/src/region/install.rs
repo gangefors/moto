@@ -4,7 +4,8 @@
 //! Downloaded regions (ADR-0008): the manifest that lists them, and the
 //! installer that checks a downloaded file and puts it in place.
 //!
-//! Everything here is hostile input until checked: the manifest is parsed
+//! Everything here is hostile input until checked: the manifest's
+//! signature is checked before anything else, the manifest is parsed
 //! strictly, file names are never read from it, the download's size and
 //! SHA-256 are checked before anything is unpacked, unpacking stops at
 //! the size the manifest promised, and the unpacked file must pass the
@@ -21,8 +22,22 @@ use sha2::{Digest, Sha256};
 use super::format::VERSION_MAJOR;
 use crate::{CoreError, LatLon};
 
-/// Largest manifest read.
+/// Largest manifest read (its JSON; a signed manifest is
+/// [`SIGNATURE_BYTES`] longer).
 pub const MAX_MANIFEST_BYTES: usize = 64 * 1024;
+/// The Ed25519 signature that opens a signed manifest.
+pub const SIGNATURE_BYTES: usize = 64;
+/// Public keys whose manifest signatures this build accepts (ADR-0008),
+/// newest first. A new key ships here before the workflow signs with it.
+pub const MANIFEST_KEYS: &[[u8; 32]] = &[
+    // Stefan's regions key, 2026-09-28; as PEM:
+    // MCowBQYDK2VwAyEAt8AuzHeFRgJyrlIw1gDTQe2tbcvevGXvliOIEMU0CnM=
+    [
+        0xb7, 0xc0, 0x2e, 0xcc, 0x77, 0x85, 0x46, 0x02, 0x72, 0xae, 0x52, 0x30, 0xd6, 0x00, 0xd3,
+        0x41, 0xed, 0xad, 0x6d, 0xcb, 0xde, 0xbc, 0x65, 0xef, 0x96, 0x23, 0x88, 0x10, 0xc5, 0x34,
+        0x0a, 0x73,
+    ],
+];
 /// Most regions one manifest may offer.
 pub const MAX_REGIONS: usize = 50;
 /// Largest compressed region accepted.
@@ -56,9 +71,46 @@ impl RegionOffer {
     }
 }
 
-/// The manifest's name for the region format this build reads.
+/// The signed manifest's name for the region format this build reads:
+/// the signature, then the manifest's JSON (see [`verify_signed_manifest`]).
 pub fn manifest_file_name() -> String {
-    format!("regions-v{VERSION_MAJOR}.json")
+    format!("regions-v{VERSION_MAJOR}.manifest")
+}
+
+/// Checks a signed manifest, a [`SIGNATURE_BYTES`] Ed25519 signature
+/// followed by the manifest's JSON bytes, against `keys` (normally
+/// [`MANIFEST_KEYS`]); returns the JSON bytes once one key's signature
+/// matches. Nothing of the manifest is read before that.
+pub fn verify_signed_manifest<'a>(
+    signed: &'a [u8],
+    keys: &[[u8; 32]],
+) -> Result<&'a [u8], CoreError> {
+    if signed.len() > SIGNATURE_BYTES + MAX_MANIFEST_BYTES {
+        return Err(bad("too large"));
+    }
+    let (signature, json) = signed
+        .split_first_chunk::<SIGNATURE_BYTES>()
+        .ok_or_else(|| bad("too short to be signed"))?;
+    let signature = ed25519_dalek::Signature::from_bytes(signature);
+    let signed_by_key = keys.iter().any(|key| {
+        ed25519_dalek::VerifyingKey::from_bytes(key)
+            .is_ok_and(|k| k.verify_strict(json, &signature).is_ok())
+    });
+    if signed_by_key {
+        Ok(json)
+    } else {
+        Err(bad(
+            "signature does not match; the download may have been tampered with",
+        ))
+    }
+}
+
+/// [`verify_signed_manifest`], then [`parse_manifest`].
+pub fn parse_signed_manifest(
+    signed: &[u8],
+    keys: &[[u8; 32]],
+) -> Result<Vec<RegionOffer>, CoreError> {
+    parse_manifest(verify_signed_manifest(signed, keys)?)
 }
 
 #[derive(Deserialize)]

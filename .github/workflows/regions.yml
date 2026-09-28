@@ -40,6 +40,8 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write # to publish the regions release
+    # Holds REGIONS_SIGNING_KEY (ADR-0008); limited to main.
+    environment: regions
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -77,6 +79,31 @@ jobs:
           mv "$out/manifest.json" "$out/publish/regions-v$major.json"
           ls -l "$out/publish"
 
+      # The app reads regions-vN.manifest: the Ed25519 signature, then the
+      # manifest (ADR-0008). The key only exists in this step's memory and a
+      # private temporary file, and the result is checked with the app's own
+      # keys before anything is published.
+      - name: Sign the manifest
+        env:
+          REGIONS_SIGNING_KEY: ${{ secrets.REGIONS_SIGNING_KEY }}
+        run: |
+          out="$RUNNER_TEMP/regions/publish"
+          json=$(ls "$out"/regions-v*.json)
+          signed="${json%.json}.manifest"
+          if [ -z "$REGIONS_SIGNING_KEY" ]; then
+            echo "::error::REGIONS_SIGNING_KEY is not set in the regions environment"
+            exit 1
+          fi
+          key=$(mktemp)
+          trap 'rm -f "$key" "$out/manifest.sig"' EXIT
+          chmod 600 "$key"
+          printf '%s\n' "$REGIONS_SIGNING_KEY" > "$key"
+          openssl pkeyutl -sign -inkey "$key" -rawin -in "$json" -out "$out/manifest.sig"
+          rm -f "$key"
+          test "$(stat -c %s "$out/manifest.sig")" -eq 64
+          cat "$out/manifest.sig" "$json" > "$signed"
+          core/target/release/moto-regionbuild --check-manifest "$signed" "$json"
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,6 +116,8 @@ jobs:
               --title "Routing regions" \
               --notes "Routing regions for the app (ADR-0008), rebuilt weekly from OpenStreetMap data. Map data © OpenStreetMap contributors, available under the Open Database License 1.0 (https://opendatacommons.org/licenses/odbl/1-0/); the region files are built with moto-regionbuild from this repository."
           fi
-          # The region files first, then the manifest that lists them.
+          # The region files first, then the manifests that list them. The
+          # unsigned regions-vN.json is for app builds from before the
+          # signed manifest (ADR-0008) and goes once those are replaced.
           gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/*.region.gz
-          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/regions-v*.json
+          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/regions-v*.manifest "$out"/regions-v*.json

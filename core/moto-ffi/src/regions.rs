@@ -44,17 +44,22 @@ impl From<core::RegionOffer> for RegionOffer {
     }
 }
 
-/// The name of the manifest listing the regions this app can read.
+/// The name of the signed manifest listing the regions this app can read.
 #[uniffi::export]
 pub fn region_manifest_file_name() -> String {
     core::manifest_file_name()
 }
 
-/// The regions a downloaded manifest offers; refuses the whole manifest if
-/// anything in it is unexpected.
+/// The regions a downloaded signed manifest offers; refuses the whole
+/// manifest if its signature doesn't match this app's keys or anything in
+/// it is unexpected.
 #[uniffi::export]
 pub fn parse_region_manifest(manifest: Vec<u8>) -> Result<Vec<RegionOffer>, MotoError> {
-    Ok(core::parse_manifest(&manifest)?
+    offers(&manifest, core::MANIFEST_KEYS)
+}
+
+fn offers(manifest: &[u8], keys: &[[u8; 32]]) -> Result<Vec<RegionOffer>, MotoError> {
+    Ok(core::parse_signed_manifest(manifest, keys)?
         .into_iter()
         .map(Into::into)
         .collect())
@@ -63,9 +68,9 @@ pub fn parse_region_manifest(manifest: Vec<u8>) -> Result<Vec<RegionOffer>, Moto
 /// Installs region `id` of `manifest` from the downloaded file at
 /// `gz_path` as `target_path`: size and SHA-256 checked against the
 /// manifest before unpacking, unpacked to at most the promised size,
-/// verified, then moved into place. The manifest is read again here, so
-/// nothing about the download is taken from the caller but paths in its
-/// own storage. Returns the installed file's fingerprint (as from
+/// verified, then moved into place. The signed manifest is checked and
+/// read again here, so nothing about the download is taken from the caller
+/// but paths in its own storage. Returns the installed file's fingerprint (as from
 /// `region_fingerprint`), to keep for `Engine.open_fingerprinted`.
 #[uniffi::export]
 pub fn install_region(
@@ -74,13 +79,23 @@ pub fn install_region(
     gz_path: String,
     target_path: String,
 ) -> Result<String, MotoError> {
-    let offer = core::parse_manifest(&manifest)?
+    install_with(&manifest, core::MANIFEST_KEYS, &id, &gz_path, &target_path)
+}
+
+fn install_with(
+    manifest: &[u8],
+    keys: &[[u8; 32]],
+    id: &str,
+    gz_path: &str,
+    target_path: &str,
+) -> Result<String, MotoError> {
+    let offer = core::parse_signed_manifest(manifest, keys)?
         .into_iter()
         .find(|o| o.id == id)
         .ok_or_else(|| {
             moto_core::CoreError::InvalidArgument(format!("no region {id} in the manifest"))
         })?;
-    let fp = core::install_region(&offer, Path::new(&gz_path), Path::new(&target_path))?;
+    let fp = core::install_region(&offer, Path::new(gz_path), Path::new(target_path))?;
     Ok(hex(&fp))
 }
 
@@ -108,6 +123,15 @@ pub(crate) fn parse_fingerprint(s: &str) -> Result<[u8; 32], MotoError> {
 mod tests {
     use super::*;
 
+    /// A test key's manifest: the signature, then the JSON.
+    fn signed(json: &str) -> (Vec<u8>, [[u8; 32]; 1]) {
+        use ed25519_dalek::Signer;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
+        let mut bytes = key.sign(json.as_bytes()).to_bytes().to_vec();
+        bytes.extend_from_slice(json.as_bytes());
+        (bytes, [key.verifying_key().to_bytes()])
+    }
+
     #[test]
     fn offers_and_refuses_across_the_ffi() {
         let json = format!(
@@ -117,35 +141,35 @@ mod tests {
             moto_core::region::format::VERSION_MAJOR,
             "00".repeat(32)
         );
-        let offers = parse_region_manifest(json.clone().into_bytes()).unwrap();
-        assert_eq!(offers[0].id, "sweden");
-        assert!(offers[0].file_name.starts_with("sweden-v"));
+        let (manifest, keys) = signed(&json);
+        let found = offers(&manifest, &keys).unwrap();
+        assert_eq!(found[0].id, "sweden");
+        assert!(found[0].file_name.starts_with("sweden-v"));
         assert!(region_manifest_file_name().starts_with("regions-v"));
-        assert!(matches!(
-            parse_region_manifest(b"{}".to_vec()),
-            Err(MotoError::InvalidInput { .. })
-        ));
+        assert!(region_manifest_file_name().ends_with(".manifest"));
+        // Unsigned, or signed by a key the app doesn't know.
+        for bad in [json.clone().into_bytes(), b"{}".to_vec(), manifest.clone()] {
+            assert!(matches!(
+                parse_region_manifest(bad),
+                Err(MotoError::InvalidInput { .. })
+            ));
+        }
         let dir = std::env::temp_dir();
         let missing = dir.join(format!("moto-ffi-none-{}.gz", std::process::id()));
         let target = dir.join(format!("moto-ffi-none-{}.region", std::process::id()));
         let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
         assert!(matches!(
-            install_region(
-                json.clone().into_bytes(),
-                "norway".into(),
-                path(&missing),
-                path(&target)
-            ),
+            install_with(&manifest, &keys, "norway", &path(&missing), &path(&target)),
             Err(MotoError::InvalidInput { .. })
         ));
         assert!(matches!(
-            install_region(
-                json.into_bytes(),
-                "sweden".into(),
-                path(&missing),
-                path(&target)
-            ),
+            install_with(&manifest, &keys, "sweden", &path(&missing), &path(&target)),
             Err(MotoError::Storage { .. })
+        ));
+        // The public call checks the signature against the app's keys.
+        assert!(matches!(
+            install_region(manifest, "sweden".into(), path(&missing), path(&target)),
+            Err(MotoError::InvalidInput { .. })
         ));
     }
 }

@@ -4,14 +4,17 @@
 //! `--manifest`: writes the manifest that lists downloadable regions
 //! (ADR-0008) for their gzip-compressed files, then proves it the way the
 //! app will use it: the core reads it back and installs every region from
-//! its compressed file.
+//! its compressed file. `--check-manifest` then checks the signed copy
+//! the regions workflow publishes, with the app's own keys.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use moto_core::region::Region;
 use moto_core::region::format::VERSION_MAJOR;
-use moto_core::region::install::{install_region, parse_manifest, sha256_file};
+use moto_core::region::install::{
+    MANIFEST_KEYS, install_region, parse_manifest, sha256_file, verify_signed_manifest,
+};
 use serde_json::{Value, json};
 
 /// One region to list: id, display name, the region file and its
@@ -101,6 +104,28 @@ pub fn run(out: &Path, entries: &[Entry], scratch: &Path) -> Result<(), String> 
     Ok(())
 }
 
+/// Checks the signed manifest at `signed` the way the app will read it:
+/// signed by a key the app accepts, carrying exactly the manifest at
+/// `json`, and read strictly. Run before publishing, so a signing key the
+/// app doesn't know never publishes.
+pub fn check_signed(signed: &Path, json: &Path) -> Result<(), String> {
+    let signed = fs::read(signed).map_err(|e| format!("cannot read the signed manifest: {e}"))?;
+    let json = fs::read(json).map_err(|e| format!("cannot read the manifest: {e}"))?;
+    check_signed_with(&signed, &json, MANIFEST_KEYS)?;
+    println!("signed manifest checked with the app's keys");
+    Ok(())
+}
+
+fn check_signed_with(signed: &[u8], json: &[u8], keys: &[[u8; 32]]) -> Result<(), String> {
+    let carried = verify_signed_manifest(signed, keys)
+        .map_err(|e| format!("signed manifest refused: {e}"))?;
+    if carried != json {
+        return Err("the signed manifest carries a different manifest".into());
+    }
+    parse_manifest(carried).map_err(|e| format!("signed manifest refused: {e}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -110,6 +135,37 @@ mod tests {
 
     use super::*;
     use crate::test_support::built_fixture;
+
+    #[test]
+    fn checks_the_signed_manifest() {
+        use ed25519_dalek::Signer;
+        let json = format!(r#"{{"format_major": {VERSION_MAJOR}, "regions": []}}"#).into_bytes();
+        let key = ed25519_dalek::SigningKey::from_bytes(&[3; 32]);
+        let keys = [key.verifying_key().to_bytes()];
+        let mut signed = key.sign(&json).to_bytes().to_vec();
+        signed.extend_from_slice(&json);
+        check_signed_with(&signed, &json, &keys).unwrap();
+        // Another manifest, another key, the app's keys (not the test key).
+        let other = format!(r#"{{"format_major": {VERSION_MAJOR}, "regions": [] }}"#).into_bytes();
+        assert!(
+            check_signed_with(&signed, &other, &keys)
+                .unwrap_err()
+                .contains("different")
+        );
+        let stranger = [ed25519_dalek::SigningKey::from_bytes(&[4; 32])
+            .verifying_key()
+            .to_bytes()];
+        assert!(
+            check_signed_with(&signed, &json, &stranger)
+                .unwrap_err()
+                .contains("signature")
+        );
+        assert!(check_signed_with(&signed, &json, MANIFEST_KEYS).is_err());
+        // Signed, but not a manifest.
+        let mut junk = key.sign(b"[]").to_bytes().to_vec();
+        junk.extend_from_slice(b"[]");
+        assert!(check_signed_with(&junk, b"[]", &keys).is_err());
+    }
 
     fn gzip_to(src: &Path, dst: &Path) {
         let mut e = GzEncoder::new(Vec::new(), Compression::best());

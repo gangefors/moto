@@ -24,4 +24,5 @@ thiserror.workspace = true
 uniffi.workspace = true
 
 [dev-dependencies]
+ed25519-dalek.workspace = true
 moto-core = { workspace = true, features = ["fixtures"] }

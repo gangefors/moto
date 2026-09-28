@@ -12,8 +12,8 @@ package se.gangefors.moto
 /** Where the region files are published: the `regions` release. */
 const val REGIONS_BASE_URL = "https://github.com/gangefors/moto/releases/download/regions/"
 
-/** Largest manifest read; the core's own limit. */
-const val MAX_MANIFEST_BYTES = 64 * 1024
+/** Largest signed manifest read: the core's limit, plus the 64-byte signature. */
+const val MAX_MANIFEST_BYTES = 64 * 1024 + 64
 
 /** Room kept free on the phone beyond what a download needs. */
 const val REGION_SPACE_MARGIN = 64L * 1024 * 1024
@@ -24,7 +24,7 @@ const val REGION_SPACE_MARGIN = 64L * 1024 * 1024
  * built from its checked id); anything else is refused.
  */
 fun regionUrl(name: String): String {
-    require(name.matches(Regex("[a-z0-9-]+(-v[0-9]+)?\\.(json|region\\.gz)"))) { "bad region file name" }
+    require(name.matches(Regex("[a-z0-9-]+(-v[0-9]+)?\\.(manifest|region\\.gz)"))) { "bad region file name" }
     return REGIONS_BASE_URL + name
 }
 
