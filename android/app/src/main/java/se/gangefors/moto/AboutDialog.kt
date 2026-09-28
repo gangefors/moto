@@ -77,6 +77,12 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
                         item {
                             Text(stringResource(R.string.about_version, appVersion(context)))
+                            Text(
+                                stringResource(R.string.about_howto_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 16.dp),
+                            )
+                            Text(stringResource(R.string.about_howto), Modifier.padding(top = 4.dp))
                             Text(stringResource(R.string.about_licence), Modifier.padding(top = 12.dp))
                             Text(stringResource(R.string.about_source), Modifier.padding(top = 12.dp))
                             Text(

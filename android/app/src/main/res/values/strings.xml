@@ -8,7 +8,8 @@
     <string name="my_location">My location</string>
     <string name="snap_error">Snap failed: %1$s</string>
     <string name="region_loading">Loading the region…</string>
-    <string name="region_missing">No map region yet: download one from the menu, Map region</string>
+    <string name="region_missing">No map region yet</string>
+    <string name="region_missing_action">Download</string>
     <string name="busy_routes">Finding routes…</string>
     <string name="busy_loops">Finding loops…</string>
     <string name="busy_section">Finding the road…</string>
@@ -38,7 +39,7 @@
     <string name="region_hint">Regions are downloaded from the app’s GitHub page and checked before use. Map data © OpenStreetMap contributors (ODbL).</string>
     <string name="region_failed">Region failed to load: %1$s</string>
     <string name="region_outside">Outside the region: routing only works where the map isn’t greyed out</string>
-    <string name="map_hint">Tap a road to see what it is, or a section to open it. Long-press twice for a route.</string>
+    <string name="map_hint">Tap a road to see what it is, or a section to open it. Long-press a place to plan a route or a loop from it.</string>
     <string name="road_close">Close road info</string>
     <string name="road_motorway">Motorway</string>
     <string name="road_trunk">Trunk road</string>
@@ -151,6 +152,8 @@
     <string name="about_title">About moto</string>
     <string name="about_close">Close</string>
     <string name="about_version">Version %1$s</string>
+    <string name="about_howto_title">How to use</string>
+    <string name="about_howto">• Tap a road to see what it is, or a section to open it.\n• Long-press a place, then: long-press where you want to go, route there from your position, or ride a loop from it.\n• The loop button plans loops from where you are.\n• Mark a section (+) to save a road you like; TAG saves the spot you are on, to review after the ride.\n• The red dot records your ride.</string>
     <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>
     <string name="about_source">Source code: https://github.com/gangefors/moto</string>
     <string name="about_map_attribution">Map data © OpenStreetMap contributors, available under the Open Database License (ODbL). Map tiles by OpenFreeMap, © OpenMapTiles.</string>

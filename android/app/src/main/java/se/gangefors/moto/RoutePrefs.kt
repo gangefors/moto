@@ -20,6 +20,10 @@ object RoutePrefs {
     private const val AREA_ZOOM = "locate_area_zoom"
     private const val CLOSE_ZOOM = "locate_close_zoom"
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
+    private const val MAP_HINTS = "map_hints_shown"
+
+    /** How many starts show how to use the map. */
+    private const val MAP_HINT_STARTS = 3
 
     /** What routes do with gravel (unpaved) roads; avoided by default.
      * A value of another type throws; it counts as unset. */
@@ -44,6 +48,16 @@ object RoutePrefs {
 
     fun setLoopChoice(context: Context, choice: LoopChoice) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP, choice.key) }
+    }
+
+    /** Whether this start shows how to use the map (the first few do);
+     * counts it. */
+    fun takeMapHint(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val shown = runCatching { prefs.getInt(MAP_HINTS, 0) }.getOrDefault(0)
+        if (shown >= MAP_HINT_STARTS) return false
+        prefs.edit { putInt(MAP_HINTS, shown + 1) }
+        return true
     }
 
     /** Whether the screen stays on while a ride is recording. */

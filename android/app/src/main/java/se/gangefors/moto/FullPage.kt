@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,24 +29,33 @@ import androidx.compose.ui.window.DialogProperties
 
 /**
  * A full-screen page over the map (a menu topic, Ride settings): a back
- * arrow and [title] at the top, then [content]. Back or the arrow closes
- * it; everything stays inside the system bars.
+ * arrow and [title] at the top, then [content]; the page's short notices
+ * ([notices]) show at its bottom. Back or the arrow closes it; everything
+ * stays inside the system bars.
  */
 @Composable
-fun FullPage(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun FullPage(
+    title: String,
+    onBack: () -> Unit,
+    notices: SnackbarHostState? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Dialog(onDismissRequest = onBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            Column(Modifier.safeDrawingPadding()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.settings_back))
+            Box(Modifier.safeDrawingPadding()) {
+                Column {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.settings_back))
+                        }
+                        Text(title, style = MaterialTheme.typography.titleLarge)
                     }
-                    Text(title, style = MaterialTheme.typography.titleLarge)
+                    content()
                 }
-                content()
+                notices?.let { SnackbarHost(it, Modifier.align(Alignment.BottomCenter)) }
             }
         }
     }
