@@ -60,6 +60,9 @@ import se.gangefors.moto.core.Gravel
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.material3.Slider
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
+import androidx.compose.material3.SliderDefaults
 import java.time.ZoneId
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -491,6 +494,7 @@ private fun LoopCardDetails(
             value = choice,
             label = { loopLengthText(it) },
             onCommit = onChoice,
+            mark = ::isLoopMark,
         ) {
             val hours = choice is LoopChoice.Minutes
             FilterChip(
@@ -702,7 +706,9 @@ private fun ArriveByDialog(initial: Long?, zone: ZoneId, onDismiss: () -> Unit, 
  * [trailing] (e.g. a chip) at the end of the title row. The text follows
  * the thumb while dragging; [onCommit] runs once, when the thumb is let
  * go, so the route is found again only then. [dimmed] shows the value as
- * not in use (e.g. while an arrival time is set).
+ * not in use (e.g. while an arrival time is set). Steps for which [mark]
+ * is true get their [label] on a scale under the slider, in place of a
+ * dot for every step.
  */
 @Composable
 fun <T> StepSlider(
@@ -712,6 +718,7 @@ fun <T> StepSlider(
     label: @Composable (T) -> String,
     onCommit: (T) -> Unit,
     dimmed: Boolean = false,
+    mark: (T) -> Boolean = { false },
     trailing: @Composable () -> Unit = {},
 ) {
     val start = steps.indexOf(value).coerceAtLeast(0)
@@ -739,7 +746,48 @@ fun <T> StepSlider(
             },
             valueRange = 0f..steps.lastIndex.coerceAtLeast(1).toFloat(),
             steps = (steps.size - 2).coerceAtLeast(0),
+            colors = if (steps.any(mark)) {
+                SliderDefaults.colors(activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent)
+            } else {
+                SliderDefaults.colors()
+            },
         )
+        val marks = steps.indices.filter { mark(steps[it]) }
+        if (marks.isNotEmpty()) {
+            val texts = marks.map { label(steps[it]) }
+            val last = steps.lastIndex.coerceAtLeast(1)
+            SliderScale(texts, marks.map { it.toFloat() / last })
+        }
+    }
+}
+
+/**
+ * Labels under a slider, each centred on its point ([fractions] of the
+ * track, 0 to 1); labels that don't fit beside each other are left out.
+ */
+@Composable
+private fun SliderScale(texts: List<String>, fractions: List<Float>) {
+    val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
+    Layout(
+        content = {
+            texts.forEach {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { measurables, constraints ->
+        val total = constraints.maxWidth
+        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0)) }
+        val shown = scaleLabels(
+            centres = fractions.map { (it * total).roundToInt() },
+            widths = placeables.map { it.width },
+            total = total,
+            gap = gap,
+        )
+        val height = placeables.maxOfOrNull { it.height } ?: 0
+        layout(total, height) {
+            shown.forEach { (i, left) -> placeables[i].placeRelative(left, 0) }
+        }
     }
 }
 

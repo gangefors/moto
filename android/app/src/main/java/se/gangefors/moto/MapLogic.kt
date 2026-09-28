@@ -248,3 +248,31 @@ fun arrival(foundAtSec: Long, durationS: Double, arriveBySec: Long): Arrival {
 fun clockTime(atSec: Long, zone: java.time.ZoneId): String =
     java.time.Instant.ofEpochSecond(atSec).atZone(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.ROOT))
+
+/**
+ * Which labels of a slider's scale fit: each label is centred on its
+ * point ([centres], px from the left of a scale [total] px wide) but kept
+ * inside the scale, at least [gap] apart. When all don't fit (large fonts,
+ * narrow screens) every second one is tried, then every third and so on,
+ * so the scale stays even. Indices of the labels shown, with their left
+ * edges; empty if not even one fits.
+ */
+fun scaleLabels(centres: List<Int>, widths: List<Int>, total: Int, gap: Int): List<Pair<Int, Int>> {
+    for (stride in 1..centres.size) {
+        val shown = mutableListOf<Pair<Int, Int>>()
+        var nextFree = Int.MIN_VALUE
+        var fits = true
+        for (i in centres.indices step stride) {
+            val w = widths[i]
+            val left = (centres[i] - w / 2).coerceIn(0, (total - w).coerceAtLeast(0))
+            if (w > total || left < nextFree) {
+                fits = false
+                break
+            }
+            shown += i to left
+            nextFree = left + w + gap
+        }
+        if (fits) return shown
+    }
+    return emptyList()
+}
