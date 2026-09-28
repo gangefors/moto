@@ -16,6 +16,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -135,6 +140,31 @@ fun RegionSection() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+    }
+    // Debug builds: time the region check, twice, step by step.
+    if (debuggable && installed != null) {
+        val scope = rememberCoroutineScope()
+        var profile by remember { mutableStateOf<List<String>?>(null) }
+        var profiling by remember { mutableStateOf(false) }
+        TextButton(
+            onClick = {
+                profiling = true
+                scope.launch {
+                    profile = withContext(Dispatchers.IO) {
+                        runCatching { Regions.profileOpen(context) }.getOrElse { listOf(it.message ?: it.toString()) }
+                    }
+                    profiling = false
+                }
+            },
+            enabled = !profiling,
+        ) { OneLine(if (profiling) "Timing the region check…" else "Time the region check") }
+        profile?.let {
+            Text(
+                it.joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
     Text(
         stringResource(R.string.region_hint),

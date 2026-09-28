@@ -300,6 +300,26 @@ fn read_at(file: &File, buf: &mut [u8], at: u64) -> std::io::Result<usize> {
     std::os::windows::fs::FileExt::seek_read(file, buf, at)
 }
 
+/// Opens and validates a region file like [`Region::open`], timing each
+/// step (in milliseconds): mapping the file, then each part of the
+/// validation. To find what makes opening slow on a device.
+pub fn profile_open(path: impl AsRef<Path>) -> Result<Vec<(String, f64)>, CoreError> {
+    let mut steps = Vec::new();
+    let mut last = std::time::Instant::now();
+    let map = map_file(path.as_ref())?;
+    let mut mark = |name: &'static str| {
+        let now = std::time::Instant::now();
+        steps.push((
+            name.to_owned(),
+            now.duration_since(last).as_secs_f64() * 1000.0,
+        ));
+        last = now;
+    };
+    mark("map the file");
+    validate_marked(&map, &mut mark)?;
+    Ok(steps)
+}
+
 /// Verifies a region file before it is installed: CRC32 of every section,
 /// then the same structural checks as [`Region::open`].
 pub fn verify_file(path: impl AsRef<Path>) -> Result<(), CoreError> {
@@ -377,6 +397,14 @@ fn str_field(b: &[u8]) -> String {
 
 /// Full structural validation; everything the accessors rely on.
 fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
+    validate_marked(bytes, &mut |_| {})
+}
+
+/// [`validate`], calling `mark` after each part (for [`profile_open`]).
+fn validate_marked(
+    bytes: &[u8],
+    mark: &mut dyn FnMut(&'static str),
+) -> Result<(RegionInfo, Sections), CoreError> {
     let (header, table) = parse_header(bytes)?;
 
     let mut ranges: Vec<(u32, Range<usize>)> = Vec::with_capacity(table.len());
@@ -420,6 +448,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         way_refs: find(section::WAY_REFS)?,
         coverage: None,
     };
+    mark("header and section table");
     let nodes: &[PointE7] = typed(bytes, &s.node_pos, section::NODE_POS)?;
     let fwd: &[u32] = typed(bytes, &s.fwd_offsets, section::FWD_OFFSETS)?;
     let bwd: &[u32] = typed(bytes, &s.bwd_offsets, section::BWD_OFFSETS)?;
@@ -433,6 +462,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
     let cell_edges: &[u32] = typed(bytes, &s.grid_edges, section::GRID_EDGES)?;
     let way_refs: &[WayRef] = typed(bytes, &s.way_refs, section::WAY_REFS)?;
 
+    mark("typed sections");
     let n = nodes.len();
     let m = edges.len();
     if n >= u32::MAX as usize || m >= u32::MAX as usize || shape.len() >= u32::MAX as usize {
@@ -446,6 +476,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         return Err(err("coordinate out of range"));
     }
 
+    mark("coordinates in range");
     check_offsets("forward CSR", fwd, n, m)?;
     check_offsets("backward CSR", bwd, n, bwd_edges.len())?;
     if bwd_edges.len() != m || curvature.len() != m || way_refs.len() != m {
@@ -460,6 +491,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         return Err(err("geometry with fewer than two points"));
     }
 
+    mark("graph and geometry offsets");
     for v in 0..n {
         for e in &edges[fwd[v] as usize..fwd[v + 1] as usize] {
             if e.tail as usize != v || e.head as usize >= n || e.geometry as usize >= g {
@@ -489,6 +521,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         }
     }
 
+    mark("edges join their nodes");
     let [meta] = meta else {
         return Err(err("grid meta must be exactly one record"));
     };
@@ -503,6 +536,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         return Err(err("grid refers to a missing edge"));
     }
 
+    mark("snapping grid");
     let coverage = match (
         find(section::COVERAGE_OFFSETS).ok(),
         find(section::COVERAGE_POINTS).ok(),
@@ -531,6 +565,7 @@ fn validate(bytes: &[u8]) -> Result<(RegionInfo, Sections), CoreError> {
         _ => return Err(err("coverage needs both its sections")),
     };
 
+    mark("coverage");
     let info = RegionInfo {
         osm_timestamp: header.osm_timestamp,
         bbox: header.bbox,

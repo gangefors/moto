@@ -432,3 +432,16 @@ fn prefetch_reads_the_whole_file() {
     std::fs::remove_file(&path).unwrap();
     assert!(matches!(prefetch(&path), Err(CoreError::Region(_))));
 }
+
+#[test]
+fn profile_open_times_each_step() {
+    let path = std::env::temp_dir().join(format!("moto-profile-{}.region", std::process::id()));
+    std::fs::write(&path, bytes()).unwrap();
+    let steps = profile_open(&path).unwrap();
+    let names: Vec<&str> = steps.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names.first(), Some(&"map the file"));
+    assert_eq!(names.last(), Some(&"coverage"));
+    assert_eq!(names.len(), 8);
+    assert!(steps.iter().all(|(_, ms)| *ms >= 0.0));
+    std::fs::remove_file(&path).unwrap();
+}
