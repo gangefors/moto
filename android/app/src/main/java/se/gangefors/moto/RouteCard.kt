@@ -699,6 +699,7 @@ fun <T> StepSlider(
     onCommit: (T) -> Unit,
     dimmed: Boolean = false,
     mark: (T) -> Boolean = { false },
+    titleExtra: @Composable () -> Unit = {},
     trailing: @Composable () -> Unit = {},
 ) {
     val start = steps.indexOf(value).coerceAtLeast(0)
@@ -709,7 +710,10 @@ fun <T> StepSlider(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.labelMedium)
+                titleExtra()
+            }
             Text(
                 label(at),
                 style = MaterialTheme.typography.titleSmall,
@@ -774,7 +778,12 @@ private fun SliderScale(texts: List<String>, fractions: List<Float>) {
 /** A loop length as a slider over its steps, in hours or kilometres
  * (chips beside the [title] switch the unit). */
 @Composable
-fun LoopLengthSlider(title: String, choice: LoopChoice, onChoice: (LoopChoice) -> Unit) {
+fun LoopLengthSlider(
+    title: String,
+    choice: LoopChoice,
+    onChoice: (LoopChoice) -> Unit,
+    info: @Composable () -> Unit = {},
+) {
     StepSlider(
         title = title,
         steps = loopSteps(choice),
@@ -782,6 +791,7 @@ fun LoopLengthSlider(title: String, choice: LoopChoice, onChoice: (LoopChoice) -
         label = { loopLengthText(it) },
         onCommit = onChoice,
         mark = ::isLoopMark,
+        titleExtra = info,
     ) {
         val hours = choice is LoopChoice.Minutes
         FilterChip(

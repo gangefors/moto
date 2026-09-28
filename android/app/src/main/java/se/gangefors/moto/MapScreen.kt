@@ -1285,14 +1285,14 @@ fun MapScreen() {
                 modifier = Modifier.align(Alignment.TopEnd),
             )
         }
-        // Notices across the top, between the top buttons when they show;
-        // on wide screens no wider than TOP_BOX_MAX_WIDTH.
-        val besideTopButtons = if (topButtons) TOP_BUTTON_MARGIN + TOP_BUTTON_SIZE + 8.dp else 16.dp
+        // Notices across the top, the whole width below the top buttons
+        // when they show; on wide screens no wider than TOP_BOX_MAX_WIDTH.
+        val belowTopButtons = if (topButtons) 8.dp + TOP_BUTTON_SIZE + 8.dp else 8.dp
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .safeDrawingPadding()
-                .padding(top = 8.dp, start = besideTopButtons, end = besideTopButtons)
+                .padding(top = belowTopButtons, start = 8.dp, end = 8.dp)
                 .widthIn(max = TOP_BOX_MAX_WIDTH)
                 .fillMaxWidth()
                 .onGloballyPositioned { topPanelBottom = it.boundsInRoot().bottom.roundToInt() },

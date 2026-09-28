@@ -20,6 +20,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.RichTooltip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -47,18 +57,20 @@ data class RideSettings(
 fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, onDismiss: () -> Unit) {
     FullPage(stringResource(R.string.ride_settings_title), onBack = onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
-            Text(stringResource(R.string.routing_gravel), style = MaterialTheme.typography.titleMedium)
+            Heading(stringResource(R.string.routing_gravel), stringResource(R.string.routing_gravel_hint))
             GravelChips(settings.gravel) { onChange(settings.copy(gravel = it)) }
-            Hint(stringResource(R.string.routing_gravel_hint))
             Divider()
 
-            LoopLengthSlider(stringResource(R.string.settings_loop_length), settings.loopLength) {
-                onChange(settings.copy(loopLength = it))
-            }
-            Hint(stringResource(R.string.settings_loop_length_hint))
+            val loopTitle = stringResource(R.string.settings_loop_length)
+            LoopLengthSlider(
+                loopTitle,
+                settings.loopLength,
+                { onChange(settings.copy(loopLength = it)) },
+                info = { InfoButton(loopTitle, stringResource(R.string.settings_loop_length_hint)) },
+            )
             Divider()
 
-            Text(stringResource(R.string.locate_zooms), style = MaterialTheme.typography.titleMedium)
+            Heading(stringResource(R.string.locate_zooms), stringResource(R.string.locate_zooms_hint))
             val zooms = settings.zooms
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -72,7 +84,6 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                     onChange(settings.copy(zooms = LocateZooms.of(zooms.area, it)))
                 }
             }
-            Hint(stringResource(R.string.locate_zooms_hint))
             Divider()
 
             // The whole row toggles, not just the switch: easier with gloves.
@@ -87,9 +98,8 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f).padding(end = 16.dp)) {
-                    Text(stringResource(R.string.settings_keep_screen_on), style = MaterialTheme.typography.titleMedium)
-                    Hint(stringResource(R.string.settings_keep_screen_on_hint))
+                Box(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Heading(stringResource(R.string.settings_keep_screen_on), stringResource(R.string.settings_keep_screen_on_hint))
                 }
                 Switch(checked = settings.keepScreenOn, onCheckedChange = null)
             }
@@ -97,14 +107,41 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
     }
 }
 
+/** A setting's name with an (i) after it that explains it. */
 @Composable
-private fun Hint(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
-    )
+private fun Heading(title: String, info: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
+        InfoButton(title, info)
+    }
+}
+
+/**
+ * An (i) that shows [text] in a rich tooltip (Material 3's way to explain
+ * a control in place): it opens on a tap and stays until a tap elsewhere
+ * or Back.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InfoButton(title: String, text: String) {
+    val state = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+        tooltip = {
+            RichTooltip(title = { Text(title) }) { Text(text) }
+        },
+        state = state,
+    ) {
+        IconButton(onClick = { scope.launch { state.show() } }) {
+            Icon(
+                painterResource(R.drawable.ic_info),
+                contentDescription = stringResource(R.string.settings_info, title),
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable

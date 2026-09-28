@@ -220,6 +220,7 @@
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>
     <string name="settings_back">Back</string>
+    <string name="settings_info">About %1$s</string>
     <string name="settings_loop_length">New loops start at</string>
     <string name="settings_loop_length_hint">The length a loop starts at when you plan one; change it on the loop sheet for that loop.</string>
     <string name="settings_keep_screen_on">Keep the screen on while recording</string>
