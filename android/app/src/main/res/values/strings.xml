@@ -185,10 +185,11 @@
     <string name="section_proposed">%1$.1f km. Tap near an end to move it.</string>
     <string name="section_save_ellipsis">Save…</string>
     <string name="section_save">Save</string>
-    <string name="section_new_title">New section</string>
+    <string name="section_new_title">New section · %1$.1f km</string>
     <string name="section_edit_title">Section · %1$.1f km</string>
     <string name="section_one_way">One-way</string>
     <string name="section_one_way_hint">Only good in the direction it was marked (arrows)</string>
+    <string name="section_rating">Rating</string>
     <string name="delete">Delete</string>
     <string name="delete_confirm">Tap again to delete</string>
     <string name="section_saved">Section saved</string>

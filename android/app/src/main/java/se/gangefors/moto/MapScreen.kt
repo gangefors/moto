@@ -1747,7 +1747,7 @@ fun MapScreen() {
     if (savingDraft && proposed != null) {
         val tag = reviewTag
         SectionSheet(
-            title = stringResource(R.string.section_new_title),
+            title = stringResource(R.string.section_new_title, sectionKm(proposed.distanceM)),
             initial = SectionChoice(rating = Rating.GOOD, oneWay = false),
             onDismiss = { savingDraft = false },
             onSave = { choice ->
