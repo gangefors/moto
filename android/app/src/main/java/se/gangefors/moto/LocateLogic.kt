@@ -111,6 +111,43 @@ private const val CENTRED_SHARE = 0.05
 /** Metres per logical pixel at zoom 0 on the equator (512-pixel tiles). */
 private const val METRES_PER_PX_AT_ZOOM_0 = 78_271.517
 
+/**
+ * The zooms a range slider (thumbs at [start] and [end], zoom levels as
+ * floats) stands for; null when the thumbs would meet or cross, so the
+ * close zoom always stays a step closer than the area.
+ */
+fun zoomsFromRange(start: Float, end: Float): LocateZooms? {
+    val a = kotlin.math.round(start).toInt().coerceIn(MIN_ZOOM, MAX_ZOOM)
+    val c = kotlin.math.round(end).toInt().coerceIn(MIN_ZOOM, MAX_ZOOM)
+    return if (c > a) LocateZooms(a, c) else null
+}
+
+/** A map's width as a rider reads it. */
+sealed interface Span {
+    /** Whole kilometres, from 10 km. */
+    data class Km(val km: Int) : Span
+
+    /** Kilometres to a tenth, from 1 km. */
+    data class KmTenths(val km: Double) : Span
+
+    /** Metres to the nearest 50, below 1 km. */
+    data class Metres(val m: Int) : Span
+}
+
+/** [metres] rounded the way [Span] says. */
+fun readableSpan(metres: Double): Span {
+    // Rounded first, so 999.9 m reads as 1.0 km, not 1000 m.
+    val tenths = kotlin.math.round(metres / 100.0) / 10.0
+    return when {
+        tenths >= 10.0 -> Span.Km(kotlin.math.round(metres / 1000.0).toInt())
+        tenths >= 1.0 -> Span.KmTenths(tenths)
+        else -> Span.Metres((kotlin.math.round(metres / 50.0).toInt() * 50).coerceAtLeast(50))
+    }
+}
+
+/** The latitude the settings page shows map widths for (Skåne). */
+const val SETTINGS_LATITUDE = 56.0
+
 /** How many metres across a map [widthDp] wide shows at [zoom] and [latitude]. */
 fun spanAtZoom(zoom: Double, widthDp: Double, latitude: Double): Double =
     METRES_PER_PX_AT_ZOOM_0 * kotlin.math.cos(Math.toRadians(latitude)) * widthDp / Math.pow(2.0, zoom)
