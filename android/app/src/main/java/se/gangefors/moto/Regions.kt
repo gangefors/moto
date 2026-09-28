@@ -77,7 +77,9 @@ object Regions {
     /** Opens the region at app start: the downloaded one, else the bundled one. */
     suspend fun load(context: Context) = lock.withLock {
         if (_active.value.state !is RegionState.Loading) return@withLock
+        StartupTimes.record("region load started")
         _active.value = withContext(Dispatchers.IO) { open(context.applicationContext) }
+        StartupTimes.record("region ready")
     }
 
     private fun open(context: Context): ActiveRegion {
@@ -85,7 +87,7 @@ object Regions {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (file.isFile) {
             try {
-                val engine = Engine.open(file.path)
+                val engine = StartupTimes.measure("region open (${file.length() / 1_000_000} MB)") { Engine.open(file.path) }
                 val meta = DownloadedRegion(
                     id = prefs.getString("id", null) ?: "",
                     name = prefs.getString("name", null) ?: "",

@@ -199,6 +199,7 @@ fun MapScreen() {
             m.setStyle(resources.getString(R.string.map_style_url)) { s ->
                 map = m
                 style = s
+                StartupTimes.record("map style loaded")
             }
         }
     }
@@ -299,7 +300,7 @@ fun MapScreen() {
         val result = busy.run(R.string.busy_sections) {
             withContext(Dispatchers.IO) {
                 runCatching {
-                    val report = s.rematch(engine)
+                    val report = StartupTimes.measure("sections re-match") { s.rematch(engine) }
                     report to if (report.checked > 0uL) s.list(null) else null
                 }
             }
@@ -329,7 +330,9 @@ fun MapScreen() {
     LaunchedEffect(store, region, sections) {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
-        withContext(Dispatchers.IO) { runCatching { s.favourites(engine).let { it to it.gravel() } } }
+        withContext(Dispatchers.IO) {
+            runCatching { StartupTimes.measure("favourites") { s.favourites(engine).let { it to it.gravel() } } }
+        }
             .onSuccess { (f, g) ->
                 favourites = f
                 sectionGravel = g
