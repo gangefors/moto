@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -292,8 +293,10 @@ fun RidesSheet(
         },
     )
     FullPage(title, onBack = onDismiss, notices = notices) {
+        val listState = rememberLazyListState()
         LazyColumn(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().scrollHints(listState),
+            state = listState,
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
         ) {
             if (page == DataPage.LIBRARY) item(key = "library-import") {

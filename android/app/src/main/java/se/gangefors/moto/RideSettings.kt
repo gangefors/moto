@@ -56,7 +56,8 @@ data class RideSettings(
 @Composable
 fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, onDismiss: () -> Unit) {
     FullPage(stringResource(R.string.ride_settings_title), onBack = onDismiss) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
+        val scroll = rememberScrollState()
+        Column(Modifier.scrollHints(scroll).verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 8.dp)) {
             Heading(stringResource(R.string.routing_gravel), stringResource(R.string.routing_gravel_hint))
             GravelChips(settings.gravel) { onChange(settings.copy(gravel = it)) }
             Divider()
