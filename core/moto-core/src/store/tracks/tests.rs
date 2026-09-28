@@ -338,3 +338,37 @@ fn upgrades_a_schema_5_database_and_keeps_its_rides() {
     assert_eq!(tracks.len(), 1);
     assert_eq!((tracks[0].started_at, tracks[0].name.as_deref()), (1, None));
 }
+
+#[test]
+fn counts_the_rides_along_each_section() {
+    let mut s = store();
+    // A ride 6 km north from 55.70 (imported: finished), and one still
+    // recording along the same road, which doesn't count yet.
+    let done = s.import_track(&ride(MS0, 300)).unwrap();
+    let going = s.start_track(T0 + 500).unwrap();
+    s.append_track_points(going.id, &ride(MS0 + 500_000, 300))
+        .unwrap();
+    let along = |lat0: f64, lat1: f64| crate::section::NewSection {
+        geometry: vec![
+            LatLon {
+                lat: lat0,
+                lon: 13.2,
+            },
+            LatLon {
+                lat: lat1,
+                lon: 13.2,
+            },
+        ],
+        ways: Vec::new(),
+        ..crate::section::tests::sample()
+    };
+    let on = s.add_section(&along(55.705, 55.73), T0).unwrap();
+    let off = s.add_section(&along(55.80, 55.82), T0).unwrap();
+    let stats = s.ridden_stats().unwrap();
+    let of = |id: i64| stats.iter().find(|r| r.section_id == id).copied().unwrap();
+    assert_eq!(
+        (of(on.id).times, of(on.id).last_at),
+        (1, Some(done.started_at))
+    );
+    assert_eq!((of(off.id).times, of(off.id).last_at), (0, None));
+}

@@ -214,8 +214,33 @@ impl SectionStore {
     }
 }
 
+/// How often a section was ridden on the finished rides, and when last
+/// (the start of the latest, seconds since the Unix epoch).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct SectionRidden {
+    pub section_id: i64,
+    pub times: u32,
+    pub last_at: Option<i64>,
+}
+
 #[uniffi::export]
 impl SectionStore {
+    /// For each saved section, how often and when last the rider rode it
+    /// (most of it along one ride, either way). Reads every ride: call off
+    /// the main thread.
+    pub fn ridden(&self) -> Result<Vec<SectionRidden>, MotoError> {
+        Ok(self
+            .store()
+            .ridden_stats()?
+            .into_iter()
+            .map(|r| SectionRidden {
+                section_id: r.section_id,
+                times: r.times,
+                last_at: r.last_at,
+            })
+            .collect())
+    }
+
     /// Deletes every section flagged `Unmatched`; returns how many.
     pub fn delete_unmatched(&self) -> Result<u64, MotoError> {
         Ok(self.store().delete_unmatched()?)
@@ -625,6 +650,33 @@ mod tests {
                 matched: 0,
                 unmatched: 0
             }
+        );
+    }
+
+    #[test]
+    fn ridden_counts_cross_the_ffi() {
+        let db = TempDb::new("ridden");
+        let store = SectionStore::open(db.path()).unwrap();
+        let s = store
+            .add(NewSection {
+                name: String::new(),
+                rating: Rating::Good,
+                direction: Direction::Both,
+                source: SectionSource::Map,
+                ways: vec![],
+                geometry: vec![ll(55.70, 13.20), ll(55.70, 13.21)],
+            })
+            .unwrap()
+            .section
+            .unwrap();
+        // No rides yet: never ridden.
+        assert_eq!(
+            store.ridden().unwrap(),
+            [SectionRidden {
+                section_id: s.id,
+                times: 0,
+                last_at: None
+            }]
         );
     }
 

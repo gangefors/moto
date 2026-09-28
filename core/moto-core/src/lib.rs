@@ -26,6 +26,7 @@ pub mod matching;
 pub mod overlap;
 pub mod region;
 pub mod rematch;
+pub mod ridden;
 pub mod road;
 pub mod roundtrip;
 mod route;
