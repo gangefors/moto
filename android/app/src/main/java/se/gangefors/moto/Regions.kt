@@ -27,7 +27,6 @@ import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.RegionOffer
 import se.gangefors.moto.core.installRegion
 import se.gangefors.moto.core.parseRegionManifest
-import se.gangefors.moto.core.prefetchRegionFile
 import se.gangefors.moto.core.profileRegionOpen
 import se.gangefors.moto.core.regionManifestFileName
 
@@ -89,10 +88,7 @@ object Regions {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (file.isFile) {
             try {
-                // Read straight through first (fast), then open and check it
-                // from the cache (a cold open reads it page by page: slow).
-                StartupTimes.measure("region read (${file.length() / 1_000_000} MB)") { prefetchRegionFile(file.path) }
-                val engine = StartupTimes.measure("region open") { Engine.open(file.path) }
+                val engine = StartupTimes.measure("region open (${file.length() / 1_000_000} MB)") { Engine.open(file.path) }
                 val meta = DownloadedRegion(
                     id = prefs.getString("id", null) ?: "",
                     name = prefs.getString("name", null) ?: "",

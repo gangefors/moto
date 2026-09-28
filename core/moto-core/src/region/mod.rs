@@ -79,17 +79,17 @@ fn err(msg: impl std::fmt::Display) -> CoreError {
 fn map_file(path: &Path) -> Result<Mmap, CoreError> {
     let file =
         File::open(path).map_err(|e| err(format_args!("cannot open {}: {e}", path.display())))?;
+    // Opening validates the whole file, and routing reads most of it. The
+    // map is populated as it is made: the kernel reads the file in and
+    // maps every page in one go, instead of one page fault at a time as
+    // validation first touches each (on the rider's phone 9-12 s for all of
+    // Sweden, against 0.13 s once mapped; a plain read-ahead was dropped
+    // again before validation ran).
     // SAFETY: the map is read-only and the app never modifies an installed
     // region file; updates are written to a new file and swapped in.
     #[allow(unsafe_code)]
-    let map = unsafe { Mmap::map(&file) }
+    let map = unsafe { memmap2::MmapOptions::new().populate().map(&file) }
         .map_err(|e| err(format_args!("cannot map {}: {e}", path.display())))?;
-    // Opening validates the whole file, and routing reads most of it: ask
-    // the kernel to read it ahead in large chunks now, rather than a page
-    // at a time as each is first touched (slow on a phone's flash when the
-    // file isn't cached). Only a hint; if it fails, pages load on demand.
-    #[cfg(unix)]
-    let _ = map.advise(memmap2::Advice::WillNeed);
     Ok(map)
 }
 
@@ -238,66 +238,6 @@ impl Region {
         let o = self.grid_cells();
         &self.grid_edges()[o[cell] as usize..o[cell + 1] as usize]
     }
-}
-
-/// Reads a region file once from start to end, in large pieces and in
-/// [`PREFETCH_THREADS`] parts at once, so it is in the page cache before
-/// [`Region::open`] validates it. On a phone a cold file otherwise comes
-/// in a page at a time as validation first touches it, which is several
-/// times slower than reading it straight through (all of Sweden: 12 s).
-/// Only reads; returns the bytes read.
-pub fn prefetch(path: impl AsRef<Path>) -> Result<u64, CoreError> {
-    let path = path.as_ref();
-    let file =
-        File::open(path).map_err(|e| err(format_args!("cannot open {}: {e}", path.display())))?;
-    let len = file
-        .metadata()
-        .map_err(|e| err(format_args!("cannot read {}: {e}", path.display())))?
-        .len();
-    let part = len.div_ceil(PREFETCH_THREADS as u64).max(1);
-    let read = |start: u64| -> std::io::Result<u64> {
-        let end = start.saturating_add(part).min(len);
-        let mut buf = vec![0u8; PREFETCH_CHUNK];
-        let mut at = start;
-        while at < end {
-            let want = usize::try_from(end - at).map_or(PREFETCH_CHUNK, |n| n.min(PREFETCH_CHUNK));
-            let n = read_at(&file, &mut buf[..want], at)?;
-            if n == 0 {
-                break;
-            }
-            at += n as u64;
-        }
-        Ok(at - start)
-    };
-    let total = std::thread::scope(|scope| {
-        let parts: Vec<_> = (0..len)
-            .step_by(usize::try_from(part).unwrap_or(usize::MAX))
-            .map(|start| scope.spawn(move || read(start)))
-            .collect();
-        parts
-            .into_iter()
-            .map(|h| {
-                h.join()
-                    .unwrap_or_else(|_| Err(std::io::Error::other("prefetch thread failed")))
-            })
-            .sum::<std::io::Result<u64>>()
-    });
-    total.map_err(|e| err(format_args!("cannot read {}: {e}", path.display())))
-}
-
-/// Parts of a region file read at the same time by [`prefetch`].
-pub const PREFETCH_THREADS: usize = 4;
-/// Bytes read at a time by [`prefetch`].
-const PREFETCH_CHUNK: usize = 1 << 20;
-
-#[cfg(unix)]
-fn read_at(file: &File, buf: &mut [u8], at: u64) -> std::io::Result<usize> {
-    std::os::unix::fs::FileExt::read_at(file, buf, at)
-}
-
-#[cfg(windows)]
-fn read_at(file: &File, buf: &mut [u8], at: u64) -> std::io::Result<usize> {
-    std::os::windows::fs::FileExt::seek_read(file, buf, at)
 }
 
 /// Opens and validates a region file like [`Region::open`], timing each
