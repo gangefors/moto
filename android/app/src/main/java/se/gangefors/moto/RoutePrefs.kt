@@ -17,6 +17,8 @@ object RoutePrefs {
     private const val ALLOW_GRAVEL = "allow_gravel"
     private const val GRAVEL = "gravel"
     private const val LOOP = "loop_length"
+    private const val AREA_ZOOM = "locate_area_zoom"
+    private const val CLOSE_ZOOM = "locate_close_zoom"
 
     /** What routes do with gravel (unpaved) roads; avoided by default.
      * A value of another type throws; it counts as unset. */
@@ -41,5 +43,19 @@ object RoutePrefs {
 
     fun setLoopChoice(context: Context, choice: LoopChoice) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP, choice.key) }
+    }
+
+    /** The location button's zoom levels, as last set (defaults 10 and 14). */
+    fun locateZooms(context: Context): LocateZooms {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        fun int(key: String) = runCatching { prefs.getInt(key, -1) }.getOrDefault(-1).takeIf { it >= 0 }
+        return LocateZooms.of(int(AREA_ZOOM), int(CLOSE_ZOOM))
+    }
+
+    fun setLocateZooms(context: Context, zooms: LocateZooms) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit {
+            putInt(AREA_ZOOM, zooms.area)
+            putInt(CLOSE_ZOOM, zooms.close)
+        }
     }
 }
