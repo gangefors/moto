@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.debug.DebugTools
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -386,6 +387,7 @@ fun RidesSheet(
                     modifier = Modifier.padding(top = 16.dp),
                 ) { OneLine(stringResource(R.string.about_open)) }
             }
+            item(key = "debug") { DebugTools.MenuEntry() }
         }
     }
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })

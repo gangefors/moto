@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.debug.DebugTools
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -198,7 +199,7 @@ fun MapScreen() {
             m.setStyle(resources.getString(R.string.map_style_url)) { s ->
                 map = m
                 style = s
-                StartupTimes.record("map style loaded")
+                DebugTools.mark("map style loaded")
             }
         }
     }
@@ -299,7 +300,7 @@ fun MapScreen() {
         val result = busy.run(R.string.busy_sections) {
             withContext(Dispatchers.IO) {
                 runCatching {
-                    val report = StartupTimes.measure("sections re-match") { s.rematch(engine) }
+                    val report = DebugTools.startup("sections re-match") { s.rematch(engine) }
                     report to if (report.checked > 0uL) s.list(null) else null
                 }
             }
@@ -330,7 +331,7 @@ fun MapScreen() {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
         withContext(Dispatchers.IO) {
-            runCatching { StartupTimes.measure("favourites") { s.favourites(engine).let { it to it.gravel() } } }
+            runCatching { DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } } }
         }
             .onSuccess { (f, g) ->
                 favourites = f
@@ -542,7 +543,7 @@ fun MapScreen() {
         when (val st = marker.onTap(point)) {
             is SectionMarker.State.PickEnd -> {
                 // Check the start lies on a road before keeping it.
-                val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
+                val problem = runCatching { DebugTools.query("snap") { ready.engine.snap(point.toLatLon()) } }.exceptionOrNull()
                 if (problem != null) {
                     marker.rejectLast()
                     message = coreErrorMessage(resources, problem)
@@ -822,13 +823,17 @@ fun MapScreen() {
             cardExpanded = true
             o.route.show(start, null, null)
         }
-        val find = { r: LoopRequest ->
-            runCatching { ready.engine.roundTrip(r.start.toLatLon(), r.choice.target, r.opts, r.favourites, r.shape) }
+        val find = { r: LoopRequest, ahead: Boolean ->
+            runCatching {
+                DebugTools.loops(r.start.toLatLon(), r.choice.target, r.opts, r.favourites, r.shape, ahead) {
+                    ready.engine.roundTrip(r.start.toLatLon(), r.choice.target, r.opts, r.favourites, r.shape)
+                }
+            }
         }
         // Found ahead (Shuffle), or found now. A newer request cancels
         // this one; its result is then dropped.
         val ahead = loopsAhead.take(request)
-        val result = busy.run(R.string.busy_loops) { ahead?.await() ?: withContext(Dispatchers.Default) { find(request) } }
+        val result = busy.run(R.string.busy_loops) { ahead?.await() ?: withContext(Dispatchers.Default) { find(request, false) } }
         result.fold(
             onSuccess = { found ->
                 val first = found.firstOrNull()
@@ -844,7 +849,7 @@ fun MapScreen() {
                     val next = shuffleSeed()
                     nextSeed = next
                     val nextRequest = request.copy(shape = shape.copy(seed = next))
-                    loopsAhead.hold(nextRequest, scope.async(Dispatchers.Default) { find(nextRequest) })
+                    loopsAhead.hold(nextRequest, scope.async(Dispatchers.Default) { find(nextRequest, true) })
                 }
             },
             onFailure = {
@@ -877,7 +882,12 @@ fun MapScreen() {
         // A newer request cancels this one; its result is then dropped.
         val result = busy.run(R.string.busy_routes) {
             withContext(Dispatchers.Default) {
-                runCatching { ready.engine.routeChoices(start.toLatLon(), vias.map { it.toLatLon() }, end.toLatLon(), opts, favs) }
+                runCatching {
+                    val via = vias.map { it.toLatLon() }
+                    DebugTools.routes(start.toLatLon(), via, end.toLatLon(), opts, favs) {
+                        ready.engine.routeChoices(start.toLatLon(), via, end.toLatLon(), opts, favs)
+                    }
+                }
             }
         }
         result.fold(
@@ -960,7 +970,7 @@ fun MapScreen() {
                 message = regionStatus(resources, region)
             } else {
                 try {
-                    val info = ready.engine.roadAt(tap.toLatLon())
+                    val info = DebugTools.query("road info") { ready.engine.roadAt(tap.toLatLon()) }
                     o.snap.show(tap, LatLng(info.point.position.lat, info.point.position.lon))
                     roadInfo = info
                     message = null
@@ -994,7 +1004,7 @@ fun MapScreen() {
                     shownSaved = null
                     startPicked = null
                     // New start: check it lies on a road before keeping it.
-                    val problem = runCatching { ready.engine.snap(point.toLatLon()) }.exceptionOrNull()
+                    val problem = runCatching { DebugTools.query("snap") { ready.engine.snap(point.toLatLon()) } }.exceptionOrNull()
                     if (problem != null) {
                         picker.reset()
                         message = coreErrorMessage(resources, problem)
