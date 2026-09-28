@@ -273,6 +273,15 @@ class MapLogicTest {
     }
 
     @Test
+    fun firstFittingPicksTheLargestSizeThatFits() {
+        assertEquals(0, firstFitting(listOf(200, 180, 150), 240))
+        assertEquals(1, firstFitting(listOf(260, 230, 190), 240))
+        assertEquals(2, firstFitting(listOf(300, 260, 240), 240))
+        assertNull(firstFitting(listOf(300, 280, 250), 240))
+        assertNull(firstFitting(emptyList(), 240))
+    }
+
+    @Test
     fun segmentsFitOnlyWhenEveryLabelHasRoom() {
         // Avoid / Allow / Prefer: the widest label decides, all segments
         // are equally wide.

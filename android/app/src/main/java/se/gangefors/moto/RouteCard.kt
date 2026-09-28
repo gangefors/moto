@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -56,6 +57,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Gravel
 import kotlin.math.roundToInt
@@ -554,20 +556,29 @@ private fun SheetTop(
     val shown = summary ?: last.value
     val dim = if (summary == null && problem == null) Modifier.alpha(0.5f) else Modifier
     Row(verticalAlignment = Alignment.CenterVertically) {
-        // The distance and the time, each kept on one line; with large
-        // fonts the time goes below the distance as a whole.
-        FlowRow(
-            modifier = Modifier.weight(1f).then(dim),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            val style = MaterialTheme.typography.headlineSmall
-            when {
-                problem != null -> Text(stringResource(R.string.loop_none_title), style = style)
-                shown == null -> Text(computing, style = style)
-                else -> {
-                    Text(noBreak(stringResource(R.string.route_km, shown.km)), style = style)
-                    Text(noBreak(durationText(shown.minutes)), style = style)
-                }
+        // The distance and the time on one line, in the largest of a few
+        // sizes that fits; when not even the smallest does (very large
+        // fonts), the time goes below the distance as a whole.
+        val texts = when {
+            problem != null -> listOf(stringResource(R.string.loop_none_title))
+            shown == null -> listOf(computing)
+            else -> listOf(noBreak(stringResource(R.string.route_km, shown.km)), noBreak(durationText(shown.minutes)))
+        }
+        val styles = listOf(
+            MaterialTheme.typography.headlineSmall,
+            MaterialTheme.typography.titleLarge,
+            MaterialTheme.typography.titleMedium,
+        )
+        val measurer = rememberTextMeasurer()
+        val gap = 12.dp
+        val gapPx = with(LocalDensity.current) { gap.roundToPx() }
+        BoxWithConstraints(Modifier.weight(1f).then(dim)) {
+            val widths = styles.map { st ->
+                texts.sumOf { measurer.measure(it, st, softWrap = false, maxLines = 1).size.width } + gapPx * (texts.size - 1)
+            }
+            val style = styles[firstFitting(widths, constraints.maxWidth) ?: styles.lastIndex]
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                texts.forEach { Text(it, style = style) }
             }
         }
         IconButton(onClick = onSave, enabled = found) {

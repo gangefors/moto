@@ -277,6 +277,11 @@ fun scaleLabels(centres: List<Int>, widths: List<Int>, total: Int, gap: Int): Li
     return emptyList()
 }
 
+/** The first of some text sizes (their [widths], largest first) that
+ * fits in [availablePx]; null when none does. */
+fun firstFitting(widths: List<Int>, availablePx: Int): Int? =
+    widths.indexOfFirst { it <= availablePx }.takeIf { it >= 0 }
+
 /** Whether [count] segments fit side by side in [availablePx]: each as
  * wide as the widest label ([widestLabelPx]) plus [segmentPaddingPx]
  * (segmented buttons share the width equally). */
