@@ -487,27 +487,7 @@ private fun LoopCardDetails(
     onGravel: (Gravel) -> Unit,
 ) {
     Column {
-        // Length as a slider, in hours or kilometres.
-        StepSlider(
-            title = stringResource(R.string.loop_length),
-            steps = loopSteps(choice),
-            value = choice,
-            label = { loopLengthText(it) },
-            onCommit = onChoice,
-            mark = ::isLoopMark,
-        ) {
-            val hours = choice is LoopChoice.Minutes
-            FilterChip(
-                selected = hours,
-                onClick = { if (!hours) onChoice(switchUnit(choice)) },
-                label = { OneLine(stringResource(R.string.loop_unit_hours)) },
-            )
-            FilterChip(
-                selected = !hours,
-                onClick = { if (hours) onChoice(switchUnit(choice)) },
-                label = { OneLine(stringResource(R.string.loop_unit_km)) },
-            )
-        }
+        LoopLengthSlider(stringResource(R.string.loop_length), choice, onChoice)
         Text(
             stringResource(R.string.loop_direction),
             style = MaterialTheme.typography.labelMedium,
@@ -791,9 +771,35 @@ private fun SliderScale(texts: List<String>, fractions: List<Float>) {
     }
 }
 
+/** A loop length as a slider over its steps, in hours or kilometres
+ * (chips beside the [title] switch the unit). */
+@Composable
+fun LoopLengthSlider(title: String, choice: LoopChoice, onChoice: (LoopChoice) -> Unit) {
+    StepSlider(
+        title = title,
+        steps = loopSteps(choice),
+        value = choice,
+        label = { loopLengthText(it) },
+        onCommit = onChoice,
+        mark = ::isLoopMark,
+    ) {
+        val hours = choice is LoopChoice.Minutes
+        FilterChip(
+            selected = hours,
+            onClick = { if (!hours) onChoice(switchUnit(choice)) },
+            label = { OneLine(stringResource(R.string.loop_unit_hours)) },
+        )
+        FilterChip(
+            selected = !hours,
+            onClick = { if (hours) onChoice(switchUnit(choice)) },
+            label = { OneLine(stringResource(R.string.loop_unit_km)) },
+        )
+    }
+}
+
 /** A loop length as text: "2 h 30 min", "45 min" or "120 km". */
 @Composable
-private fun loopLengthText(c: LoopChoice): String = when (c) {
+fun loopLengthText(c: LoopChoice): String = when (c) {
     is LoopChoice.Km -> stringResource(R.string.loop_km, c.km)
     is LoopChoice.Minutes -> when {
         c.minutes < 60 -> stringResource(R.string.loop_minutes, c.minutes)

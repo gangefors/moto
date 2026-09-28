@@ -73,6 +73,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
@@ -350,6 +351,11 @@ fun MapScreen() {
     var savingDraft by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Section?>(null) }
     var showRides by remember { mutableStateOf(false) }
+    // Ride settings, one tap from the map.
+    var showSettings by remember { mutableStateOf(false) }
+    // The length a new loop starts at (Ride settings).
+    var defaultLoop by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    var keepScreenOn by remember { mutableStateOf(RoutePrefs.keepScreenOn(context)) }
     // Sections that no longer fit the map are hidden unless the rider asks.
     var showUnmatched by remember { mutableStateOf(false) }
     var confirmDeleteUnmatched by remember { mutableStateOf(false) }
@@ -369,6 +375,14 @@ fun MapScreen() {
 
     // Ride recording (RecordingService): the line so far, and what to say.
     val recording by Recording.state.collectAsState()
+    // Ride settings: the screen stays on while a ride records, for a phone
+    // on a handlebar mount.
+    val view = LocalView.current
+    val screenOn = keepScreenOn && recording is Recording.State.Active
+    DisposableEffect(view, screenOn) {
+        view.keepScreenOn = screenOn
+        onDispose { view.keepScreenOn = false }
+    }
     // A saved ride the rider asked to see (My data > Rides > Show), to
     // mark sections along it; the ride being recorded takes its place.
     var shownRide by remember { mutableStateOf<ShownRide?>(null) }
@@ -681,6 +695,7 @@ fun MapScreen() {
      * or the set of [seed]. */
     fun startLoop(start: LatLng, seed: UInt = 0u) {
         startPicked = null
+        loopChoice = defaultLoop
         loopSeed = seed
         loopDirection = LoopDirection.ANY
         loopStart = start
@@ -1183,14 +1198,35 @@ fun MapScreen() {
                 .align(Alignment.TopCenter)
                 .offset { IntOffset(0, max(topPanelBottom, insets.top) + 8.dp.roundToPx()) },
         )
-        // Messages and the route card, across the top (the compass sits at
-        // the bottom right, so nothing else is up here); on wide screens no
-        // wider than TOP_BOX_MAX_WIDTH.
+        // The menu (top left) and ride settings (top right), clear of the
+        // status bar and cutouts; they step aside while planning or marking,
+        // like the buttons at the bottom.
+        val topButtons = !marking && !planning
+        if (topButtons) {
+            if (store is StoreState.Ready) {
+                TopMapButton(
+                    icon = R.drawable.ic_menu,
+                    description = stringResource(R.string.menu_open),
+                    onClick = { showRides = true },
+                    modifier = Modifier.align(Alignment.TopStart),
+                )
+            }
+            TopMapButton(
+                icon = R.drawable.ic_settings,
+                description = stringResource(R.string.ride_settings_open),
+                onClick = { showSettings = true },
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+        // Messages across the top, between the top buttons when they show
+        // (the compass sits at the bottom right); on wide screens no wider
+        // than TOP_BOX_MAX_WIDTH.
+        val besideTopButtons = if (topButtons) TOP_BUTTON_MARGIN + TOP_BUTTON_SIZE + 8.dp else 16.dp
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .safeDrawingPadding()
-                .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                .padding(top = 8.dp, start = besideTopButtons, end = besideTopButtons)
                 .widthIn(max = TOP_BOX_MAX_WIDTH)
                 .fillMaxWidth()
                 .onGloballyPositioned { topPanelBottom = it.boundsInRoot().bottom.roundToInt() },
@@ -1434,10 +1470,7 @@ fun MapScreen() {
                                 showLoop(it, loops, loopIndex)
                             },
                             choice = loopChoice,
-                            onChoice = { c ->
-                                loopChoice = c
-                                RoutePrefs.setLoopChoice(context, c)
-                            },
+                            onChoice = { c -> loopChoice = c },
                             gravel = gravel,
                             onGravel = { g ->
                                 gravel = g
@@ -1513,11 +1546,6 @@ fun MapScreen() {
                 if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
                     ExtendedFloatingActionButton(onClick = { startReview() }) {
                         Text(stringResource(R.string.tags_review, pendingTags))
-                    }
-                }
-                if (store is StoreState.Ready) {
-                    FloatingActionButton(onClick = { showRides = true }) {
-                        Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.rides_open))
                     }
                 }
                 // Loops from where the rider is, in one tap: a new set
@@ -1702,16 +1730,31 @@ fun MapScreen() {
                     }
                 }
             },
-            zooms = locateZooms,
-            onZooms = { z ->
-                locateZooms = z
-                RoutePrefs.setLocateZooms(context, z)
-            },
             gravel = gravel,
-            onGravel = { g ->
-                gravel = g
-                RoutePrefs.setGravel(context, g)
+        )
+    }
+    if (showSettings) {
+        RideSettingsPage(
+            settings = RideSettings(gravel, defaultLoop, locateZooms, keepScreenOn),
+            onChange = { new ->
+                if (new.gravel != gravel) {
+                    gravel = new.gravel
+                    RoutePrefs.setGravel(context, new.gravel)
+                }
+                if (new.loopLength != defaultLoop) {
+                    defaultLoop = new.loopLength
+                    RoutePrefs.setLoopChoice(context, new.loopLength)
+                }
+                if (new.zooms != locateZooms) {
+                    locateZooms = new.zooms
+                    RoutePrefs.setLocateZooms(context, new.zooms)
+                }
+                if (new.keepScreenOn != keepScreenOn) {
+                    keepScreenOn = new.keepScreenOn
+                    RoutePrefs.setKeepScreenOn(context, new.keepScreenOn)
+                }
             },
+            onDismiss = { showSettings = false },
         )
     }
 
@@ -1753,6 +1796,31 @@ private fun mapFix(map: MapLibreMap?): TrackPoint? {
         speedMps = if (l.hasSpeed()) l.speed.toDouble() else null,
         bearingDeg = if (l.hasBearing()) l.bearing.toDouble() else null,
     )
+}
+
+/** The round buttons at the top of the map. */
+private val TOP_BUTTON_SIZE = 48.dp
+private val TOP_BUTTON_MARGIN = 16.dp
+
+/** A round button at the top of the map (menu, ride settings). */
+@Composable
+private fun TopMapButton(icon: Int, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .safeDrawingPadding()
+            .padding(top = 8.dp, start = TOP_BUTTON_MARGIN, end = TOP_BUTTON_MARGIN)
+            .size(TOP_BUTTON_SIZE)
+            .semantics { contentDescription = description },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(painterResource(icon), contentDescription = null)
+        }
+    }
 }
 
 /** Quick-tag button: large enough to hit with gloves on. */
