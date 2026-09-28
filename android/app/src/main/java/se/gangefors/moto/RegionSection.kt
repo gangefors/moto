@@ -40,7 +40,7 @@ fun osmDate(timestamp: Long, zone: ZoneId): String =
         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT))
 
 /**
- * My data → Map region (ADR-0008): which region the app routes on, the
+ * Menu → Map region (ADR-0008): which region the app routes on, the
  * regions there are to download, and the download itself (progress,
  * stop), plus a bin to remove a downloaded region again.
  */
@@ -54,7 +54,6 @@ fun RegionSection() {
     var confirmRemove by remember { mutableStateOf(false) }
     val installed = active.downloaded
 
-    Text(stringResource(R.string.region_title), style = MaterialTheme.typography.titleLarge)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             when {

@@ -50,7 +50,7 @@ sealed interface DownloadState {
 /**
  * The routing region: a downloaded one when installed, else the region
  * bundled in a debug APK. Downloads run here, not in a screen, so they
- * carry on when My data is closed; an interrupted download resumes where
+ * carry on when the Map region page is closed; an interrupted download resumes where
  * it stopped. The core checks everything before a region is used.
  */
 object Regions {
