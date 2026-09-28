@@ -240,6 +240,66 @@ impl Region {
     }
 }
 
+/// Reads a region file once from start to end, in large pieces and in
+/// [`PREFETCH_THREADS`] parts at once, so it is in the page cache before
+/// [`Region::open`] validates it. On a phone a cold file otherwise comes
+/// in a page at a time as validation first touches it, which is several
+/// times slower than reading it straight through (all of Sweden: 12 s).
+/// Only reads; returns the bytes read.
+pub fn prefetch(path: impl AsRef<Path>) -> Result<u64, CoreError> {
+    let path = path.as_ref();
+    let file =
+        File::open(path).map_err(|e| err(format_args!("cannot open {}: {e}", path.display())))?;
+    let len = file
+        .metadata()
+        .map_err(|e| err(format_args!("cannot read {}: {e}", path.display())))?
+        .len();
+    let part = len.div_ceil(PREFETCH_THREADS as u64).max(1);
+    let read = |start: u64| -> std::io::Result<u64> {
+        let end = start.saturating_add(part).min(len);
+        let mut buf = vec![0u8; PREFETCH_CHUNK];
+        let mut at = start;
+        while at < end {
+            let want = usize::try_from(end - at).map_or(PREFETCH_CHUNK, |n| n.min(PREFETCH_CHUNK));
+            let n = read_at(&file, &mut buf[..want], at)?;
+            if n == 0 {
+                break;
+            }
+            at += n as u64;
+        }
+        Ok(at - start)
+    };
+    let total = std::thread::scope(|scope| {
+        let parts: Vec<_> = (0..len)
+            .step_by(usize::try_from(part).unwrap_or(usize::MAX))
+            .map(|start| scope.spawn(move || read(start)))
+            .collect();
+        parts
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err(std::io::Error::other("prefetch thread failed")))
+            })
+            .sum::<std::io::Result<u64>>()
+    });
+    total.map_err(|e| err(format_args!("cannot read {}: {e}", path.display())))
+}
+
+/// Parts of a region file read at the same time by [`prefetch`].
+pub const PREFETCH_THREADS: usize = 4;
+/// Bytes read at a time by [`prefetch`].
+const PREFETCH_CHUNK: usize = 1 << 20;
+
+#[cfg(unix)]
+fn read_at(file: &File, buf: &mut [u8], at: u64) -> std::io::Result<usize> {
+    std::os::unix::fs::FileExt::read_at(file, buf, at)
+}
+
+#[cfg(windows)]
+fn read_at(file: &File, buf: &mut [u8], at: u64) -> std::io::Result<usize> {
+    std::os::windows::fs::FileExt::seek_read(file, buf, at)
+}
+
 /// Verifies a region file before it is installed: CRC32 of every section,
 /// then the same structural checks as [`Region::open`].
 pub fn verify_file(path: impl AsRef<Path>) -> Result<(), CoreError> {
