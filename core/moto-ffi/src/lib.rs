@@ -519,9 +519,14 @@ mod tests {
     struct TempRegion(std::path::PathBuf);
 
     impl TempRegion {
+        /// A file of its own, even when two tests pick the same name: tests
+        /// run in parallel, and one rewriting or removing a file another
+        /// has mapped kills the process (SIGBUS).
         fn new(name: &str, bytes: &[u8]) -> Self {
-            let path =
-                std::env::temp_dir().join(format!("moto-ffi-{name}-{}.region", std::process::id()));
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir()
+                .join(format!("moto-ffi-{name}-{}-{n}.region", std::process::id()));
             std::fs::write(&path, bytes).unwrap();
             Self(path)
         }
@@ -535,6 +540,14 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.0);
         }
+    }
+
+    #[test]
+    fn temp_regions_of_the_same_name_are_separate_files() {
+        let (a, b) = (TempRegion::new("same", b"a"), TempRegion::new("same", b"b"));
+        assert_ne!(a.path(), b.path());
+        drop(a);
+        assert_eq!(std::fs::read(b.path()).unwrap(), b"b");
     }
 
     fn fixture_file(name: &str) -> TempRegion {
@@ -729,7 +742,10 @@ mod tests {
 
     #[test]
     fn loops_through_points_cross_the_ffi() {
-        let file = TempRegion::new("via", &moto_core::fixture::grid(13).to_bytes().unwrap());
+        let file = TempRegion::new(
+            "via-loops",
+            &moto_core::fixture::grid(13).to_bytes().unwrap(),
+        );
         let engine = Engine::open(file.path()).unwrap();
         let stops = vec![ll(55.790, 13.448), ll(55.790, 13.496)];
         let loops = engine
