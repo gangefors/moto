@@ -40,7 +40,7 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E] [--coun
                        [--poly <border.poly>]
        moto-regionbuild --check <file.region> [--json <out.json>] [LAT,LON ...]
        moto-regionbuild --match <file.region> <ride.gpx> [--geojson <out.geojson>]
-       moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
+       moto-regionbuild --golden <file.region>[,<file.region>...] <cases-dir> [--json <out.json>]
        moto-regionbuild --refresh <in.region> <out.region>
        moto-regionbuild --manifest <out.json> (<id> <name> <file.region> <file.region.gz>)...
        moto-regionbuild --check-manifest <signed.manifest> <manifest.json>
@@ -59,7 +59,8 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E] [--coun
   --match  map-match a ride exported from the app and report how well it
            fits; --geojson also writes the ride and the matched pieces
   --golden run the golden routes (core/moto-core/tests/golden/*.json) and
-           check their expectations; --json also writes the figures
+           check their expectations; --json also writes the figures;
+           several region files (commas) are linked at their borders
   --refresh derive curvature and built-up areas afresh for an existing
            region file, without the extract (to try a change to them)
   --manifest write the manifest of downloadable regions (ADR-0008) for

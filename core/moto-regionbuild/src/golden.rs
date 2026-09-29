@@ -70,6 +70,10 @@ pub struct Case {
     /// false for cases about favourites or gravel alone.
     #[serde(default = "yes")]
     pub curvy: bool,
+    /// Whether motorways may be ridden (default false: the app avoids
+    /// them unless the rider allows them).
+    #[serde(default)]
+    pub motorways: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
     /// A loop from `from` through these points in order and back (as the
@@ -373,6 +377,9 @@ impl Case {
         }
         opts.gravel = self.gravel.into();
         opts.curvy = self.curvy;
+        if self.motorways {
+            opts.avoid.motorways = false;
+        }
         opts
     }
 
@@ -942,10 +949,25 @@ pub fn load(dir: &Path) -> Result<Vec<Case>, String> {
         .collect()
 }
 
-/// Runs the golden cases in `dir` on `region`; prints a table, optionally
-/// writes the outcomes as JSON, and fails if any case fails.
+/// Opens `regions`: one file, or several separated by commas, linked at
+/// their borders (ADR-0009).
+fn open_regions(regions: &Path) -> Result<Engine, String> {
+    let text = regions.to_string_lossy();
+    if !text.contains(',') {
+        return Engine::open(regions).map_err(|e| e.to_string());
+    }
+    let opened = text
+        .split(',')
+        .map(|p| moto_core::region::Region::open(p).map_err(|e| format!("{p}: {e}")))
+        .collect::<Result<Vec<_>, _>>()?;
+    Engine::from_regions(opened).map_err(|e| e.to_string())
+}
+
+/// Runs the golden cases in `dir` on `region` (several region files
+/// separated by commas are linked into one map); prints a table,
+/// optionally writes the outcomes as JSON, and fails if any case fails.
 pub fn run(region: &Path, dir: &Path, json: Option<&Path>) -> Result<(), String> {
-    let engine = Engine::open(region).map_err(|e| e.to_string())?;
+    let engine = open_regions(region)?;
     let cases = load(dir)?;
     if cases.is_empty() {
         return Err(format!("no *.json cases in {}", dir.display()));

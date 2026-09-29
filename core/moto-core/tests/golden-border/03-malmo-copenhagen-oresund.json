@@ -1,0 +1,8 @@
+{
+  "name": "Malmö to Copenhagen over the Öresund bridge",
+  "description": "Across the Swedish–Danish border at sea on the Öresund bridge (E20, a motorway, so motorways are allowed): about 40 km, not round by a ferry.",
+  "from": [55.605, 13.000],
+  "to": [55.676, 12.568],
+  "motorways": true,
+  "expect": {"pass": [[55.56547, 12.89461]], "max_detour_ratio": 1.4}
+}

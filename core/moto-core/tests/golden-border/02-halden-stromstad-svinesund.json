@@ -1,0 +1,7 @@
+{
+  "name": "Halden to Strömstad over the old Svinesund bridge",
+  "description": "The same land border the other way: the Norwegian region's stub on the bridge links to the Swedish side.",
+  "from": [59.124, 11.387],
+  "to": [58.936, 11.172],
+  "expect": {"pass": [[59.09596, 11.27190]]}
+}
