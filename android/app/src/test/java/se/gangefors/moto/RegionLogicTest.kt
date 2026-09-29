@@ -99,4 +99,17 @@ class RegionLogicTest {
         assertEquals(60L, installedBytes(listOf(se, no, dk)))
         assertTrue(enabledRegions(listOf(no)).isEmpty())
     }
+
+    @Test
+    fun regionsFromAnOlderMonthAreNamed() {
+        val day = 24L * 3600
+        val se = InstalledRegion("sweden", "Sweden", 100 * day, 1, enabled = true)
+        val no = InstalledRegion("norway", "Norway", 95 * day, 1, enabled = true)
+        val dk = InstalledRegion("denmark", "Denmark", 60 * day, 1, enabled = true)
+        val fi = InstalledRegion("finland", "Finland", 10 * day, 1, enabled = false)
+        assertEquals(listOf(dk), olderNeighbours(listOf(se, no, dk, fi)))
+        assertTrue(olderNeighbours(listOf(se, no)).isEmpty())
+        assertTrue(olderNeighbours(listOf(se.copy(osmTimestamp = 0), dk)).isEmpty())
+        assertTrue(olderNeighbours(emptyList()).isEmpty())
+    }
 }
