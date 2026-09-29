@@ -53,6 +53,21 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 - Every loop returned must be within ±15 % of the target, come back to the start, and ride at most 10 % of its length twice outside the home zone (the way out of town and home, 2–5 km around the start). The runner measures reuse from the line itself, not from the core. At least `min_loops` loops (default 2) must come back. `max_side_loops` caps, for every loop, the side loops outside the home zone: places where the line comes back within 10 m of where it was 300 m – 5 km before (a detour through town or out to a waypoint and back).
 - The other expectations (`pass`, `avoid`, the shares) apply to the best loop.
 
+## A loop through points
+
+```json
+{
+  "name": "Loop from Markaryd through an epic stretch of road 578",
+  "from": [56.4610, 13.5960],
+  "through": [[56.50705, 13.90175], [56.52343, 13.91132]],
+  "favourites": [{"from": [56.50705, 13.90175], "to": [56.52343, 13.91132], "rating": "epic"}],
+  "expect": {"pass": [[56.50705, 13.90175], [56.52343, 13.91132]]}
+}
+```
+
+- `through` replaces `to` and `loop`: a loop from `from` through the points in order and back, both ways round, as the app's "Loop through it" rides a section from its two ends. It has no length target or budget; otherwise it is checked like a round trip (comes back, rides at most 10 % twice outside its home zone, at least `min_loops` loops, default 1).
+- Cases come from random roads and starts, never from a rider's own sections or rides (they are personal).
+
 ## A section's name
 
 ```json

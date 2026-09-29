@@ -482,3 +482,27 @@ fn bad_section_cases_are_refused() {
     );
     assert!(Case::parse(&with_fav).is_err());
 }
+
+#[test]
+fn loops_through_points_are_checked_as_round_trips() {
+    let (_f, engine) = grid_engine("golden-through");
+    let text = r#"{"name":"grid loop through","from":[55.754,13.496],
+        "through":[[55.790,13.448],[55.790,13.496]],"expect":{"pass":[[55.790,13.448]]}}"#;
+    let o = Case::parse(text).unwrap().run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    assert!(o.loops.is_some_and(|n| n >= 1), "{o:?}");
+    assert!(
+        o.reuse_share.is_some_and(|r| r <= MAX_REUSE + REUSE_SLACK),
+        "{o:?}"
+    );
+    // Through points replace to and loop, and take no budget.
+    let bad = [
+        r#"{"name":"x","from":[55.754,13.496],"to":[55.76,13.5],"through":[[55.79,13.45]],"expect":{}}"#,
+        r#"{"name":"x","from":[55.754,13.496],"loop":{"km":20},"through":[[55.79,13.45]],"expect":{}}"#,
+        r#"{"name":"x","from":[55.754,13.496],"max_detour":0.2,"through":[[55.79,13.45]],"expect":{}}"#,
+        r#"{"name":"x","from":[55.754,13.496],"through":[[95.0,13.45]],"expect":{}}"#,
+    ];
+    for b in bad {
+        assert!(Case::parse(b).is_err(), "{b}");
+    }
+}

@@ -562,7 +562,7 @@ fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
     let p = |edge, from, to| Partial { edge, from, to };
     let joined = |parts: Vec<Partial>, leg: Vec<Partial>| {
         let mut parts = parts;
-        append_leg(&region, &mut parts, leg);
+        append_leg(&region, &mut parts, leg, 0);
         parts
     };
     // Out to 70 % of A-B and straight back to A: both go.
@@ -589,6 +589,24 @@ fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
     assert_eq!(
         joined(vec![p(E_AB, 0.0, 0.7)], vec![p(E_AB, 0.7, 1.0)]),
         [p(E_AB, 0.0, 0.7), p(E_AB, 0.7, 1.0)]
+    );
+    // Parts that ride through a stop the loop must visit are kept: out to
+    // C (a section's end) and back is ridden, only the guide's spur goes.
+    let mut parts = vec![p(E_AB, 0.0, 1.0), p(E_BC, 0.0, 1.0)];
+    append_leg(
+        &region,
+        &mut parts,
+        vec![p(E_CB, 0.0, 1.0), p(E_BD, 0.0, 0.5)],
+        2,
+    );
+    assert_eq!(
+        parts,
+        [
+            p(E_AB, 0.0, 1.0),
+            p(E_BC, 0.0, 1.0),
+            p(E_CB, 0.0, 1.0),
+            p(E_BD, 0.0, 0.5)
+        ]
     );
 }
 
@@ -701,4 +719,69 @@ fn loops_through_points_refuse_bad_input() {
     assert!(round_trip_via(&e, bad, &[CENTRE], true, &opts, &none).is_err());
     // Far outside the region: no road to go through.
     assert!(round_trip_via(&e, CENTRE, &[ll(60.0, 18.0)], true, &opts, &none).is_err());
+}
+
+/// Share of `line`'s length (outside `home` metres of its start) ridden a
+/// second time: each stretch whose middle lies within 15 m of the line
+/// as it was more than 200 m before.
+fn ridden_twice(line: &[LatLon], home: f64) -> f64 {
+    let start = line[0];
+    let dense = crate::geo::densify(line, 10.0);
+    let mut cum = vec![0.0];
+    for w in dense.windows(2) {
+        cum.push(cum.last().unwrap() + haversine_m(w[0], w[1]));
+    }
+    let (mut total, mut twice) = (0.0, 0.0);
+    for i in 1..dense.len() {
+        let m = haversine_m(dense[i - 1], dense[i]);
+        total += m;
+        if haversine_m(dense[i], start) <= home {
+            continue;
+        }
+        let again =
+            (0..i).any(|j| cum[i] - cum[j] > 200.0 && haversine_m(dense[i], dense[j]) < 15.0);
+        if again {
+            twice += m;
+        }
+    }
+    twice / total.max(1.0)
+}
+
+#[test]
+fn a_loop_through_an_epic_section_rides_it_once() {
+    // A loop through an epic section rode it to the far end and back
+    // (found on a real ride). Here the section runs 3 km straight north, away
+    // from the start: back along it is the shortest way home, and cheap
+    // as a favourite. The loop must carry on past it and come round.
+    let e = engine(fixture::grid(13));
+    let (a, b) = (ll(55.772, 13.496), ll(55.799, 13.496));
+    let d = e.section_between(a, b).unwrap();
+    let s = Section {
+        id: 1,
+        rider_id: LOCAL_RIDER.into(),
+        name: String::new(),
+        rating: Rating::Epic,
+        direction: Direction::Both,
+        source: Source::Map,
+        status: Status::Ok,
+        created_at: 0,
+        updated_at: 0,
+        ways: d.ways,
+        geometry: d.geometry,
+    };
+    let fav = Favourites::build(&e, &[s]);
+    let loops = round_trip_via(&e, CENTRE, &[a, b], true, &RouteOptions::default(), &fav).unwrap();
+    for (i, l) in loops.iter().enumerate() {
+        let twice = ridden_twice(&l.geometry, 1_500.0);
+        assert!(
+            twice <= MAX_REUSE,
+            "loop {i}: {:.0} % ridden twice: {:?}",
+            twice * 100.0,
+            l.geometry
+                .iter()
+                .map(|p| (p.lat, p.lon))
+                .collect::<Vec<_>>()
+        );
+        assert!(l.favourite_share > 0.1, "loop {i} rides the section: {l:?}");
+    }
 }

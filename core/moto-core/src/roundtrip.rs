@@ -237,12 +237,15 @@ pub fn round_trip_via(
         .map(|&p| engine.snap(p))
         .collect::<Result<_, _>>()?;
     let fun = Fun::new(engine.region(), favourites, opts);
+    let home = through_home_m(
+        s.position,
+        &snapped.iter().map(|p| p.position).collect::<Vec<_>>(),
+    );
     let reach = snapped
         .iter()
         .map(|p| haversine_m(s.position, p.position))
         .fold(0.0, f64::max);
     let rough = (2.0 * reach * PARAMS.loop_detour).max(MIN_TARGET_M);
-    let home = home_radius_m(rough);
     let side_loop_max = SIDE_LOOP_MAX_M.min(rough * SIDE_LOOP_SHARE);
     let mut orders = vec![snapped.clone()];
     if both_ways && snapped.len() > 1 {
@@ -250,8 +253,13 @@ pub fn round_trip_via(
     }
     let mut found: Vec<Loop> = orders
         .iter()
-        .filter_map(|o| ride_loop(engine, &fun, opts, &s, o, home, side_loop_max))
+        .filter_map(|o| through_loop(engine, &fun, opts, &s, o, home, side_loop_max))
         .collect();
+    // A way round that must ride back along the section (the far end
+    // first, from here) is offered only when no other is a loop.
+    if found.iter().any(|l| reuse_share(l) <= MAX_REUSE) {
+        found.retain(|l| reuse_share(l) <= MAX_REUSE);
+    }
     found.sort_by(|a, b| worth_per_s(b).total_cmp(&worth_per_s(a)));
     found.dedup_by(|a, b| a.routed.route.geometry == b.routed.route.geometry);
     if found.is_empty() {
@@ -269,6 +277,92 @@ pub fn round_trip_via(
         })
         .collect())
 }
+
+/// The home zone of a loop from `start` through `stops`: as for a loop
+/// of its rough length (out to the farthest stop and back), but never
+/// reaching more than half way to the nearest stop, so a section near
+/// home still counts as ridden once it is (the way back must not take it
+/// again).
+pub fn through_home_m(start: LatLon, stops: &[LatLon]) -> f64 {
+    let dist: Vec<f64> = stops.iter().map(|&p| haversine_m(start, p)).collect();
+    let reach = dist.iter().copied().fold(0.0, f64::max);
+    let nearest = dist.iter().copied().fold(f64::INFINITY, f64::min);
+    let rough = (2.0 * reach * PARAMS.loop_detour).max(MIN_TARGET_M);
+    home_radius_m(rough).min(nearest / 2.0)
+}
+
+/// Turns tried for the guide past the last stop, from straight on.
+const GUIDE_TURNS: [f64; 5] = [0.0, 60.0, -60.0, 120.0, -120.0];
+
+/// The loop from `start` through `stops` (all ridden through) and back.
+/// Straight home from the last stop may be back the way the loop came
+/// (along the section it rode, cheap as a favourite): so it is also tried
+/// with a guide past the last stop, straight on or turned, that carries
+/// the loop on and round. The best loop riding at most [`MAX_REUSE`] of
+/// itself twice wins, else the one riding least twice.
+fn through_loop(
+    engine: &Engine,
+    fun: &Fun,
+    opts: &RouteOptions,
+    start: &RoadPoint,
+    stops: &[RoadPoint],
+    home: f64,
+    side_loop_max: f64,
+) -> Option<Loop> {
+    let last = stops.last()?;
+    let before = stops
+        .len()
+        .checked_sub(2)
+        .and_then(|i| stops.get(i))
+        .unwrap_or(start);
+    let heading = bearing_deg(before.position, last.position);
+    let out =
+        (haversine_m(last.position, start.position) * GUIDE_SHARE).clamp(GUIDE_MIN_M, GUIDE_MAX_M);
+    let visit: Vec<(RoadPoint, bool)> = stops.iter().map(|p| (p.clone(), true)).collect();
+    let mut candidates = vec![visit.clone()];
+    for turn in GUIDE_TURNS {
+        let p = destination(last.position, heading + turn, out);
+        if let Some(guide) = loop_road_near(engine, p, opts) {
+            let mut c = visit.clone();
+            c.push((guide, false));
+            candidates.push(c);
+        }
+    }
+    let loops: Vec<Loop> = candidates
+        .iter()
+        .filter_map(|c| ride_loop(engine, fun, opts, start, c, home, side_loop_max))
+        .collect();
+    // Straight home is best when it is a loop already; else the most
+    // worth per second, the shorter of equals.
+    let fine = loops
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| reuse_share(l) <= MAX_REUSE)
+        .max_by(|(i, a), (j, b)| {
+            (*i == 0)
+                .cmp(&(*j == 0))
+                .then(worth_per_s(a).total_cmp(&worth_per_s(b)))
+                .then(
+                    b.routed
+                        .route
+                        .duration_s
+                        .total_cmp(&a.routed.route.duration_s),
+                )
+        })
+        .map(|(i, _)| i);
+    match fine {
+        Some(i) => loops.into_iter().nth(i),
+        None => loops
+            .into_iter()
+            .min_by(|a, b| reuse_share(a).total_cmp(&reuse_share(b))),
+    }
+}
+
+/// How far past the last stop the guide lies: this share of the way home
+/// from it, within the bounds below.
+const GUIDE_SHARE: f64 = 0.4;
+const GUIDE_MIN_M: f64 = 2_000.0;
+const GUIDE_MAX_M: f64 = 15_000.0;
 
 /// `kept` plus the best of `loops` (worth per second; ties by heading, so
 /// results are stable) that overlap every kept loop by less than
@@ -530,18 +624,30 @@ fn loop_at(
     };
     let w1 = waypoint(bearing - spread, radius.0)?;
     let w2 = waypoint(bearing + spread, radius.1)?;
-    ride_loop(engine, fun, opts, start, &[w1, w2], home, side_loop_max)
+    ride_loop(
+        engine,
+        fun,
+        opts,
+        start,
+        &[(w1, false), (w2, false)],
+        home,
+        side_loop_max,
+    )
 }
 
 /// The loop from `start` through `stops` in order and back, each leg
 /// avoiding the roads the earlier ones took (outside the home zone of
-/// radius `home`), side loops up to `side_loop_max` metres cut out.
+/// radius `home`). A stop marked `true` must be ridden through (a
+/// section's end): the loop is never trimmed there, and no side loops are
+/// cut from it. Other stops only guide it: an out-and-back where the legs
+/// meet there is cut out, and so are side loops up to `side_loop_max`
+/// metres.
 fn ride_loop(
     engine: &Engine,
     fun: &Fun,
     opts: &RouteOptions,
     start: &RoadPoint,
-    stops: &[RoadPoint],
+    stops: &[(RoadPoint, bool)],
     home: f64,
     side_loop_max: f64,
 ) -> Option<Loop> {
@@ -552,22 +658,34 @@ fn ride_loop(
             .iter()
             .all(|&n| haversine_m(start.position, latlon(region.nodes()[n as usize])) <= home)
     };
-    let points: Vec<&RoadPoint> = std::iter::once(start)
-        .chain(stops)
-        .chain(std::iter::once(start))
+    let points: Vec<(&RoadPoint, bool)> = std::iter::once((start, false))
+        .chain(stops.iter().map(|(p, visit)| (p, *visit)))
+        .chain(std::iter::once((start, false)))
         .collect();
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
+    // Parts up to here ride through a stop that must be visited: trimming
+    // an out-and-back never reaches back into them.
+    let mut kept = 0;
     for w in points.windows(2) {
-        let (from, to) = (w[0], w[1]);
+        let ((from, visit), (to, _)) = (w[0], w[1]);
         let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &used);
         let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
             used.insert(region.edges()[p.edge as usize].geometry);
         }
-        append_leg(region, &mut parts, leg);
+        if visit {
+            parts.extend(leg);
+            kept = parts.len();
+        } else {
+            append_leg(region, &mut parts, leg, kept);
+        }
     }
-    let parts = cut_side_loops(region, fun, parts, side_loop_max);
+    let parts = if stops.iter().any(|(_, visit)| *visit) {
+        parts
+    } else {
+        cut_side_loops(region, fun, parts, side_loop_max)
+    };
     let mut roads: HashMap<u32, f64> = HashMap::new();
     let mut reused = 0.0;
     for p in parts.iter().filter(|p| !at_home(p.edge)) {
@@ -593,11 +711,20 @@ fn ride_loop(
 /// riding back the way the last one came (the waypoint is only a guide,
 /// not a place to visit). While the last piece so far and the leg's first
 /// piece run opposite ways along the same road, the shared stretch is
-/// removed from both.
-fn append_leg(region: &crate::region::Region, parts: &mut Vec<Partial>, leg: Vec<Partial>) {
+/// removed from both, but never the first `keep` parts (they ride
+/// through a stop the loop must visit).
+fn append_leg(
+    region: &crate::region::Region,
+    parts: &mut Vec<Partial>,
+    leg: Vec<Partial>,
+    keep: usize,
+) {
     const EPS: f64 = 1e-9;
     let mut leg = leg.into_iter().peekable();
     while let (Some(&prev), Some(&next)) = (parts.last(), leg.peek()) {
+        if parts.len() <= keep {
+            break;
+        }
         if prev.to - prev.from <= EPS {
             parts.pop();
             continue;
