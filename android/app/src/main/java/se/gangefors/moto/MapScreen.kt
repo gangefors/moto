@@ -2091,7 +2091,7 @@ private fun TopMapButton(icon: Int, description: String, onClick: () -> Unit, mo
 
 /** Quick-tag button: large enough to hit with gloves on. */
 private val TAG_BUTTON_SIZE: Dp = 96.dp
-private val TAG_COLOR = Color(0xFFE8710A)
+internal val TAG_COLOR = Color(0xFFE8710A)
 
 /** The map layers the screen draws into, created once per style. */
 private class Overlays(
@@ -2217,7 +2217,7 @@ private val LIGHT_SCRIM = Color.White.copy(alpha = 0.7f)
 private val DARK_SCRIM = Color.Black.copy(alpha = 0.7f)
 
 /** The record symbol's red. */
-private val RECORD_RED = Color(0xFFD93025)
+internal val RECORD_RED = Color(0xFFD93025)
 
 /** Widest the messages and route card get (tablets, landscape). */
 private val TOP_BOX_MAX_WIDTH: Dp = 640.dp
