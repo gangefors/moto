@@ -661,10 +661,11 @@ fn loop_at(
 /// The loop from `start` through `stops` in order and back, each leg
 /// avoiding the roads the earlier ones took (outside the home zone of
 /// radius `home`). A stop marked `true` must be ridden through (a
-/// section's end): the loop is never trimmed there, and no side loops are
-/// cut from it. Other stops only guide it: an out-and-back where the legs
-/// meet there is cut out, and so are side loops up to `side_loop_max`
-/// metres.
+/// section's end): the loop is never trimmed back past it, and the way
+/// between such stops is kept whole. Other stops only guide it: an
+/// out-and-back where the legs meet there is cut out, and so are side
+/// loops up to `side_loop_max` metres on the way out and the way home.
+/// Roads ridden again earn nothing for being worth riding.
 fn ride_loop(
     engine: &Engine,
     fun: &Fun,
@@ -691,19 +692,21 @@ fn ride_loop(
     let mut ahead: HashSet<u32> = HashSet::new();
     let empty = HashSet::new();
     for w in stops.windows(2).filter(|w| w[0].1 && w[1].1) {
-        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &empty);
+        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &empty, true);
         let leg = path(region, &w[0].0, &w[1].0, cost, engine.max_speed_kmh()).ok()?;
         ahead.extend(leg.iter().map(|p| region.edges()[p.edge as usize].geometry));
     }
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
-    // Parts up to here ride through a stop that must be visited: trimming
-    // an out-and-back never reaches back into them.
+    // Parts up to here reach a stop that must be visited: trimming an
+    // out-and-back never reaches back into them.
     let mut kept = 0;
+    // Where the parts from the first stop to visit begin.
+    let mut first: Option<usize> = None;
     let mut reached = false;
     for w in points.windows(2) {
-        let ((from, visit), (to, _)) = (w[0], w[1]);
-        reached |= visit;
+        let ((from, from_visit), (to, to_visit)) = (w[0], w[1]);
+        reached |= from_visit;
         let out: HashSet<u32>;
         let avoid = if reached || ahead.is_empty() {
             &used
@@ -711,22 +714,35 @@ fn ride_loop(
             out = used.union(&ahead).copied().collect();
             &out
         };
-        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, avoid);
+        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, avoid, true);
         let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
             used.insert(region.edges()[p.edge as usize].geometry);
         }
-        if visit {
+        if from_visit && to_visit {
             parts.extend(leg);
-            kept = parts.len();
         } else {
             append_leg(region, &mut parts, leg, kept);
         }
+        // Once at a stop to visit, trimming never reaches back past it.
+        if to_visit {
+            first.get_or_insert(parts.len());
+            kept = parts.len();
+        }
     }
-    let parts = if stops.iter().any(|(_, visit)| *visit) {
-        parts
-    } else {
-        cut_side_loops(region, fun, parts, side_loop_max)
+    // Side loops (out to a dead end at a waypoint and back) are cut on the
+    // way out and the way home, never through the stops to visit.
+    let parts = match first {
+        Some(first) => {
+            let mut rest = parts;
+            let tail = rest.split_off(kept);
+            let through = rest.split_off(first);
+            let mut out = cut_side_loops(region, fun, rest, side_loop_max);
+            out.extend(through);
+            out.extend(cut_side_loops(region, fun, tail, side_loop_max));
+            out
+        }
+        None => cut_side_loops(region, fun, parts, side_loop_max),
     };
     let mut roads: HashMap<u32, f64> = HashMap::new();
     let mut reused = 0.0;

@@ -895,3 +895,45 @@ fn a_loop_through_a_one_way_section_rides_it_its_way() {
         }
     }
 }
+
+#[test]
+fn a_guide_after_a_section_loses_its_out_and_back() {
+    // From A through a stretch of A-B (the section) to a guide on the
+    // dead-end bend towards C, and home. The way to the guide and back is
+    // cut where the legs meet, as for any guide; the section stays.
+    let e = engine(fixture::region());
+    let opts = RouteOptions::default();
+    let none = Favourites::none();
+    let fun = Fun::new(e.region(), &none, &opts);
+    let snap = |p: LatLon| e.snap(p).unwrap();
+    let (s1, s2, guide) = (
+        ll(55.7001, 13.203),
+        ll(55.7001, 13.208),
+        ll(55.705, 13.2119),
+    );
+    let stops = [(snap(s1), true), (snap(s2), true), (snap(guide), false)];
+    let l = ride_loop(
+        &e,
+        &fun,
+        &opts,
+        &snap(ll(55.7001, 13.2001)),
+        &stops,
+        0.0,
+        5_000.0,
+    )
+    .unwrap();
+    let near = |p: LatLon| {
+        l.routed
+            .route
+            .geometry
+            .iter()
+            .map(|&g| haversine_m(g, p))
+            .fold(f64::INFINITY, f64::min)
+    };
+    assert!(near(s1) < 20.0 && near(s2) < 20.0, "rides the section");
+    assert!(
+        near(guide) > 200.0,
+        "no spur to the guide: {:?}",
+        l.routed.route.geometry
+    );
+}

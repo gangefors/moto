@@ -233,9 +233,11 @@ pub(crate) enum Cost<'a> {
     /// worth riding cheaper by their worth times `max_pull` times the pull
     /// (0–1; 0 is the fastest route).
     Favoured(Off, Fun<'a>, f64),
-    /// As `Favoured`, with roads the loop already rides (either way, by
-    /// geometry) costing `reuse_penalty` times more (round trips).
-    Loop(Off, Fun<'a>, f64, &'a HashSet<u32>),
+    /// As `Favoured`, with roads already ridden (either way, by geometry)
+    /// costing `reuse_penalty` times more. With the flag (round trips) a
+    /// road ridden again also earns nothing for being worth riding: a
+    /// favourite is only worth riding once, however cheap it is.
+    Loop(Off, Fun<'a>, f64, &'a HashSet<u32>, bool),
     /// Distance along the road, nothing avoided: the road the rider points
     /// at, not a faster one nearby (marking sections).
     Shortest,
@@ -248,13 +250,15 @@ impl Cost<'_> {
             Cost::Favoured(off, fun, pull) => {
                 time_s(e) * fun.factor(id, e, *pull) + avoid_extra(off, e)
             }
-            Cost::Loop(off, fun, pull, used) => {
-                let reused = if used.contains(&e.geometry) {
-                    PARAMS.reuse_penalty
+            Cost::Loop(off, fun, pull, used, once) => {
+                let factor = fun.factor(id, e, *pull);
+                if !used.contains(&e.geometry) {
+                    time_s(e) * factor + avoid_extra(off, e)
+                } else if *once {
+                    (time_s(e) * factor.max(1.0) + avoid_extra(off, e)) * PARAMS.reuse_penalty
                 } else {
-                    1.0
-                };
-                (time_s(e) * fun.factor(id, e, *pull) + avoid_extra(off, e)) * reused
+                    (time_s(e) * factor + avoid_extra(off, e)) * PARAMS.reuse_penalty
+                }
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
         }
@@ -275,7 +279,7 @@ impl Cost<'_> {
             // `max_pull` is below 1, so the bound stays positive.
             // The reuse and dullness penalties only add cost, so the bound
             // still holds.
-            Cost::Favoured(_, fun, pull) | Cost::Loop(_, fun, pull, _) => {
+            Cost::Favoured(_, fun, pull) | Cost::Loop(_, fun, pull, _, _) => {
                 metres / max_mps * (1.0 - pull * PARAMS.max_pull * fun.max_worth())
             }
             Cost::Shortest => metres,
@@ -575,7 +579,7 @@ pub(crate) fn route_choices(
         while kept.len() < MAX_CHOICES {
             let mut found = None;
             for pull in CHOICE_PULLS {
-                let cost = Cost::Loop(search.off, search.fun, pull, &used);
+                let cost = Cost::Loop(search.off, search.fun, pull, &used, false);
                 let parts = path(region, from, to, cost, max_speed_kmh)?;
                 let r = build(&search.fun, &parts);
                 let roads = roads_of(&parts);
@@ -1312,6 +1316,46 @@ mod tests {
         let r = e.route_with(from, to, &with(Gravel::Avoid), &fav).unwrap();
         assert_eq!(r.unpaved_m, 0.0, "{r:?}");
         assert_eq!(r.favourite_share, 0.0);
+    }
+
+    #[test]
+    fn a_favourite_ridden_again_earns_nothing_in_a_loop() {
+        use super::{Cost, Fun, Off, time_s};
+        use crate::scoring::PARAMS;
+        use crate::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
+        use std::collections::HashSet;
+        // An epic favourite along A-B: cheaper than its time the first
+        // time. Ridden again in a loop it costs the reuse penalty on its
+        // full time; route choices only scale its favoured cost.
+        let e = engine(fixture::region());
+        let d = e
+            .section_between(ll(55.7001, 13.201), ll(55.7001, 13.209))
+            .unwrap();
+        let s = Section {
+            id: 1,
+            rider_id: LOCAL_RIDER.into(),
+            name: String::new(),
+            rating: Rating::Epic,
+            direction: Direction::Both,
+            source: Source::Map,
+            status: Status::Ok,
+            created_at: 0,
+            updated_at: 0,
+            ways: d.ways,
+            geometry: d.geometry,
+        };
+        let fav = crate::Favourites::build(&e, &[s]);
+        let o = opts(false, false);
+        let fun = Fun::new(e.region(), &fav, &o);
+        let edge = e.region().edges()[fixture::E_AB as usize];
+        let time = time_s(&edge);
+        let none = HashSet::new();
+        let used: HashSet<u32> = [edge.geometry].into();
+        let cost =
+            |used, once| Cost::Loop(Off::of(&o), fun, 1.0, used, once).edge(fixture::E_AB, &edge);
+        assert!(cost(&none, true) < time);
+        assert!((cost(&used, true) - time * PARAMS.reuse_penalty).abs() < 1e-9);
+        assert!(cost(&used, false) < time * PARAMS.reuse_penalty);
     }
 
     #[test]
