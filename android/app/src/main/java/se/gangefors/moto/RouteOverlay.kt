@@ -27,13 +27,14 @@ import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.RegionInfo
 
 /**
- * Shows where routing works: a light grey veil over everything outside
+ * Shows where routing works: a veil (grey, or black on the dark map
+ * [darkMap]) over everything outside
  * the area the region's roads cover, with a thin line along its edge
  * ([coverage], from the core). A region file without that outline (format
  * 1.0) shows its bounding box as a dashed line instead. Updated in place
  * when another region takes over; drawn under the routes and sections.
  */
-fun showRegionOutline(style: Style, info: RegionInfo, coverage: List<List<LatLon>>) {
+fun showRegionOutline(style: Style, info: RegionInfo, coverage: List<List<LatLon>>, darkMap: Boolean = false) {
     val rings = coverage.filter { it.size >= 4 }.map { ring -> ring.map { Point.fromLngLat(it.lon, it.lat) } }
     val edge: Feature
     val veil: Feature?
@@ -68,9 +69,11 @@ fun showRegionOutline(style: Style, info: RegionInfo, coverage: List<List<LatLon
     }
     style.addSource(GeoJsonSource(VEIL_SOURCE, FeatureCollection.fromFeatures(listOfNotNull(veil))))
     style.addSource(GeoJsonSource(OUTLINE_SOURCE, edge))
+    // Grey dims the light map; on the dark map grey would lighten it, so
+    // black dims it there.
     val veilLayer = FillLayer(VEIL_LAYER, VEIL_SOURCE).withProperties(
-        PropertyFactory.fillColor("#5f6368"),
-        PropertyFactory.fillOpacity(0.28f),
+        PropertyFactory.fillColor(if (darkMap) "#000000" else "#5f6368"),
+        PropertyFactory.fillOpacity(if (darkMap) 0.45f else 0.28f),
     )
     val edgeLayer = LineLayer(OUTLINE_LAYER, OUTLINE_SOURCE).withProperties(
         PropertyFactory.lineColor("#5f6368"),
@@ -108,7 +111,7 @@ private val SOLID = arrayOf(1f, 0f)
  * choices, the dull option, is grey instead of blue.
  * The map only draws; the route comes from the core.
  */
-class RouteOverlay(private val style: Style, private val density: Float) {
+class RouteOverlay(private val style: Style, private val density: Float, darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
 
     init {
@@ -120,7 +123,7 @@ class RouteOverlay(private val style: Style, private val density: Float) {
                     .withProperties(
                         PropertyFactory.lineColor(CASING_COLOR),
                         PropertyFactory.lineWidth(6f),
-                        PropertyFactory.lineOpacity(0.8f),
+                        PropertyFactory.lineOpacity(0.8f * outlineStrength(darkMap)),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
@@ -155,6 +158,7 @@ class RouteOverlay(private val style: Style, private val density: Float) {
                     .withProperties(
                         PropertyFactory.lineColor(CASING_COLOR),
                         PropertyFactory.lineWidth(9f),
+                        PropertyFactory.lineOpacity(outlineStrength(darkMap)),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),

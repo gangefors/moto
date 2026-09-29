@@ -16,9 +16,17 @@ data class SectionLook(
  * loop is shown ([routeShown]), so the route is the one strong line and
  * the sections stay visible as context. A route drawn over a section
  * covers it completely (the route and its casing are wider). */
-fun sectionLook(routeShown: Boolean): SectionLook =
+fun sectionLook(routeShown: Boolean, darkMap: Boolean = false): SectionLook =
     if (routeShown) {
         SectionLook(lineWidth = 3f, lineOpacity = 0.5f, casingOpacity = 0f, arrowOpacity = 0.5f)
     } else {
-        SectionLook(lineWidth = 5f, lineOpacity = 1f, casingOpacity = 0.8f, arrowOpacity = 1f)
+        SectionLook(lineWidth = 5f, lineOpacity = 1f, casingOpacity = 0.8f * outlineStrength(darkMap), arrowOpacity = 1f)
     }
+
+/**
+ * How strong the white outline of routes and sections is drawn (its
+ * opacity, as a share): full on the light map, where it lifts the lines
+ * off the roads; fainter on the dark map, where full white glares, but
+ * still enough to keep the lines apart from the roads under them.
+ */
+fun outlineStrength(darkMap: Boolean): Float = if (darkMap) 0.45f else 1f
