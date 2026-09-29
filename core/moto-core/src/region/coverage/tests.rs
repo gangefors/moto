@@ -245,3 +245,87 @@ fn broken_coverage_is_refused() {
         );
     }
 }
+
+/// A closed counter-clockwise box.
+fn square(lat0: f64, lon0: f64, lat1: f64, lon1: f64) -> Vec<PointE7> {
+    vec![
+        p(lat0, lon0),
+        p(lat0, lon1),
+        p(lat1, lon1),
+        p(lat1, lon0),
+        p(lat0, lon0),
+    ]
+}
+
+fn rings_of(offsets: &[u32], points: &[PointE7]) -> Vec<Vec<PointE7>> {
+    offsets
+        .windows(2)
+        .map(|w| points[w[0] as usize..w[1] as usize].to_vec())
+        .collect()
+}
+
+#[test]
+fn merging_overlapping_outlines_gives_one() {
+    // Two neighbours whose outlines reach a little over their border.
+    let west = square(55.0, 13.0, 55.5, 13.62);
+    let east = square(55.0, 13.58, 55.5, 14.2);
+    let (offsets, points) = merge(&[vec![&west[..]], vec![&east[..]]], BBoxE7::default()).unwrap();
+    let rings = rings_of(&offsets, &points);
+    assert_eq!(rings.len(), 1, "{rings:?}");
+    assert!(signed_area(&rings[0]) > 0.0, "counter-clockwise");
+    let inside = |lat, lon| contains(&offsets, &points, p(lat, lon));
+    // On both sides, and where both outlines were: covered once, not
+    // cancelled out as overlapping holes would be.
+    assert!(inside(55.25, 13.2));
+    assert!(inside(55.25, 13.6));
+    assert!(inside(55.25, 14.0));
+    assert!(!inside(55.8, 13.6));
+    assert!(!inside(55.25, 14.5));
+}
+
+#[test]
+fn merging_fills_a_gap_the_outlines_enclose() {
+    // A roadless strip along the border, closed off by roads crossing it
+    // at both ends: covered, like a lake inside one region.
+    let west = square(55.0, 13.0, 56.0, 13.4);
+    let east = [
+        square(55.0, 13.38, 55.2, 14.0),
+        square(55.8, 13.38, 56.0, 14.0),
+        square(55.0, 13.9, 56.0, 14.3),
+    ];
+    let east: Vec<&[PointE7]> = east.iter().map(Vec::as_slice).collect();
+    let (offsets, points) = merge(&[vec![&west[..]], east], BBoxE7::default()).unwrap();
+    assert_eq!(offsets.len(), 2, "one outline");
+    assert!(contains(&offsets, &points, p(55.5, 13.65)));
+}
+
+#[test]
+fn merging_keeps_areas_apart_that_are_apart() {
+    let a = square(55.0, 13.0, 55.3, 13.3);
+    let b = square(56.0, 15.0, 56.3, 15.3);
+    let (offsets, points) = merge(&[vec![&a[..]], vec![&b[..]]], BBoxE7::default()).unwrap();
+    assert_eq!(offsets.len(), 3, "two outlines");
+    assert!(!contains(&offsets, &points, p(55.6, 14.1)));
+    // Nothing to merge: no outline.
+    assert_eq!(
+        merge(&[vec![], vec![]], BBoxE7::default()),
+        Some((vec![0], vec![]))
+    );
+}
+
+#[test]
+fn merging_stays_in_the_box_and_near_the_outlines() {
+    let a = square(55.0, 13.0, 55.3, 13.3);
+    let b = square(55.28, 13.0, 55.6, 13.3);
+    let bbox = BBoxE7 {
+        min_lat: p(55.0, 0.0).lat,
+        min_lon: p(0.0, 13.0).lon,
+        max_lat: p(55.6, 0.0).lat,
+        max_lon: p(0.0, 13.3).lon,
+    };
+    let (_, points) = merge(&[vec![&a[..]], vec![&b[..]]], bbox).unwrap();
+    for q in &points {
+        assert!(q.lat >= bbox.min_lat && q.lat <= bbox.max_lat, "{q:?}");
+        assert!(q.lon >= bbox.min_lon && q.lon <= bbox.max_lon, "{q:?}");
+    }
+}

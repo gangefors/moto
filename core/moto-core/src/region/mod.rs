@@ -11,6 +11,7 @@
 //! [`fingerprint`] instead ([`Region::open_fingerprinted`]).
 
 mod coverage;
+pub(crate) use coverage::{contains as coverage_contains, merge as merge_coverage};
 pub mod format;
 mod grid;
 pub mod install;

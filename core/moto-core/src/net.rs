@@ -19,10 +19,10 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use crate::CoreError;
-use crate::region::Region;
 use crate::region::format::{
     BBoxE7, CurvatureMetrics, Edge, GeometryName, NO_NAME, Place, PointE7, WayRef, border_flags,
 };
+use crate::region::{Region, coverage_contains, merge_coverage};
 
 /// Most regions open at once (ADR-0009).
 pub const MAX_REGIONS: usize = 16;
@@ -42,6 +42,9 @@ pub struct Net {
     /// stubs in other regions.
     extra_out: HashMap<u32, Vec<u32>>,
     extra_in: HashMap<u32, Vec<u32>>,
+    /// Several regions' coverage as one outline (offsets, points), so
+    /// neighbours join at their border instead of overlapping.
+    merged: Option<(Vec<u32>, Vec<PointE7>)>,
 }
 
 /// The edges leaving (or entering) a node: its own, then those of the
@@ -80,6 +83,7 @@ impl Net {
             canon: HashMap::new(),
             extra_out: HashMap::new(),
             extra_in: HashMap::new(),
+            merged: None,
         }
     }
 
@@ -114,8 +118,10 @@ impl Net {
             canon: HashMap::new(),
             extra_out: HashMap::new(),
             extra_in: HashMap::new(),
+            merged: None,
         };
         net.link();
+        net.merge_coverage();
         Ok(net)
     }
 
@@ -151,6 +157,18 @@ impl Net {
                 self.extra_in.entry(twin).or_default().extend(inn);
             }
         }
+    }
+
+    /// Joins the regions' coverage into one outline. Overlapping outlines
+    /// (each region's reaches a little past its border, along the roads
+    /// it keeps up to the first node beyond) would otherwise be drawn as
+    /// overlapping holes in the veil, which the map fills again.
+    fn merge_coverage(&mut self) {
+        if self.parts.len() < 2 || self.parts.iter().any(|r| r.coverage().is_empty()) {
+            return;
+        }
+        let rings: Vec<Vec<&[PointE7]>> = self.parts.iter().map(|r| r.coverage()).collect();
+        self.merged = merge_coverage(&rings, self.bbox());
     }
 
     /// The open regions, in order.
@@ -310,18 +328,28 @@ impl Net {
         })
     }
 
-    /// The area the regions' roads cover: every region's rings, empty
-    /// when a region has none (format 1.0), whose box is all there is.
+    /// The area the regions' roads cover as closed rings that never
+    /// overlap (several regions' joined into one outline), empty when a
+    /// region has none (format 1.0), whose box is all there is.
     pub fn coverage(&self) -> Vec<&[PointE7]> {
         if self.parts.iter().any(|r| r.coverage().is_empty()) {
             return Vec::new();
         }
+        if let Some((offsets, points)) = &self.merged {
+            return offsets
+                .windows(2)
+                .filter_map(|w| points.get(w[0] as usize..w[1] as usize))
+                .collect();
+        }
         self.parts.iter().flat_map(|r| r.coverage()).collect()
     }
 
-    /// Whether `p` lies in the area some region's roads cover; `None`
-    /// when a region has no coverage.
+    /// Whether `p` lies in the area the regions' roads cover (the joined
+    /// outline, when there is one); `None` when a region has no coverage.
     pub fn covers(&self, p: PointE7) -> Option<bool> {
+        if let Some((offsets, points)) = &self.merged {
+            return Some(coverage_contains(offsets, points, p));
+        }
         let mut any = false;
         for r in &self.parts {
             any |= r.covers(p)?;

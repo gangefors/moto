@@ -174,3 +174,23 @@ fn the_engine_routes_across_the_border() {
             .is_err()
     );
 }
+
+#[test]
+fn neighbours_coverage_is_one_outline() {
+    // Each region's outline reaches past the border along the road they
+    // share; drawn as two holes in the veil, the overlap would be veiled.
+    let (w, e) = (region(west()), region(east()));
+    assert_eq!(w.coverage().len(), 1);
+    assert_eq!(e.coverage().len(), 1);
+    let net = Net::linked(vec![w, e]).unwrap();
+    let rings = net.coverage();
+    assert_eq!(rings.len(), 1, "{rings:?}");
+    let at = |lat: f64, lon: f64| PointE7 {
+        lat: (lat * 1e7) as i32,
+        lon: (lon * 1e7) as i32,
+    };
+    assert_eq!(net.covers(at(55.70, 13.19)), Some(true));
+    assert_eq!(net.covers(at(55.70, 13.205)), Some(true));
+    assert_eq!(net.covers(at(55.70, 13.22)), Some(true));
+    assert_eq!(net.covers(at(56.5, 13.2)), Some(false));
+}
