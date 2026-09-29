@@ -205,11 +205,13 @@ pub fn loops(
 
 /// Loops from `start` through `stops` in order and back (at most
 /// [`crate::MAX_VIA_POINTS`]), e.g. the ends of a favourite section to
-/// ride: the loop through them as given and, when `both_ways`, through
-/// them the other way round, the better (worth per second) first. Each
-/// leg avoids the roads the earlier ones took, as every loop does, so the
-/// way back isn't the way out. The home zone and side-loop cut are sized
-/// by the loop's rough length (out to the farthest stop and back).
+/// ride: the stops as given and, when `both_ways`, the other way round,
+/// each made like an ordinary loop with two corners past the last stop
+/// (see `through_loops`). Up to [`MAX_LOOPS`] that differ, best (worth
+/// per second) first, preferring those that ride little twice. Each leg
+/// avoids the roads the earlier ones took, so the loop doesn't turn back
+/// along the stops. The home zone and side-loop cut are sized by the
+/// loop's rough length (out to the farthest stop and back).
 pub fn round_trip_via(
     engine: &Engine,
     start: LatLon,
@@ -253,15 +255,15 @@ pub fn round_trip_via(
     }
     let mut found: Vec<Loop> = orders
         .iter()
-        .filter_map(|o| through_loop(engine, &fun, opts, &s, o, home, side_loop_max))
+        .flat_map(|o| through_loops(engine, &fun, opts, favourites, &s, o, home, side_loop_max))
         .collect();
-    // A way round that must ride back along the section (the far end
-    // first, from here) is offered only when no other is a loop.
+    // Loops that ride much of themselves twice (back along the section)
+    // only when there is nothing else.
     if found.iter().any(|l| reuse_share(l) <= MAX_REUSE) {
         found.retain(|l| reuse_share(l) <= MAX_REUSE);
     }
-    found.sort_by(|a, b| worth_per_s(b).total_cmp(&worth_per_s(a)));
-    found.dedup_by(|a, b| a.routed.route.geometry == b.routed.route.geometry);
+    // The best few that differ, as for ordinary loops.
+    let found = pick(Vec::new(), found, MAX_LOOPS);
     if found.is_empty() {
         return Err(CoreError::NoRoute(
             "no loop through those points from here".into(),
@@ -291,78 +293,99 @@ pub fn through_home_m(start: LatLon, stops: &[LatLon]) -> f64 {
     home_radius_m(rough).min(nearest / 2.0)
 }
 
-/// Turns tried for the guide past the last stop, from straight on.
-const GUIDE_TURNS: [f64; 5] = [0.0, 60.0, -60.0, 120.0, -120.0];
+/// Turns tried for the first corner past the last stop, from straight on.
+const CORNER_TURNS: [f64; 5] = [0.0, 45.0, -45.0, 90.0, -90.0];
 
-/// The loop from `start` through `stops` (all ridden through) and back.
-/// Straight home from the last stop may be back the way the loop came
-/// (along the section it rode, cheap as a favourite): so it is also tried
-/// with a guide past the last stop, straight on or turned, that carries
-/// the loop on and round. The best loop riding at most [`MAX_REUSE`] of
-/// itself twice wins, else the one riding least twice.
-fn through_loop(
+/// How far past the last stop the first corner lies: this share of the
+/// way home from it, within the bounds below.
+const CORNER_SHARE: f64 = 0.35;
+const CORNER_MIN_M: f64 = 3_000.0;
+const CORNER_MAX_M: f64 = 20_000.0;
+/// The second corner swings this far off the way home from the first,
+/// away from the way out.
+const CORNER_SWING_DEG: f64 = 40.0;
+
+/// Loops from `start` through `stops` (all ridden through) and back, the
+/// way ordinary loops are made (ADR-0007): the start is one corner of a
+/// triangle and two waypoints the others, placed like a loop's (at a
+/// favourite when one is there, else on a road fit for a loop). The first
+/// corner lies past the last stop (straight on or turned), the second
+/// between it and home, swung away from the way out; so the loop rides
+/// the stops, carries on and picks up what is worth riding near them, and
+/// comes home another way. Also the loop straight home from the last
+/// stop. Each loop's `heading` is its candidate's index.
+#[allow(clippy::too_many_arguments)]
+fn through_loops(
     engine: &Engine,
     fun: &Fun,
     opts: &RouteOptions,
+    favourites: &Favourites,
     start: &RoadPoint,
     stops: &[RoadPoint],
     home: f64,
     side_loop_max: f64,
-) -> Option<Loop> {
-    let last = stops.last()?;
-    let before = stops
-        .len()
-        .checked_sub(2)
-        .and_then(|i| stops.get(i))
-        .unwrap_or(start);
-    let heading = bearing_deg(before.position, last.position);
-    let out =
-        (haversine_m(last.position, start.position) * GUIDE_SHARE).clamp(GUIDE_MIN_M, GUIDE_MAX_M);
+) -> Vec<Loop> {
+    let (Some(first), Some(last)) = (stops.first(), stops.last()) else {
+        return Vec::new();
+    };
+    let heading = if stops.len() > 1 {
+        bearing_deg(first.position, last.position)
+    } else {
+        bearing_deg(start.position, last.position)
+    };
+    let out = (haversine_m(last.position, start.position) * CORNER_SHARE)
+        .clamp(CORNER_MIN_M, CORNER_MAX_M);
     let visit: Vec<(RoadPoint, bool)> = stops.iter().map(|p| (p.clone(), true)).collect();
-    let mut candidates = vec![visit.clone()];
-    for turn in GUIDE_TURNS {
-        let p = destination(last.position, heading + turn, out);
-        if let Some(guide) = loop_road_near(engine, p, opts) {
-            let mut c = visit.clone();
-            c.push((guide, false));
-            candidates.push(c);
+    let mut taken: Vec<LatLon> = stops.iter().map(|p| p.position).collect();
+    // A corner: at a favourite in that direction if there is one, else on
+    // a road fit for a loop, pulled in if need be.
+    let mut corner = |from: LatLon, bearing: f64, radius: f64| -> Option<RoadPoint> {
+        if let Some(p) = anchor_near(from, bearing, radius, favourites, &taken) {
+            taken.push(p);
+            return engine.snap(p).ok();
         }
+        WAYPOINT_PULL_IN.iter().find_map(|&f| {
+            let p = destination(from, bearing, radius * f);
+            loop_road_near(engine, p, opts).inspect(|_| taken.push(p))
+        })
+    };
+    let mut candidates = vec![visit.clone()];
+    for turn in CORNER_TURNS {
+        let Some(c1) = corner(last.position, heading + turn, out) else {
+            continue;
+        };
+        let home_way = bearing_deg(c1.position, start.position);
+        let half = haversine_m(c1.position, start.position) / 2.0;
+        // Swung away from the way out: the side further from the first stop.
+        let side = [CORNER_SWING_DEG, -CORNER_SWING_DEG]
+            .into_iter()
+            .max_by(|a, b| {
+                let d = |s: f64| {
+                    haversine_m(destination(c1.position, home_way + s, half), first.position)
+                };
+                d(*a).total_cmp(&d(*b))
+            })
+            .unwrap_or(CORNER_SWING_DEG);
+        let mut c = visit.clone();
+        c.push((c1.clone(), false));
+        if half > CORNER_MIN_M
+            && let Some(c2) = corner(c1.position, home_way + side, half)
+        {
+            c.push((c2, false));
+        }
+        candidates.push(c);
     }
-    let loops: Vec<Loop> = candidates
-        .iter()
-        .filter_map(|c| ride_loop(engine, fun, opts, start, c, home, side_loop_max))
-        .collect();
-    // Straight home is best when it is a loop already; else the most
-    // worth per second, the shorter of equals.
-    let fine = loops
+    candidates
         .iter()
         .enumerate()
-        .filter(|(_, l)| reuse_share(l) <= MAX_REUSE)
-        .max_by(|(i, a), (j, b)| {
-            (*i == 0)
-                .cmp(&(*j == 0))
-                .then(worth_per_s(a).total_cmp(&worth_per_s(b)))
-                .then(
-                    b.routed
-                        .route
-                        .duration_s
-                        .total_cmp(&a.routed.route.duration_s),
-                )
+        .filter_map(|(i, c)| {
+            ride_loop(engine, fun, opts, start, c, home, side_loop_max).map(|mut l| {
+                l.heading = i;
+                l
+            })
         })
-        .map(|(i, _)| i);
-    match fine {
-        Some(i) => loops.into_iter().nth(i),
-        None => loops
-            .into_iter()
-            .min_by(|a, b| reuse_share(a).total_cmp(&reuse_share(b))),
-    }
+        .collect()
 }
-
-/// How far past the last stop the guide lies: this share of the way home
-/// from it, within the bounds below.
-const GUIDE_SHARE: f64 = 0.4;
-const GUIDE_MIN_M: f64 = 2_000.0;
-const GUIDE_MAX_M: f64 = 15_000.0;
 
 /// `kept` plus the best of `loops` (worth per second; ties by heading, so
 /// results are stable) that overlap every kept loop by less than

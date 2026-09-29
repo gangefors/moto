@@ -665,7 +665,11 @@ fn loops_through_given_points_ride_out_through_them_and_back() {
     // A stretch 4 km north of the centre, from 3 km west to straight north.
     let (a, b) = (ll(55.790, 13.448), ll(55.790, 13.496));
     let loops = round_trip_via(&e, CENTRE, &[a, b], true, &opts, &Favourites::none()).unwrap();
-    assert!(!loops.is_empty() && loops.len() <= 2, "{}", loops.len());
+    assert!(
+        !loops.is_empty() && loops.len() <= MAX_LOOPS,
+        "{}",
+        loops.len()
+    );
     let start = e.snap(CENTRE).unwrap().position;
     let near = |r: &Route, p: LatLon| {
         r.geometry
@@ -687,19 +691,23 @@ fn loops_through_given_points_ride_out_through_them_and_back() {
             "through both points"
         );
         // The shortest loop through both is 14 km (7 out, 3 along, 4
-        // back); the way back keeps off the roads out, so a little more,
-        // never twice the way out.
+        // back); loops carry on past the points and come round another
+        // way, so longer, but not far beyond the corners (3 km out).
         assert!(
-            l.distance_m >= 13_900.0 && l.distance_m < 1.4 * 14_000.0,
+            l.distance_m >= 13_900.0 && l.distance_m < 35_000.0,
             "{}",
             l.distance_m
+        );
+        assert!(
+            ridden_twice(&l.geometry, 1_000.0) <= MAX_REUSE,
+            "a loop, not out and back"
         );
         assert_eq!(l.fastest_duration_s, l.duration_s);
     }
     // One way only: the points in the order given (the way out may pass
     // b on its way to a, but b comes again after a).
     let one = round_trip_via(&e, CENTRE, &[a, b], false, &opts, &Favourites::none()).unwrap();
-    assert_eq!(one.len(), 1);
+    assert!(!one.is_empty());
     let g = &one[0].geometry;
     let first_a = g.iter().position(|&p| haversine_m(p, a) < 50.0).unwrap();
     let last_b = g.iter().rposition(|&p| haversine_m(p, b) < 50.0).unwrap();
@@ -783,5 +791,56 @@ fn a_loop_through_an_epic_section_rides_it_once() {
                 .collect::<Vec<_>>()
         );
         assert!(l.favourite_share > 0.1, "loop {i} rides the section: {l:?}");
+    }
+}
+
+#[test]
+fn a_loop_through_a_section_carries_on_past_its_far_end() {
+    // The epic section runs 3 km north, away from the start. The loop
+    // rides it once, carries on beyond its far end and comes home another
+    // way, as an ordinary loop would, instead of turning back along it.
+    let e = engine(fixture::grid(13));
+    let (a, b) = (ll(55.772, 13.496), ll(55.799, 13.496));
+    let d = e.section_between(a, b).unwrap();
+    let line = d.geometry.clone();
+    let fav = Favourites::build(
+        &e,
+        &[Section {
+            id: 1,
+            rider_id: LOCAL_RIDER.into(),
+            name: String::new(),
+            rating: Rating::Epic,
+            direction: Direction::Both,
+            source: Source::Map,
+            status: Status::Ok,
+            created_at: 0,
+            updated_at: 0,
+            ways: d.ways,
+            geometry: d.geometry,
+        }],
+    );
+    let loops = round_trip_via(&e, CENTRE, &[a, b], true, &RouteOptions::default(), &fav).unwrap();
+    for l in &loops {
+        let near = |p: LatLon| {
+            l.geometry
+                .iter()
+                .map(|&g| haversine_m(g, p))
+                .fold(f64::INFINITY, f64::min)
+        };
+        assert!(near(a) < 50.0 && near(b) < 50.0, "rides the section");
+        assert!(ridden_twice(&l.geometry, 1_000.0) <= MAX_REUSE);
+        // Goes on near the far end, off the section, rather than turning
+        // straight back along it.
+        let beyond = l
+            .geometry
+            .iter()
+            .filter(|&&g| haversine_m(g, b) < 3_000.0)
+            .map(|&g| {
+                line.iter()
+                    .map(|&s| haversine_m(g, s))
+                    .fold(f64::INFINITY, f64::min)
+            })
+            .fold(0.0, f64::max);
+        assert!(beyond > 1_000.0, "carries on past the far end: {beyond} m");
     }
 }
