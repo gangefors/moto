@@ -485,11 +485,15 @@ fn route_choices_offer_the_favourite_and_the_fastest() {
     assert_eq!(choices.len(), 2, "{choices:?}");
     assert_eq!(
         choices[0],
-        e.route_with(FROM, TO, &detour(0.5), &fav).unwrap()
+        Route {
+            suggested: true,
+            ..e.route_with(FROM, TO, &detour(0.5), &fav).unwrap()
+        }
     );
     assert!(north_of(&choices[0]));
     let fastest = &choices[1];
     assert!(!north_of(fastest));
+    assert!(!fastest.suggested, "the fastest is only the fastest here");
     assert!((fastest.duration_s - fastest.fastest_duration_s).abs() < 1e-6);
     assert_eq!(choices[0].fastest_duration_s, fastest.duration_s);
     // The same inputs give the same routes.
@@ -503,6 +507,7 @@ fn route_choices_offer_the_favourite_and_the_fastest() {
         .unwrap();
     assert_eq!(plain.len(), 1);
     assert!(!north_of(&plain[0]));
+    assert!(!plain[0].suggested);
     // No budget: the favourite is too far, only the fastest.
     let tight = e.route_choices(FROM, &[], TO, &detour(0.0), &fav).unwrap();
     assert_eq!(tight.len(), 1);
@@ -512,10 +517,14 @@ fn route_choices_offer_the_favourite_and_the_fastest() {
     let via = e
         .route_choices(FROM, &via_point, TO, &detour(0.5), &fav)
         .unwrap();
+    assert_eq!(via.len(), 1);
     assert_eq!(
-        via,
-        [e.route_via(FROM, &via_point, TO, &detour(0.5), &fav)
-            .unwrap()]
+        Route {
+            suggested: false,
+            ..via[0].clone()
+        },
+        e.route_via(FROM, &via_point, TO, &detour(0.5), &fav)
+            .unwrap()
     );
     assert!(
         e.route_choices(FROM, &[FROM; 9], TO, &detour(0.5), &fav)
@@ -526,6 +535,30 @@ fn route_choices_offer_the_favourite_and_the_fastest() {
         e.route_choices(ll(f64::NAN, 13.0), &[], TO, &detour(0.5), &fav)
             .is_err()
     );
+}
+
+#[test]
+fn a_choice_on_the_fastest_road_is_offered_once_as_the_fastest() {
+    // An epic favourite along the straight road: the best choice is the
+    // fastest route, offered once and marked as a suggestion too.
+    let e = fork();
+    let d = e.section_between(FROM, TO).unwrap();
+    let straight = Section {
+        ways: d.ways,
+        geometry: d.geometry,
+        ..section(&[], Rating::Epic, Direction::Both)
+    };
+    let fav = Favourites::build(&e, &[straight]);
+    let choices = e.route_choices(FROM, &[], TO, &detour(0.5), &fav).unwrap();
+    assert_eq!(choices.len(), 1, "{choices:?}");
+    assert!(!north_of(&choices[0]));
+    assert!(choices[0].suggested);
+    // Through a via point on it: every leg's fastest is its pick.
+    let via = e
+        .route_choices(FROM, &[ll(55.70, 13.42)], TO, &detour(0.5), &fav)
+        .unwrap();
+    assert_eq!(via.len(), 1, "{via:?}");
+    assert!(via[0].suggested);
 }
 
 #[test]

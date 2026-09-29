@@ -130,6 +130,7 @@ mod tests {
             favourite_parts: vec![],
             unpaved_m: 0.0,
             unpaved_parts: vec![],
+            suggested: false,
         };
         let saved = store
             .save_route("Lund & back".into(), true, route.clone())

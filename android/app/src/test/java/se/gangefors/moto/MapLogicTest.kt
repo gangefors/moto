@@ -283,4 +283,14 @@ class MapLogicTest {
         assertFalse(segmentsFit(widestLabelPx = 140, count = 3, segmentPaddingPx = 28, availablePx = 320))
         assertFalse(segmentsFit(widestLabelPx = 10, count = 0, segmentPaddingPx = 28, availablePx = 320))
     }
+
+    @Test
+    fun theFastestIsGreyOnlyAmongSeveralAndWhenNotAlsoTheSuggestion() {
+        assertTrue(fastestIsDull(count = 3, fastestSuggested = false))
+        assertFalse(fastestIsDull(count = 2, fastestSuggested = true))
+        // A single route is never grey (nor says it is the fastest).
+        assertFalse(fastestIsDull(count = 1, fastestSuggested = false))
+        assertFalse(fastestIsDull(count = 1, fastestSuggested = true))
+        assertEquals(null, fastestChoice(1))
+    }
 }

@@ -405,6 +405,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         favourite_parts: Vec::new(),
         unpaved_m: 0.0,
         unpaved_parts: Vec::new(),
+        suggested: false,
     };
     let (mut favourite_m, mut curvy_m) = (0.0, 0.0);
     for leg in legs {
@@ -489,6 +490,7 @@ impl Builder {
                 favourite_parts: self.favourite_parts,
                 unpaved_m: self.unpaved_m,
                 unpaved_parts: self.unpaved_parts,
+                suggested: false,
             },
         }
     }
@@ -539,6 +541,14 @@ pub const MAX_CHOICES: usize = 3;
 /// Two routes are choices apart when they share less than this share of
 /// the shorter one.
 pub const MAX_CHOICE_OVERLAP: f64 = 0.5;
+/// A choice is the same road as the fastest route when neither rides more
+/// than this share of the longer one that the other doesn't, or more
+/// than [`SAME_ROAD_M`] if that is more: a few metres out along a
+/// favourite and back at a waypoint, say, which a rider can't tell apart
+/// on the map.
+pub const SAME_ROAD_SHARE: f64 = 0.05;
+/// See [`SAME_ROAD_SHARE`]; the room short routes get.
+pub const SAME_ROAD_M: f64 = 200.0;
 /// Pulls tried, strongest first, for each further choice.
 const CHOICE_PULLS: [f64; 3] = [1.0, 0.5, 0.25];
 
@@ -551,7 +561,10 @@ const CHOICE_PULLS: [f64; 3] = [1.0, 0.5, 0.25];
 /// picks, so a choice may buy less than the first) and shares less than
 /// [`MAX_CHOICE_OVERLAP`] with every route kept and the fastest. Without
 /// anything to pull (no favourites, curvy roads off, no gravel wanted)
-/// only the fastest. The same inputs always give the same routes.
+/// only the fastest. The routes worth riding are `suggested`; a first
+/// choice that is the fastest's road ([`same_road`]) is offered once, as
+/// the fastest, which is then `suggested` too. The same inputs always
+/// give the same routes.
 pub(crate) fn route_choices(
     region: &Region,
     from: &RoadPoint,
@@ -562,12 +575,20 @@ pub(crate) fn route_choices(
 ) -> Result<Vec<Route>, CoreError> {
     let search = Search::new(region, from, to, opts, favourites, max_speed_kmh)?;
     let mut kept: Vec<(Routed, Vec<Partial>)> = Vec::new();
-    // The first choice, unless it is the fastest route itself (offered
-    // last).
-    if let Some(best) = search.best()?
-        && best.0.route.geometry != search.fastest.0.route.geometry
-    {
-        kept.push(best);
+    // The first choice, unless it is the fastest route's road (offered
+    // last, as a suggestion too).
+    let mut fastest_suggested = false;
+    if let Some(best) = search.best()? {
+        let same = best.0.route.geometry == search.fastest.0.route.geometry
+            || same_road(
+                &road_metres(region, &best.1),
+                &road_metres(region, &search.fastest.1),
+            );
+        if same {
+            fastest_suggested = true;
+        } else {
+            kept.push(best);
+        }
     }
     if !search.fun.is_empty() {
         let roads_of = |parts: &[Partial]| road_metres(region, parts);
@@ -602,12 +623,29 @@ pub(crate) fn route_choices(
     let fastest_s = search.fastest.0.route.duration_s;
     let mut routes: Vec<Route> = kept
         .into_iter()
-        .map(|(r, _)| search.with_fastest(r.route))
+        .map(|(r, _)| Route {
+            suggested: true,
+            ..search.with_fastest(r.route)
+        })
         .collect();
     let mut fastest = search.fastest.0.route;
     fastest.fastest_duration_s = fastest_s;
+    fastest.suggested = fastest_suggested;
     routes.push(fastest);
     Ok(routes)
+}
+
+/// Whether two routes (as [`road_metres`]) ride the same road: neither
+/// rides more than [`SAME_ROAD_SHARE`] of the longer one (at least
+/// [`SAME_ROAD_M`]) off the other.
+fn same_road(a: &HashMap<u32, f64>, b: &HashMap<u32, f64>) -> bool {
+    let shared: f64 = a
+        .iter()
+        .filter_map(|(g, m)| b.get(g).map(|n| m.min(*n)))
+        .sum();
+    let (la, lb): (f64, f64) = (a.values().sum(), b.values().sum());
+    let slack = (SAME_ROAD_SHARE * la.max(lb)).max(SAME_ROAD_M);
+    la - shared <= slack && lb - shared <= slack
 }
 
 /// Metres of each road geometry that `parts` ride.
@@ -963,6 +1001,7 @@ pub(crate) fn shortest_within(
 
 #[cfg(test)]
 mod tests {
+    use super::{HashMap, same_road};
     use crate::fixture::{self, L_S};
     use crate::geo::haversine_m;
     use crate::region::Region;
@@ -998,6 +1037,27 @@ mod tests {
 
     /// Degrees of longitude at 55.7°N, in metres.
     const M_PER_DEG_LON: f64 = 62_742.0;
+
+    #[test]
+    fn the_same_road_allows_a_short_spur_but_not_a_detour() {
+        let m = |v: &[(u32, f64)]| v.iter().copied().collect::<HashMap<u32, f64>>();
+        let fastest = m(&[(1, 1000.0), (2, 900.0)]);
+        assert!(same_road(&fastest, &fastest));
+        // 25 m out along the next road and back.
+        assert!(same_road(
+            &m(&[(1, 1000.0), (2, 900.0), (3, 50.0)]),
+            &fastest
+        ));
+        // A little further along a road it rides anyway.
+        assert!(same_road(&m(&[(1, 1000.0), (2, 1080.0)]), &fastest));
+        // Another road for half the way.
+        assert!(!same_road(&m(&[(1, 1000.0), (3, 1000.0)]), &fastest));
+        // Long routes: 5 % of the length.
+        let long = m(&[(1, 20_000.0)]);
+        assert!(same_road(&m(&[(1, 20_000.0), (4, 900.0)]), &long));
+        assert!(!same_road(&m(&[(1, 20_000.0), (4, 1500.0)]), &long));
+        assert!(!same_road(&m(&[(4, 20_000.0)]), &long));
+    }
 
     #[test]
     fn follows_roads_through_junctions() {
@@ -1420,6 +1480,7 @@ mod tests {
             favourite_parts: parts.clone(),
             unpaved_m: 0.0,
             unpaved_parts: parts,
+            suggested: false,
         };
         let r = super::join(vec![
             leg(55.0, 55.1, 1.0, vec![vec![p(55.05), p(55.1)]]),
