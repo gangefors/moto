@@ -3,6 +3,9 @@
 
 package se.gangefors.moto
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import se.gangefors.moto.core.RoundTripTarget
 
 /**
@@ -125,5 +128,20 @@ class OneAhead<K, V>(private val drop: (V) -> Unit) {
     fun clear() {
         held?.let { drop(it.second) }
         held = null
+    }
+}
+
+/**
+ * The loop length the rider last picked, on the loop sheet or in Ride
+ * settings: every new loop starts at it. [save] stores a new pick.
+ */
+class LoopLength(initial: LoopChoice, private val save: (LoopChoice) -> Unit) {
+    var choice by mutableStateOf(initial)
+        private set
+
+    fun pick(c: LoopChoice) {
+        if (c == choice) return
+        choice = c
+        save(c)
     }
 }

@@ -404,8 +404,6 @@ fun MapScreen() {
     var showDebug by remember { mutableStateOf(false) }
     // Ride settings, one tap from the map.
     var showSettings by remember { mutableStateOf(false) }
-    // The length a new loop starts at (Ride settings).
-    var defaultLoop by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
     // How to use the map, as a notice on the first few starts (after that
     // it is under About); no region: a notice that stays, with a way to
     // download one.
@@ -725,7 +723,10 @@ fun MapScreen() {
     var loops by remember { mutableStateOf<List<Route>>(emptyList()) }
     var loopIndex by remember { mutableIntStateOf(0) }
     var loopOpts by remember { mutableStateOf<RouteOptions?>(null) }
-    var loopChoice by remember { mutableStateOf(RoutePrefs.loopChoice(context)) }
+    // The last loop length picked (loop sheet or Ride settings); new
+    // loops start at it.
+    val loopLength = remember { LoopLength(RoutePrefs.loopChoice(context)) { RoutePrefs.setLoopChoice(context, it) } }
+    val loopChoice = loopLength.choice
     // 0: the standard loops; Shuffle picks another seed. A new start goes
     // back to the standard loops.
     var loopSeed by remember { mutableStateOf(0u) }
@@ -787,7 +788,6 @@ fun MapScreen() {
         startPicked = null
         // A plan replaces the step that led to it ("Point set…").
         message = null
-        loopChoice = defaultLoop
         loopSeed = seed
         loopDirection = LoopDirection.ANY
         loopStart = start
@@ -1725,7 +1725,7 @@ fun MapScreen() {
                                 showLoop(it, loops, loopIndex)
                             },
                             choice = loopChoice,
-                            onChoice = { c -> loopChoice = c },
+                            onChoice = { c -> loopLength.pick(c) },
                             gravel = gravel,
                             onGravel = { g ->
                                 gravel = g
@@ -2047,16 +2047,13 @@ fun MapScreen() {
     }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(gravel, defaultLoop, locateZooms, keepScreenOn),
+            settings = RideSettings(gravel, loopChoice, locateZooms, keepScreenOn),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
                     RoutePrefs.setGravel(context, new.gravel)
                 }
-                if (new.loopLength != defaultLoop) {
-                    defaultLoop = new.loopLength
-                    RoutePrefs.setLoopChoice(context, new.loopLength)
-                }
+                loopLength.pick(new.loopLength)
                 if (new.zooms != locateZooms) {
                     locateZooms = new.zooms
                     RoutePrefs.setLocateZooms(context, new.zooms)
