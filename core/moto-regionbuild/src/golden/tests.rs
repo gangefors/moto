@@ -187,6 +187,43 @@ fn gravel_can_be_allowed_or_preferred() {
 }
 
 #[test]
+fn motorways_are_avoided_unless_allowed() {
+    assert!(
+        Case::parse(&case("", ""))
+            .unwrap()
+            .options()
+            .avoid
+            .motorways
+    );
+    let c = Case::parse(&case(r#","motorways":true"#, "")).unwrap();
+    assert!(!c.options().avoid.motorways);
+    assert!(Case::parse(&case(r#","motorways":"yes""#, "")).is_err());
+}
+
+#[test]
+fn cases_run_on_linked_regions_too() {
+    // Two copies of the fixture, as a comma-separated list: they open as
+    // one map (no border tables, so nothing links, but both are there).
+    let (a, b) = (built_fixture("golden-net-a"), built_fixture("golden-net-b"));
+    let both = format!("{},{}", a.path().display(), b.path().display());
+    let engine = super::open_regions(std::path::Path::new(&both)).unwrap();
+    assert_eq!(engine.net().regions().len(), 2);
+    let o = Case::parse(&case("", "")).unwrap().run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    let bad = format!("{},/definitely/not/here.region", a.path().display());
+    assert!(super::open_regions(std::path::Path::new(&bad)).is_err());
+}
+
+#[test]
+fn the_border_cases_parse() {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../moto-core/tests/golden-border");
+    let cases = super::load(&dir).unwrap();
+    assert!(cases.len() >= 4);
+    assert!(cases.iter().all(|c| !c.description.is_empty()));
+}
+
+#[test]
 fn a_demand_for_gravel_is_checked() {
     // The fixture route is paved.
     let file = built_fixture("golden-gravel");

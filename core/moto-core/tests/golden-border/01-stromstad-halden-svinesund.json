@@ -1,0 +1,7 @@
+{
+  "name": "Strömstad to Halden over the old Svinesund bridge",
+  "description": "Across the Swedish–Norwegian land border (ADR-0009): motorways avoided, the route takes road 1040 over the old Svinesund bridge into Norway (road 118). Needs the Swedish and Norwegian regions linked at their border stubs.",
+  "from": [58.936, 11.172],
+  "to": [59.124, 11.387],
+  "expect": {"pass": [[59.09596, 11.27190]]}
+}

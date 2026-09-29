@@ -162,6 +162,50 @@ jobs:
           core/target/release/moto-regionbuild --golden "$region" "$cases" --json "$out/current.json" || true
           python3 .github/scripts/golden_compare.py "${args[@]}"
 
+      # Routes across borders (ADR-0009): small cuts of the Swedish,
+      # Norwegian and Danish regions, each cut at its country's exact
+      # border polygon, linked into one map. Cached like the M0 region.
+      - name: Border regions cache key
+        id: border-key
+        env:
+          SOURCES_HASH: ${{ hashFiles('core/moto-regionbuild/src/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}
+        run: echo "key=region-border-$(date -u +%G-W%V)-$SOURCES_HASH" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: border-cache
+        with:
+          path: ${{ runner.temp }}/moto-border
+          key: ${{ steps.border-key.outputs.key }}
+
+      - name: Build border regions
+        if: steps.border-cache.outputs.cache-hit != 'true'
+        env:
+          OSM_EXTRACTS: https://download.openstreetmap.fr/extracts/europe
+          OSM_POLYGONS: https://polygons.openstreetmap.fr/get_poly.py
+        run: |
+          out="$RUNNER_TEMP/moto-border"
+          mkdir -p "$out"
+          cut() {
+            local id=$1 short=$2 country=$3 relation=$4 bbox=$5
+            local pbf="$RUNNER_TEMP/$id-latest.osm.pbf" poly="$RUNNER_TEMP/$short.poly"
+            curl -sSfL --proto '=https' --retry 3 -o "$pbf" "$OSM_EXTRACTS/$id-latest.osm.pbf"
+            curl -sSfL --proto '=https' --retry 3 -o "$poly" "$OSM_POLYGONS?id=$relation&params=0"
+            core/target/release/moto-regionbuild "$pbf" "$out/$short.region" \
+              --country "$country" --poly "$poly" --bbox "$bbox"
+            rm "$pbf"
+          }
+          cut sweden se SE 52822 55.3,10.9,59.35,13.4
+          cut norway no NO 2978650 58.9,10.6,59.4,11.8
+          cut denmark dk DK 50046 55.5,12.3,55.8,13.0
+
+      - name: Golden routes across borders
+        run: |
+          b="$RUNNER_TEMP/moto-border"
+          out="$RUNNER_TEMP/golden"
+          core/target/release/moto-regionbuild --golden "$b/se.region,$b/no.region,$b/dk.region" \
+            core/moto-core/tests/golden-border --json "$out/border.json" || true
+          python3 .github/scripts/golden_compare.py --current "$out/border.json" --summary "$GITHUB_STEP_SUMMARY"
+
   bench:
     # The synthetic benchmark (about 7 minutes) runs beside the app build,
     # so debug-latest doesn't wait for it; a significant regression still
