@@ -10,8 +10,9 @@
 -->
 <resources>
     <string name="map_style_url" translatable="false">https://tiles.openfreemap.org/styles/liberty</string>
-    <!-- The map in the app's dark theme. -->
-    <string name="map_style_url_dark" translatable="false">https://tiles.openfreemap.org/styles/dark</string>
+    <!-- The map in the app's dark theme: fiord, a slate blue-grey, lighter
+         than OpenFreeMap's near-black dark style. -->
+    <string name="map_style_url_dark" translatable="false">https://tiles.openfreemap.org/styles/fiord</string>
     <!-- Initial camera before a GPS fix: centre of Skåne. -->
     <string name="map_initial_lat" translatable="false">55.85</string>
     <string name="map_initial_lon" translatable="false">13.55</string>
