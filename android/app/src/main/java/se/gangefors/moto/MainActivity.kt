@@ -11,7 +11,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
 import org.maplibre.android.MapLibre
 import se.gangefors.moto.core.defaultRouteOptions
 
@@ -19,8 +18,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Status bar: fully transparent; MapScreen switches its icons between
         // light and dark to contrast with the map behind them.
-        // Navigation bar: icons follow the system theme, over a matching
-        // theme-coloured scrim drawn by MapScreen; while the planning sheet
+        // Navigation bar: icons follow the app's theme (light or dark, see
+        // MotoTheme), over a matching theme-coloured scrim drawn by MapScreen; while the planning sheet
         // is behind the bar they contrast with the sheet instead.
         val transparentBars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = transparentBars, navigationBarStyle = transparentBars)
@@ -32,7 +31,7 @@ class MainActivity : ComponentActivity() {
         MapLibre.getInstance(this)
         checkCoreLoads()
         setContent {
-            MaterialTheme {
+            MotoTheme {
                 MapScreen()
             }
         }

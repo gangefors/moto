@@ -53,12 +53,12 @@ class StatusBarContrastTest {
     fun navigationButtonsContrastWithThePanelBehindThem() {
         // The light planning sheet behind the bar: dark buttons, even in
         // dark mode (the case where they all but disappeared).
-        assertTrue(navigationIconsDark(0.95f, systemDark = true, darkIconsNow = false))
-        assertFalse(navigationIconsDark(0.05f, systemDark = false, darkIconsNow = true))
+        assertTrue(navigationIconsDark(0.95f, appDark = true, darkIconsNow = false))
+        assertFalse(navigationIconsDark(0.05f, appDark = false, darkIconsNow = true))
         // A mid-tone panel keeps the buttons as they are, like the status bar.
-        assertTrue(navigationIconsDark(0.5f, systemDark = true, darkIconsNow = true))
-        // No panel: the system theme's, over its scrim.
-        assertTrue(navigationIconsDark(null, systemDark = false, darkIconsNow = false))
-        assertFalse(navigationIconsDark(null, systemDark = true, darkIconsNow = true))
+        assertTrue(navigationIconsDark(0.5f, appDark = true, darkIconsNow = true))
+        // No panel: the app theme's, over its scrim.
+        assertTrue(navigationIconsDark(null, appDark = false, darkIconsNow = false))
+        assertFalse(navigationIconsDark(null, appDark = true, darkIconsNow = true))
     }
 }
