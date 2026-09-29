@@ -20,6 +20,7 @@ mod graph;
 mod hilbert;
 mod manifest;
 mod pbf;
+mod poly;
 mod ridecheck;
 mod speed;
 mod tags;
@@ -36,6 +37,7 @@ use graph::{GraphStats, NodeIndex};
 
 const USAGE: &str = "\
 usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E] [--country CC]
+                       [--poly <border.poly>]
        moto-regionbuild --check <file.region> [--json <out.json>] [LAT,LON ...]
        moto-regionbuild --match <file.region> <ride.gpx> [--geojson <out.geojson>]
        moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
@@ -48,6 +50,10 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E] [--coun
            55.28,12.20,56.72,15.05)
   --country the country whose legal speed limits apply to roads without
            a signed limit: SE, DK, NO or FI (default SE)
+  --poly   cut the region at this border (an Osmosis .poly file, the
+           exact polygon of the country's boundary relation), keeping each
+           road up to the first node past it (ADR-0009); without --bbox,
+           the box is the border's
   --check  verify checksums, benchmark opening, snapping and routing, and
            snap the given points; --json also writes the numbers as JSON
   --match  map-match a ride exported from the app and report how well it
@@ -121,7 +127,7 @@ fn main() -> ExitCode {
             refresh(Path::new(input), Path::new(output))
         }
         [input, output, opts @ ..] if !input.starts_with("--") => match build_options(opts) {
-            Ok(Some((b, country))) => build(Path::new(input), Path::new(output), b, country),
+            Ok(Some(o)) => build(Path::new(input), Path::new(output), &o),
             Ok(None) => {
                 eprintln!("{USAGE}");
                 return ExitCode::from(2);
@@ -142,10 +148,32 @@ fn main() -> ExitCode {
     }
 }
 
-/// The build's options (`--bbox`, `--country`, each at most once), or
-/// `None` for anything else; an option with a bad value is an error.
-fn build_options(opts: &[String]) -> Result<Option<([f64; 4], speed::Country)>, String> {
-    let (mut bbox, mut country) = (None, None);
+/// What to build a region of.
+#[derive(Debug, PartialEq)]
+struct BuildOptions {
+    /// Degrees S, W, N, E; without one, the border's box (or Skåne's).
+    bbox: Option<[f64; 4]>,
+    country: speed::Country,
+    /// The country's border as an Osmosis `.poly` file (ADR-0009).
+    poly: Option<std::path::PathBuf>,
+}
+
+#[cfg(test)]
+impl BuildOptions {
+    fn bbox(bbox: [f64; 4]) -> Self {
+        Self {
+            bbox: Some(bbox),
+            country: speed::Country::Sweden,
+            poly: None,
+        }
+    }
+}
+
+/// The build's options (`--bbox`, `--country`, `--poly`, each at most
+/// once), or `None` for anything else; an option with a bad value is an
+/// error.
+fn build_options(opts: &[String]) -> Result<Option<BuildOptions>, String> {
+    let (mut bbox, mut country, mut poly) = (None, None, None);
     let mut it = opts.iter();
     while let Some(flag) = it.next() {
         let Some(value) = it.next() else {
@@ -163,14 +191,31 @@ fn build_options(opts: &[String]) -> Result<Option<([f64; 4], speed::Country)>, 
                     format!("unknown --country '{value}', expected SE, DK, NO or FI")
                 })?);
             }
+            "--poly" if poly.is_none() => poly = Some(std::path::PathBuf::from(value)),
             _ => return Ok(None),
         }
     }
-    Ok(Some((
-        bbox.unwrap_or(SKANE_BBOX),
-        country.unwrap_or(speed::Country::Sweden),
-    )))
+    Ok(Some(BuildOptions {
+        bbox,
+        country: country.unwrap_or(speed::Country::Sweden),
+        poly,
+    }))
 }
+
+/// Reads and parses a border polygon file, refusing one too large.
+fn read_border(path: &Path) -> Result<poly::Border, String> {
+    let name = path.display();
+    let meta = std::fs::metadata(path).map_err(|e| format!("{name}: {e}"))?;
+    if meta.len() > poly::MAX_FILE_BYTES as u64 {
+        return Err(format!("{name}: polygon file too large"));
+    }
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{name}: {e}"))?;
+    poly::Border::parse(&text).map_err(|e| format!("{name}: {e}"))
+}
+
+/// How far past the border nodes are read, degrees: enough for the first
+/// node past it (the stub) on any road.
+const BORDER_MARGIN_DEG: f64 = 0.05;
 
 fn parse_bbox(s: &str) -> Option<[f64; 4]> {
     let v: Vec<f64> = s
@@ -187,15 +232,27 @@ fn parse_bbox(s: &str) -> Option<[f64; 4]> {
     ok.then_some(b)
 }
 
-/// Reads the extract and builds the region content for bounding box `b`.
-fn build_region(
-    input: &Path,
-    b: [f64; 4],
-    country: speed::Country,
-) -> Result<(RegionData, GraphStats), String> {
+/// Reads the extract and builds the region content `o` asks for.
+fn build_region(input: &Path, o: &BuildOptions) -> Result<(RegionData, GraphStats), String> {
     if !input.is_file() {
         return Err(format!("input not found: {}", input.display()));
     }
+    let border = o.poly.as_deref().map(read_border).transpose()?;
+    let b = match (o.bbox, &border) {
+        (Some(b), _) => b,
+        (None, Some(border)) => {
+            let e = border.bbox();
+            let deg = |v: i32| f64::from(v) / moto_core::region::format::COORD_SCALE;
+            [
+                (deg(e.min_lat) - BORDER_MARGIN_DEG).max(-90.0),
+                (deg(e.min_lon) - BORDER_MARGIN_DEG).max(-180.0),
+                (deg(e.max_lat) + BORDER_MARGIN_DEG).min(90.0),
+                (deg(e.max_lon) + BORDER_MARGIN_DEG).min(180.0),
+            ]
+        }
+        (None, None) => SKANE_BBOX,
+    };
+    let country = o.country;
     let bbox = graph::bbox_e7(b[0], b[1], b[2], b[3]);
     let t = Instant::now();
     let osm = pbf::read(input, &bbox, country)?;
@@ -215,10 +272,29 @@ fn build_region(
         osm_timestamp: osm.timestamp.unwrap_or(0),
         bbox,
         builder_version: format!("moto-regionbuild {}", env!("CARGO_PKG_VERSION")),
-        source_name: format!("{file_name} [{},{},{},{}]", b[0], b[1], b[2], b[3]),
+        source_name: format!(
+            "{file_name} {} [{},{},{},{}]",
+            country.code(),
+            b[0],
+            b[1],
+            b[2],
+            b[3]
+        ),
     };
     let index = NodeIndex::new(osm.nodes);
-    let (mut data, stats) = graph::build(&osm.ways, &index, info, GRID_CELL_E7, MIN_NETWORK_M);
+    let (mut data, stats) = graph::build(
+        &osm.ways,
+        &index,
+        info,
+        GRID_CELL_E7,
+        MIN_NETWORK_M,
+        border.as_ref(),
+    );
+    let code = country.code().as_bytes();
+    data.meta = Some(moto_core::region::format::RegionMeta {
+        country: [code[0], code[1]],
+        reserved: [0; 14],
+    });
     graph::add_places(&mut data.names, &osm.places);
     eprintln!(
         "graph     {:>7.1} s  {} ways in bbox → {} nodes, {} edges, {} geometries, {} shape points",
@@ -235,6 +311,18 @@ fn build_region(
         MIN_NETWORK_M / 1000.0,
         stats.fragment_m / 1000.0
     );
+    if border.is_some() {
+        let stubs = data
+            .border
+            .iter()
+            .filter(|b| b.flags & moto_core::region::format::border_flags::OUTSIDE != 0)
+            .count();
+        eprintln!(
+            "border             {} {} border nodes, {stubs} of them stubs past the border",
+            country.code(),
+            data.border.len()
+        );
+    }
     let named = data
         .names
         .geometry_names
@@ -282,9 +370,9 @@ fn refresh(input: &Path, output: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn build(input: &Path, output: &Path, b: [f64; 4], country: speed::Country) -> Result<(), String> {
+fn build(input: &Path, output: &Path, o: &BuildOptions) -> Result<(), String> {
     let start = Instant::now();
-    let (data, _) = build_region(input, b, country)?;
+    let (data, _) = build_region(input, o)?;
     let t = Instant::now();
     let bytes = data.to_bytes().map_err(|e| e.to_string())?;
     std::fs::write(output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
@@ -453,8 +541,7 @@ mod test_support {
         super::build(
             Path::new(FIXTURE),
             file.path(),
-            FIXTURE_BBOX,
-            crate::speed::Country::Sweden,
+            &super::BuildOptions::bbox(FIXTURE_BBOX),
         )
         .unwrap();
         file
@@ -481,21 +568,34 @@ mod tests {
     #[test]
     fn parses_build_options() {
         let o = |a: &[&str]| build_options(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
-        assert_eq!(o(&[]), Ok(Some((SKANE_BBOX, speed::Country::Sweden))));
+        let plain = |bbox, country| BuildOptions {
+            bbox,
+            country,
+            poly: None,
+        };
+        assert_eq!(o(&[]), Ok(Some(plain(None, speed::Country::Sweden))));
         assert_eq!(
             o(&["--country", "NO", "--bbox", "57,4,72,32"]),
-            Ok(Some(([57.0, 4.0, 72.0, 32.0], speed::Country::Norway)))
+            Ok(Some(plain(
+                Some([57.0, 4.0, 72.0, 32.0]),
+                speed::Country::Norway
+            )))
         );
         assert_eq!(
-            o(&["--country", "fi"]),
-            Ok(Some((SKANE_BBOX, speed::Country::Finland)))
+            o(&["--country", "fi", "--poly", "fi.poly"]),
+            Ok(Some(BuildOptions {
+                bbox: None,
+                country: speed::Country::Finland,
+                poly: Some("fi.poly".into()),
+            }))
         );
         assert!(o(&["--country", "DE"]).is_err());
         assert!(o(&["--bbox", "1,2,3"]).is_err());
         // A lone flag, an unknown one or a repeated one is a usage error.
         assert_eq!(o(&["--country"]), Ok(None));
-        assert_eq!(o(&["--poly", "x"]), Ok(None));
+        assert_eq!(o(&["--shape", "x"]), Ok(None));
         assert_eq!(o(&["--country", "SE", "--country", "DK"]), Ok(None));
+        assert_eq!(o(&["--poly", "a", "--poly", "b"]), Ok(None));
     }
 
     #[test]
@@ -515,10 +615,12 @@ mod tests {
         let info = engine.region().info();
         assert_eq!(info.osm_timestamp, 1_790_108_579);
         assert!(
-            info.source_name.starts_with("lund-centre.osm.pbf ["),
+            info.source_name.starts_with("lund-centre.osm.pbf SE ["),
             "{}",
             info.source_name
         );
+        assert_eq!(engine.region().country(), Some("SE"));
+        assert!(engine.region().border_nodes().is_empty(), "no border given");
         assert!(info.builder_version.starts_with("moto-regionbuild "));
         assert_eq!(
             (engine.region().node_count(), engine.region().edge_count()),
@@ -665,11 +767,10 @@ mod tests {
     #[test]
     fn cuts_ways_at_the_bounding_box() {
         let (whole, whole_stats) =
-            build_region(Path::new(FIXTURE), FIXTURE_BBOX, speed::Country::Sweden).unwrap();
+            build_region(Path::new(FIXTURE), &BuildOptions::bbox(FIXTURE_BBOX)).unwrap();
         let (half, half_stats) = build_region(
             Path::new(FIXTURE),
-            [55.7040, 13.1900, 55.7050, 13.1940],
-            speed::Country::Sweden,
+            &BuildOptions::bbox([55.7040, 13.1900, 55.7050, 13.1940]),
         )
         .unwrap();
         assert!(half_stats.edges < whole_stats.edges);
@@ -683,16 +784,14 @@ mod tests {
         let err = build(
             Path::new("/definitely/not/here.osm.pbf"),
             out.path(),
-            FIXTURE_BBOX,
-            speed::Country::Sweden,
+            &BuildOptions::bbox(FIXTURE_BBOX),
         )
         .unwrap_err();
         assert!(err.contains("input not found"), "{err}");
         let err = build(
             Path::new(FIXTURE),
             Path::new("/definitely/not/a/dir/x.region"),
-            FIXTURE_BBOX,
-            speed::Country::Sweden,
+            &BuildOptions::bbox(FIXTURE_BBOX),
         )
         .unwrap_err();
         assert!(err.contains("x.region"), "{err}");

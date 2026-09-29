@@ -46,6 +46,11 @@ pub struct RegionData {
     /// Road numbers, road names and places (format 1.2); written only
     /// when there is a name per geometry.
     pub names: RoadNames,
+    /// The routing nodes at the region's border, sorted by OSM id
+    /// (format 1.3, ADR-0009); written only when there are any.
+    pub border: Vec<BorderNode>,
+    /// The region's country (format 1.3); written only when set.
+    pub meta: Option<RegionMeta>,
 }
 
 /// Road numbers and names per geometry, and named places, with the
@@ -150,6 +155,10 @@ impl RegionData {
         } else {
             Some(self.names.pack(geometries).map_err(bad)?)
         };
+        check_border(&self.border, n).map_err(|e| bad(e.into()))?;
+        if let Some(meta) = &self.meta {
+            check_meta(meta).map_err(|e| bad(e.into()))?;
+        }
         let mut sections: Vec<(u32, &[u8])> = vec![
             (section::NODE_POS, bytes_of(&self.nodes)),
             (section::FWD_OFFSETS, bytes_of(&fwd)),
@@ -175,10 +184,44 @@ impl RegionData {
             ));
             sections.push((section::PLACES, bytes_of(&self.names.places)));
         }
+        if !self.border.is_empty() {
+            sections.push((section::BORDER_NODES, bytes_of(&self.border)));
+        }
+        if let Some(meta) = &self.meta {
+            sections.push((section::REGION_META, bytemuck::bytes_of(meta)));
+        }
         let out = assemble(&self.info, &sections);
         super::Region::from_bytes(&out)?;
         Ok(out)
     }
+}
+
+/// The border table (ADR-0009): at most [`MAX_BORDER_NODES`] entries,
+/// OSM ids strictly increasing, nodes among the region's `nodes`, no
+/// unknown flag.
+pub(crate) fn check_border(border: &[BorderNode], nodes: usize) -> Result<(), &'static str> {
+    if border.len() > MAX_BORDER_NODES {
+        return Err("too many border nodes");
+    }
+    if border.windows(2).any(|w| w[0].osm_id >= w[1].osm_id) {
+        return Err("border nodes not sorted by OSM id");
+    }
+    if border
+        .iter()
+        .any(|b| b.node as usize >= nodes || b.flags & !border_flags::KNOWN != 0)
+    {
+        return Err("invalid border node");
+    }
+    Ok(())
+}
+
+/// The region's description: a country code of two upper-case ASCII
+/// letters, reserved bytes zero.
+pub(crate) fn check_meta(meta: &RegionMeta) -> Result<(), &'static str> {
+    if !meta.country.iter().all(u8::is_ascii_uppercase) || meta.reserved != [0; 14] {
+        return Err("invalid region meta");
+    }
+    Ok(())
 }
 
 fn bytes_of<T: Pod>(v: &[T]) -> &[u8] {

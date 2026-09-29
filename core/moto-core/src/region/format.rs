@@ -23,7 +23,7 @@ pub const MAGIC: [u8; 8] = *b"MOTOREG\0";
 /// Major format version. Files with another major version are refused.
 pub const VERSION_MAJOR: u16 = 1;
 /// Minor format version. Minor bumps only add optional sections.
-pub const VERSION_MINOR: u16 = 2;
+pub const VERSION_MINOR: u16 = 3;
 
 /// Sections start on multiples of this.
 pub const PAGE: u64 = 4096;
@@ -78,6 +78,12 @@ pub mod section {
     /// Optional (format 1.2): `[Place]`, named towns and villages, sorted
     /// by latitude.
     pub const PLACES: u32 = 18;
+    /// Optional (format 1.3, ADR-0009): `[BorderNode]`, sorted by OSM
+    /// node id, strictly increasing: the routing nodes at the region's
+    /// border, by which the phone links it to its neighbours.
+    pub const BORDER_NODES: u32 = 19;
+    /// Optional (format 1.3, ADR-0009): `[RegionMeta]`, exactly one.
+    pub const REGION_META: u32 = 20;
     /// Reserved for ALT landmark distances (ADR-0005, decided in M2).
     pub const LANDMARKS: u32 = 100;
 }
@@ -332,6 +338,42 @@ impl PlaceKind {
     }
 }
 
+/// A routing node at the region's border (ADR-0009), by OSM node id. A
+/// node with [`border_flags::OUTSIDE`] is a stub: the first node past the
+/// border, where a road leaves the region; it stands for the node with
+/// the same id inside a neighbouring region.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Pod, Zeroable)]
+pub struct BorderNode {
+    pub osm_id: i64,
+    /// Local routing node index.
+    pub node: u32,
+    /// Bits from [`border_flags`].
+    pub flags: u32,
+}
+
+/// Bits of [`BorderNode::flags`].
+pub mod border_flags {
+    /// The node lies outside the region's border (a stub).
+    pub const OUTSIDE: u32 = 1 << 0;
+    /// Every bit a reader of this version knows.
+    pub const KNOWN: u32 = OUTSIDE;
+}
+
+/// Most border nodes a region may have (ADR-0009): far more than any
+/// country's border crossings, small enough to link quickly.
+pub const MAX_BORDER_NODES: usize = 1 << 20;
+
+/// What the region is (format 1.3, ADR-0009).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Pod, Zeroable)]
+pub struct RegionMeta {
+    /// ISO 3166-1 alpha-2 code of the region's country, upper case ASCII
+    /// (its default speed limits apply), e.g. `SE`.
+    pub country: [u8; 2],
+    pub reserved: [u8; 14],
+}
+
 /// Uniform snapping grid over the region.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Pod, Zeroable)]
@@ -361,6 +403,8 @@ mod tests {
         assert_eq!(size_of::<GridMeta>(), 24);
         assert_eq!(size_of::<GeometryName>(), 8);
         assert_eq!(size_of::<Place>(), 16);
+        assert_eq!(size_of::<BorderNode>(), 16);
+        assert_eq!(size_of::<RegionMeta>(), 16);
         assert_eq!(MAX_SECTIONS, 160);
     }
 

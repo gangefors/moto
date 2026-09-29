@@ -160,6 +160,8 @@ pub fn build(nodes: &[(f64, f64)], roads: &[Road], cell: i32) -> RegionData {
         way_refs: drafts.iter().map(|d| d.2).collect(),
         grid_cell: (cell, cell),
         names: Default::default(),
+        border: Vec::new(),
+        meta: None,
     }
 }
 
