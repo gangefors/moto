@@ -172,6 +172,6 @@ private fun SettingsGroup(group: HelpGroup) {
             Modifier.padding(top = 10.dp).semantics { heading() },
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
         )
-        Text(stringResource(setting.text), Modifier.padding(top = 2.dp), style = MaterialTheme.typography.bodyMedium)
+        IconText(stringResource(setting.text), Modifier.padding(top = 2.dp), style = MaterialTheme.typography.bodyMedium)
     }
 }

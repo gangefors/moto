@@ -12,7 +12,10 @@ enum class HelpTopicId { MAP, PLAN, FAVOURITES, RIDE, SETTINGS }
  */
 data class HelpKey(val icon: String, val name: Int, val what: Int, val see: HelpTopicId? = null)
 
-/** A setting described in the settings topic: its name and what it does. */
+/**
+ * A setting described in the settings topic: its name and what it does,
+ * the same strings as its heading and (i) text on the Ride settings page.
+ */
 data class HelpSetting(val name: Int, val text: Int)
 
 /** A group of settings, as the Ride settings page groups them. */
@@ -82,11 +85,11 @@ val HELP_TOPICS = listOf(
             HelpGroup(
                 R.string.settings_group_routing,
                 listOf(
-                    HelpSetting(R.string.help_set_gravel, R.string.help_set_gravel_text),
-                    HelpSetting(R.string.settings_loop_length, R.string.help_set_loop_length_text),
+                    HelpSetting(R.string.routing_gravel, R.string.routing_gravel_hint),
+                    HelpSetting(R.string.settings_loop_length, R.string.settings_loop_length_hint),
                 ),
             ),
-            HelpGroup(R.string.settings_group_map, listOf(HelpSetting(R.string.locate_zooms, R.string.help_set_zooms_text))),
+            HelpGroup(R.string.settings_group_map, listOf(HelpSetting(R.string.locate_zooms, R.string.locate_zooms_hint))),
             HelpGroup(
                 R.string.settings_group_recording,
                 listOf(HelpSetting(R.string.settings_keep_screen_on, R.string.settings_keep_screen_on_hint)),

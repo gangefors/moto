@@ -18,7 +18,7 @@
     <string name="locate_zooms">Zooms of [location]</string>
     <string name="locate_zoom_area">Area</string>
     <string name="locate_zoom_close">Close by</string>
-    <string name="locate_zooms_hint">The app starts at the area zoom; tapping [location] on your position switches between the two. Drag the left mark for close by and the right one for the area. Widths are across this screen in southern Sweden.</string>
+    <string name="locate_zooms_hint">The app starts at the area zoom; tapping [location] on your position switches between the two. Widths are across this screen in southern Sweden.</string>
     <string name="locate_zoom_value">%1$s: %2$s across</string>
     <string name="locate_zoom_wider">Wider</string>
     <string name="locate_zoom_closer">Closer</string>
@@ -225,10 +225,6 @@
     <string name="help_key_save_what">keeps it under Routes &amp; rides in the menu</string>
     <string name="help_key_sections">Sections</string>
     <string name="help_key_sections_what">in the menu: all your sections</string>
-    <string name="help_set_gravel">Gravel roads: Avoid, Allow or Prefer</string>
-    <string name="help_set_gravel_text">Avoid stays off unpaved roads where it can and hides your mostly-gravel sections; Prefer seeks them out within a route’s extra time. Gravel shows as a dashed centre line.</string>
-    <string name="help_set_loop_length_text">The length a new loop starts at; change it on the loop sheet for that loop.</string>
-    <string name="help_set_zooms_text">How far the location button zooms: close by and the area. The app starts at the area; a tap on your position switches between the two.</string>
     <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>
     <string name="about_source">Source code: https://github.com/gangefors/moto</string>
     <string name="about_map_attribution">Map data © OpenStreetMap contributors, available under the Open Database License (ODbL). Map tiles by OpenFreeMap, © OpenMapTiles.</string>
@@ -243,7 +239,7 @@
     <string name="gravel_allow">Allow</string>
     <string name="gravel_prefer">Prefer</string>
     <string name="routing_gravel">Gravel roads</string>
-    <string name="routing_gravel_hint">Avoid: stay off unpaved roads where possible and hide your mostly-gravel sections. Prefer: seek them out within a route’s extra time. Gravel shows as a dashed centre line.</string>
+    <string name="routing_gravel_hint">Avoid: stay off unpaved roads where possible and hide your mostly-gravel sections. Allow: ride them like any other road. Prefer: seek them out within a route’s extra time. Gravel shows as a dashed centre line.</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
@@ -300,7 +296,7 @@
     <string name="settings_back">Back</string>
     <string name="settings_info">About %1$s</string>
     <string name="settings_loop_length">New loops start at</string>
-    <string name="settings_loop_length_hint">The length a loop starts at when you plan one; change it on the loop sheet for that loop.</string>
+    <string name="settings_loop_length_hint">The length a new loop starts at when you plan one; change it on the loop sheet for that loop.</string>
     <string name="settings_keep_screen_on">Keep the screen on while recording</string>
     <string name="settings_keep_screen_on_hint">For the phone on a handlebar mount. Uses more battery.</string>
     <string name="settings_group_routing">Routes and loops</string>
