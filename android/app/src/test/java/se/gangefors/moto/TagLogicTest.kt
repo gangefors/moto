@@ -95,4 +95,11 @@ class TagLogicTest {
         m.rejectLast()
         assertEquals(SectionMarker.State.Proposed(1.0, 9.0), m.state)
     }
+
+    @Test
+    fun badgeCountsStayShort() {
+        assertEquals("1", badgeCount(1))
+        assertEquals("99", badgeCount(99))
+        assertEquals("99+", badgeCount(100))
+    }
 }
