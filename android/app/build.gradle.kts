@@ -130,43 +130,6 @@ val uniffiBindings = tasks.register<UniffiBindgen>("uniffiBindings") {
 }
 
 /**
- * Copies a region file into a debug APK's assets as `regions/m0.region`, for
- * testing (production will download regions; ADR-0005). The file comes from
- * the `moto.regionFile` Gradle property or the `MOTO_REGION_FILE` environment
- * variable (CI builds it with moto-regionbuild); without one the app starts
- * without a region.
- */
-abstract class BundleRegion : DefaultTask() {
-    @get:InputFile
-    @get:Optional
-    @get:PathSensitive(PathSensitivity.NONE)
-    abstract val regionFile: RegularFileProperty
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @TaskAction
-    fun copy() {
-        val out = outputDir.get().asFile
-        out.deleteRecursively()
-        out.mkdirs()
-        val region = regionFile.orNull?.asFile
-        if (region == null) {
-            logger.warn("No region file bundled; set -Pmoto.regionFile or MOTO_REGION_FILE.")
-            return
-        }
-        region.copyTo(out.resolve("regions/m0.region"))
-    }
-}
-
-val bundleRegion = tasks.register<BundleRegion>("bundleRegion") {
-    group = "moto"
-    val path = providers.gradleProperty("moto.regionFile")
-        .orElse(providers.environmentVariable("MOTO_REGION_FILE"))
-    regionFile.fileProvider(path.map { file(it) })
-}
-
-/**
  * Writes the app's licence notices (ADR-0004) into the APK's assets as
  * `licenses/third_party.txt`: the app's own licence, then every Rust crate
  * linked into moto-ffi for the Android targets and every library on the
@@ -322,11 +285,6 @@ val rustTargetOfAbi = mapOf("arm64-v8a" to "aarch64-linux-android", "x86_64" to 
 androidComponents {
     onVariants { variant ->
         variant.sources.kotlin?.addGeneratedSourceDirectory(uniffiBindings, UniffiBindgen::outputDir)
-        // Only debug builds carry the M0 test region; a release build starts
-        // without one and the rider downloads a region (ADR-0008).
-        if (variant.buildType == "debug") {
-            variant.sources.assets?.addGeneratedSourceDirectory(bundleRegion, BundleRegion::outputDir)
-        }
         val licences = tasks.register<ThirdPartyLicenses>("${variant.name}ThirdPartyLicenses") {
             group = "moto"
             coreDir.set(rustCoreDir)

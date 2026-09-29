@@ -47,9 +47,18 @@ sealed interface DownloadState {
     data class Failed(val message: String, val offers: List<RegionOffer>) : DownloadState
 }
 
+/** What the app knows about its routing region. */
+sealed interface RegionState {
+    data object Loading : RegionState
+    data class Ready(val engine: Engine) : RegionState
+    /** No region is installed; the rider downloads one. */
+    data object Missing : RegionState
+    data class Failed(val message: String) : RegionState
+}
+
 /**
- * The routing region: a downloaded one when installed, else the region
- * bundled in a debug APK. Downloads run here, not in a screen, so they
+ * The routing region: the downloaded one, or none until the rider downloads
+ * one (no APK carries a region, ADR-0008). Downloads run here, not in a screen, so they
  * carry on when the Map region page is closed; an interrupted download resumes where
  * it stopped. The core checks everything before a region is used.
  */
@@ -80,7 +89,7 @@ object Regions {
     private fun partial(context: Context, offer: RegionOffer) =
         File(File(context.noBackupFilesDir, DIR), "${offer.fileName}.part")
 
-    /** Opens the region at app start: the downloaded one, else the bundled one. */
+    /** Opens the downloaded region at app start, if there is one. */
     suspend fun load(context: Context) = lock.withLock {
         if (_active.value.state !is RegionState.Loading) return@withLock
         DebugTools.mark("region load started")
@@ -108,13 +117,13 @@ object Regions {
                 )
                 return ActiveRegion(RegionState.Ready(engine), meta)
             } catch (_: Exception) {
-                // A file that no longer opens is dropped; the bundled region
-                // (debug builds) takes over and the rider can download again.
+                // A file that no longer opens is dropped; the rider can
+                // download it again.
                 prefs.edit().remove(FINGERPRINT).apply()
                 file.delete()
             }
         }
-        return ActiveRegion(BundledRegion.open(context), null)
+        return ActiveRegion(RegionState.Missing, null)
     }
 
     /**
@@ -207,7 +216,7 @@ object Regions {
         job?.cancel()
     }
 
-    /** Removes the downloaded region; the bundled one (debug builds) takes over. */
+    /** Removes the downloaded region; the app is left without one. */
     fun remove(context: Context) {
         val app = context.applicationContext
         if (job?.isActive == true) return
@@ -216,7 +225,7 @@ object Regions {
                 installs++
                 app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(FINGERPRINT).apply()
                 installed(app).delete()
-                _active.value = ActiveRegion(BundledRegion.open(app), null)
+                _active.value = ActiveRegion(RegionState.Missing, null)
             }
         }
     }

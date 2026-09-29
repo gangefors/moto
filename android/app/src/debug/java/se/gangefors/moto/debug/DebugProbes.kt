@@ -45,7 +45,7 @@ fun deviceLines(context: Context): List<String> {
     val region = when (val s = active.state) {
         is RegionState.Ready -> {
             val file = Regions.installedFile(context)
-            val name = active.downloaded?.name ?: "built-in"
+            val name = active.downloaded?.name ?: "unnamed"
             val size = if (active.downloaded != null && file.isFile) ", ${mb(file.length())}" else ""
             val date = s.engine.info().osmTimestamp.takeIf { it > 0 }?.let { ", map data ${TIME.format(Instant.ofEpochSecond(it))}" } ?: ""
             "$name$size$date"

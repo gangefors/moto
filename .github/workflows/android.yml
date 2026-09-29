@@ -9,8 +9,8 @@
 # - bench: benchmarks this build against the last main build's benchmark
 #   binary on the same machine, failing on a significant regression. It
 #   runs beside build, so the phone's APK doesn't wait for it.
-# - build: the Android app (Rust core via cargo-ndk, then Gradle) with the
-#   region bundled, lint and unit tests.
+# - build: the Android app (Rust core via cargo-ndk, then Gradle), lint
+#   and unit tests. No APK carries a region; the rider downloads one.
 # - publish: on main, the debug APK becomes the rolling `debug-latest`
 #   pre-release for the phone, once core and build pass.
 #
@@ -298,16 +298,6 @@ jobs:
           else
             echo "::warning::DEBUG_KEYSTORE_BASE64 not set; APK signed with a one-off debug key"
           fi
-
-      # The M0 region file built and benchmarked by the core job.
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/moto-region
-          key: ${{ needs.core.outputs.region-key }}
-          fail-on-cache-miss: true
-
-      - name: Use region file
-        run: echo "MOTO_REGION_FILE=$RUNNER_TEMP/moto-region/m0.region" >> "$GITHUB_ENV"
 
       - name: Build, lint and test
         working-directory: android

@@ -76,7 +76,6 @@ fun RegionSection() {
             Text(
                 when {
                     installed != null -> installed.name
-                    active.state is RegionState.Ready -> stringResource(R.string.region_bundled)
                     active.state is RegionState.Loading -> stringResource(R.string.region_loading)
                     else -> stringResource(R.string.region_none)
                 },
