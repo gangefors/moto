@@ -426,3 +426,59 @@ fn side_loops_are_found_outside_the_home_zone() {
     assert_eq!(side_loops(&line[..1], 0.0), (0, 0.0));
     assert_eq!(side_loops(&[], 0.0), (0, 0.0));
 }
+
+fn named_engine(name: &str) -> (TempFile, Engine) {
+    let file = TempFile::new(name);
+    let bytes = moto_core::fixture::named_region().to_bytes().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    let engine = Engine::open(file.path()).unwrap();
+    (file, engine)
+}
+
+fn section_case(expect: &str) -> String {
+    format!(
+        r#"{{"name":"road 13 across the fixture","from":[55.7001,13.2005],"to":[55.7001,13.2195],
+            "section":true,"expect":{{{expect}}}}}"#
+    )
+}
+
+#[test]
+fn sections_are_checked_by_their_names() {
+    let (_f, engine) = named_engine("golden-names");
+    let good = Case::parse(&section_case(
+        r#""road_ref":"13","road_name":"Storgatan","start_place":"Lund","end_place":"Dalby""#,
+    ))
+    .unwrap();
+    let o = good.run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    assert!(o.distance_km > 1.0 && o.distance_km < 1.3, "{o:?}");
+    // Wrong words are reported, one failure each; "none" means none.
+    let bad = Case::parse(&section_case(
+        r#""road_ref":"14","road_name":"none","start_place":"Lund","end_place":"Höör""#,
+    ))
+    .unwrap();
+    let o = bad.run(&engine);
+    assert_eq!(o.failures.len(), 3, "{o:?}");
+    assert!(o.failures[0].contains("road_ref is \"13\""), "{o:?}");
+    // A section that can't be marked is a failure, not a panic.
+    let off = Case::parse(
+        r#"{"name":"off","from":[10.0,10.0],"to":[10.0,10.1],"section":true,"expect":{"road_ref":"1"}}"#,
+    )
+    .unwrap();
+    assert_eq!(off.run(&engine).failures.len(), 1);
+}
+
+#[test]
+fn bad_section_cases_are_refused() {
+    // Names are for sections, and a section expects a name.
+    assert!(Case::parse(&case("", r#""road_ref":"13""#)).is_err());
+    assert!(Case::parse(&section_case("")).is_err());
+    // A section is between two points, with no loop or favourites.
+    let no_end = r#"{"name":"x","from":[55.7,13.2],"section":true,"loop":{"km":20},"expect":{"road_ref":"1"}}"#;
+    assert!(Case::parse(no_end).is_err());
+    let with_fav = section_case(r#""road_ref":"13""#).replace(
+        r#""section":true"#,
+        r#""section":true,"favourites":[{"from":[55.7,13.2],"to":[55.7,13.21],"rating":"good"}]"#,
+    );
+    assert!(Case::parse(&with_fav).is_err());
+}

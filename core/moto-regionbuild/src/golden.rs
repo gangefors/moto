@@ -72,6 +72,11 @@ pub struct Case {
     pub curvy: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
+    /// A section, not a route: `from` and `to` mark the road between
+    /// them as the app does, and the case checks what it is called (the
+    /// `road_*` and `*_place` expectations).
+    #[serde(default)]
+    pub section: bool,
     pub expect: Expect,
 }
 
@@ -190,6 +195,13 @@ pub struct Expect {
     pub min_loops: Option<usize>,
     /// Round trips: the most side loops in any loop (see [`side_loops`]).
     pub max_side_loops: Option<usize>,
+    /// Sections: the number and name of the road it runs on most, as the
+    /// app shows them (`1341`, `E22`; `"none"` for no number or name),
+    /// and the places named for its start and end (`"none"` for none).
+    pub road_ref: Option<String>,
+    pub road_name: Option<String>,
+    pub start_place: Option<String>,
+    pub end_place: Option<String>,
 }
 
 /// The figures of one case, for the report and the before/after table.
@@ -239,6 +251,17 @@ impl Case {
             return Err(format!(
                 "at most {MAX_ITEMS} favourites, pass and avoid points"
             ));
+        }
+        let names = [&e.road_ref, &e.road_name, &e.start_place, &e.end_place];
+        if case.section {
+            if case.to.is_none() || case.round_trip.is_some() || !case.favourites.is_empty() {
+                return Err("a section needs from and to, and no loop or favourites".into());
+            }
+            if names.iter().all(|n| n.is_none()) {
+                return Err("a section case expects a road or a place".into());
+            }
+        } else if names.iter().any(|n| n.is_some()) {
+            return Err("road_ref, road_name, start_place and end_place are for sections".into());
         }
         match (case.to, case.round_trip) {
             (Some(_), None) => {
@@ -317,6 +340,45 @@ impl Case {
         opts
     }
 
+    /// Marks the section like the app and checks what it is called.
+    fn run_section(&self, engine: &Engine, out: &mut Outcome) {
+        let described = (|| -> Result<_, String> {
+            let to = self.to.ok_or("no end")?;
+            let d = engine
+                .section_between(ll(self.from)?, ll(to)?)
+                .map_err(|e| e.to_string())?;
+            let words = engine.describe(&d.geometry).map_err(|e| e.to_string())?;
+            Ok((d, words))
+        })();
+        let (d, words) = match described {
+            Ok(x) => x,
+            Err(e) => {
+                out.failures.push(e);
+                return;
+            }
+        };
+        out.distance_km = d.distance_m / 1000.0;
+        out.curvy_share = words.curvy_share;
+        out.detour_ratio = 1.0;
+        let road = words.roads.first();
+        let got = [
+            ("road_ref", road.and_then(|r| r.road_ref.clone())),
+            ("road_name", road.and_then(|r| r.name.clone())),
+            ("start_place", words.start.map(|p| p.name)),
+            ("end_place", words.end.map(|p| p.name)),
+        ];
+        let e = &self.expect;
+        let want = [&e.road_ref, &e.road_name, &e.start_place, &e.end_place];
+        for ((what, got), want) in got.iter().zip(want) {
+            let Some(want) = want else { continue };
+            let got = got.as_deref().unwrap_or("none");
+            if got != want {
+                out.failures
+                    .push(format!("{what} is {got:?}, expected {want:?}"));
+            }
+        }
+    }
+
     /// The case's favourites on `engine`'s region, marked like in the app.
     fn favourites(&self, engine: &Engine) -> Result<Vec<Section>, String> {
         self.favourites
@@ -364,6 +426,10 @@ impl Case {
         };
         if let Some(t) = self.round_trip {
             self.run_loop(engine, t, &mut out);
+            return out;
+        }
+        if self.section {
+            self.run_section(engine, &mut out);
             return out;
         }
         let routed = (|| -> Result<(Route, Route), String> {

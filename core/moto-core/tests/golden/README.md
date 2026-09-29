@@ -53,6 +53,22 @@ cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/go
 - Every loop returned must be within ±15 % of the target, come back to the start, and ride at most 10 % of its length twice outside the home zone (the way out of town and home, 2–5 km around the start). The runner measures reuse from the line itself, not from the core. At least `min_loops` loops (default 2) must come back. `max_side_loops` caps, for every loop, the side loops outside the home zone: places where the line comes back within 10 m of where it was 300 m – 5 km before (a detour through town or out to a waypoint and back).
 - The other expectations (`pass`, `avoid`, the shares) apply to the best loop.
 
+## A section's name
+
+```json
+{
+  "name": "Section on road 581 north of Olofström",
+  "description": "Where the road and places come from in OSM.",
+  "from": [56.26726, 14.56105],
+  "to": [56.27814, 14.56434],
+  "section": true,
+  "expect": {"road_ref": "581", "road_name": "P.J. Rösjös väg", "start_place": "Rösjö", "end_place": "Hemmingsmåla"}
+}
+```
+
+- `section` marks the road between `from` and `to` as the app does and checks what the app calls it (ADR-0005, format 1.2): the number (as signed: `1665`, `E22`) and name of the road it runs on most, and the place named for each end; `"none"` expects none. Give at least one of the four.
+- Pick roads at random, not ones already tried, and check each expectation against the raw OSM places near the ends (their kind and distance), so the case tests the rule rather than copying its output.
+
 ## Adding cases
 
 - When a real ride or route shows bad routing, add a case for it instead of tuning weights until that one route looks right. Never tune against a single route.

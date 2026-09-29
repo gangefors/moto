@@ -1,0 +1,19 @@
+{
+  "name": "Section on Dövevägen near Vittskövle",
+  "description": "A random 2 km of Dövevägen, an unnumbered road east of Vittskövle. OSM: its west end is 1.7 km from the village Vittskövle (nothing nearer), its east end 1.2 km from the hamlet Nyehusen och Furuboda, within a hamlet's 1.5 km reach and nearer than any village.",
+  "from": [
+    55.85855,
+    14.17509
+  ],
+  "to": [
+    55.85574,
+    14.20352
+  ],
+  "section": true,
+  "expect": {
+    "road_ref": "none",
+    "road_name": "Dövevägen",
+    "start_place": "Vittskövle",
+    "end_place": "Nyehusen och Furuboda"
+  }
+}
