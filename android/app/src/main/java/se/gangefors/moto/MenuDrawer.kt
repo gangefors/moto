@@ -37,15 +37,15 @@ import androidx.compose.ui.unit.dp
 import se.gangefors.moto.debug.DebugTools
 
 /** What the menu opens. */
-enum class MenuTopic { LIBRARY, SECTIONS, REGION, ABOUT, DEBUG }
+enum class MenuTopic { LIBRARY, SECTIONS, REGION, HELP, ABOUT, DEBUG }
 
 /**
  * The menu (the button at the top left): a drawer from the left over a
  * dimmed map, listing the rider's data (Routes & rides, Sections, Map
- * region), then About (and Debug tools in debug builds); ride settings
- * have their own button (the gear at the top right). A
- * tap on a topic closes the menu and opens its page ([onPick]); a tap on
- * the map or Back just closes it.
+ * region), then How to use and About (and Debug tools in debug builds);
+ * ride settings have their own button (the gear at the top right). A tap
+ * on a topic closes the menu and opens its page ([onPick]); a tap on the
+ * map or Back just closes it.
  */
 @Composable
 fun MenuDrawer(open: Boolean, onClose: () -> Unit, onPick: (MenuTopic) -> Unit) {
@@ -80,6 +80,7 @@ fun MenuDrawer(open: Boolean, onClose: () -> Unit, onPick: (MenuTopic) -> Unit) 
                 Item(R.drawable.ic_star, R.string.sections_title) { pick(MenuTopic.SECTIONS) }
                 Item(R.drawable.ic_map, R.string.region_title) { pick(MenuTopic.REGION) }
                 HorizontalDivider(Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                Item(R.drawable.ic_help, R.string.help_open) { pick(MenuTopic.HELP) }
                 Item(R.drawable.ic_info, R.string.about_open) { pick(MenuTopic.ABOUT) }
                 DebugTools.MenuEntry { pick(MenuTopic.DEBUG) }
             }
