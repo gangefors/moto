@@ -364,7 +364,7 @@ private fun SectionRowItem(
  * A saved section shown on the map (from the Sections page): where it
  * runs, its road and facts, a pencil to change its rating or direction
  * ([onEdit]), [actions] and the cross; below, Loop through it ([onLoop])
- * and Ride it from here ([onRide]) when the rider's position is known.
+ * and Route through it ([onRide]) when the rider's position is known.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

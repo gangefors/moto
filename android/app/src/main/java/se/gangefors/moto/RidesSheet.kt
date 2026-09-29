@@ -122,7 +122,6 @@ fun RidesSheet(
     // being saved as a file.
     var renaming by remember { mutableStateOf<LibraryItem?>(null) }
     var savingAsRoute by remember { mutableStateOf<Track?>(null) }
-    var exporting by remember { mutableStateOf<LibraryItem?>(null) }
 
     var routes by remember { mutableStateOf<List<SavedRoute>?>(null) }
 
@@ -147,27 +146,6 @@ fun RidesSheet(
     fun fileNameOf(item: LibraryItem): String = when (item) {
         is LibraryItem.Ride -> rideFileName(item.track.startedAt, zone)
         is LibraryItem.Route -> routeFileName(item.route.createdAt, zone)
-    }
-
-    val saveAs = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/gpx+xml"),
-    ) { uri: Uri? ->
-        val item = exporting ?: return@rememberLauncherForActivityResult
-        exporting = null
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val gpx = gpxOf(item)
-                    context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(gpx.toByteArray()) }
-                        ?: error(resources.getString(R.string.rides_cannot_write))
-                }
-            }
-            result.fold(
-                onSuccess = { done(resources.getString(R.string.rides_exported)) },
-                onFailure = { failed(resources.getString(R.string.rides_export_failed, it.message ?: it.toString())) },
-            )
-        }
     }
 
     val actions = object : LibraryActions {
@@ -197,11 +175,6 @@ fun RidesSheet(
                     onFailure = { failed(resources.getString(R.string.route_share_failed, it.message ?: it.toString())) },
                 )
             }
-        }
-
-        override fun export(item: LibraryItem) {
-            exporting = item
-            saveAs.launch(fileNameOf(item))
         }
 
         override fun saveAsRoute(item: LibraryItem.Ride) {
