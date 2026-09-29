@@ -38,4 +38,24 @@ class HelpTextTest {
         val parts = helpParts("Tap [bin] again to delete", setOf("bin"))
         assertEquals("Tap the bin again to delete", helpWords(parts, mapOf("bin" to "the bin")))
     }
+
+    @Test
+    fun termLinesMakeAListBetweenParagraphs() {
+        val text = "Pick one:\n**Avoid** stay off them\n**Allow** ride them\nGravel shows as a dashed line."
+        assertEquals(
+            listOf(
+                TextBlock.Paragraph("Pick one:"),
+                TextBlock.Terms(listOf("Avoid" to "stay off them", "Allow" to "ride them")),
+                TextBlock.Paragraph("Gravel shows as a dashed line."),
+            ),
+            textBlocks(text),
+        )
+    }
+
+    @Test
+    fun plainTextIsOneParagraph() {
+        assertEquals(listOf(TextBlock.Paragraph("Tap [bin] again")), textBlocks("Tap [bin] again"))
+        assertEquals(listOf(TextBlock.Paragraph("a **b")), textBlocks("a **b"))
+        assertEquals(emptyList<TextBlock>(), textBlocks(""))
+    }
 }

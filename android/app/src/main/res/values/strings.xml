@@ -239,7 +239,7 @@
     <string name="gravel_allow">Allow</string>
     <string name="gravel_prefer">Prefer</string>
     <string name="routing_gravel">Gravel roads</string>
-    <string name="routing_gravel_hint">Avoid: stay off unpaved roads where possible and hide your mostly-gravel sections. Allow: ride them like any other road. Prefer: seek them out within a route’s extra time. Gravel shows as a dashed centre line.</string>
+    <string name="routing_gravel_hint">**Avoid** stay off unpaved roads where possible and hide your mostly-gravel sections\n**Allow** ride them like any other road\n**Prefer** seek them out within a route’s extra time\nGravel shows as a dashed centre line.</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
@@ -331,7 +331,7 @@
     <string name="rides_cannot_write">can’t write to the chosen file</string>
     <string name="tag_button">TAG</string>
     <string name="tag_button_description">Tag this road</string>
-    <string name="tag_saved">Tagged. Review it after the ride.</string>
+    <string name="tag_saved">Tagged</string>
     <string name="tag_no_fix">No GPS position yet; nothing tagged.</string>
     <string name="tag_failed">Tag not saved: %1$s</string>
     <plurals name="tags_review">

@@ -46,3 +46,38 @@ fun helpWords(parts: List<HelpPart>, spoken: Map<String, String>): String =
             is HelpPart.Icon -> spoken[it.key] ?: it.key
         }
     }
+
+/** A block of text with icons: a paragraph, or a list of terms. */
+sealed interface TextBlock {
+    data class Paragraph(val text: String) : TextBlock
+
+    /** Terms and what each means, one per line: "Avoid" – "stay off …". */
+    data class Terms(val rows: List<Pair<String, String>>) : TextBlock
+}
+
+private val TERM_LINE = Regex("""^\*\*(.+?)\*\*\s+(.+)$""")
+
+/**
+ * [text] as blocks: lines of the form "**Term** what it means" that follow
+ * each other make a list of terms, the choices standing out from the
+ * text around them; other lines are paragraphs.
+ */
+fun textBlocks(text: String): List<TextBlock> {
+    val blocks = mutableListOf<TextBlock>()
+    val terms = mutableListOf<Pair<String, String>>()
+    fun flush() {
+        if (terms.isNotEmpty()) blocks += TextBlock.Terms(terms.toList())
+        terms.clear()
+    }
+    for (line in text.split('\n')) {
+        val m = TERM_LINE.find(line.trim())
+        if (m != null) {
+            terms += m.groupValues[1] to m.groupValues[2]
+        } else {
+            flush()
+            if (line.isNotBlank()) blocks += TextBlock.Paragraph(line.trim())
+        }
+    }
+    flush()
+    return blocks
+}
