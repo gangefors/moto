@@ -685,14 +685,33 @@ fn ride_loop(
         .chain(stops.iter().map(|(p, visit)| (p, *visit)))
         .chain(std::iter::once((start, false)))
         .collect();
+    // The roads between the stops that must be visited (a section to
+    // ride): the way out keeps off them as off roads already ridden, or
+    // it could ride out along a section that runs towards home and back.
+    let mut ahead: HashSet<u32> = HashSet::new();
+    let empty = HashSet::new();
+    for w in stops.windows(2).filter(|w| w[0].1 && w[1].1) {
+        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &empty);
+        let leg = path(region, &w[0].0, &w[1].0, cost, engine.max_speed_kmh()).ok()?;
+        ahead.extend(leg.iter().map(|p| region.edges()[p.edge as usize].geometry));
+    }
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
     // Parts up to here ride through a stop that must be visited: trimming
     // an out-and-back never reaches back into them.
     let mut kept = 0;
+    let mut reached = false;
     for w in points.windows(2) {
         let ((from, visit), (to, _)) = (w[0], w[1]);
-        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &used);
+        reached |= visit;
+        let out: HashSet<u32>;
+        let avoid = if reached || ahead.is_empty() {
+            &used
+        } else {
+            out = used.union(&ahead).copied().collect();
+            &out
+        };
+        let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, avoid);
         let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
             used.insert(region.edges()[p.edge as usize].geometry);
