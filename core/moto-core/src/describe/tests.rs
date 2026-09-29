@@ -3,14 +3,15 @@
 
 use super::*;
 use crate::fixture;
+use crate::region::Region;
 
-fn region(named: bool) -> Region {
+fn region(named: bool) -> Net {
     let data = if named {
         fixture::named_region()
     } else {
         fixture::region()
     };
-    Region::from_bytes(&data.to_bytes().unwrap()).unwrap()
+    Net::single(Region::from_bytes(&data.to_bytes().unwrap()).unwrap())
 }
 
 fn ll(lat: f64, lon: f64) -> LatLon {
@@ -142,7 +143,7 @@ fn a_hamlet_right_by_an_end_names_it() {
         reserved: [0; 3],
     });
     data.names.places.sort_by_key(|p| p.pos.lat);
-    let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+    let r = Net::single(Region::from_bytes(&data.to_bytes().unwrap()).unwrap());
     assert_eq!(nearest_place(&r, ll(55.70, 13.20)).unwrap().name, "Kvärnby");
     // 1.3 km from it, and still 1.7 km from Lund: the town, being bigger.
     assert_eq!(nearest_place(&r, ll(55.70, 13.18)).unwrap().name, "Lund");

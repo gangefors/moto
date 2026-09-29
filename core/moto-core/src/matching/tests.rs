@@ -6,6 +6,7 @@
 use super::*;
 use crate::Engine;
 use crate::fixture::{self, Road, build};
+use crate::region::Region;
 use crate::region::format::RoadClass;
 
 fn engine(data: crate::region::RegionData) -> Engine {
@@ -289,23 +290,20 @@ fn candidates_are_each_road_once_nearest_first() {
     let e = parallel();
     // 10 m north of the south road: both roads, south first; each two-way
     // road once, as its lower edge id.
-    let c = nearby(e.region(), ll(55.60 + 10.0 / M_PER_DEG, 13.01), 50.0, 8);
+    let c = nearby(e.net(), ll(55.60 + 10.0 / M_PER_DEG, 13.01), 50.0, 8);
     assert_eq!(c.len(), 2, "{c:?}");
     assert!((c[0].distance_m - 10.0).abs() < 0.1 && (c[1].distance_m - 30.0).abs() < 0.1);
-    let ways: Vec<i64> = c
-        .iter()
-        .map(|p| e.region().way_refs()[p.edge as usize].way_id)
-        .collect();
+    let ways: Vec<i64> = c.iter().map(|p| e.net().way_ref(p.edge).way_id).collect();
     assert_eq!(ways, [1, 2]);
     // A smaller radius or count leaves the far road out.
     assert_eq!(
-        nearby(e.region(), ll(55.60 + 10.0 / M_PER_DEG, 13.01), 20.0, 8).len(),
+        nearby(e.net(), ll(55.60 + 10.0 / M_PER_DEG, 13.01), 20.0, 8).len(),
         1
     );
     assert_eq!(
-        nearby(e.region(), ll(55.60 + 10.0 / M_PER_DEG, 13.01), 50.0, 1).len(),
+        nearby(e.net(), ll(55.60 + 10.0 / M_PER_DEG, 13.01), 50.0, 1).len(),
         1
     );
     // Nothing within reach.
-    assert!(nearby(e.region(), ll(55.61, 13.01), 50.0, 8).is_empty());
+    assert!(nearby(e.net(), ll(55.61, 13.01), 50.0, 8).is_empty());
 }

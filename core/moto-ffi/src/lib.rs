@@ -160,6 +160,10 @@ pub struct RegionInfo {
     pub osm_timestamp: i64,
     /// Where the data came from, e.g. the extract name and bounding box.
     pub source_name: String,
+    /// ISO country code of a single region (`SE`); none for the whole
+    /// network or older files.
+    #[uniffi(default = None)]
+    pub country: Option<String>,
 }
 
 /// Default route options, so the app does not duplicate the core's defaults.
@@ -192,6 +196,63 @@ pub fn profile_region_open(path: String) -> Result<Vec<OpenStep>, MotoError> {
         .collect())
 }
 
+/// A region file to open with [`open_regions`], and the fingerprint
+/// recorded when it last passed a full check, if any.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RegionFile {
+    pub path: String,
+    pub fingerprint: Option<String>,
+}
+
+/// Several regions opened as one network, and each file's fingerprint as
+/// it stands now (to keep for the next open).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct OpenedRegions {
+    pub engine: Arc<Engine>,
+    pub fingerprints: Vec<String>,
+}
+
+/// Opens the enabled regions as one network, linked at their borders
+/// (ADR-0009): routes, loops and matching run across them. A file whose
+/// fingerprint matches is opened quickly (see `Engine.open_fingerprinted`);
+/// one without, or that no longer matches, is checked in full and its new
+/// fingerprint returned. Any file failing its check fails the whole open,
+/// naming the file. At most 16 regions.
+#[uniffi::export]
+pub fn open_regions(files: Vec<RegionFile>) -> Result<OpenedRegions, MotoError> {
+    let mut regions = Vec::with_capacity(files.len());
+    let mut fingerprints = Vec::with_capacity(files.len());
+    for f in &files {
+        let known = f
+            .fingerprint
+            .as_deref()
+            .map(regions::parse_fingerprint)
+            .transpose()?;
+        let quick = known.and_then(|fp| {
+            moto_core::region::Region::open_fingerprinted(&f.path, &fp)
+                .ok()
+                .map(|r| (r, f.fingerprint.clone().unwrap_or_default()))
+        });
+        let (region, fp) = match quick {
+            Some(opened) => opened,
+            None => {
+                let named = |e: moto_core::CoreError| {
+                    MotoError::from(moto_core::CoreError::Region(format!("{}: {e}", f.path)))
+                };
+                let region = moto_core::region::Region::open(&f.path).map_err(named)?;
+                (region, regions::region_fingerprint(f.path.clone())?)
+            }
+        };
+        regions.push(region);
+        fingerprints.push(fp);
+    }
+    let inner = moto_core::Engine::from_regions(regions)?;
+    Ok(OpenedRegions {
+        engine: Arc::new(Engine { inner }),
+        fingerprints,
+    })
+}
+
 /// A loaded routing region. Thread-safe; share one instance per region.
 #[derive(Debug, uniffi::Object)]
 pub struct Engine {
@@ -217,16 +278,54 @@ impl Engine {
         Ok(Arc::new(Self { inner }))
     }
 
-    /// The region's bounds and data source.
+    /// The open regions' bounds and data source: the box around them all,
+    /// the oldest data, and the sources joined.
     pub fn info(&self) -> RegionInfo {
         let (sw, ne) = self.inner.bounds();
-        let info = self.inner.region().info();
+        let regions = self.inner.net().regions();
         RegionInfo {
             south_west: sw.into(),
             north_east: ne.into(),
-            osm_timestamp: info.osm_timestamp,
-            source_name: info.source_name.clone(),
+            osm_timestamp: regions
+                .iter()
+                .map(|r| r.info().osm_timestamp)
+                .min()
+                .unwrap_or(0),
+            source_name: regions
+                .iter()
+                .map(|r| r.info().source_name.clone())
+                .collect::<Vec<_>>()
+                .join(" + "),
+            country: None,
         }
+    }
+
+    /// Each open region's bounds, data and country, in the order opened.
+    pub fn region_infos(&self) -> Vec<RegionInfo> {
+        self.inner
+            .net()
+            .regions()
+            .iter()
+            .map(|r| {
+                let (info, b) = (r.info(), r.info().bbox);
+                let ll = |lat: i32, lon: i32| LatLon {
+                    lat: f64::from(lat) / 1e7,
+                    lon: f64::from(lon) / 1e7,
+                };
+                RegionInfo {
+                    south_west: ll(b.min_lat, b.min_lon),
+                    north_east: ll(b.max_lat, b.max_lon),
+                    osm_timestamp: info.osm_timestamp,
+                    source_name: info.source_name.clone(),
+                    country: r.country().map(str::to_owned),
+                }
+            })
+            .collect()
+    }
+
+    /// How many border crossings join the open regions.
+    pub fn link_count(&self) -> u32 {
+        self.inner.net().link_count() as u32
     }
 
     /// Where the region's roads are: closed rings (first point repeated
@@ -566,6 +665,49 @@ mod tests {
 
     fn ll(lat: f64, lon: f64) -> LatLon {
         LatLon { lat, lon }
+    }
+
+    #[test]
+    fn opens_several_regions_by_fingerprint_or_in_full() {
+        let (a, b) = (fixture_file("net-a"), fixture_file("net-b"));
+        let fp_a = regions::region_fingerprint(a.path()).unwrap();
+        let file = |p: String, fp: Option<String>| RegionFile {
+            path: p,
+            fingerprint: fp,
+        };
+        // A by its fingerprint, B without one: B is checked in full and
+        // its fingerprint comes back.
+        let opened = open_regions(vec![
+            file(a.path(), Some(fp_a.clone())),
+            file(b.path(), None),
+        ])
+        .unwrap();
+        assert_eq!(opened.fingerprints[0], fp_a);
+        assert_eq!(
+            opened.fingerprints[1],
+            regions::region_fingerprint(b.path()).unwrap()
+        );
+        let infos = opened.engine.region_infos();
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].country, None, "the fixture names no country");
+        assert_eq!(opened.engine.link_count(), 0, "no border tables");
+        assert!(opened.engine.info().source_name.contains(" + "));
+        // A wrong fingerprint falls back to the full check.
+        let wrong = format!(
+            "{}{}",
+            if fp_a.starts_with('0') { '1' } else { '0' },
+            &fp_a[1..]
+        );
+        let again = open_regions(vec![file(a.path(), Some(wrong))]).unwrap();
+        assert_eq!(again.fingerprints, [fp_a]);
+        // A file that isn't a region fails the open, naming it.
+        let bad = TempRegion::new("net-bad", &[0u8; 5000]);
+        match open_regions(vec![file(a.path(), None), file(bad.path(), None)]) {
+            Err(MotoError::Region { message }) => assert!(message.contains("net-bad"), "{message}"),
+            other => panic!("{other:?}"),
+        }
+        assert!(open_regions(vec![]).is_err());
+        assert!(open_regions(vec![file(a.path(), Some("not hex".into()))]).is_err());
     }
 
     #[test]

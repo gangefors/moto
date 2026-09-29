@@ -4,7 +4,7 @@
 //! What the region file knows about the road at a point: the answer to
 //! the rider tapping a road on the map.
 
-use crate::region::Region;
+use crate::net::Net;
 use crate::region::format::{RoadClass, Surface, edge_flags};
 use crate::route::twin;
 use crate::scoring::PARAMS;
@@ -43,12 +43,12 @@ pub struct RoadInfo {
 
 /// The road under an already snapped point. The point's edge must come
 /// from `region` (a snap on it); anything else is a typed error.
-pub(crate) fn road_info(region: &Region, point: RoadPoint) -> Result<RoadInfo, CoreError> {
+pub(crate) fn road_info(region: &Net, point: RoadPoint) -> Result<RoadInfo, CoreError> {
     let id = point.edge;
     let bad = || CoreError::Region(format!("no edge {id}"));
-    let e = *region.edges().get(id as usize).ok_or_else(bad)?;
-    let m = *region.curvature().get(id as usize).ok_or_else(bad)?;
-    let way = *region.way_refs().get(id as usize).ok_or_else(bad)?;
+    let e = region.get_edge(id).ok_or_else(bad)?;
+    let m = region.curvature(id);
+    let way = region.way_ref(id);
     let length_m = f64::from(e.length_dm) / 10.0;
     Ok(RoadInfo {
         point,
@@ -63,11 +63,10 @@ pub(crate) fn road_info(region: &Region, point: RoadPoint) -> Result<RoadInfo, C
         length_m,
         way_id: way.way_id,
         road_ref: region
-            .string(region.geometry_name(e.geometry).road_ref)
+            .road_names(e.geometry)
+            .0
             .map(crate::describe::signed_ref),
-        name: region
-            .string(region.geometry_name(e.geometry).name)
-            .map(str::to_owned),
+        name: region.road_names(e.geometry).1.map(str::to_owned),
     })
 }
 

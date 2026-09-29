@@ -7,6 +7,7 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use crate::geo::{EARTH_RADIUS_M, haversine_m};
+use crate::net::Net;
 use crate::region::Region;
 use crate::region::format::{COORD_SCALE, PointE7, edge_flags};
 use crate::{CoreError, LatLon, RoadPoint};
@@ -28,17 +29,38 @@ struct Best {
     t: f64,
 }
 
-/// Scans grid cells in square rings around `point` out to `max_distance_m`
-/// and calls `visit` with the nearest point of every segment of every
-/// non-ferry edge found (edge, segment, position along it, distance in
-/// metres), each edge once. `done` gets the distance no unscanned cell can
-/// be closer than, and stops the scan early when it returns true.
+/// Scans every region's grid cells in square rings around `point` out to
+/// `max_distance_m` and calls `visit` with the nearest point of every
+/// segment of every non-ferry edge found (global edge, segment, position
+/// along it, distance in metres), each edge once per region. `done` gets
+/// the distance no unscanned cell can be closer than, and stops a
+/// region's scan early when it returns true.
 fn scan(
-    region: &Region,
+    net: &Net,
     point: LatLon,
     max_distance_m: f64,
     mut visit: impl FnMut(u32, usize, f64, f64),
     done: impl Fn(f64) -> bool,
+) {
+    for (r, region) in net.regions().iter().enumerate() {
+        let (_, edge_base, _) = net.bases(r);
+        scan_region(
+            region,
+            point,
+            max_distance_m,
+            |edge, segment, t, d| visit(edge_base + edge, segment, t, d),
+            &done,
+        );
+    }
+}
+
+/// [`scan`] over one region's grid, with the region's own edge ids.
+fn scan_region(
+    region: &Region,
+    point: LatLon,
+    max_distance_m: f64,
+    mut visit: impl FnMut(u32, usize, f64, f64),
+    done: &impl Fn(f64) -> bool,
 ) {
     let meta = *region.grid_meta();
 
@@ -120,7 +142,7 @@ fn scan(
 /// Stops scanning once no unscanned cell can hold anything closer than the
 /// best match so far.
 pub(crate) fn snap(
-    region: &Region,
+    region: &Net,
     point: LatLon,
     max_distance_m: f64,
 ) -> Result<RoadPoint, CoreError> {
@@ -158,7 +180,7 @@ pub(crate) fn snap(
 /// The nearest point of each road within `radius_m` of `point`, nearest
 /// first, at most `max` of them (ferries excluded). The two directions of a
 /// road share a geometry and count once, as the lower edge id.
-pub(crate) fn nearby(region: &Region, point: LatLon, radius_m: f64, max: usize) -> Vec<RoadPoint> {
+pub(crate) fn nearby(region: &Net, point: LatLon, radius_m: f64, max: usize) -> Vec<RoadPoint> {
     let mut per_geometry: HashMap<u32, Best> = HashMap::new();
     scan(
         region,
@@ -168,7 +190,7 @@ pub(crate) fn nearby(region: &Region, point: LatLon, radius_m: f64, max: usize) 
             if d > radius_m {
                 return;
             }
-            let g = region.edges()[edge as usize].geometry;
+            let g = region.edge(edge).geometry;
             let better = per_geometry
                 .get(&g)
                 .is_none_or(|b| d < b.dist_m || (d == b.dist_m && edge < b.edge));
@@ -193,8 +215,8 @@ pub(crate) fn nearby(region: &Region, point: LatLon, radius_m: f64, max: usize) 
 }
 
 /// The road point for a scan result.
-fn road_point(region: &Region, point: LatLon, best: &Best) -> RoadPoint {
-    let e = region.edges()[best.edge as usize];
+fn road_point(region: &Net, point: LatLon, best: &Best) -> RoadPoint {
+    let e = region.edge(best.edge);
     let line: Vec<LatLon> = region
         .geometry(e.geometry)
         .iter()

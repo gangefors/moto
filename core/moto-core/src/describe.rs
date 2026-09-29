@@ -7,8 +7,8 @@
 //! own worth reading; this gives them one ("13 · Höör → Sjöbo").
 
 use crate::geo::haversine_m;
-use crate::region::Region;
-use crate::region::format::{COORD_SCALE, NO_NAME, Place, PlaceKind};
+use crate::net::Net;
+use crate::region::format::{COORD_SCALE, PlaceKind};
 use crate::section::MAX_SECTION_POINTS;
 use crate::{CoreError, LatLon};
 
@@ -76,7 +76,7 @@ fn reach(kind: PlaceKind) -> (f64, f64) {
 }
 
 /// Describes `line` (2 to [`MAX_SECTION_POINTS`] valid points) on `region`.
-pub(crate) fn describe(region: &Region, line: &[LatLon]) -> Result<Description, CoreError> {
+pub(crate) fn describe(region: &Net, line: &[LatLon]) -> Result<Description, CoreError> {
     if line.len() < 2 || line.len() > MAX_SECTION_POINTS {
         return Err(CoreError::InvalidArgument(format!(
             "a line to describe needs 2–{MAX_SECTION_POINTS} points, got {}",
@@ -88,7 +88,7 @@ pub(crate) fn describe(region: &Region, line: &[LatLon]) -> Result<Description, 
     }
     let under = roads_under(region, line);
     let curvy_share = curvy_share(region, &under);
-    if !region.has_names() {
+    if !region.regions().iter().any(|r| r.has_names()) {
         return Ok(Description {
             curvy_share,
             ..Description::default()
@@ -104,7 +104,7 @@ pub(crate) fn describe(region: &Region, line: &[LatLon]) -> Result<Description, 
 
 /// The edge under each sample of `line` (`None` where it is off the
 /// roads).
-fn roads_under(region: &Region, line: &[LatLon]) -> Vec<Option<u32>> {
+fn roads_under(region: &Net, line: &[LatLon]) -> Vec<Option<u32>> {
     samples(line)
         .into_iter()
         .map(|p| {
@@ -118,7 +118,7 @@ fn roads_under(region: &Region, line: &[LatLon]) -> Vec<Option<u32>> {
 
 /// The curviness of the edges under the samples, averaged over all of
 /// them (a sample off the roads counts as straight).
-fn curvy_share(region: &Region, under: &[Option<u32>]) -> f64 {
+fn curvy_share(region: &Net, under: &[Option<u32>]) -> f64 {
     if under.is_empty() {
         return 0.0;
     }
@@ -126,10 +126,10 @@ fn curvy_share(region: &Region, under: &[Option<u32>]) -> f64 {
         .iter()
         .flatten()
         .filter_map(|&id| {
-            let e = region.edges().get(id as usize)?;
-            let m = region.curvature().get(id as usize)?;
+            let e = region.get_edge(id)?;
+            let m = region.curvature(id);
             let length_m = f64::from(e.length_dm) / 10.0;
-            Some(crate::scoring::PARAMS.curviness(m, e.class, e.speed_kmh, e.flags, length_m))
+            Some(crate::scoring::PARAMS.curviness(&m, e.class, e.speed_kmh, e.flags, length_m))
         })
         .sum();
     (sum / under.len() as f64).clamp(0.0, 1.0)
@@ -162,14 +162,14 @@ fn samples(line: &[LatLon]) -> Vec<LatLon> {
     out
 }
 
-/// A road found under the samples: its number and name ids (the key),
-/// its share of the line, and the shares of the names along it.
-type Found = (u32, u32, f64, Vec<(u32, f64)>);
+/// A road found under the samples: its number and name (the key), its
+/// share of the line, and the shares of the names along it.
+type Found<'a> = (Option<&'a str>, Option<&'a str>, f64, Vec<(&'a str, f64)>);
 
 /// The roads the samples lie on most (`under`, see [`roads_under`]). A
 /// numbered road is one road whatever its streets are called along the
 /// way (a road through a town).
-fn roads(region: &Region, under: &[Option<u32>]) -> Vec<RoadLabel> {
+fn roads(region: &Net, under: &[Option<u32>]) -> Vec<RoadLabel> {
     if under.is_empty() {
         return Vec::new();
     }
@@ -177,18 +177,18 @@ fn roads(region: &Region, under: &[Option<u32>]) -> Vec<RoadLabel> {
     // Per road (by number, else by name): its share, and its names' shares.
     let mut found: Vec<Found> = Vec::new();
     for &id in under.iter().flatten() {
-        let Some(edge) = region.edges().get(id as usize) else {
+        let Some(edge) = region.get_edge(id) else {
             continue;
         };
-        let g = region.geometry_name(edge.geometry);
-        if g.road_ref == NO_NAME && g.name == NO_NAME {
+        let (road_ref, name) = region.road_names(edge.geometry);
+        if road_ref.is_none() && name.is_none() {
             continue;
         }
         // By number when it has one, else by name.
-        let key = if g.road_ref != NO_NAME {
-            (g.road_ref, NO_NAME)
+        let key = if road_ref.is_some() {
+            (road_ref, None)
         } else {
-            (NO_NAME, g.name)
+            (None, name)
         };
         let road = match found.iter_mut().position(|r| (r.0, r.1) == key) {
             Some(i) => &mut found[i],
@@ -198,27 +198,30 @@ fn roads(region: &Region, under: &[Option<u32>]) -> Vec<RoadLabel> {
             }
         };
         road.2 += each;
-        if g.name != NO_NAME {
-            match road.3.iter_mut().find(|(n, _)| *n == g.name) {
+        if let Some(name) = name {
+            match road.3.iter_mut().find(|(n, _)| *n == name) {
                 Some(n) => n.1 += each,
-                None => road.3.push((g.name, each)),
+                None => road.3.push((name, each)),
             }
         }
     }
-    // Most first; equal shares by string id, so the result is stable.
+    // Most first; equal shares by number and name, so the result is stable.
     found.sort_by(|a, b| b.2.total_cmp(&a.2).then((a.0, a.1).cmp(&(b.0, b.1))));
     found
         .into_iter()
         .filter(|r| r.2 >= MIN_ROAD_SHARE - 1e-9)
         .take(MAX_ROADS)
         .map(|(road_ref, _, share, names)| {
+            // The name ridden most; of equal ones, the first along the line.
             let name = names
                 .iter()
-                .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
-                .and_then(|&(n, _)| region.string(n))
-                .map(str::to_owned);
+                .fold(None::<&(&str, f64)>, |best, n| match best {
+                    Some(b) if n.1 <= b.1 + 1e-9 => Some(b),
+                    _ => Some(n),
+                })
+                .map(|&(n, _)| n.to_owned());
             RoadLabel {
-                road_ref: region.string(road_ref).map(signed_ref),
+                road_ref: road_ref.map(signed_ref),
                 name,
                 share: share.min(1.0),
             }
@@ -252,38 +255,43 @@ pub fn signed_ref(r: &str) -> String {
 /// The place that best names `p`: the nearest, but a bigger place wins
 /// over a smaller one unless the smaller one is clearly nearer (see
 /// [`reach`]). None within reach gives `None`.
-fn nearest_place(region: &Region, p: LatLon) -> Option<PlaceName> {
-    let places = region.places();
+fn nearest_place(net: &Net, p: LatLon) -> Option<PlaceName> {
     // Places are sorted by latitude: look only within the widest reach.
     let widest = reach(PlaceKind::City).0;
     let span = (widest / 111_000.0 * COORD_SCALE).ceil() as i64;
     let lat = (p.lat * COORD_SCALE).round() as i64;
-    let lo = places.partition_point(|q| i64::from(q.pos.lat) < lat - span);
-    let hi = places.partition_point(|q| i64::from(q.pos.lat) <= lat + span);
-    let mut best: Option<(f64, &Place, PlaceKind, f64)> = None;
-    for q in places.get(lo..hi).unwrap_or(&[]) {
-        let Some(kind) = PlaceKind::from_u8(q.kind) else {
-            continue;
-        };
-        let (max_m, weight) = reach(kind);
-        let d = haversine_m(
-            p,
-            LatLon {
-                lat: f64::from(q.pos.lat) / COORD_SCALE,
-                lon: f64::from(q.pos.lon) / COORD_SCALE,
-            },
-        );
-        if d > max_m {
-            continue;
-        }
-        let score = d / weight;
-        if best.is_none_or(|b| score < b.0) {
-            best = Some((score, q, kind, d));
+    let mut best: Option<(f64, &str, PlaceKind, f64)> = None;
+    for region in net.regions() {
+        let places = region.places();
+        let lo = places.partition_point(|q| i64::from(q.pos.lat) < lat - span);
+        let hi = places.partition_point(|q| i64::from(q.pos.lat) <= lat + span);
+        for q in places.get(lo..hi).unwrap_or(&[]) {
+            let Some(kind) = PlaceKind::from_u8(q.kind) else {
+                continue;
+            };
+            let Some(name) = region.string(q.name) else {
+                continue;
+            };
+            let (max_m, weight) = reach(kind);
+            let d = haversine_m(
+                p,
+                LatLon {
+                    lat: f64::from(q.pos.lat) / COORD_SCALE,
+                    lon: f64::from(q.pos.lon) / COORD_SCALE,
+                },
+            );
+            if d > max_m {
+                continue;
+            }
+            let score = d / weight;
+            if best.is_none_or(|b| score < b.0) {
+                best = Some((score, name, kind, d));
+            }
         }
     }
-    let (_, q, kind, distance_m) = best?;
+    let (_, name, kind, distance_m) = best?;
     Some(PlaceName {
-        name: region.string(q.name)?.to_owned(),
+        name: name.to_owned(),
         kind,
         distance_m,
     })

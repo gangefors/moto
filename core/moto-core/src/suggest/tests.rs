@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::fixture::{self, L_N};
+use crate::region::Region;
 use crate::region::format::Surface;
 use crate::section::WaySpan;
 use crate::tag::TagStatus;
@@ -73,7 +74,7 @@ fn takes_about_a_kilometre_each_way() {
     // The ladder's north road is one OSM way over 2.5 km; tagged in the
     // middle, heading east.
     let e = engine(fixture::ladder(Surface::Asphalt));
-    let n = e.region().nodes()[L_N as usize];
+    let n = e.net().node(L_N);
     let at = ll(f64::from(n.lat) / 1e7, f64::from(n.lon) / 1e7 + 0.0005);
     let d = e.suggest_from_tag(&tag(at, Some(90.0)), None).unwrap();
     assert!((d.distance_m - 2.0 * TAG_REACH_M).abs() < 1.0, "{d:?}");

@@ -120,10 +120,7 @@ fn a_bad_edge_is_a_typed_error() {
     let e = engine(fixture::region());
     let mut p = e.snap(ll(55.7002, 13.205)).unwrap();
     p.edge = u32::MAX;
-    assert!(matches!(
-        road_info(e.region(), p),
-        Err(CoreError::Region(_))
-    ));
+    assert!(matches!(road_info(e.net(), p), Err(CoreError::Region(_))));
 }
 
 #[test]

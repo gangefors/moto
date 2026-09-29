@@ -6,7 +6,7 @@
 //! save.
 
 use crate::geo::haversine_m;
-use crate::region::Region;
+use crate::net::Net;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, edge_flags};
 use crate::route::Partial;
 use crate::section::{MAX_SECTION_POINTS, MAX_SECTION_WAYS, WaySpan};
@@ -30,7 +30,7 @@ fn latlon(p: PointE7) -> LatLon {
 }
 
 /// An edge's shape in travel direction.
-fn edge_line(region: &Region, e: &Edge) -> Vec<LatLon> {
+fn edge_line(region: &Net, e: &Edge) -> Vec<LatLon> {
     let mut line: Vec<LatLon> = region
         .geometry(e.geometry)
         .iter()
@@ -68,7 +68,7 @@ fn point_index(line: &[LatLon], frac: f64, round_up: bool) -> usize {
 
 /// Builds a draft from path pieces (in travel order), refusing one too
 /// small or too big to save as a section.
-pub(crate) fn from_path(region: &Region, parts: &[Partial]) -> Result<SectionDraft, CoreError> {
+pub(crate) fn from_path(region: &Net, parts: &[Partial]) -> Result<SectionDraft, CoreError> {
     let draft = trace(region, parts);
     if draft.geometry.len() < 2 || draft.distance_m <= 0.0 {
         return Err(CoreError::InvalidArgument(
@@ -84,12 +84,12 @@ pub(crate) fn from_path(region: &Region, parts: &[Partial]) -> Result<SectionDra
 }
 
 /// The OSM way spans, geometry and length of path pieces (in travel order).
-pub(crate) fn trace(region: &Region, parts: &[Partial]) -> SectionDraft {
+pub(crate) fn trace(region: &Net, parts: &[Partial]) -> SectionDraft {
     let mut ways: Vec<WaySpan> = Vec::new();
     let mut geometry: Vec<LatLon> = Vec::new();
     let mut distance_m = 0.0;
     for part in parts {
-        let e = region.edges()[part.edge as usize];
+        let e = region.edge(part.edge);
         let frac = (part.to - part.from).max(0.0);
         distance_m += frac * f64::from(e.length_dm) / 10.0;
         let line = edge_line(region, &e);
@@ -101,7 +101,7 @@ pub(crate) fn trace(region: &Region, parts: &[Partial]) -> SectionDraft {
 
         // Shape point i of the edge (in travel order) is way node
         // from_idx ± i, per the region file's way refs.
-        let r = region.way_refs()[part.edge as usize];
+        let r = region.way_ref(part.edge);
         let (i, j) = (
             point_index(&line, part.from, false),
             point_index(&line, part.to, true),
@@ -145,6 +145,7 @@ pub(crate) fn trace(region: &Region, parts: &[Partial]) -> SectionDraft {
 mod tests {
     use super::*;
     use crate::fixture::{self, Road};
+    use crate::region::Region;
     use crate::region::format::{RoadClass, Surface};
     use crate::{Avoid, Engine, RouteOptions};
 

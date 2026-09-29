@@ -15,7 +15,7 @@ use std::collections::HashSet;
 
 use crate::draft::{SectionDraft, from_path};
 use crate::geo::haversine_m;
-use crate::region::Region;
+use crate::net::Net;
 use crate::region::format::{Edge, edge_flags};
 use crate::route::{Partial, edge_line, twin};
 use crate::tag::Tag;
@@ -95,11 +95,11 @@ pub(crate) fn along_road(
     position: LatLon,
     heading_deg: Option<f64>,
 ) -> Result<SectionDraft, CoreError> {
-    let region = engine.region();
+    let region = engine.net();
     let p = engine.snap(position)?;
     let (mut edge, mut offset) = (p.edge, p.offset);
     if let Some(h) = heading_deg.filter(|h| h.is_finite()) {
-        let e = region.edges()[edge as usize];
+        let e = region.edge(edge);
         if turn(bearing_at(region, &e, offset), h) > 90.0
             && let Some(t) = twin(region, edge)
         {
@@ -124,12 +124,12 @@ fn length_m(e: &Edge) -> f64 {
 
 /// Pieces from `offset` on `edge` onwards for `reach` metres, in travel
 /// order.
-fn walk_on(region: &Region, edge: u32, offset: f64, reach: f64) -> Vec<Partial> {
+fn walk_on(region: &Net, edge: u32, offset: f64, reach: f64) -> Vec<Partial> {
     let mut parts = Vec::new();
     let (mut id, mut from, mut left) = (edge, offset, reach);
     let mut seen = HashSet::new();
     loop {
-        let e = region.edges()[id as usize];
+        let e = region.edge(id);
         let len = length_m(&e);
         let avail = (1.0 - from) * len;
         if len > 0.0 && avail >= left {
@@ -150,16 +150,16 @@ fn walk_on(region: &Region, edge: u32, offset: f64, reach: f64) -> Vec<Partial> 
             break;
         }
         let exit = exit_bearing(region, &e);
-        let way = region.way_refs()[id as usize].way_id;
+        let way = region.way_ref(id).way_id;
         let next = region
             .out_edges(e.head)
             .filter(|&c| {
-                let ce = region.edges()[c as usize];
+                let ce = region.edge(c);
                 ce.geometry != e.geometry && ce.flags & edge_flags::FERRY == 0
             })
             .map(|c| {
-                let t = turn(exit, entry_bearing(region, &region.edges()[c as usize]));
-                (c, t, region.way_refs()[c as usize].way_id == way)
+                let t = turn(exit, entry_bearing(region, &region.edge(c)));
+                (c, t, region.way_ref(c).way_id == way)
             })
             .filter(|&(_, t, _)| t <= MAX_TURN_DEG)
             .min_by(|a, b| {
@@ -177,12 +177,12 @@ fn walk_on(region: &Region, edge: u32, offset: f64, reach: f64) -> Vec<Partial> 
 
 /// Pieces leading up to `offset` on `edge` from `reach` metres back, in
 /// travel order.
-fn walk_back(region: &Region, edge: u32, offset: f64, reach: f64) -> Vec<Partial> {
+fn walk_back(region: &Net, edge: u32, offset: f64, reach: f64) -> Vec<Partial> {
     let mut parts = Vec::new();
     let (mut id, mut to, mut left) = (edge, offset, reach);
     let mut seen = HashSet::new();
     loop {
-        let e = region.edges()[id as usize];
+        let e = region.edge(id);
         let len = length_m(&e);
         let avail = to * len;
         if len > 0.0 && avail >= left {
@@ -203,18 +203,16 @@ fn walk_back(region: &Region, edge: u32, offset: f64, reach: f64) -> Vec<Partial
             break;
         }
         let entry = entry_bearing(region, &e);
-        let way = region.way_refs()[id as usize].way_id;
+        let way = region.way_ref(id).way_id;
         let prev = region
             .in_edges(e.tail)
-            .iter()
-            .copied()
             .filter(|&c| {
-                let ce = region.edges().get(c as usize);
+                let ce = region.get_edge(c);
                 ce.is_some_and(|ce| ce.geometry != e.geometry && ce.flags & edge_flags::FERRY == 0)
             })
             .map(|c| {
-                let t = turn(exit_bearing(region, &region.edges()[c as usize]), entry);
-                (c, t, region.way_refs()[c as usize].way_id == way)
+                let t = turn(exit_bearing(region, &region.edge(c)), entry);
+                (c, t, region.way_ref(c).way_id == way)
             })
             .filter(|&(_, t, _)| t <= MAX_TURN_DEG)
             .min_by(|a, b| {
@@ -250,20 +248,20 @@ fn turn(a: f64, b: f64) -> f64 {
 }
 
 /// Distinct consecutive points of an edge's shape, in travel order.
-fn shape(region: &Region, e: &Edge) -> Vec<LatLon> {
+fn shape(region: &Net, e: &Edge) -> Vec<LatLon> {
     let mut line = edge_line(region, e);
     line.dedup();
     line
 }
 
-fn entry_bearing(region: &Region, e: &Edge) -> f64 {
+fn entry_bearing(region: &Net, e: &Edge) -> f64 {
     match shape(region, e).as_slice() {
         [a, b, ..] => bearing(*a, *b),
         _ => 0.0,
     }
 }
 
-fn exit_bearing(region: &Region, e: &Edge) -> f64 {
+fn exit_bearing(region: &Net, e: &Edge) -> f64 {
     match shape(region, e).as_slice() {
         [.., a, b] => bearing(*a, *b),
         _ => 0.0,
@@ -271,7 +269,7 @@ fn exit_bearing(region: &Region, e: &Edge) -> f64 {
 }
 
 /// Bearing of the edge's segment at fraction `offset` of its length.
-fn bearing_at(region: &Region, e: &Edge, offset: f64) -> f64 {
+fn bearing_at(region: &Net, e: &Edge, offset: f64) -> f64 {
     let line = shape(region, e);
     let lengths: Vec<f64> = line.windows(2).map(|w| haversine_m(w[0], w[1])).collect();
     let target = offset.clamp(0.0, 1.0) * lengths.iter().sum::<f64>();

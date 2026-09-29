@@ -23,6 +23,7 @@ pub mod geo;
 pub mod gpx;
 pub mod handoff;
 pub mod matching;
+pub mod net;
 pub mod overlap;
 pub mod region;
 pub mod rematch;
