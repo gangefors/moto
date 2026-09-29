@@ -585,10 +585,28 @@ fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
         ),
         [p(E_AB, 0.0, 1.0), p(E_BD, 0.0, 0.5)]
     );
-    // Going on the same way: nothing is cut.
+    // Going on the same way: nothing is cut, the pieces join.
     assert_eq!(
         joined(vec![p(E_AB, 0.0, 0.7)], vec![p(E_AB, 0.7, 1.0)]),
-        [p(E_AB, 0.0, 0.7), p(E_AB, 0.7, 1.0)]
+        [p(E_AB, 0.0, 1.0)]
+    );
+    // On past the waypoint to B, turning there and all the way back to A
+    // (a spur to a guide near the end of a road): all of it goes.
+    assert!(
+        joined(
+            vec![p(E_AB, 0.0, 0.7)],
+            vec![p(E_AB, 0.7, 1.0), p(E_BA, 0.0, 1.0)]
+        )
+        .is_empty()
+    );
+    // From a guide partway along B-C on to C, back to B and then on to D:
+    // the way out to C and back goes.
+    assert_eq!(
+        joined(
+            vec![p(E_AB, 0.0, 1.0), p(E_BC, 0.0, 0.4)],
+            vec![p(E_BC, 0.4, 1.0), p(E_CB, 0.0, 1.0), p(E_BD, 0.0, 0.5)],
+        ),
+        [p(E_AB, 0.0, 1.0), p(E_BD, 0.0, 0.5)]
     );
     // Parts that ride through a stop the loop must visit are kept: out to
     // C (a section's end) and back is ridden, only the guide's spur goes.
