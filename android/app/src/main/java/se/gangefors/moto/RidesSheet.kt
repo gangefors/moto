@@ -95,7 +95,9 @@ fun RidesSheet(
     /** The saved sections, for the Sections page. */
     sections: List<Section> = emptyList(),
     /** Open Sections showing only those that need attention. */
-    sectionsAttention: Boolean = false,
+    sectionFilter: SectionFilter = SectionFilter(),
+    /** The Sections page's filter chips changed. */
+    onSectionFilter: (SectionFilter) -> Unit = {},
     /** The rider's position, to list sections nearest first. */
     here: LatLon? = null,
     onShowSection: (Section) -> Unit = {},
@@ -329,7 +331,8 @@ fun RidesSheet(
                 store = store,
                 engine = engine,
                 here = here,
-                initialAttention = sectionsAttention,
+                filter = sectionFilter,
+                onFilter = onSectionFilter,
                 onShow = onShowSection,
                 onDelete = onDeleteSections,
                 rowActions = sectionActions,

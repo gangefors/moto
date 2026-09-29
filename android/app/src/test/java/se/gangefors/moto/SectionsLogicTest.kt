@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import se.gangefors.moto.core.Description
@@ -184,5 +185,14 @@ class SectionsLogicTest {
         // The rider's own name cleared: goes by where it runs again.
         assertEquals("", nameUpdate("Coast road", ""))
         assertEquals("", sectionNameToStore(" \t "))
+    }
+
+    @Test
+    fun deletingASectionShownFromThePageGoesBackToItAsItWas() {
+        val filter = SectionFilter(attention = true)
+        assertEquals(filter, pageAfterDelete(7L to filter, deletedId = 7L))
+        // Another section, or one picked on the map: stay on the map.
+        assertNull(pageAfterDelete(7L to filter, deletedId = 8L))
+        assertNull(pageAfterDelete(null, deletedId = 7L))
     }
 }
