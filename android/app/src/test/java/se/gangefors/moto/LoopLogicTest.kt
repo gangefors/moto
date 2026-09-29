@@ -104,6 +104,21 @@ class LoopLogicTest {
             assertEquals(true, other in loopSteps(other))
         }
     }
+
+    @Test
+    fun aNewLoopStartsAtTheLengthLastPicked() {
+        val saved = mutableListOf<LoopChoice>()
+        val length = LoopLength(LoopChoice.Minutes(120)) { saved += it }
+        // Picked on the loop sheet: kept for the next loop, and stored.
+        length.pick(LoopChoice.Km(150))
+        assertEquals(LoopChoice.Km(150), length.choice)
+        // Picked in Ride settings: the same length.
+        length.pick(LoopChoice.Minutes(180))
+        assertEquals(LoopChoice.Minutes(180), length.choice)
+        // The same length again stores nothing.
+        length.pick(LoopChoice.Minutes(180))
+        assertEquals(listOf(LoopChoice.Km(150), LoopChoice.Minutes(180)), saved)
+    }
 }
 
 class OneAheadTest {
