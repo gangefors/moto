@@ -21,7 +21,14 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,14 +42,15 @@ import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Rating
 
 /** What the rider chose in the section sheet. */
-data class SectionChoice(val rating: Rating, val oneWay: Boolean)
+data class SectionChoice(val rating: Rating, val oneWay: Boolean, val name: String = "")
 
 /**
  * A bottom sheet to rate a section and set its direction: for a new one
  * before it is saved, or a saved one (then [onDelete] is set, shown as a
  * bin on the left that asks for a second tap). X, Back or a swipe down
- * leave it without saving. Sections have no name the rider sees:
- * they are found and changed on the map.
+ * leave it without saving. The name is the rider's own and may stay
+ * empty: the section then goes by where it runs ([suggestion], shown in
+ * the empty field).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,10 +60,13 @@ fun SectionSheet(
     onSave: (SectionChoice) -> Unit,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
+    suggestion: String? = null,
 ) {
+    var name by rememberSaveable { mutableStateOf(initial.name) }
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -81,6 +92,17 @@ fun SectionSheet(
                         .verticalScroll(scroll)
                         .padding(end = 12.dp),
                 ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it.take(MAX_ROUTE_NAME_CHARS * 2) },
+                        label = { Text(stringResource(R.string.section_name)) },
+                        placeholder = suggestion?.let { { Text(it, maxLines = 1) } },
+                        supportingText = { Text(stringResource(R.string.section_name_hint)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
                     OptionHeading(stringResource(R.string.section_rating))
                     SingleChoice(
                         options = RATINGS,
@@ -96,9 +118,12 @@ fun SectionSheet(
                             .toggleable(value = oneWay, role = Role.Switch, onValueChange = { oneWay = it }),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(stringResource(R.string.section_one_way), modifier = Modifier.weight(1f, fill = false))
-                        InfoButton(stringResource(R.string.section_one_way), stringResource(R.string.section_one_way_hint))
-                        Spacer(Modifier.weight(1f))
+                        // The label and (i) take the room left; the switch
+                        // sits at the right edge, in line with Save.
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.section_one_way), modifier = Modifier.weight(1f, fill = false))
+                            InfoButton(stringResource(R.string.section_one_way), stringResource(R.string.section_one_way_hint))
+                        }
                         Switch(checked = oneWay, onCheckedChange = null)
                     }
                 }
@@ -115,7 +140,7 @@ fun SectionSheet(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    Button(onClick = { onSave(SectionChoice(rating, oneWay)) }) {
+                    Button(onClick = { onSave(SectionChoice(rating, oneWay, name)) }) {
                         OneLine(stringResource(R.string.section_save))
                     }
                 }

@@ -122,6 +122,7 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
@@ -1794,22 +1795,33 @@ fun MapScreen() {
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
     if (showDebug) DebugTools.Page(onDismiss = { showDebug = false })
 
-    // Rate and save the proposed section (its name is generated).
+    // Rate and save the proposed section, and name it if the rider likes
+    // (else it goes by where it runs, suggested in the empty name field).
     val proposed = draft
+    var draftWords by remember { mutableStateOf<Description?>(null) }
+    LaunchedEffect(savingDraft, proposed) {
+        draftWords = null
+        val line = proposed?.geometry?.takeIf { savingDraft } ?: return@LaunchedEffect
+        val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
+        draftWords = withContext(Dispatchers.Default) { runCatching { engine.describe(line) }.getOrNull() }
+    }
     if (savingDraft && proposed != null) {
         val tag = reviewTag
         SectionSheet(
             title = stringResource(R.string.section_new_title, sectionKm(proposed.distanceM)),
             initial = SectionChoice(rating = Rating.GOOD, oneWay = false),
+            suggestion = sectionSuggestedName(draftWords),
             onDismiss = { savingDraft = false },
             onSave = { choice ->
                 if (tag == null) stopMarking() else savingDraft = false
-                val name = autoSectionName(
-                    fromTag = tag != null,
-                    savedAtSec = System.currentTimeMillis() / 1000,
-                    distanceM = proposed.distanceM,
-                    zone = ZoneId.systemDefault(),
-                )
+                val name = sectionNameToStore(choice.name).ifEmpty {
+                    autoSectionName(
+                        fromTag = tag != null,
+                        savedAtSec = System.currentTimeMillis() / 1000,
+                        distanceM = proposed.distanceM,
+                        zone = ZoneId.systemDefault(),
+                    )
+                }
                 changeSectionsThen { st ->
                     val result = st.add(
                         NewSection(
@@ -1997,14 +2009,19 @@ fun MapScreen() {
     editing?.let { section ->
         SectionSheet(
             title = stringResource(R.string.section_edit_title, sectionKm(lengthM(section.geometry))),
-            initial = SectionChoice(section.rating, isOneWay(section.direction)),
+            initial = SectionChoice(section.rating, isOneWay(section.direction), riderName(section.name) ?: ""),
+            suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
             onDismiss = { editing = null },
             onSave = { choice ->
                 editing = null
                 changeSections(resources.getString(R.string.section_updated)) { st ->
                     st.update(
                         section.id,
-                        SectionUpdate(name = null, rating = choice.rating, direction = directionOf(choice.oneWay)),
+                        SectionUpdate(
+                            name = nameUpdate(section.name, choice.name),
+                            rating = choice.rating,
+                            direction = directionOf(choice.oneWay),
+                        ),
                     )
                 }
             },

@@ -161,4 +161,28 @@ class SectionsLogicTest {
         // A line that can't be described is left out, not cached.
         assertEquals(emptyMap<List<LatLon>, String>(), cache.fill(b, listOf(listOf(LatLon(1.0, 1.0)))) { null })
     }
+
+    @Test
+    fun theAppsOwnNamesAreNoNameOfTheRiders() {
+        assertEquals(null, riderName("Map 2026-09-28 14:02, 3.2 km"))
+        assertEquals(null, riderName("Tag 2026-01-05 09:30, 12.0 km"))
+        assertEquals(null, riderName("  "))
+        assertEquals("Coast road", riderName(" Coast road "))
+        // Only the app's exact pattern: a rider's name like it stays.
+        assertEquals("Map 2026 favourite", riderName("Map 2026 favourite"))
+    }
+
+    @Test
+    fun savingTheNameFieldChangesOnlyWhatTheRiderChanged() {
+        val auto = "Map 2026-09-28 14:02, 3.2 km"
+        // Empty field on an app-named section: no change.
+        assertEquals(null, nameUpdate(auto, "  "))
+        // A name typed: stored, cleaned.
+        assertEquals("Coast road", nameUpdate(auto, " Coast road\n"))
+        // The same name again: no change.
+        assertEquals(null, nameUpdate("Coast road", "Coast road"))
+        // The rider's own name cleared: goes by where it runs again.
+        assertEquals("", nameUpdate("Coast road", ""))
+        assertEquals("", sectionNameToStore(" \t "))
+    }
 }

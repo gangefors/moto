@@ -74,15 +74,31 @@ object SectionDescriptions {
         cache.fill(engine, sections.map { it.geometry }) { line -> runCatching { engine.describe(line) }.getOrNull() }
 }
 
-/** A section's title: where it runs ("Höör → Sjöbo"), else its road, else
- * its length. */
+/** A section's title: the rider's name for it, else where it runs
+ * ("Höör → Sjöbo"), else its road, else its length. */
 @Composable
-fun sectionTitle(row: SectionRow): String =
-    placeText(row.description) ?: roadText(row.description) ?: stringResource(R.string.section_fallback, sectionKm(row.lengthM))
+fun sectionTitle(row: SectionRow): String = riderName(row.section.name)
+    ?: placeText(row.description)
+    ?: roadText(row.description)
+    ?: stringResource(R.string.section_fallback, sectionKm(row.lengthM))
 
-/** The line under the title: the road, when the title is the places. */
+/** The line under the title: the road when the title is the places;
+ * where it runs and its road when the title is the rider's name. */
 @Composable
-fun sectionRoadLine(row: SectionRow): String? = roadText(row.description)?.takeIf { placeText(row.description) != null }
+fun sectionRoadLine(row: SectionRow): String? {
+    val road = roadText(row.description)
+    val places = placeText(row.description)
+    return if (riderName(row.section.name) != null) {
+        listOfNotNull(places, road).joinToString(" · ").takeIf { it.isNotEmpty() }
+    } else {
+        road?.takeIf { places != null }
+    }
+}
+
+/** What a section would be called without a name of the rider's: where
+ * it runs, else its road; null until described. */
+@Composable
+fun sectionSuggestedName(description: Description?): String? = placeText(description) ?: roadText(description)
 
 /** "Epic · 12.3 km · 35 % curvy · One-way". */
 @Composable
