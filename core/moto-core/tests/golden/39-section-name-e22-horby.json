@@ -1,0 +1,19 @@
+{
+  "name": "Section of E22 east of Hörby",
+  "description": "A random 1 km of the E22 at Hörby. OSM: the west end is 1.6 km from the town Hörby and 1.0 km from the hamlet Slagtofta: the town wins (1.6 / 2 < 1.0); the east end is 0.4 km from Slagtofta, which wins there.",
+  "from": [
+    55.86438,
+    13.67225
+  ],
+  "to": [
+    55.86469,
+    13.6885
+  ],
+  "section": true,
+  "expect": {
+    "road_ref": "E22",
+    "road_name": "none",
+    "start_place": "Hörby",
+    "end_place": "Slagtofta"
+  }
+}

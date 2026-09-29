@@ -1,0 +1,19 @@
+{
+  "name": "Section of E65 by Toarp",
+  "description": "A random 1.3 km of the E65 motorway south of Malmö: a European road reads as signed (E65, not OSM's \"E 65\"). OSM: both ends are nearest the village Toarp (1.1 and 1.4 km); the town Oxie 1.8 km from the west end is bigger but not twice as near as a village needs to beat it by, and the hamlet Skabersjöby 1.1 km from the east end loses to the village only 1.4 km away.",
+  "from": [
+    55.5503,
+    13.12512
+  ],
+  "to": [
+    55.54583,
+    13.14413
+  ],
+  "section": true,
+  "expect": {
+    "road_ref": "E65",
+    "road_name": "none",
+    "start_place": "Toarp",
+    "end_place": "Toarp"
+  }
+}

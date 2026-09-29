@@ -1,0 +1,19 @@
+{
+  "name": "Section on road 1665 Hallingavägen at Legeved",
+  "description": "A random 1.3 km of county road 1665: OSM tags it \"M 1665\", signed and shown as 1665, and names it Hallingavägen. OSM: the hamlet Legeved is 0.1 km from its north end and 1.4 km from its south end (just within reach), nothing bigger near.",
+  "from": [
+    56.01351,
+    14.28667
+  ],
+  "to": [
+    56.00203,
+    14.2841
+  ],
+  "section": true,
+  "expect": {
+    "road_ref": "1665",
+    "road_name": "Hallingavägen",
+    "start_place": "Legeved",
+    "end_place": "Legeved"
+  }
+}

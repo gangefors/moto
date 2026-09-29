@@ -1,0 +1,19 @@
+{
+  "name": "Section on road 578 between two hamlets",
+  "description": "A random 2 km of road 578 north of Klippan's forests. OSM: the hamlet Kroksbygd is 0.4 km from its south end and Gårdstaköp 0.2 km from its north end, nothing bigger within reach; a hamlet right by an end names it (the label the rider sees there).",
+  "from": [
+    56.50705,
+    13.90175
+  ],
+  "to": [
+    56.52343,
+    13.91132
+  ],
+  "section": true,
+  "expect": {
+    "road_ref": "578",
+    "road_name": "none",
+    "start_place": "Kroksbygd",
+    "end_place": "Gårdstaköp"
+  }
+}

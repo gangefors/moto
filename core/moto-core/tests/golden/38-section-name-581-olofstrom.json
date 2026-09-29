@@ -1,0 +1,19 @@
+{
+  "name": "Section on road 581 north of Olofström",
+  "description": "A random 1.3 km of road 581 (P.J. Rösjös väg). OSM: the hamlet Rösjö is 1.0 km from its south end, the town Olofström 2.2 km (a town wins when half its distance is less than the hamlet's: 2.2 / 2 = 1.1 is not); the hamlet Hemmingsmåla is 0.4 km from its north end, Olofström 1.9 km.",
+  "from": [
+    56.26726,
+    14.56105
+  ],
+  "to": [
+    56.27814,
+    14.56434
+  ],
+  "section": true,
+  "expect": {
+    "road_ref": "581",
+    "road_name": "P.J. Rösjös väg",
+    "start_place": "Rösjö",
+    "end_place": "Hemmingsmåla"
+  }
+}
