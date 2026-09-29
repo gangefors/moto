@@ -235,4 +235,16 @@ class SectionLogicTest {
         )
         assertEquals(listOf(a), gravelParts(gravel, shown))
     }
+
+    @Test
+    fun aShownSectionShowsTheDirectionTheSheetWouldSave() {
+        val line = listOf(LatLon(55.0, 13.0), LatLon(55.1, 13.1), LatLon(55.2, 13.2))
+        // As saved.
+        assertEquals(line to true, shownSectionLine(line, oneWay = true, preview = null))
+        assertEquals(line to false, shownSectionLine(line, oneWay = false, preview = null))
+        // While editing: the switch and the toggle, before Save.
+        assertEquals(line.reversed() to true, shownSectionLine(line, oneWay = true, preview = true to true))
+        assertEquals(line to false, shownSectionLine(line, oneWay = true, preview = false to false))
+        assertEquals(line to true, shownSectionLine(line, oneWay = false, preview = true to false))
+    }
 }

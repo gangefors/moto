@@ -46,6 +46,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.LaunchedEffect
 import se.gangefors.moto.core.Rating
 
 /** What the rider chose in the section sheet. */
@@ -59,6 +63,10 @@ data class SectionChoice(val rating: Rating, val oneWay: Boolean, val name: Stri
  * empty: the section then goes by where it runs ([suggestion], shown in
  * the empty field). A saved one-way section can be turned round
  * ([canReverse]): the swap toggle beside the switch, applied on Save.
+ * [onPreview] hears the one-way switch and the toggle as they change, so
+ * the map can show the direction Save would give; [onTop] the sheet's
+ * top edge (px from the top of the screen), so the map can fit the
+ * section above it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +78,8 @@ fun SectionSheet(
     onDelete: (() -> Unit)? = null,
     suggestion: String? = null,
     canReverse: Boolean = false,
+    onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit = { _, _ -> },
+    onTop: (Int) -> Unit = {},
 ) {
     // A text field state (kept over rotation), for the field's label on
     // the border; the name is what it holds.
@@ -78,6 +88,7 @@ fun SectionSheet(
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
     var reverse by remember { mutableStateOf(false) }
+    LaunchedEffect(oneWay, reverse) { onPreview(oneWay, oneWay && reverse) }
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
 
@@ -85,7 +96,7 @@ fun SectionSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Box {
+        Box(Modifier.onGloballyPositioned { onTop(it.positionInWindow().y.roundToInt()) }) {
             Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 16.dp)) {
                 // The title, and X to leave without saving (as do Back and a
                 // swipe down).

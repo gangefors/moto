@@ -15,6 +15,7 @@ import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -183,6 +184,26 @@ class RouteOverlay(private val style: Style, private val density: Float) {
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),
             )
+            // A one-way section shown as the route: its direction, with the
+            // same arrows as on the sections.
+            style.addImage(ARROW_IMAGE, arrowBitmap(density))
+            style.addLayer(
+                SymbolLayer(ARROW_LAYER, SOURCE)
+                    .withFilter(
+                        Expression.all(
+                            Expression.eq(Expression.get(KIND), ROUTE),
+                            Expression.toBool(Expression.get(ARROWS)),
+                        ),
+                    )
+                    .withProperties(
+                        PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
+                        PropertyFactory.symbolSpacing(60f),
+                        PropertyFactory.iconImage(ARROW_IMAGE),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true),
+                        PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                    ),
+            )
             style.addLayer(
                 CircleLayer(PIN_LAYER, SOURCE)
                     .withFilter(
@@ -216,7 +237,8 @@ class RouteOverlay(private val style: Style, private val density: Float) {
      * [gravel] those on unpaved roads, [via] the points it passes, and
      * [others] the other routes to choose from, by their index. The route
      * is grey when [dull] (the fastest choice), as is the other route of
-     * index [dullOther]. */
+     * index [dullOther]. With [arrows] the route shows its direction (a
+ * one-way section shown on its own). */
     fun show(
         start: LatLng?,
         end: LatLng?,
@@ -227,6 +249,7 @@ class RouteOverlay(private val style: Style, private val density: Float) {
         others: List<Pair<Int, List<LatLon>>> = emptyList(),
         dull: Boolean = false,
         dullOther: Int? = null,
+        arrows: Boolean = false,
     ) {
         val features = mutableListOf<Feature>()
         fun line(points: List<LatLon>) = LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })
@@ -237,7 +260,10 @@ class RouteOverlay(private val style: Style, private val density: Float) {
             }
         }
         if (route != null && route.size >= 2) {
-            features += feature(line(route), ROUTE).apply { addBooleanProperty(DULL, dull) }
+            features += feature(line(route), ROUTE).apply {
+                addBooleanProperty(DULL, dull)
+                addBooleanProperty(ARROWS, arrows)
+            }
             favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
             gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }
         }
@@ -287,6 +313,9 @@ class RouteOverlay(private val style: Style, private val density: Float) {
         const val GLOW_LAYER = "moto-route-favourite-glow"
         const val GRAVEL_LAYER = "moto-route-gravel"
         const val PIN_LAYER = "moto-route-pins"
+        const val ARROW_LAYER = "moto-route-arrows"
+        const val ARROW_IMAGE = "moto-route-arrow"
+        const val ARROWS = "arrows"
         const val OTHER_LAYER = "moto-route-other"
         const val OTHER_CASING_LAYER = "moto-route-other-casing"
         const val OTHER = "other"
