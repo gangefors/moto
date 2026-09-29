@@ -24,6 +24,7 @@ import org.maplibre.geojson.MultiLineString
 import org.maplibre.geojson.Polygon
 import org.maplibre.geojson.Point
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.RegionInfo
 
 /**
@@ -139,12 +140,13 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
-            // Glow: a wide, soft purple band under the route's casing.
+            // Glow: a wide, soft band under the route's casing, in the
+            // colour of the section's rating.
             style.addLayer(
                 LineLayer(GLOW_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), FAVOURITE))
                     .withProperties(
-                        PropertyFactory.lineColor(FAVOURITE_COLOR),
+                        PropertyFactory.lineColor(Expression.get(GLOW_COLOR)),
                         PropertyFactory.lineWidth(18f),
                         PropertyFactory.lineBlur(4f),
                         PropertyFactory.lineOpacity(0.55f),
@@ -237,7 +239,8 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
     }
 
     /** Shows the start pin, and the end pin and route when there are any;
-     * [favourites] are the route's stretches on favourite sections,
+     * [favourites] are the route's stretches on favourite sections
+     * (glowing in the colour of [favouriteRatings], one per stretch),
      * [gravel] those on unpaved roads, [via] the points it passes, and
      * [others] the other routes to choose from, by their index. The route
      * is grey when [dull] (the fastest choice), as is the other route of
@@ -254,6 +257,7 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
         dull: Boolean = false,
         dullOther: Int? = null,
         arrows: Boolean = false,
+        favouriteRatings: List<Rating> = emptyList(),
     ) {
         val features = mutableListOf<Feature>()
         fun line(points: List<LatLon>) = LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })
@@ -268,7 +272,9 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
                 addBooleanProperty(DULL, dull)
                 addBooleanProperty(ARROWS, arrows)
             }
-            favourites.filter { it.size >= 2 }.forEach { features += feature(line(it), FAVOURITE) }
+            favouriteGlowColors(favourites, favouriteRatings).forEach { (points, color) ->
+                features += feature(line(points), FAVOURITE).apply { addStringProperty(GLOW_COLOR, color) }
+            }
             gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }
         }
         via.forEachIndexed { i, p ->
@@ -337,8 +343,7 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
         const val END = "end"
         const val VIA = "via"
         const val ROUTE_COLOR = "#1a73e8"
-        // Epic purple, the favourite colour of the section layer.
-        const val FAVOURITE_COLOR = "#a142f4"
+        const val GLOW_COLOR = "glowColor"
         // The route's white outline, also its centre dashes on gravel.
         const val CASING_COLOR = "#ffffff"
         const val START_COLOR = "#188038"

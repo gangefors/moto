@@ -128,6 +128,7 @@ mod tests {
             curvy_share: 0.0,
             fastest_duration_s: 90.0,
             favourite_parts: vec![],
+            favourite_ratings: vec![],
             unpaved_m: 0.0,
             unpaved_parts: vec![],
             suggested: false,
