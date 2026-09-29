@@ -324,8 +324,9 @@ impl Engine {
 
     /// Loops from `start` through `stops` in order and back (at most 8),
     /// e.g. a favourite section's two ends to ride it from here; with
-    /// `both_ways` also through them the other way round. Best first; the
-    /// way back keeps off the roads out, as every loop does.
+    /// `both_ways` also through them the other way round. Made like
+    /// ordinary loops, going on past the last stop; up to three, best
+    /// first; the way back keeps off the roads out.
     pub fn round_trip_via(
         &self,
         start: LatLon,
@@ -740,7 +741,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        assert!(!loops.is_empty() && loops.len() <= 2);
+        assert!(!loops.is_empty() && loops.len() <= 3);
         assert_eq!(loops[0].geometry.first(), loops[0].geometry.last());
         let err = engine
             .round_trip_via(
