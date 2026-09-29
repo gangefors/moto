@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.runtime.getValue
@@ -96,7 +97,25 @@ fun SectionSheet(
                         value = name,
                         onValueChange = { name = it.take(MAX_ROUTE_NAME_CHARS * 2) },
                         label = { Text(stringResource(R.string.section_name)) },
-                        placeholder = suggestion?.let { { Text(it, maxLines = 1) } },
+                        // The suggestion is faded and slanted, so an empty
+                        // field doesn't look named; X clears a name in one tap.
+                        placeholder = suggestion?.let {
+                            {
+                                Text(
+                                    it,
+                                    maxLines = 1,
+                                    fontStyle = FontStyle.Italic,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                            }
+                        },
+                        trailingIcon = if (name.isEmpty()) null else {
+                            {
+                                IconButton(onClick = { name = "" }) {
+                                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.section_name_clear))
+                                }
+                            }
+                        },
                         supportingText = { Text(stringResource(R.string.section_name_hint)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),

@@ -204,6 +204,7 @@
     <string name="section_rating">Rating</string>
     <string name="section_name">Name</string>
     <string name="section_name_hint">Leave it empty to name it by where it runs</string>
+    <string name="section_name_clear">Clear the name</string>
     <string name="delete">Delete</string>
     <string name="delete_confirm">Tap again to delete</string>
     <string name="section_saved">Section saved</string>
