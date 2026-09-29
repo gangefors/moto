@@ -32,4 +32,10 @@ class HelpTextTest {
         assertEquals(emptyList<HelpPart>(), helpParts("", icons))
     }
 
+
+    @Test
+    fun iconsReadAsWordsThatFitTheSentence() {
+        val parts = helpParts("Tap [bin] again to delete", setOf("bin"))
+        assertEquals("Tap the bin again to delete", helpWords(parts, mapOf("bin" to "the bin")))
+    }
 }

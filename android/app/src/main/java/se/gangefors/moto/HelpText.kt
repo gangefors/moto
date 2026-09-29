@@ -35,3 +35,14 @@ fun helpParts(text: String, icons: Set<String>): List<HelpPart> {
     return parts
 }
 
+/**
+ * [parts] as words only, for a screen reader or a plain label: each icon
+ * is the words for its button from [spoken].
+ */
+fun helpWords(parts: List<HelpPart>, spoken: Map<String, String>): String =
+    parts.joinToString("") {
+        when (it) {
+            is HelpPart.Words -> it.text
+            is HelpPart.Icon -> spoken[it.key] ?: it.key
+        }
+    }

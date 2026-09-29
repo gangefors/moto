@@ -35,26 +35,27 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The buttons text may show, by the key it names them with ("[mark]"):
- * the button's own icon, its colour when it has one of its own, and what
- * a screen reader says for it. TAG is drawn as the button itself, a label
- * on orange.
+ * the button's own icon, drawn in the text's colour so it reads as well
+ * as the words, and what a screen reader says in its place, words that
+ * fit the sentence ("the bin"). TAG is drawn as the button itself, a
+ * label on orange. [then] is an arrow between menu steps, read "then".
  */
-internal class ButtonIcon(val drawable: Int?, val description: Int, val tint: Color? = null)
+internal class ButtonIcon(val drawable: Int?, val spoken: Int)
 
 internal val BUTTON_ICONS = mapOf(
-    "menu" to ButtonIcon(R.drawable.ic_menu, R.string.menu_open),
-    "location" to ButtonIcon(R.drawable.ic_my_location, R.string.my_location),
-    "loop" to ButtonIcon(R.drawable.ic_loop, R.string.loop_from_me),
-    "directions" to ButtonIcon(R.drawable.ic_directions, R.string.route_from_me),
-    "share" to ButtonIcon(R.drawable.ic_share, R.string.route_share),
-    "save" to ButtonIcon(R.drawable.ic_bookmark, R.string.route_save),
-    "mark" to ButtonIcon(R.drawable.ic_add_road, R.string.section_mark),
-    "sections" to ButtonIcon(R.drawable.ic_star, R.string.sections_title),
-    "record" to ButtonIcon(R.drawable.ic_record_dot, R.string.record_start, RECORD_RED),
-    "tag" to ButtonIcon(null, R.string.tag_button_description),
-    "flag" to ButtonIcon(R.drawable.ic_flag, R.string.help_icon_review),
-    "settings" to ButtonIcon(R.drawable.ic_settings, R.string.ride_settings_open),
-    "bin" to ButtonIcon(R.drawable.ic_delete, R.string.delete, DELETE_COLOR),
+    "menu" to ButtonIcon(R.drawable.ic_menu, R.string.say_menu),
+    "location" to ButtonIcon(R.drawable.ic_my_location, R.string.say_location),
+    "loop" to ButtonIcon(R.drawable.ic_loop, R.string.say_loop),
+    "directions" to ButtonIcon(R.drawable.ic_directions, R.string.say_directions),
+    "share" to ButtonIcon(R.drawable.ic_share, R.string.say_share),
+    "save" to ButtonIcon(R.drawable.ic_bookmark, R.string.say_save),
+    "mark" to ButtonIcon(R.drawable.ic_add_road, R.string.say_mark),
+    "sections" to ButtonIcon(R.drawable.ic_star, R.string.say_sections),
+    "record" to ButtonIcon(R.drawable.ic_record_dot, R.string.say_record),
+    "tag" to ButtonIcon(null, R.string.say_tag),
+    "flag" to ButtonIcon(R.drawable.ic_flag, R.string.say_flag),
+    "settings" to ButtonIcon(R.drawable.ic_settings, R.string.say_settings),
+    "bin" to ButtonIcon(R.drawable.ic_delete, R.string.say_bin),
 )
 
 /**
@@ -64,12 +65,12 @@ internal val BUTTON_ICONS = mapOf(
 @Composable
 fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = LocalTextStyle.current) {
     val parts = helpParts(text, BUTTON_ICONS.keys)
-    val descriptions = BUTTON_ICONS.mapValues { stringResource(it.value.description) }
+    val spoken = BUTTON_ICONS.mapValues { stringResource(it.value.spoken) }
     val annotated = buildAnnotatedString {
         for (part in parts) {
             when (part) {
                 is HelpPart.Words -> append(part.text)
-                is HelpPart.Icon -> appendInlineContent(part.key, descriptions.getValue(part.key))
+                is HelpPart.Icon -> appendInlineContent(part.key, spoken.getValue(part.key))
             }
         }
     }
@@ -80,7 +81,7 @@ fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = Loc
                 Icon(
                     painterResource(icon.drawable),
                     contentDescription = null,
-                    tint = icon.tint ?: LocalContentColor.current,
+                    tint = LocalContentColor.current,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else if (key == "tag") {
@@ -96,3 +97,13 @@ fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = Loc
     Text(annotated, modifier, style = style, inlineContent = inline)
 }
 
+
+/**
+ * [text] as a screen reader would say it, for a spoken label: each
+ * "[key]" becomes the words for its button ("the location button").
+ */
+@Composable
+fun iconTextWords(text: String): String {
+    val spoken = BUTTON_ICONS.mapValues { stringResource(it.value.spoken) }
+    return helpWords(helpParts(text, BUTTON_ICONS.keys), spoken)
+}
