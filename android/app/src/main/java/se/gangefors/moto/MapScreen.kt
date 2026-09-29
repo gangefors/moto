@@ -826,6 +826,25 @@ fun MapScreen() {
         shownSectionId = null
         overlays?.route?.show(null, null, null)
     }
+    /**
+     * Shows saved section [s] with its card (the same whether picked on
+     * the map or in Menu > Sections): drawn as a route line, so it stands
+     * out from the other sections (faded meanwhile) and one that no longer
+     * fits the map shows too; the map moves to it when [fit] (from the
+     * page), not when it was tapped where the rider looks.
+     */
+    fun showSection(s: Section, fit: Boolean) {
+        routeEnds = null
+        loopStart = null
+        startPicked = null
+        picker.reset()
+        shownSaved = null
+        roadInfo = null
+        overlays?.snap?.clear()
+        shownSectionId = s.id
+        overlays?.route?.show(null, null, s.geometry)
+        if (fit) showOnMap(listOf(s.geometry), always = true)
+    }
     // Planning takes the map over: the shown section goes.
     LaunchedEffect(routeEnds, loopStart) {
         if (routeEnds != null || loopStart != null) shownSectionId = null
@@ -1095,13 +1114,15 @@ fun MapScreen() {
             }
             val hit = o.sections.sectionAt(m, tap)?.let { id -> sections.firstOrNull { it.id == id } }
             if (hit != null) {
-                editing = hit
+                showSection(hit, fit = false)
             } else if (ready == null) {
                 notify(regionStatus(resources, region), long = true)
             } else {
                 try {
                     val info = DebugTools.query("road info") { ready.engine.roadAt(tap.toLatLon()) }
                     o.snap.show(tap, LatLng(info.point.position.lat, info.point.position.lon))
+                    // One card for what was tapped: the road's replaces a section's.
+                    hideSection()
                     roadInfo = info
                     message = null
                 } catch (e: MotoException) {
@@ -1443,9 +1464,9 @@ fun MapScreen() {
                                     // The long-pressed point becomes the end; the
                                     // rider's position the start. A later
                                     // long-press moves the end, as usual.
-                                    OutlinedButton(onClick = {
-                                        val from = riderStart() ?: return@OutlinedButton
-                                        val to = picker.takeStart() ?: return@OutlinedButton
+                                    IconTextButton(R.drawable.ic_directions, stringResource(R.string.route_from_me)) {
+                                        val from = riderStart() ?: return@IconTextButton
+                                        val to = picker.takeStart() ?: return@IconTextButton
                                         picker.startAt(from)
                                         startPicked = null
                                         message = null
@@ -1453,13 +1474,13 @@ fun MapScreen() {
                                         vias = emptyList()
                                         arriveBy = null
                                         routeEnds = from to to
-                                    }) { OneLine(stringResource(R.string.route_from_me)) }
+                                    }
                                 }
-                                OutlinedButton(onClick = {
-                                    val start = picker.takeStart() ?: return@OutlinedButton
+                                IconTextButton(R.drawable.ic_loop, stringResource(R.string.loop_from_here)) {
+                                    val start = picker.takeStart() ?: return@IconTextButton
                                     message = null
                                     startLoop(start)
-                                }) { OneLine(stringResource(R.string.loop_from_here)) }
+                                }
                             }
                         }
                         if (marking) {
@@ -1940,19 +1961,7 @@ fun MapScreen() {
             onShowSection = { s ->
                 dataPage = null
                 sectionsAttention = false
-                routeEnds = null
-                loopStart = null
-                startPicked = null
-                picker.reset()
-                shownSaved = null
-                roadInfo = null
-                overlays?.snap?.clear()
-                shownSectionId = s.id
-                // Drawn as a route line: it stands out from the other
-                // sections (faded meanwhile), and one that no longer fits
-                // the map shows too.
-                overlays?.route?.show(null, null, s.geometry)
-                showOnMap(listOf(s.geometry), always = true)
+                showSection(s, fit = true)
             },
             sectionActions = { s, close ->
                 if (hasLocation) {
