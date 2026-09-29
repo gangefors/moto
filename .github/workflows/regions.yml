@@ -63,17 +63,68 @@ jobs:
         working-directory: core
         run: cargo build --release --locked -p moto-regionbuild
 
-      # id, name, country, OSM boundary relation, and the box nodes are
-      # read from (Norway's polygon also holds Svalbard and Jan Mayen).
-      - name: Build the regions
+      # Before anything is downloaded or built: each country's sources (the
+      # extract's ETag and date, the border polygon's SHA-256, and the
+      # builder, as the git tree of core/) against those its published
+      # region was built from (sources-vN.json in the release). A country
+      # whose sources are all the same is not built again: its published
+      # file is reused (Stefan, 2026-09-29).
+      - name: Check the sources
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           out="$RUNNER_TEMP/regions"
           mkdir -p "$out"
-          build() {
-            local id=$1 country=$2 relation=$3 bbox=$4
-            local pbf="$RUNNER_TEMP/$id-latest.osm.pbf" poly="$RUNNER_TEMP/$id.poly"
-            curl -sSfL --proto '=https' --retry 3 -o "$pbf" "$OSM_EXTRACTS/$id-latest.osm.pbf"
+          major=$(sed -n 's/^pub const VERSION_MAJOR: u16 = \([0-9]*\);/\1/p' core/moto-core/src/region/format.rs)
+          test -n "$major"
+          echo "$major" > "$RUNNER_TEMP/major"
+          builder=$(git rev-parse HEAD:core)
+          while read -r id relation; do
+            poly="$RUNNER_TEMP/$id.poly"
             curl -sSfL --proto '=https' --retry 3 -o "$poly" "$OSM_POLYGONS?id=$relation&params=0"
+            head=$(curl -sSfIL --proto '=https' --retry 3 "$OSM_EXTRACTS/$id-latest.osm.pbf" \
+              | tr -d '\r' | awk -F': ' 'tolower($1)=="etag"||tolower($1)=="last-modified"{printf "%s|", $2}')
+            echo "$id ${head}$(sha256sum "$poly" | cut -d' ' -f1)|$builder"
+          done > "$RUNNER_TEMP/sources.txt" <<'EOF_LIST'
+          sweden 52822
+          denmark 50046
+          norway 2978650
+          finland 54224
+          EOF_LIST
+          python3 -c 'import json,sys; print(json.dumps(dict(l.split(" ", 1) for l in open(sys.argv[1]).read().split("\n") if l), indent=1, sort_keys=True))' \
+            "$RUNNER_TEMP/sources.txt" > "$RUNNER_TEMP/sources-now.json"
+          gh release download regions --repo "$GITHUB_REPOSITORY" --pattern "sources-v$major.json" \
+            --output "$RUNNER_TEMP/sources-published.json" 2> /dev/null || true
+          : > "$RUNNER_TEMP/same"
+          for id in $(python3 .github/scripts/regions_changed.py --same-sources \
+              "$RUNNER_TEMP/sources-published.json" "$RUNNER_TEMP/sources-now.json"); do
+            if gh release download regions --repo "$GITHUB_REPOSITORY" --pattern "$id-v$major.region.gz" \
+                --output "$out/$id.region.gz" 2> /dev/null; then
+              echo "$id" >> "$RUNNER_TEMP/same"
+            fi
+          done
+          echo "Sources unchanged:"; cat "$RUNNER_TEMP/same"
+
+      # id, country, and the box nodes are read from (Norway's polygon also
+      # holds Svalbard and Jan Mayen). The ETag recorded is the download's
+      # own, so an extract replaced since the check is built again next
+      # time.
+      - name: Build the regions
+        run: |
+          out="$RUNNER_TEMP/regions"
+          build() {
+            local id=$1 country=$2 bbox=$3
+            if grep -qx "$id" "$RUNNER_TEMP/same"; then
+              echo "$id: sources unchanged, reusing the published region"
+              return
+            fi
+            local pbf="$RUNNER_TEMP/$id-latest.osm.pbf" poly="$RUNNER_TEMP/$id.poly"
+            curl -sSfL --proto '=https' --retry 3 -D "$RUNNER_TEMP/$id.headers" -o "$pbf" "$OSM_EXTRACTS/$id-latest.osm.pbf"
+            local head
+            head=$(tr -d '\r' < "$RUNNER_TEMP/$id.headers" \
+              | awk -F': ' 'tolower($1)=="etag"||tolower($1)=="last-modified"{printf "%s|", $2}')
+            python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); old=d[sys.argv[2]]; d[sys.argv[2]]=sys.argv[3]+old.split("|",2)[2]; json.dump(d, open(p,"w"), indent=1, sort_keys=True)' \
+              "$RUNNER_TEMP/sources-now.json" "$id" "$head"
             local opts=(--country "$country" --poly "$poly")
             [ -n "$bbox" ] && opts+=(--bbox "$bbox")
             core/target/release/moto-regionbuild "$pbf" "$out/$id.region" "${opts[@]}"
@@ -82,10 +133,10 @@ jobs:
             # always compresses to the same bytes.
             gzip -9 -n "$out/$id.region"
           }
-          build sweden SE 52822 ""
-          build denmark DK 50046 ""
-          build norway NO 2978650 57.8,4.0,71.4,31.5
-          build finland FI 54224 ""
+          build sweden SE ""
+          build denmark DK ""
+          build norway NO 57.8,4.0,71.4,31.5
+          build finland FI ""
 
       - name: Write and check the manifest
         run: |
@@ -105,6 +156,7 @@ jobs:
             mv "$out/$id.region.gz" "$out/publish/$id-v$major.region.gz"
           done
           mv "$out/manifest.json" "$out/publish/regions-v$major.json"
+          cp "$RUNNER_TEMP/sources-now.json" "$out/publish/sources-v$major.json"
           ls -l "$out/publish"
 
       # Monthly, and only what changed: a region whose compressed file has
@@ -176,3 +228,5 @@ jobs:
             gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out/$f"
           done < "$RUNNER_TEMP/changed"
           gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/regions-v*.manifest
+          # What each region was built from, for the next run's check.
+          gh release upload regions --repo "$GITHUB_REPOSITORY" --clobber "$out"/sources-v*.json

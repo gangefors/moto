@@ -62,5 +62,28 @@ class RegionsChanged(unittest.TestCase):
         self.assertEqual(rc.main(["x"]), 2)
 
 
+class SameSources(unittest.TestCase):
+    def test_only_regions_whose_sources_match_are_skipped(self):
+        published = {"sweden": "e1|p1|b1", "norway": "e2|p2|b1", "finland": "e3|p3|b1"}
+        current = {"sweden": "e1|p1|b1", "norway": "e9|p2|b1", "finland": "e3|p3|b2", "denmark": "x"}
+        self.assertEqual(rc.same_sources(published, current), ["sweden"])
+
+    def test_bad_ids_and_values_never_count_as_the_same(self):
+        self.assertEqual(rc.same_sources({"../x": "a"}, {"../x": "a"}), [])
+        self.assertEqual(rc.same_sources({"se": 1}, {"se": 1}), [])
+
+    def test_a_missing_or_broken_file_skips_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            cur = os.path.join(d, "cur.json")
+            with open(cur, "w") as f:
+                json.dump({"sweden": "a"}, f)
+            broken = os.path.join(d, "broken.json")
+            with open(broken, "w") as f:
+                f.write("{not json")
+            for published in [os.path.join(d, "missing.json"), broken]:
+                self.assertEqual(rc.read_json(published), {})
+                self.assertEqual(rc.main(["x", "--same-sources", published, cur]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
