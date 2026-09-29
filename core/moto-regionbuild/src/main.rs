@@ -21,6 +21,7 @@ mod hilbert;
 mod manifest;
 mod pbf;
 mod ridecheck;
+mod speed;
 mod tags;
 
 use std::path::Path;
@@ -34,7 +35,7 @@ use moto_core::{Engine, LatLon};
 use graph::{GraphStats, NodeIndex};
 
 const USAGE: &str = "\
-usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
+usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E] [--country CC]
        moto-regionbuild --check <file.region> [--json <out.json>] [LAT,LON ...]
        moto-regionbuild --match <file.region> <ride.gpx> [--geojson <out.geojson>]
        moto-regionbuild --golden <file.region> <cases-dir> [--json <out.json>]
@@ -45,6 +46,8 @@ usage: moto-regionbuild <input.osm.pbf> <output.region> [--bbox S,W,N,E]
 
   --bbox   cut to this box in degrees (default: Skåne and surroundings,
            55.28,12.20,56.72,15.05)
+  --country the country whose legal speed limits apply to roads without
+           a signed limit: SE, DK, NO or FI (default SE)
   --check  verify checksums, benchmark opening, snapping and routing, and
            snap the given points; --json also writes the numbers as JSON
   --match  map-match a ride exported from the app and report how well it
@@ -117,10 +120,13 @@ fn main() -> ExitCode {
         [flag, input, output] if flag == "--refresh" => {
             refresh(Path::new(input), Path::new(output))
         }
-        [input, output] => build(Path::new(input), Path::new(output), SKANE_BBOX),
-        [input, output, flag, bbox] if flag == "--bbox" => match parse_bbox(bbox) {
-            Some(b) => build(Path::new(input), Path::new(output), b),
-            None => Err(format!("bad --bbox '{bbox}', expected S,W,N,E in degrees")),
+        [input, output, opts @ ..] if !input.starts_with("--") => match build_options(opts) {
+            Ok(Some((b, country))) => build(Path::new(input), Path::new(output), b, country),
+            Ok(None) => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
+            Err(e) => Err(e),
         },
         _ => {
             eprintln!("{USAGE}");
@@ -134,6 +140,36 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// The build's options (`--bbox`, `--country`, each at most once), or
+/// `None` for anything else; an option with a bad value is an error.
+fn build_options(opts: &[String]) -> Result<Option<([f64; 4], speed::Country)>, String> {
+    let (mut bbox, mut country) = (None, None);
+    let mut it = opts.iter();
+    while let Some(flag) = it.next() {
+        let Some(value) = it.next() else {
+            return Ok(None);
+        };
+        match flag.as_str() {
+            "--bbox" if bbox.is_none() => {
+                bbox =
+                    Some(parse_bbox(value).ok_or_else(|| {
+                        format!("bad --bbox '{value}', expected S,W,N,E in degrees")
+                    })?);
+            }
+            "--country" if country.is_none() => {
+                country = Some(speed::Country::from_code(value).ok_or_else(|| {
+                    format!("unknown --country '{value}', expected SE, DK, NO or FI")
+                })?);
+            }
+            _ => return Ok(None),
+        }
+    }
+    Ok(Some((
+        bbox.unwrap_or(SKANE_BBOX),
+        country.unwrap_or(speed::Country::Sweden),
+    )))
 }
 
 fn parse_bbox(s: &str) -> Option<[f64; 4]> {
@@ -152,13 +188,17 @@ fn parse_bbox(s: &str) -> Option<[f64; 4]> {
 }
 
 /// Reads the extract and builds the region content for bounding box `b`.
-fn build_region(input: &Path, b: [f64; 4]) -> Result<(RegionData, GraphStats), String> {
+fn build_region(
+    input: &Path,
+    b: [f64; 4],
+    country: speed::Country,
+) -> Result<(RegionData, GraphStats), String> {
     if !input.is_file() {
         return Err(format!("input not found: {}", input.display()));
     }
     let bbox = graph::bbox_e7(b[0], b[1], b[2], b[3]);
     let t = Instant::now();
-    let osm = pbf::read(input, &bbox)?;
+    let osm = pbf::read(input, &bbox, country)?;
     eprintln!(
         "read      {:>7.1} s  {} nodes in bbox, {} routable ways (whole file)",
         t.elapsed().as_secs_f64(),
@@ -242,9 +282,9 @@ fn refresh(input: &Path, output: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn build(input: &Path, output: &Path, b: [f64; 4]) -> Result<(), String> {
+fn build(input: &Path, output: &Path, b: [f64; 4], country: speed::Country) -> Result<(), String> {
     let start = Instant::now();
-    let (data, _) = build_region(input, b)?;
+    let (data, _) = build_region(input, b, country)?;
     let t = Instant::now();
     let bytes = data.to_bytes().map_err(|e| e.to_string())?;
     std::fs::write(output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
@@ -410,7 +450,13 @@ mod test_support {
     /// The fixture built into a region file.
     pub fn built_fixture(name: &str) -> TempFile {
         let file = TempFile::new(name);
-        super::build(Path::new(FIXTURE), file.path(), FIXTURE_BBOX).unwrap();
+        super::build(
+            Path::new(FIXTURE),
+            file.path(),
+            FIXTURE_BBOX,
+            crate::speed::Country::Sweden,
+        )
+        .unwrap();
         file
     }
 }
@@ -430,6 +476,26 @@ mod tests {
         assert_eq!(parse_bbox("1,2,3"), None);
         assert_eq!(parse_bbox("a,b,c,d"), None);
         assert_eq!(parse_bbox("0,-200,1,0"), None);
+    }
+
+    #[test]
+    fn parses_build_options() {
+        let o = |a: &[&str]| build_options(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(o(&[]), Ok(Some((SKANE_BBOX, speed::Country::Sweden))));
+        assert_eq!(
+            o(&["--country", "NO", "--bbox", "57,4,72,32"]),
+            Ok(Some(([57.0, 4.0, 72.0, 32.0], speed::Country::Norway)))
+        );
+        assert_eq!(
+            o(&["--country", "fi"]),
+            Ok(Some((SKANE_BBOX, speed::Country::Finland)))
+        );
+        assert!(o(&["--country", "DE"]).is_err());
+        assert!(o(&["--bbox", "1,2,3"]).is_err());
+        // A lone flag, an unknown one or a repeated one is a usage error.
+        assert_eq!(o(&["--country"]), Ok(None));
+        assert_eq!(o(&["--poly", "x"]), Ok(None));
+        assert_eq!(o(&["--country", "SE", "--country", "DK"]), Ok(None));
     }
 
     #[test]
@@ -523,7 +589,12 @@ mod tests {
             .unwrap();
         assert!(!draft.ways.is_empty());
         let b = FIXTURE_BBOX;
-        let osm = pbf::read(Path::new(FIXTURE), &graph::bbox_e7(b[0], b[1], b[2], b[3])).unwrap();
+        let osm = pbf::read(
+            Path::new(FIXTURE),
+            &graph::bbox_e7(b[0], b[1], b[2], b[3]),
+            speed::Country::Sweden,
+        )
+        .unwrap();
         let pos: std::collections::HashMap<i64, LatLon> = osm
             .nodes
             .iter()
@@ -593,9 +664,14 @@ mod tests {
 
     #[test]
     fn cuts_ways_at_the_bounding_box() {
-        let (whole, whole_stats) = build_region(Path::new(FIXTURE), FIXTURE_BBOX).unwrap();
-        let (half, half_stats) =
-            build_region(Path::new(FIXTURE), [55.7040, 13.1900, 55.7050, 13.1940]).unwrap();
+        let (whole, whole_stats) =
+            build_region(Path::new(FIXTURE), FIXTURE_BBOX, speed::Country::Sweden).unwrap();
+        let (half, half_stats) = build_region(
+            Path::new(FIXTURE),
+            [55.7040, 13.1900, 55.7050, 13.1940],
+            speed::Country::Sweden,
+        )
+        .unwrap();
         assert!(half_stats.edges < whole_stats.edges);
         let north = |d: &RegionData| d.shape_points.iter().map(|p| p.lat).max().unwrap();
         assert!(north(&half) <= 557_050_000 && north(&whole) > 557_050_000);
@@ -608,6 +684,7 @@ mod tests {
             Path::new("/definitely/not/here.osm.pbf"),
             out.path(),
             FIXTURE_BBOX,
+            speed::Country::Sweden,
         )
         .unwrap_err();
         assert!(err.contains("input not found"), "{err}");
@@ -615,6 +692,7 @@ mod tests {
             Path::new(FIXTURE),
             Path::new("/definitely/not/a/dir/x.region"),
             FIXTURE_BBOX,
+            speed::Country::Sweden,
         )
         .unwrap_err();
         assert!(err.contains("x.region"), "{err}");
