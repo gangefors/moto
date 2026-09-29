@@ -254,3 +254,27 @@ fn deletes_only_unmatched_sections() {
     assert!(store.get_section(keep.id).unwrap().is_some());
     assert_eq!(store.delete_unmatched().unwrap(), 0);
 }
+
+#[test]
+fn a_section_off_the_open_map_waits_for_its_region() {
+    let (mut store, id) = store_with_section();
+    // Only a region 50 km north is open (the section's own is switched
+    // off): the section is kept as it is, waiting, not flagged unmatched.
+    let far = engine(lund(50_000.0, 0, false, false));
+    let report = rematch_store(&mut store, &far).unwrap();
+    assert_eq!(
+        (report.checked, report.off_map, report.unmatched),
+        (0, 1, 0)
+    );
+    assert_eq!(
+        store.get_section(id).unwrap().unwrap().status,
+        Status::NeedsRematch
+    );
+    // The same map again: nothing to do but count it.
+    let again = rematch_store(&mut store, &far).unwrap();
+    assert_eq!((again.checked, again.off_map), (0, 1));
+    // Its region back: matched and fine.
+    let back = rematch_store(&mut store, &engine(fixture::region())).unwrap();
+    assert_eq!((back.checked, back.matched, back.off_map), (1, 1, 0));
+    assert_eq!(store.get_section(id).unwrap().unwrap().status, Status::Ok);
+}

@@ -29,7 +29,11 @@
     <string name="region_none">No region: routing needs one</string>
     <string name="region_group_phone">On this phone</string>
     <string name="region_group_available">To download</string>
-    <string name="region_data_from">Map data from %1$s</string>
+    <string name="region_data_size">Map data from %1$s · %2$.1f MB</string>
+    <string name="region_size">%1$.1f MB</string>
+    <string name="region_off">Off: not used for routing · %1$.1f MB</string>
+    <string name="region_total">%1$d on this phone, %2$.1f MB in all. The regions switched on are one map, joined at their borders.</string>
+    <string name="region_all_off">Every region is switched off: switch one on to route.</string>
     <string name="region_progress">%1$.1f of %2$.1f MB</string>
     <string name="region_installing_short">Checking and installing…</string>
     <string name="region_installed_label">Installed</string>
@@ -197,7 +201,7 @@
     <!-- The keys of the how-to page: a button's name, then what it does. -->
     <string name="help_see">see %1$s</string>
     <string name="help_key_menu">Menu</string>
-    <string name="help_key_menu_what">routes and rides, sections, map region, this page, About; the sun or moon at its top switches light and dark</string>
+    <string name="help_key_menu_what">routes and rides, sections, map regions (the countries on the phone, each switched on or off; those on are one map, joined at the borders), this page, About; the sun or moon at its top switches light and dark</string>
     <string name="help_key_review">Review</string>
     <string name="help_key_review_map">shown when tagged spots wait</string>
     <string name="help_key_review_what">how many tagged spots wait; tap to go through them</string>
@@ -382,6 +386,7 @@
     </plurals>
     <string name="section_not_ridden">Not ridden yet</string>
     <string name="sections_attention">Needs attention (%1$d)</string>
+    <string name="section_off_map_note">Not on a map in use: switch its region on in Map region to ride it.</string>
     <string name="section_attention_note">Doesn’t fit the updated map. Look at it, then keep it or delete it.</string>
     <string name="section_fallback">Section · %1$.1f km</string>
     <string name="sections_menu">More for Sections</string>

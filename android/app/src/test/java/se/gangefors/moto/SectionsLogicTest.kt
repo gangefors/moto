@@ -89,6 +89,11 @@ class SectionsLogicTest {
         assertEquals(emptySet<Rating>(), toggled(setOf(Rating.EPIC), Rating.EPIC))
         assertTrue(needsAttention(rows[3].section))
         assertFalse(needsAttention(rows[0].section))
+        // Waiting for its region is not something to look at.
+        val waiting = row(9, Rating.GOOD, 1.0, status = SectionStatus.NEEDS_REMATCH).section
+        assertFalse(needsAttention(waiting))
+        assertTrue(offTheMap(waiting))
+        assertFalse(offTheMap(rows[3].section))
     }
 
     @Test

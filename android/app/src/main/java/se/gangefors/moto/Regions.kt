@@ -25,17 +25,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.Engine
+import se.gangefors.moto.core.RegionFile
 import se.gangefors.moto.core.RegionOffer
 import se.gangefors.moto.core.installRegion
+import se.gangefors.moto.core.openRegions
 import se.gangefors.moto.core.parseRegionManifest
-import se.gangefors.moto.core.regionFingerprint
 import se.gangefors.moto.core.regionManifestFileName
 
-/** Which region the app routes on, and where it came from. */
-data class ActiveRegion(val state: RegionState, val downloaded: DownloadedRegion?)
-
-/** A region installed from a download (ADR-0008). */
-data class DownloadedRegion(val id: String, val name: String, val osmTimestamp: Long)
+/** The network the app routes on, and the regions on the phone. */
+data class ActiveRegion(val state: RegionState, val installed: List<InstalledRegion>)
 
 /** What the region download is doing. */
 sealed interface DownloadState {
@@ -47,27 +45,30 @@ sealed interface DownloadState {
     data class Failed(val message: String, val offers: List<RegionOffer>) : DownloadState
 }
 
-/** What the app knows about its routing region. */
+/** What the app knows about its routing network. */
 sealed interface RegionState {
     data object Loading : RegionState
     data class Ready(val engine: Engine) : RegionState
-    /** No region is installed; the rider downloads one. */
+    /** No region is installed and enabled; the rider downloads or enables one. */
     data object Missing : RegionState
     data class Failed(val message: String) : RegionState
 }
 
 /**
- * The routing region: the downloaded one, or none until the rider downloads
- * one (no APK carries a region, ADR-0008). Downloads run here, not in a screen, so they
- * carry on when the Map region page is closed; an interrupted download resumes where
- * it stopped. The core checks everything before a region is used.
+ * The routing regions (ADR-0008, ADR-0009): the downloaded ones, one file
+ * each, opened together as one network linked at their borders; none
+ * until the rider downloads one (no APK carries a region). A region can
+ * be disabled without removing it: it stays on the phone but isn't opened.
+ * Downloads run here, not in a screen, so they carry on when the Map region page is
+ * closed; an interrupted download resumes where it stopped. The core checks everything
+ * before a region is used.
  */
 object Regions {
     private const val DIR = "regions"
-    private const val FILE = "downloaded.region"
+    /** The single region file of app versions before ADR-0009. */
+    private const val LEGACY_FILE = "downloaded.region"
     private const val PREFS = "regions"
-    /** Fingerprint of the installed file, recorded once it passed the full check. */
-    private const val FINGERPRINT = "fingerprint"
+    private const val INSTALLED = "installed"
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
 
@@ -75,77 +76,125 @@ object Regions {
     private val lock = Mutex()
     private var job: Job? = null
     private var manifest: ByteArray? = null
-    /** Counts installs and removals, so a stale fingerprint is never recorded. */
-    @Volatile private var installs = 0
 
-    private val _active = MutableStateFlow(ActiveRegion(RegionState.Loading, null))
+    private val _active = MutableStateFlow(ActiveRegion(RegionState.Loading, emptyList()))
     val active: StateFlow<ActiveRegion> = _active.asStateFlow()
 
     private val _download = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val download: StateFlow<DownloadState> = _download.asStateFlow()
 
-    private fun installed(context: Context) = File(File(context.filesDir, DIR), FILE)
+    private fun dir(context: Context) = File(context.filesDir, DIR)
+
+    /** Region [id]'s file; the id is checked, so it can only name a file here. */
+    private fun file(context: Context, id: String) = File(dir(context), regionFileName(id))
 
     private fun partial(context: Context, offer: RegionOffer) =
         File(File(context.noBackupFilesDir, DIR), "${offer.fileName}.part")
 
-    /** Opens the downloaded region at app start, if there is one. */
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** Opens the enabled regions at app start. */
     suspend fun load(context: Context) = lock.withLock {
         if (_active.value.state !is RegionState.Loading) return@withLock
         DebugTools.mark("region load started")
-        _active.value = withContext(Dispatchers.IO) { open(context.applicationContext) }
+        _active.value = withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            migrate(app)
+            open(app)
+        }
         DebugTools.mark("region ready")
     }
 
-    private fun open(context: Context): ActiveRegion {
-        val file = installed(context)
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (file.isFile) {
-            try {
-                val size = "${file.length() / 1_000_000} MB"
-                val opened = openRegion(
-                    prefs.getString(FINGERPRINT, null),
-                    { fp -> DebugTools.startup("region open by fingerprint ($size)") { Engine.openFingerprinted(file.path, fp) } },
-                    { DebugTools.startup("region open, full check ($size)") { Engine.open(file.path) } },
-                )
-                val engine = opened.region
-                if (opened.needsFingerprint) recordFingerprint(context, file)
-                val meta = DownloadedRegion(
-                    id = prefs.getString("id", null) ?: "",
-                    name = prefs.getString("name", null) ?: "",
-                    osmTimestamp = engine.info().osmTimestamp,
-                )
-                return ActiveRegion(RegionState.Ready(engine), meta)
-            } catch (_: Exception) {
-                // A file that no longer opens is dropped; the rider can
-                // download it again.
-                prefs.edit().remove(FINGERPRINT).apply()
-                file.delete()
-            }
+    /**
+     * Moves the single region of app versions before ADR-0009 to its own
+     * file, named by its id; a file without a valid id is dropped (the
+     * rider can download it again).
+     */
+    private fun migrate(context: Context) {
+        val legacy = File(dir(context), LEGACY_FILE)
+        if (!legacy.isFile) return
+        val p = prefs(context)
+        val id = p.getString("id", null)
+        if (id != null && isRegionId(id) && legacy.renameTo(file(context, id))) {
+            p.edit()
+                .putStringSet(INSTALLED, installedIds(context) + id)
+                .putString("name.$id", p.getString("name", null) ?: id)
+                .remove("id").remove("name").remove("fingerprint")
+                .apply()
+        } else {
+            legacy.delete()
+            p.edit().remove("id").remove("name").remove("fingerprint").apply()
         }
-        return ActiveRegion(RegionState.Missing, null)
+    }
+
+    private fun installedIds(context: Context): Set<String> =
+        prefs(context).getStringSet(INSTALLED, emptySet()).orEmpty().filter(::isRegionId).toSet()
+
+    /** The regions on the phone, by id; ids whose file is gone are dropped. */
+    private fun installedList(context: Context): List<InstalledRegion> {
+        val p = prefs(context)
+        return installedIds(context).mapNotNull { id ->
+            val f = file(context, id)
+            if (!f.isFile) return@mapNotNull null
+            InstalledRegion(
+                id = id,
+                name = p.getString("name.$id", null) ?: id,
+                osmTimestamp = p.getLong("ts.$id", 0),
+                bytes = f.length(),
+                enabled = !p.getBoolean("off.$id", false),
+            )
+        }.sortedBy { it.name }
     }
 
     /**
-     * Records the fingerprint of [file], which just passed the full check,
-     * so the next start can open it quickly. In the background: it reads
-     * the whole file once. Skipped if the file was replaced or removed
-     * meanwhile (an install records its own).
+     * Opens the enabled regions as one network (the core checks each by
+     * its recorded fingerprint, or in full when it has none or no longer
+     * matches, and hands back each file's fingerprint to keep). A region
+     * that no longer opens is dropped; the rider can download it again.
      */
-    private fun recordFingerprint(context: Context, file: File) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().remove(FINGERPRINT).apply()
-        val generation = installs
-        scope.launch {
-            val fp = try {
-                regionFingerprint(file.path)
-            } catch (_: Exception) {
-                return@launch
+    private fun open(context: Context): ActiveRegion {
+        val p = prefs(context)
+        var installed = installedList(context)
+        val enabled = enabledRegions(installed)
+        if (enabled.isEmpty()) return ActiveRegion(RegionState.Missing, installed)
+        val files = enabled.map { RegionFile(file(context, it.id).path, p.getString("fp.${it.id}", null)) }
+        val size = "${enabled.size} region(s), ${installedBytes(enabled) / 1_000_000} MB"
+        return try {
+            val opened = DebugTools.startup("regions open ($size)") { openRegions(files) }
+            val infos = opened.engine.regionInfos()
+            val edit = p.edit()
+            enabled.forEachIndexed { i, r ->
+                opened.fingerprints.getOrNull(i)?.let { edit.putString("fp.${r.id}", it) }
+                infos.getOrNull(i)?.let { edit.putLong("ts.${r.id}", it.osmTimestamp) }
             }
-            lock.withLock {
-                if (installs == generation && file.isFile) prefs.edit().putString(FINGERPRINT, fp).apply()
+            edit.apply()
+            installed = installedList(context)
+            ActiveRegion(RegionState.Ready(opened.engine), installed)
+        } catch (e: Exception) {
+            // Find the file that no longer opens (the core names it) and
+            // drop it; the others open next time.
+            val bad = enabled.firstOrNull { e.message?.contains(file(context, it.id).path) == true }
+            if (bad != null) {
+                drop(context, bad.id)
+                open(context)
+            } else {
+                ActiveRegion(RegionState.Failed(e.message ?: e.toString()), installed)
             }
         }
+    }
+
+    /** Forgets region [id] and deletes its file. */
+    private fun drop(context: Context, id: String) {
+        prefs(context).edit()
+            .putStringSet(INSTALLED, installedIds(context) - id)
+            .remove("name.$id").remove("fp.$id").remove("ts.$id").remove("off.$id")
+            .apply()
+        file(context, id).delete()
+    }
+
+    /** Opens the network again after a change, the app switching to it. */
+    private fun reopen(context: Context) {
+        _active.value = open(context)
     }
 
     /** Fetches the list of regions this app can read. */
@@ -164,11 +213,12 @@ object Regions {
         }
     }
 
-    /** Downloads and installs [offer], then switches the app to it. */
+    /** Downloads and installs [offer] (enabled), then opens the network with it. */
     fun start(context: Context, offer: RegionOffer) {
         val app = context.applicationContext
         val bytes = manifest ?: return
         if (job?.isActive == true) return
+        if (!isRegionId(offer.id)) return
         val offers = (download.value as? DownloadState.Offers)?.offers
             ?: (download.value as? DownloadState.Failed)?.offers.orEmpty()
         job = scope.launch {
@@ -183,18 +233,18 @@ object Regions {
                 }
                 fetchFile(regionUrl(offer.fileName), part, offer)
                 _download.value = DownloadState.Installing(offer)
-                val target = installed(app).apply { parentFile?.mkdirs() }
-                installs++
-                val fp = installRegion(bytes, offer.id, part.path, target.path)
-                part.delete()
+                val target = file(app, offer.id).apply { parentFile?.mkdirs() }
                 lock.withLock {
-                    app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                        .putString("id", offer.id).putString("name", offer.name)
-                        .putString(FINGERPRINT, fp).apply()
-                    _active.value = ActiveRegion(
-                        RegionState.Ready(Engine.openFingerprinted(target.path, fp)),
-                        DownloadedRegion(offer.id, offer.name, offer.osmTimestamp),
-                    )
+                    val fp = installRegion(bytes, offer.id, part.path, target.path)
+                    part.delete()
+                    prefs(app).edit()
+                        .putStringSet(INSTALLED, installedIds(app) + offer.id)
+                        .putString("name.${offer.id}", offer.name)
+                        .putString("fp.${offer.id}", fp)
+                        .putLong("ts.${offer.id}", offer.osmTimestamp)
+                        .remove("off.${offer.id}")
+                        .apply()
+                    reopen(app)
                 }
                 _download.value = DownloadState.Offers(offers)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -208,24 +258,34 @@ object Regions {
         }
     }
 
-    /** The installed downloaded region's file (it may not exist). */
-    fun installedFile(context: Context): File = installed(context.applicationContext)
+    /** The installed regions' files, for the debug tools. */
+    fun installedFiles(context: Context): List<File> =
+        installedList(context.applicationContext).map { file(context.applicationContext, it.id) }
 
     /** Stops a download; what has arrived is kept to resume later. */
     fun cancel() {
         job?.cancel()
     }
 
-    /** Removes the downloaded region; the app is left without one. */
-    fun remove(context: Context) {
+    /** Removes region [id] from the phone; the network opens without it. */
+    fun remove(context: Context, id: String) = change(context) { drop(it, id) }
+
+    /**
+     * Enables or disables region [id]: a disabled region stays on the phone
+     * but isn't used for routing; enabling it needs no download.
+     */
+    fun setEnabled(context: Context, id: String, enabled: Boolean) = change(context) {
+        prefs(it).edit().putBoolean("off.$id", !enabled).apply()
+    }
+
+    private fun change(context: Context, what: (Context) -> Unit) {
         val app = context.applicationContext
         if (job?.isActive == true) return
         job = scope.launch {
             lock.withLock {
-                installs++
-                app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(FINGERPRINT).apply()
-                installed(app).delete()
-                _active.value = ActiveRegion(RegionState.Missing, null)
+                _active.value = _active.value.copy(state = RegionState.Loading)
+                what(app)
+                reopen(app)
             }
         }
     }

@@ -321,8 +321,8 @@ pub struct ImportReport {
     /// Saved sections removed because an imported section makes them
     /// redundant.
     pub replaced: u64,
-    /// Added sections that don't fit the current map (kept, hidden as
-    /// unmatched until a map they fit).
+    /// Added sections that don't fit the current map (kept: waiting when
+    /// no open region covers them, else flagged unmatched).
     pub unmatched: u64,
 }
 
