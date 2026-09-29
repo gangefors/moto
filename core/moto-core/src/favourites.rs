@@ -115,10 +115,11 @@ impl Favourites {
             return favourites;
         }
 
-        let region = engine.region();
+        let region = engine.net();
         let mut bonus = vec![0.0f32; region.edge_count()];
         let mut gravel: HashMap<usize, SectionGravel> = HashMap::new();
-        for (id, r) in region.way_refs().iter().enumerate() {
+        for id in 0..region.edge_count() as u32 {
+            let r = &region.way_ref(id);
             let Some(spans) = by_way.get(&r.way_id) else {
                 continue;
             };
@@ -127,9 +128,6 @@ impl Favourites {
                 continue;
             }
             let along_way = r.to_idx > r.from_idx;
-            let Ok(id) = u32::try_from(id) else {
-                break; // the region format caps edge ids below this
-            };
             // (bonus, stretch, weight, rating)
             let mut best = (0.0f64, (0.0f64, 0.0f64), 0.0f64, Rating::Good);
             for s in spans {
@@ -148,7 +146,7 @@ impl Favourites {
                 // Gravel is drawn once per road: from the edge along the
                 // geometry, or from the one direction a one-way section
                 // takes.
-                let e = &region.edges()[id as usize];
+                let e = &region.edge(id);
                 let once = s.along_way.is_some() || e.flags & REVERSED == 0;
                 if once && is_unpaved(e) && stretch.1 > stretch.0 {
                     let part =
@@ -206,7 +204,7 @@ impl Favourites {
             return Ok(());
         }
         if self.region_key != crate::rematch::region_key(engine)
-            || (!self.bonus.is_empty() && self.bonus.len() != engine.region().edge_count())
+            || (!self.bonus.is_empty() && self.bonus.len() != engine.net().edge_count())
         {
             return Err(CoreError::InvalidArgument(
                 "favourites were built for another region; build them again".into(),
@@ -275,11 +273,11 @@ impl Favourites {
 /// travel order. Shape point `k` of the edge, in travel order, is way node
 /// `r.from_idx ± k`.
 fn covered(engine: &Engine, id: u32, r: &WayRef, from: u32, to: u32) -> (f64, f64) {
-    let region = engine.region();
-    let Some(e) = region.edges().get(id as usize) else {
+    let region = engine.net();
+    let Some(e) = region.get_edge(id) else {
         return (0.0, 0.0);
     };
-    let line = edge_line(region, e);
+    let line = edge_line(region, &e);
     if line.len() < 2 {
         return (0.0, 0.0);
     }

@@ -126,7 +126,7 @@ pub fn loops(
         )));
     }
     let s = engine.snap(start)?;
-    let fun = Fun::new(engine.region(), favourites, opts);
+    let fun = Fun::new(engine.net(), favourites, opts);
     let side_loop_max = SIDE_LOOP_MAX_M.min(target_m * SIDE_LOOP_SHARE);
     let fits = |r: &Route| match target {
         RoundTripTarget::DistanceM(m) => (r.distance_m - m).abs() <= m * TOLERANCE,
@@ -238,7 +238,7 @@ pub fn round_trip_via(
         .iter()
         .map(|&p| engine.snap(p))
         .collect::<Result<_, _>>()?;
-    let fun = Fun::new(engine.region(), favourites, opts);
+    let fun = Fun::new(engine.net(), favourites, opts);
     let home = through_home_m(
         s.position,
         &snapped.iter().map(|p| p.position).collect::<Vec<_>>(),
@@ -633,7 +633,7 @@ fn loop_at(
             // ride on to the next turning and back up the other side.
             // The favourite still pulls; the waypoint goes where it would
             // without it.
-            let region = engine.region();
+            let region = engine.net();
             if let Some(rp) = engine
                 .snap(p)
                 .ok()
@@ -686,12 +686,12 @@ fn ride_loop(
     home: f64,
     side_loop_max: f64,
 ) -> Option<Loop> {
-    let region = engine.region();
+    let region = engine.net();
     let at_home = |edge: u32| {
-        let e = region.edges()[edge as usize];
+        let e = region.edge(edge);
         [e.tail, e.head]
             .iter()
-            .all(|&n| haversine_m(start.position, latlon(region.nodes()[n as usize])) <= home)
+            .all(|&n| haversine_m(start.position, latlon(region.node(n))) <= home)
     };
     let points: Vec<(&RoadPoint, bool)> = std::iter::once((start, false))
         .chain(stops.iter().map(|(p, visit)| (p, *visit)))
@@ -705,7 +705,7 @@ fn ride_loop(
     for w in stops.windows(2).filter(|w| w[0].1 && w[1].1) {
         let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, &empty, true);
         let leg = path(region, &w[0].0, &w[1].0, cost, engine.max_speed_kmh()).ok()?;
-        ahead.extend(leg.iter().map(|p| region.edges()[p.edge as usize].geometry));
+        ahead.extend(leg.iter().map(|p| region.edge(p.edge).geometry));
     }
     let mut used: HashSet<u32> = HashSet::new();
     let mut parts: Vec<Partial> = Vec::new();
@@ -728,7 +728,7 @@ fn ride_loop(
         let cost = Cost::Loop(Off::of(opts), *fun, PARAMS.loop_pull, avoid, true);
         let leg = path(region, from, to, cost, engine.max_speed_kmh()).ok()?;
         for p in leg.iter().filter(|p| !at_home(p.edge)) {
-            used.insert(region.edges()[p.edge as usize].geometry);
+            used.insert(region.edge(p.edge).geometry);
         }
         if from_visit && to_visit {
             parts.extend(leg);
@@ -781,7 +781,7 @@ fn ride_loop(
     let mut roads: HashMap<u32, f64> = HashMap::new();
     let mut reused = 0.0;
     for p in parts.iter().filter(|p| !at_home(p.edge)) {
-        let e = region.edges()[p.edge as usize];
+        let e = region.edge(p.edge);
         let metres = (p.to - p.from).max(0.0) * f64::from(e.length_dm) / 10.0;
         let seen = roads.entry(e.geometry).or_insert(0.0);
         if *seen > 0.0 {
@@ -809,12 +809,7 @@ fn ride_loop(
 /// edge first joins the last one, so a turn beyond the waypoint is caught
 /// too. The first `keep` parts are never touched (they ride through a
 /// stop the loop must visit).
-fn append_leg(
-    region: &crate::region::Region,
-    parts: &mut Vec<Partial>,
-    leg: Vec<Partial>,
-    keep: usize,
-) {
+fn append_leg(region: &crate::net::Net, parts: &mut Vec<Partial>, leg: Vec<Partial>, keep: usize) {
     for piece in leg {
         push_piece(region, parts, piece, keep);
     }
@@ -822,12 +817,7 @@ fn append_leg(
 
 /// Pushes `next` onto `parts`, cancelling it against the last piece where
 /// it rides back along it (see [`append_leg`]).
-fn push_piece(
-    region: &crate::region::Region,
-    parts: &mut Vec<Partial>,
-    mut next: Partial,
-    keep: usize,
-) {
+fn push_piece(region: &crate::net::Net, parts: &mut Vec<Partial>, mut next: Partial, keep: usize) {
     const EPS: f64 = 1e-9;
     loop {
         if next.to - next.from <= EPS {
@@ -840,9 +830,7 @@ fn push_piece(
             parts.pop();
             continue;
         }
-        let edges = region.edges();
-        let (Some(ep), Some(en)) = (edges.get(prev.edge as usize), edges.get(next.edge as usize))
-        else {
+        let (Some(ep), Some(en)) = (region.get_edge(prev.edge), region.get_edge(next.edge)) else {
             break;
         };
         // Carrying on along the same edge: one piece.
@@ -883,13 +871,12 @@ fn push_piece(
 /// that ride favourites for at least half their length stay: the loop may
 /// have been led there for them.
 fn cut_side_loops(
-    region: &crate::region::Region,
+    region: &crate::net::Net,
     fun: &Fun,
     parts: Vec<Partial>,
     max_m: f64,
 ) -> Vec<Partial> {
     const END: f64 = 1.0 - 1e-9;
-    let edges = region.edges();
     let mut out: Vec<Partial> = Vec::with_capacity(parts.len());
     // The crossings passed so far, each with how many parts came before it
     // and the metres ridden to it; `at` finds a crossing on the stack.
@@ -897,7 +884,7 @@ fn cut_side_loops(
     let mut at: HashMap<u32, usize> = HashMap::new();
     let mut ridden = 0.0;
     for p in parts {
-        let Some(e) = edges.get(p.edge as usize) else {
+        let Some(e) = region.get_edge(p.edge) else {
             out.push(p);
             continue;
         };
@@ -912,7 +899,7 @@ fn cut_side_loops(
             // Kept when at least half of it rides favourites: the loop was
             // led there for them. A turn that only touches one is cut.
             let metres = |q: &Partial| {
-                edges.get(q.edge as usize).map_or(0.0, |e| {
+                region.get_edge(q.edge).map_or(0.0, |e| {
                     (q.to - q.from).max(0.0) * f64::from(e.length_dm) / 10.0
                 })
             };
@@ -968,11 +955,11 @@ fn overlap(a: &Loop, b: &Loop) -> f64 {
 /// carriageway: the loop would ride down it to the next turning and back
 /// up the other carriageway, an out-and-back no trimming can see.
 fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<RoadPoint> {
-    let region = engine.region();
+    let region = engine.net();
     crate::snap::nearby(region, p, WAYPOINT_SEARCH_M, WAYPOINT_CANDIDATES)
         .into_iter()
         .find(|rp| {
-            let Some(e) = region.edges().get(rp.edge as usize) else {
+            let Some(e) = region.get_edge(rp.edge) else {
                 return false;
             };
             let through = matches!(

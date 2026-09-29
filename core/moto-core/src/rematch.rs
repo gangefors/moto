@@ -26,16 +26,20 @@ const MAX_LENGTH_CHANGE_M: f64 = 30.0;
 /// The key a store remembers for the region its sections were matched to.
 /// It changes with the OSM data, the builder, or the graph built.
 pub fn region_key(engine: &Engine) -> String {
-    let region = engine.region();
-    let info = region.info();
-    format!(
-        "{}|{}|{}|{}|{}",
-        info.source_name,
-        info.osm_timestamp,
-        info.builder_version,
-        region.node_count(),
-        region.edge_count()
-    )
+    // One region keeps the key it always had; several join theirs.
+    let key = |r: &crate::region::Region| {
+        let info = r.info();
+        format!(
+            "{}|{}|{}|{}|{}",
+            info.source_name,
+            info.osm_timestamp,
+            info.builder_version,
+            r.node_count(),
+            r.edge_count()
+        )
+    };
+    let keys: Vec<String> = engine.net().regions().iter().map(key).collect();
+    keys.join("+")
 }
 
 /// A section's fit to the current region: its new way spans and geometry,

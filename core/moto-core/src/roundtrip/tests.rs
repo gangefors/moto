@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::fixture;
+use crate::net::Net;
 use crate::region::Region;
 use crate::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
 
@@ -542,7 +543,7 @@ fn waypoints_go_on_through_roads() {
     let p = ll(55.6995, 13.41);
     let way = |opts: &RouteOptions| {
         let w = loop_road_near(&e, p, opts).unwrap();
-        e.region().way_refs()[w.edge as usize].way_id
+        e.net().way_ref(w.edge).way_id
     };
     assert_eq!(way(&RouteOptions::default()), 3, "paved through road");
     let prefer = RouteOptions {
@@ -558,7 +559,7 @@ fn waypoints_go_on_through_roads() {
 fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
     use crate::fixture::{E_AB, E_BA, E_BC, E_BD, E_CB};
     let data = fixture::region();
-    let region = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+    let region = Net::single(Region::from_bytes(&data.to_bytes().unwrap()).unwrap());
     let p = |edge, from, to| Partial { edge, from, to };
     let joined = |parts: Vec<Partial>, leg: Vec<Partial>| {
         let mut parts = parts;
@@ -632,7 +633,7 @@ fn legs_meeting_at_a_waypoint_lose_their_out_and_back() {
 fn side_loops_are_cut_unless_short_of_reach_or_a_favourite() {
     use crate::fixture::{E_AB, E_BC, E_BD, E_CB};
     let e = engine(fixture::region());
-    let region = e.region();
+    let region = e.net();
     let p = |edge, from, to| Partial { edge, from, to };
     // A to B, out to C and back to B (about 2.7 km), then on to D.
     let parts = vec![
@@ -922,7 +923,7 @@ fn a_guide_after_a_section_loses_its_out_and_back() {
     let e = engine(fixture::region());
     let opts = RouteOptions::default();
     let none = Favourites::none();
-    let fun = Fun::new(e.region(), &none, &opts);
+    let fun = Fun::new(e.net(), &none, &opts);
     let snap = |p: LatLon| e.snap(p).unwrap();
     let (s1, s2, guide) = (
         ll(55.7001, 13.203),

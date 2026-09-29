@@ -10,7 +10,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::favourites::Favourites;
 use crate::geo::{haversine_m, polyline_slice};
-use crate::region::Region;
+use crate::net::Net;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, RoadClass, Surface, edge_flags};
 use crate::scoring::PARAMS;
 use crate::section::Rating;
@@ -73,7 +73,7 @@ fn avoid_extra(off: &Off, e: &Edge) -> f64 {
 /// unpaved roads.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Fun<'a> {
-    region: &'a Region,
+    region: &'a Net,
     favourites: &'a Favourites,
     curvy: bool,
     gravel: bool,
@@ -82,7 +82,7 @@ pub(crate) struct Fun<'a> {
 }
 
 impl<'a> Fun<'a> {
-    pub(crate) fn new(region: &'a Region, favourites: &'a Favourites, opts: &RouteOptions) -> Self {
+    pub(crate) fn new(region: &'a Net, favourites: &'a Favourites, opts: &RouteOptions) -> Self {
         Self {
             region,
             favourites,
@@ -115,14 +115,13 @@ impl<'a> Fun<'a> {
     /// Whether edge `id` is part of a favourite that counts.
     pub(crate) fn is_favourite(&self, id: u32) -> bool {
         self.region
-            .edges()
-            .get(id as usize)
-            .is_some_and(|e| self.favourite_bonus(id, e) > 0.0)
+            .get_edge(id)
+            .is_some_and(|e| self.favourite_bonus(id, &e) > 0.0)
     }
 
     /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
     fn curviness(&self, id: u32, e: &Edge) -> f64 {
-        let m = self.region.curvature()[id as usize];
+        let m = self.region.curvature(id);
         PARAMS.curviness(
             &m,
             e.class,
@@ -289,16 +288,16 @@ impl Cost<'_> {
 }
 
 /// The edge running the other way along the same geometry, if any.
-pub(crate) fn twin(region: &Region, id: u32) -> Option<u32> {
-    let e = region.edges()[id as usize];
+pub(crate) fn twin(region: &Net, id: u32) -> Option<u32> {
+    let e = region.edge(id);
     region.out_edges(e.head).find(|&o| {
-        let t = region.edges()[o as usize];
+        let t = region.edge(o);
         o != id && t.head == e.tail && t.geometry == e.geometry
     })
 }
 
 /// Shape of an edge in its travel direction.
-pub(crate) fn edge_line(region: &Region, e: &Edge) -> Vec<LatLon> {
+pub(crate) fn edge_line(region: &Net, e: &Edge) -> Vec<LatLon> {
     let mut line: Vec<LatLon> = region
         .geometry(e.geometry)
         .iter()
@@ -324,8 +323,8 @@ type Links = Vec<(u32, Partial)>;
 
 /// Ways to leave `p` (towards the head of its edge or of the twin) and ways
 /// to arrive at it, each with the node it connects to.
-fn partials(region: &Region, p: &RoadPoint) -> (Links, Links) {
-    let e = region.edges()[p.edge as usize];
+fn partials(region: &Net, p: &RoadPoint) -> (Links, Links) {
+    let e = region.edge(p.edge);
     let mut leave = vec![(
         e.head,
         Partial {
@@ -459,7 +458,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
 impl Builder {
     fn add(&mut self, fun: &Fun, id: u32, from: f64, to: f64) {
         let (region, favourites) = (fun.region, fun.favourites);
-        let e = region.edges()[id as usize];
+        let e = region.edge(id);
         let frac = (to - from).max(0.0);
         let length_m = f64::from(e.length_dm) / 10.0;
         self.distance_m += frac * length_m;
@@ -551,7 +550,7 @@ pub(crate) fn build(fun: &Fun, parts: &[Partial]) -> Routed {
 /// of the strongest pull that passes wins (the fastest route if none
 /// does). The same inputs always give the same route.
 pub(crate) fn route(
-    region: &Region,
+    region: &Net,
     from: &RoadPoint,
     to: &RoadPoint,
     opts: &RouteOptions,
@@ -595,7 +594,7 @@ const CHOICE_PULLS: [f64; 3] = [1.0, 0.5, 0.25];
 /// the fastest, which is then `suggested` too. The same inputs always
 /// give the same routes.
 pub(crate) fn route_choices(
-    region: &Region,
+    region: &Net,
     from: &RoadPoint,
     to: &RoadPoint,
     opts: &RouteOptions,
@@ -678,10 +677,10 @@ fn same_road(a: &HashMap<u32, f64>, b: &HashMap<u32, f64>) -> bool {
 }
 
 /// Metres of each road geometry that `parts` ride.
-fn road_metres(region: &Region, parts: &[Partial]) -> HashMap<u32, f64> {
+fn road_metres(region: &Net, parts: &[Partial]) -> HashMap<u32, f64> {
     let mut roads: HashMap<u32, f64> = HashMap::new();
     for p in parts {
-        if let Some(e) = region.edges().get(p.edge as usize) {
+        if let Some(e) = region.get_edge(p.edge) {
             *roads.entry(e.geometry).or_insert(0.0) +=
                 (p.to - p.from).max(0.0) * f64::from(e.length_dm) / 10.0;
         }
@@ -703,7 +702,7 @@ fn overlap_share(a: &HashMap<u32, f64>, b: &HashMap<u32, f64>) -> f64 {
 /// One routing request: the fastest route, and what the others are
 /// measured against.
 struct Search<'a> {
-    region: &'a Region,
+    region: &'a Net,
     from: &'a RoadPoint,
     to: &'a RoadPoint,
     opts: &'a RouteOptions,
@@ -716,7 +715,7 @@ struct Search<'a> {
 
 impl<'a> Search<'a> {
     fn new(
-        region: &'a Region,
+        region: &'a Net,
         from: &'a RoadPoint,
         to: &'a RoadPoint,
         opts: &'a RouteOptions,
@@ -806,7 +805,7 @@ impl<'a> Search<'a> {
 /// plain cost. `max_speed_kmh` bounds every edge's speed and keeps the A*
 /// estimate admissible.
 pub(crate) fn path(
-    region: &Region,
+    region: &Net,
     from: &RoadPoint,
     to: &RoadPoint,
     cost: Cost,
@@ -822,7 +821,7 @@ pub(crate) fn path(
     for &(_, l) in &leave {
         for &(_, a) in &arrive {
             if l.edge == a.edge && a.to >= l.from {
-                let c = cost.partial(&region.edges()[l.edge as usize], a.to - l.from);
+                let c = cost.partial(&region.edge(l.edge), a.to - l.from);
                 if c < best_cost {
                     best_cost = c;
                     direct = Some(Partial {
@@ -841,17 +840,12 @@ pub(crate) fn path(
     let mut heap = BinaryHeap::new();
     let target = to.position;
     let max_mps = max_speed_kmh.max(1.0) / 3.6;
-    let h = |v: u32| {
-        cost.estimate(
-            haversine_m(latlon(region.nodes()[v as usize]), target),
-            max_mps,
-        )
-    };
+    let h = |v: u32| cost.estimate(haversine_m(latlon(region.node(v)), target), max_mps);
     // Keys are non-negative f64s, whose bit patterns sort like the values.
     let key = |cost: f64| cost.to_bits();
 
     for &(node, l) in &leave {
-        let c = cost.partial(&region.edges()[l.edge as usize], l.to - l.from);
+        let c = cost.partial(&region.edge(l.edge), l.to - l.from);
         if c < dist[node as usize] {
             dist[node as usize] = c;
             heap.push(Reverse((key(c + h(node)), node)));
@@ -867,7 +861,7 @@ pub(crate) fn path(
         }
         for &(node, a) in &arrive {
             if node == v {
-                let c = g + cost.partial(&region.edges()[a.edge as usize], a.to - a.from);
+                let c = g + cost.partial(&region.edge(a.edge), a.to - a.from);
                 if c < best_cost {
                     best_cost = c;
                     best = Some((v, a));
@@ -876,7 +870,7 @@ pub(crate) fn path(
             }
         }
         for id in region.out_edges(v) {
-            let e = region.edges()[id as usize];
+            let e = region.edge(id);
             let c = g + cost.edge(id, &e);
             let w = e.head as usize;
             if c < dist[w] {
@@ -901,7 +895,7 @@ pub(crate) fn path(
     while parent[v as usize] != NONE {
         let id = parent[v as usize];
         path.push(id);
-        v = region.edges()[id as usize].tail;
+        v = region.edge(id).tail;
     }
     path.reverse();
     let first = leave
@@ -926,14 +920,14 @@ pub(crate) fn path(
 /// search serves all targets; its memory grows with the area searched, not
 /// with the region.
 pub(crate) fn shortest_within(
-    region: &Region,
+    region: &Net,
     from: &RoadPoint,
     targets: &[RoadPoint],
     limit_m: f64,
 ) -> Vec<Option<(f64, Vec<Partial>)>> {
     let cost = Cost::Shortest;
     let (leave, _) = partials(region, from);
-    let edge = |id: u32| region.edges()[id as usize];
+    let edge = |id: u32| region.edge(id);
 
     // node -> (distance, edge arrived by, or NONE for a start node)
     let mut settled: HashMap<u32, (f64, u32)> = HashMap::new();
@@ -1159,7 +1153,7 @@ mod tests {
         // one: the motorway in the south is faster than the 30 km/h street.
         let (from, to) = (ll(55.71, 13.3995), ll(55.71, 13.4405));
         let e = engine(fixture::ladder(Surface::Asphalt));
-        let s_node = e.region().nodes()[L_S as usize];
+        let s_node = e.net().node(L_S);
         let south = ll(
             f64::from(s_node.lat) / COORD_SCALE,
             f64::from(s_node.lon) / COORD_SCALE,
@@ -1435,8 +1429,8 @@ mod tests {
         };
         let fav = crate::Favourites::build(&e, &[s]);
         let o = opts(false, false);
-        let fun = Fun::new(e.region(), &fav, &o);
-        let edge = e.region().edges()[fixture::E_AB as usize];
+        let fun = Fun::new(e.net(), &fav, &o);
+        let edge = e.net().edge(fixture::E_AB);
         let time = time_s(&edge);
         let none = HashSet::new();
         let used: HashSet<u32> = [edge.geometry].into();

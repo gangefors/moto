@@ -16,7 +16,7 @@
 
 use crate::draft::trace;
 use crate::geo::haversine_m;
-use crate::region::Region;
+use crate::net::Net;
 use crate::route::{Partial, shortest_within};
 use crate::section::WaySpan;
 use crate::snap::nearby;
@@ -90,7 +90,7 @@ fn transition(road_m: f64, straight_m: f64) -> f64 {
 /// outside `bounds` (south-west, north-east) or far from any road are
 /// skipped.
 pub(crate) fn match_track(
-    region: &Region,
+    region: &Net,
     bounds: (LatLon, LatLon),
     points: &[LatLon],
 ) -> Result<MatchedTrack, CoreError> {
@@ -145,7 +145,7 @@ pub(crate) fn match_track(
 /// The Viterbi step from `prev` to point `i`, or `None` if no candidate of
 /// `i` can be reached from any candidate of `prev`.
 fn advance(
-    region: &Region,
+    region: &Net,
     points: &[LatLon],
     prev: &Step,
     i: usize,
@@ -184,7 +184,7 @@ fn advance(
 
 /// The matched piece of a chain: its best final candidate traced back to
 /// the start. A chain of fewer than two points matches nothing.
-fn finish(region: &Region, chain: &[Step]) -> Option<MatchedPiece> {
+fn finish(region: &Net, chain: &[Step]) -> Option<MatchedPiece> {
     let (first, last) = (chain.first()?, chain.last()?);
     if chain.len() < 2 {
         return None;

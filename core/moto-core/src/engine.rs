@@ -12,6 +12,7 @@ use std::path::Path;
 use crate::draft::SectionDraft;
 use crate::favourites::Favourites;
 use crate::matching::MatchedTrack;
+use crate::net::Net;
 use crate::region::Region;
 use crate::region::format::COORD_SCALE;
 use crate::road::RoadInfo;
@@ -27,8 +28,8 @@ pub const MAX_VIA_POINTS: usize = 8;
 
 #[derive(Debug)]
 pub struct Engine {
-    region: Region,
-    /// Highest edge speed in the region, for the A* estimate.
+    net: Net,
+    /// Highest edge speed in the regions, for the A* estimate.
     max_speed_kmh: f64,
 }
 
@@ -59,24 +60,38 @@ impl Engine {
 
     /// Wraps an already opened region.
     pub fn from_region(region: Region) -> Self {
-        let max_speed_kmh = region
-            .edges()
+        Self::from_net(Net::single(region))
+    }
+
+    /// Several opened regions as one network, linked at their borders
+    /// (ADR-0009). At most [`crate::net::MAX_REGIONS`].
+    pub fn from_regions(regions: Vec<Region>) -> Result<Self, CoreError> {
+        Ok(Self::from_net(Net::linked(regions)?))
+    }
+
+    fn from_net(net: Net) -> Self {
+        let max_speed_kmh = net
+            .regions()
             .iter()
+            .flat_map(|r| r.edges().iter())
             .map(|e| f64::from(e.speed_kmh))
             .fold(1.0, f64::max);
-        Self {
-            region,
-            max_speed_kmh,
-        }
+        Self { net, max_speed_kmh }
     }
 
+    /// The road network of the open regions.
+    pub fn net(&self) -> &Net {
+        &self.net
+    }
+
+    /// The first (or only) open region, for tools that open one.
     pub fn region(&self) -> &Region {
-        &self.region
+        &self.net.regions()[0]
     }
 
-    /// The region's bounding box as (south-west, north-east) corners.
+    /// The regions' bounding box as (south-west, north-east) corners.
     pub fn bounds(&self) -> (LatLon, LatLon) {
-        let b = self.region.info().bbox;
+        let b = self.net.bbox();
         let ll = |lat: i32, lon: i32| LatLon {
             lat: f64::from(lat) / COORD_SCALE,
             lon: f64::from(lon) / COORD_SCALE,
@@ -99,7 +114,7 @@ impl Engine {
         if !inside {
             return Err(outside);
         }
-        match crate::snap::snap(&self.region, point, SNAP_MAX_DISTANCE_M) {
+        match crate::snap::snap(&self.net, point, SNAP_MAX_DISTANCE_M) {
             Err(CoreError::NoRoadNearby { .. }) if self.covers(point) == Some(false) => {
                 Err(outside)
             }
@@ -107,11 +122,11 @@ impl Engine {
         }
     }
 
-    /// The area the region's roads cover, as closed rings (first point
+    /// The area the regions' roads cover, as closed rings (first point
     /// repeated last); empty for region files without one (format 1.0),
     /// whose bounding box is all there is to show.
     pub fn coverage(&self) -> Vec<Vec<LatLon>> {
-        self.region
+        self.net
             .coverage()
             .into_iter()
             .map(|ring| ring.iter().map(|&p| crate::route::latlon(p)).collect())
@@ -124,20 +139,20 @@ impl Engine {
             lat: (point.lat * COORD_SCALE).round() as i32,
             lon: (point.lon * COORD_SCALE).round() as i32,
         };
-        self.region.covers(p)
+        self.net.covers(p)
     }
 
     /// Snaps `point` to the nearest road and describes that road: class,
     /// surface, speed, one-way, curviness and its OSM way.
     pub fn road_at(&self, point: LatLon) -> Result<RoadInfo, CoreError> {
-        crate::road::road_info(&self.region, self.snap(point)?)
+        crate::road::road_info(&self.net, self.snap(point)?)
     }
 
     /// Which roads `line` runs on and which places it runs between, for
     /// naming a section, route or ride (see [`crate::describe`]). Empty
     /// on a region file without names.
     pub fn describe(&self, line: &[LatLon]) -> Result<crate::Description, CoreError> {
-        crate::describe::describe(&self.region, line)
+        crate::describe::describe(&self.net, line)
     }
 
     /// Fastest route from `from` to `to` under `opts.avoid` and
@@ -176,7 +191,7 @@ impl Engine {
         let start = self.snap(from)?;
         let end = self.snap(to)?;
         crate::route::route(
-            &self.region,
+            &self.net,
             &start,
             &end,
             opts,
@@ -250,7 +265,7 @@ impl Engine {
             let start = self.snap(w[0])?;
             let end = self.snap(w[1])?;
             let choices = crate::route::route_choices(
-                &self.region,
+                &self.net,
                 &start,
                 &end,
                 opts,
@@ -304,13 +319,13 @@ impl Engine {
         let start = self.snap(from)?;
         let end = self.snap(to)?;
         let parts = crate::route::path(
-            &self.region,
+            &self.net,
             &start,
             &end,
             crate::route::Cost::Shortest,
             self.max_speed_kmh,
         )?;
-        crate::draft::from_path(&self.region, &parts)
+        crate::draft::from_path(&self.net, &parts)
     }
 
     /// Fits a recorded GPS track (points in recording order) to the roads
@@ -318,7 +333,7 @@ impl Engine {
     /// outside the region or far from any road are skipped; where the
     /// track can't be followed along the roads it splits into pieces.
     pub fn match_track(&self, points: &[LatLon]) -> Result<MatchedTrack, CoreError> {
-        crate::matching::match_track(&self.region, self.bounds(), points)
+        crate::matching::match_track(&self.net, self.bounds(), points)
     }
 
     /// The section suggested for a quick-tag (PRD R3): about 1 km of road
@@ -413,7 +428,7 @@ mod tests {
         let engine = Engine::open(&path);
         std::fs::remove_file(&path).unwrap();
         let engine = engine.unwrap();
-        assert_eq!(engine.region().node_count(), 4);
+        assert_eq!(engine.net().node_count(), 4);
         let p = engine.snap(ll(55.7001, 13.205)).unwrap();
         assert_eq!(p.edge, fixture::E_AB);
     }
@@ -537,10 +552,7 @@ mod tests {
         );
         // Right on the ferry line: the road 300 m north wins.
         let p = e.snap(ll(55.5001, 13.0495)).unwrap();
-        assert_eq!(
-            e.region().edges()[p.edge as usize].class,
-            RoadClass::Tertiary as u8
-        );
+        assert_eq!(e.net().edge(p.edge).class, RoadClass::Tertiary as u8);
         // Mid-crossing, far from the road: nothing.
         assert!(matches!(
             e.snap(ll(55.5, 13.02)),
