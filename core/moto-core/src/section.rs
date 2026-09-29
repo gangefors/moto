@@ -152,6 +152,21 @@ pub struct SectionUpdate {
     pub name: Option<String>,
     pub rating: Option<Rating>,
     pub direction: Option<Direction>,
+    /// Turns the section round: its geometry and way spans run the other
+    /// way, so a one-way section is good in the other direction.
+    pub reverse: bool,
+}
+
+/// `ways` ridden the other way: last first, each span flipped.
+pub fn reversed_ways(ways: &[WaySpan]) -> Vec<WaySpan> {
+    ways.iter()
+        .rev()
+        .map(|w| WaySpan {
+            way_id: w.way_id,
+            from_idx: w.to_idx,
+            to_idx: w.from_idx,
+        })
+        .collect()
 }
 
 fn invalid(msg: impl Into<String>) -> CoreError {

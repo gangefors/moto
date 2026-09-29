@@ -255,7 +255,8 @@
     <string name="section_new_title">New section · %1$.1f km</string>
     <string name="section_edit_title">Section · %1$.1f km</string>
     <string name="section_one_way">One-way</string>
-    <string name="section_one_way_hint">Only good in the direction it was marked (arrows)</string>
+    <string name="section_one_way_hint">Only good in the direction it was marked (arrows). Marked from the wrong end? The arrows button beside the switch turns it round when you save.</string>
+    <string name="section_reverse">Turn round: ride it the other way</string>
     <string name="section_rating">Rating</string>
     <string name="section_name">Name</string>
     <string name="section_name_hint">Leave it empty to name it by where it runs</string>
@@ -301,12 +302,13 @@
     <string name="settings_group_map">Map</string>
     <string name="settings_group_recording">Recording</string>
     <string name="library_title">Routes &amp; rides</string>
-    <string name="library_none">No routes or rides yet. Save a route or loop from its card, record a ride, or import a GPX file.</string>
+    <string name="library_none">No routes or rides yet. Save a route or loop from its card, record a ride, or import a GPX file from the ⋮ menu at the top.</string>
     <string name="library_route">Route · %1$.1f km · %2$s</string>
     <string name="library_loop">Loop · %1$.1f km · %2$s</string>
     <string name="library_ride">Ride · %1$s</string>
     <string name="library_share">Share</string>
     <string name="library_more">More for %1$s</string>
+    <string name="library_menu">More for Routes &amp; rides</string>
     <string name="library_show_on_map">Show on the map</string>
     <!-- Shared by the Routes & rides page and How to use, so they can't drift apart. -->
     <string name="library_hint">A route is a plan to ride; a ride is where you actually rode.</string>

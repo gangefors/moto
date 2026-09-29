@@ -32,15 +32,6 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
-import android.os.SystemClock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -48,7 +39,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import se.gangefors.moto.core.Gravel
 
@@ -86,33 +76,24 @@ fun SettingsGroup(title: String, first: Boolean = false) {
 /**
  * An (i) that shows [text] in a rich tooltip (Material 3's way to explain
  * a control in place): it opens on a tap and stays until a tap elsewhere
- * or Back. A tap on the (i) while it is open closes it: that tap first
- * reaches the tooltip as a tap outside it, so the click that follows is
- * ignored rather than opening it again.
+ * or Back. The tooltip is focusable, so while it is open a tap anywhere
+ * else, the (i) included, only closes it (Android gives that tap to the
+ * tooltip's window alone); the next tap on the (i) opens it again. Not
+ * focusable, the tap reached both the tooltip, which closed, and the
+ * (i), which opened it again, in no fixed order.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InfoButton(title: String, text: String) {
     val state = rememberTooltipState(isPersistent = true)
     val scope = rememberCoroutineScope()
-    val interactions = remember { MutableInteractionSource() }
-    var closedAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
-    var pressedAt by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(state) {
-        snapshotFlow { state.isVisible }.drop(1).collect { if (!it) closedAt = SystemClock.uptimeMillis() }
-    }
-    LaunchedEffect(interactions) {
-        interactions.interactions.collect { if (it is PressInteraction.Press) pressedAt = SystemClock.uptimeMillis() }
-    }
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { RichTooltip(title = { IconText(title) }) { IconText(text) } },
         state = state,
+        focusable = true,
     ) {
-        IconButton(
-            onClick = { if (opensOnTap(pressedAt, closedAt)) scope.launch { state.show() } },
-            interactionSource = interactions,
-        ) {
+        IconButton(onClick = { scope.launch { state.show() } }) {
             Icon(
                 painterResource(R.drawable.ic_info),
                 contentDescription = stringResource(R.string.settings_info, iconTextWords(title)),

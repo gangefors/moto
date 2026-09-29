@@ -90,6 +90,8 @@ pub struct SectionUpdate {
     pub name: Option<String>,
     pub rating: Option<Rating>,
     pub direction: Option<Direction>,
+    /// Turns the section round, so a one-way section runs the other way.
+    pub reverse: bool,
 }
 
 /// A map area, e.g. what is on screen.
@@ -182,12 +184,14 @@ impl SectionStore {
         Ok(sections.into_iter().map(Into::into).collect())
     }
 
-    /// Changes name, rating or direction; `None` if there is no such section.
+    /// Changes name, rating or direction, and turns the section round if
+    /// asked; `None` if there is no such section.
     pub fn update(&self, id: i64, update: SectionUpdate) -> Result<Option<Section>, MotoError> {
         let update = core::SectionUpdate {
             name: update.name,
             rating: update.rating.map(Into::into),
             direction: update.direction.map(Into::into),
+            reverse: update.reverse,
         };
         Ok(self
             .store()

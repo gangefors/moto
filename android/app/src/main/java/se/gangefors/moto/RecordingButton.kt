@@ -89,4 +89,4 @@ private fun arcBrush(degrees: Float, centre: Offset) = object : ShaderBrush() {
 }
 
 /** How long the arc takes to go once round, ms. */
-private const val ARC_TURN_MS = 1600
+private const val ARC_TURN_MS = 3200
