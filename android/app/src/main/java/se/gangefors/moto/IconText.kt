@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -61,9 +63,66 @@ internal val BUTTON_ICONS = mapOf(
 /**
  * [text] with its "[key]"s drawn as the buttons' icons ([BUTTON_ICONS]),
  * at text size, so text that names a button shows the rider which one.
+ * Lines of the form "**Term** what it means" make a list: the terms in
+ * bold, their meanings lined up beside them ([textBlocks]).
  */
 @Composable
 fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = LocalTextStyle.current) {
+    val blocks = textBlocks(text)
+    val single = blocks.singleOrNull()
+    if (single is TextBlock.Paragraph || blocks.isEmpty()) {
+        IconLine(text.trim(), modifier, style)
+        return
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (block in blocks) {
+            when (block) {
+                is TextBlock.Paragraph -> IconLine(block.text, style = style)
+                is TextBlock.Terms -> TermList(block.rows, style)
+            }
+        }
+    }
+}
+
+/**
+ * Terms in bold with what each means beside them, the meanings lined up
+ * after the widest term and wrapping under themselves.
+ */
+@Composable
+private fun TermList(rows: List<Pair<String, String>>, style: TextStyle) {
+    Layout(
+        content = {
+            for ((term, meaning) in rows) {
+                Text(term, style = style.copy(fontWeight = FontWeight.Bold))
+                IconLine(meaning, style = style)
+            }
+        },
+    ) { measurables, constraints ->
+        val gap = 8.dp.roundToPx()
+        val rowGap = 2.dp.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val terms = measurables.filterIndexed { i, _ -> i % 2 == 0 }.map { it.measure(loose) }
+        val termWidth = terms.maxOf { it.width }
+        val meaningWidth = (constraints.maxWidth - termWidth - gap).coerceAtLeast(0)
+        val meanings = measurables.filterIndexed { i, _ -> i % 2 == 1 }
+            .map { it.measure(loose.copy(maxWidth = meaningWidth)) }
+        val heights = terms.indices.map { maxOf(terms[it].height, meanings[it].height) }
+        val height = heights.sum() + rowGap * (heights.size - 1).coerceAtLeast(0)
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else termWidth + gap + meanings.maxOf { it.width }
+        layout(width, height) {
+            var y = 0
+            for (i in terms.indices) {
+                terms[i].placeRelative(0, y)
+                meanings[i].placeRelative(termWidth + gap, y)
+                y += heights[i] + rowGap
+            }
+        }
+    }
+}
+
+/** One paragraph of [IconText]: words with the buttons' icons inline. */
+@Composable
+private fun IconLine(text: String, modifier: Modifier = Modifier, style: TextStyle = LocalTextStyle.current) {
     val parts = helpParts(text, BUTTON_ICONS.keys)
     val spoken = BUTTON_ICONS.mapValues { stringResource(it.value.spoken) }
     val annotated = buildAnnotatedString {

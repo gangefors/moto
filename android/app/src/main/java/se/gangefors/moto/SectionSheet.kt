@@ -20,12 +20,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldLabelPosition
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -63,7 +67,10 @@ fun SectionSheet(
     onDelete: (() -> Unit)? = null,
     suggestion: String? = null,
 ) {
-    var name by rememberSaveable { mutableStateOf(initial.name) }
+    // A text field state (kept over rotation), for the field's label on
+    // the border; the name is what it holds.
+    val nameState = rememberTextFieldState(initial.name)
+    val name = nameState.text.toString()
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -94,9 +101,12 @@ fun SectionSheet(
                         .padding(end = 12.dp),
                 ) {
                     OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it.take(MAX_ROUTE_NAME_CHARS * 2) },
+                        state = nameState,
+                        inputTransformation = InputTransformation.maxLength(MAX_ROUTE_NAME_CHARS * 2),
                         label = { Text(stringResource(R.string.section_name)) },
+                        // The label stays on the border, so the suggestion
+                        // shows in the empty field from the start.
+                        labelPosition = TextFieldLabelPosition.Attached(alwaysMinimize = true),
                         // The suggestion is faded and slanted, so an empty
                         // field doesn't look named; X clears a name in one tap.
                         placeholder = suggestion?.let {
@@ -111,15 +121,15 @@ fun SectionSheet(
                         },
                         trailingIcon = if (name.isEmpty()) null else {
                             {
-                                IconButton(onClick = { name = "" }) {
+                                IconButton(onClick = { nameState.clearText() }) {
                                     Icon(painterResource(R.drawable.ic_close), stringResource(R.string.section_name_clear))
                                 }
                             }
                         },
                         supportingText = { Text(stringResource(R.string.section_name_hint)) },
-                        singleLine = true,
+                        lineLimits = TextFieldLineLimits.SingleLine,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
+                        onKeyboardAction = { focus.clearFocus() },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                     OptionHeading(stringResource(R.string.section_rating))
