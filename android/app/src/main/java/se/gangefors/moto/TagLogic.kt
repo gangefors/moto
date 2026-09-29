@@ -72,5 +72,5 @@ class TagReview(tags: List<Tag>) {
     }
 }
 
-/** A count for a small badge: the number, or "99+" above 99. */
-fun badgeCount(n: Int): String = if (n > 99) "99+" else n.toString()
+/** A count for a small badge: one digit, or "9+" above 9. */
+fun badgeCount(n: Int): String = if (n > 9) "9+" else n.toString()

@@ -99,7 +99,7 @@ class TagLogicTest {
     @Test
     fun badgeCountsStayShort() {
         assertEquals("1", badgeCount(1))
-        assertEquals("99", badgeCount(99))
-        assertEquals("99+", badgeCount(100))
+        assertEquals("9", badgeCount(9))
+        assertEquals("9+", badgeCount(10))
     }
 }
