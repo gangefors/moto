@@ -11,6 +11,7 @@ MapLibre ([ADR-0002](0002-map-widget-maplibre-native.md)) needs a vector tile so
 Use **OpenFreeMap** hosted vector tiles and one of its OSM-based styles for v1.
 
 - The style URL is in app config, so switching provider is a config change.
+- **Light and dark (2026-09-29).** The app uses two OpenFreeMap styles, `liberty` and `dark`, both in app config; the map follows the app's light or dark theme.
 - Show the required attribution (OpenFreeMap, OpenMapTiles, © OpenStreetMap contributors).
 - Revisit offline basemaps with the P1 "offline region" work.
 
