@@ -72,6 +72,11 @@ pub struct Case {
     pub curvy: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
+    /// A loop from `from` through these points in order and back (as the
+    /// app's "Loop through it" does with a section's ends), in place of
+    /// `to` or `loop`: no length target; checked like a round trip.
+    #[serde(default)]
+    pub through: Vec<[f64; 2]>,
     /// A section, not a route: `from` and `to` mark the road between
     /// them as the app does, and the case checks what it is called (the
     /// `road_*` and `*_place` expectations).
@@ -263,6 +268,28 @@ impl Case {
         } else if names.iter().any(|n| n.is_some()) {
             return Err("road_ref, road_name, start_place and end_place are for sections".into());
         }
+        if !case.through.is_empty() {
+            if case.to.is_some() || case.round_trip.is_some() || case.section {
+                return Err("a loop through points has no to, loop or section".into());
+            }
+            if case.through.len() > moto_core::MAX_VIA_POINTS {
+                return Err(format!(
+                    "at most {} through points",
+                    moto_core::MAX_VIA_POINTS
+                ));
+            }
+            for p in &case.through {
+                ll(*p)?;
+            }
+            if case.max_detour.is_some()
+                || case.max_minutes.is_some()
+                || case.min_gain.is_some()
+                || e.max_detour_ratio.is_some()
+            {
+                return Err("a loop through points has no budget".into());
+            }
+            return Ok(case);
+        }
         match (case.to, case.round_trip) {
             (Some(_), None) => {
                 if e.min_loops.is_some() || e.max_side_loops.is_some() {
@@ -432,6 +459,10 @@ impl Case {
             self.run_section(engine, &mut out);
             return out;
         }
+        if !self.through.is_empty() {
+            self.run_through(engine, &mut out);
+            return out;
+        }
         let routed = (|| -> Result<(Route, Route), String> {
             let to = self.to.ok_or("no end")?;
             let (from, to) = (ll(self.from)?, ll(to)?);
@@ -486,6 +517,44 @@ impl Case {
 
     /// Round trips: every loop's length, closure and reuse, then the best
     /// loop against the expectations.
+    /// Loops through the case's points, both ways round, checked like
+    /// round trips (without a length target).
+    fn run_through(&self, engine: &Engine, out: &mut Outcome) {
+        let loops = (|| -> Result<Vec<Route>, String> {
+            let fav = Favourites::build(engine, &self.favourites(engine)?);
+            let stops = self
+                .through
+                .iter()
+                .map(|p| ll(*p))
+                .collect::<Result<Vec<_>, _>>()?;
+            engine
+                .round_trip_via(ll(self.from)?, &stops, true, &self.options(), &fav)
+                .map_err(|e| e.to_string())
+        })();
+        let loops = match loops {
+            Ok(l) => l,
+            Err(e) => {
+                out.failures.push(e);
+                return;
+            }
+        };
+        // The home zone as the core sizes it.
+        let start = LatLon {
+            lat: self.from[0],
+            lon: self.from[1],
+        };
+        let stops: Vec<LatLon> = self
+            .through
+            .iter()
+            .map(|p| LatLon {
+                lat: p[0],
+                lon: p[1],
+            })
+            .collect();
+        let home = moto_core::roundtrip::through_home_m(start, &stops);
+        self.check_loops(engine, &loops, home, None, out);
+    }
+
     fn run_loop(&self, engine: &Engine, t: LoopTarget, out: &mut Outcome) {
         let loops = (|| -> Result<(RoundTripTarget, Vec<Route>), String> {
             let target = t.target()?;
@@ -510,8 +579,26 @@ impl Case {
             RoundTripTarget::DistanceM(m) => m,
             RoundTripTarget::DurationS(s) => s * moto_core::scoring::PARAMS.loop_speed_mps,
         });
+        self.check_loops(engine, &loops, home, Some((goal, unit, size)), out);
+    }
+
+    /// The checks every round trip gets: how many loops, each within its
+    /// target (when there is one), closed, its speeds and side loops, and
+    /// riding little of itself twice outside the home zone.
+    #[allow(clippy::type_complexity)]
+    fn check_loops(
+        &self,
+        engine: &Engine,
+        loops: &[Route],
+        home: f64,
+        target: Option<(f64, &str, fn(&Route) -> f64)>,
+        out: &mut Outcome,
+    ) {
         out.loops = Some(loops.len());
-        let min_loops = self.expect.min_loops.unwrap_or(2);
+        let min_loops = self
+            .expect
+            .min_loops
+            .unwrap_or(if target.is_some() { 2 } else { 1 });
         if loops.len() < min_loops {
             out.failures.push(format!(
                 "{} loop(s), expected at least {min_loops}",
@@ -521,7 +608,9 @@ impl Case {
         let mut worst: f64 = 0.0;
         for (i, l) in loops.iter().enumerate() {
             let n = i + 1;
-            if (size(l) - goal).abs() > goal * TOLERANCE + 1e-9 {
+            if let Some((goal, unit, size)) = target
+                && (size(l) - goal).abs() > goal * TOLERANCE + 1e-9
+            {
                 out.failures.push(format!(
                     "loop {n}: {:.1} {unit}, target {goal:.1} {unit} ±{:.0} %",
                     size(l),

@@ -1,0 +1,12 @@
+{
+  "name": "Loop from Markaryd through an epic stretch of road 578",
+  "description": "A loop through a favourite section rides it once and comes home another way. Found on a real ride (elsewhere): the loop rode to the section's far end and turned back along it, the favourite being cheap even ridden twice. Here a random 2 km of road 578, about 20 km east of Markaryd, rated epic: the loop must pass both ends and ride at most 10 % of itself twice outside the home zone.",
+  "from": [56.4610, 13.5960],
+  "through": [[56.50705, 13.90175], [56.52343, 13.91132]],
+  "favourites": [
+    {"from": [56.50705, 13.90175], "to": [56.52343, 13.91132], "rating": "epic", "one_way": false}
+  ],
+  "expect": {
+    "pass": [[56.50705, 13.90175], [56.52343, 13.91132]]
+  }
+}
