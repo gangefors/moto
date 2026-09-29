@@ -3,6 +3,8 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.Rating
+
 /** How saved sections are drawn: line width (dp) and opacity, and the
  * opacity of their white casing and one-way arrows. */
 data class SectionLook(
@@ -30,3 +32,31 @@ fun sectionLook(routeShown: Boolean, darkMap: Boolean = false): SectionLook =
  * still enough to keep the lines apart from the roads under them.
  */
 fun outlineStrength(darkMap: Boolean): Float = if (darkMap) 0.45f else 1f
+
+/** How the shown (selected) section is drawn: its line colour and width,
+ * the dark edge round it and the white outline outside that. */
+data class ShownSectionLook(
+    val color: String,
+    val lineWidth: Float,
+    val edgeWidth: Float,
+    val casingWidth: Float,
+    val casingOpacity: Float,
+)
+
+/**
+ * The shown section keeps its rating's colour (grey when it no longer
+ * [fits] the map), drawn wider than the others with a dark edge inside
+ * the white outline, so it stands out while its rating stays readable;
+ * the other sections fade meanwhile (see [sectionLook]).
+ */
+fun shownSectionLook(rating: Rating, fits: Boolean, darkMap: Boolean = false): ShownSectionLook =
+    ShownSectionLook(
+        color = if (fits) ratingColor(rating) else UNMATCHED_SECTION_COLOR,
+        lineWidth = 7f,
+        edgeWidth = 10f,
+        casingWidth = 13f,
+        casingOpacity = 0.8f * outlineStrength(darkMap),
+    )
+
+/** The shown section's dark edge. */
+const val SHOWN_SECTION_EDGE_COLOR = "#202124"

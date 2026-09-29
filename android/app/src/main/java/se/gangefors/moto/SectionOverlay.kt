@@ -36,6 +36,7 @@ import se.gangefors.moto.core.Section
 class SectionOverlay(private val style: Style, private val density: Float, darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
     private val gravelSource = style.getSourceAs(GRAVEL_SOURCE) ?: GeoJsonSource(GRAVEL_SOURCE).also(style::addSource)
+    private val shownSource = style.getSourceAs(SHOWN_SOURCE) ?: GeoJsonSource(SHOWN_SOURCE).also(style::addSource)
 
     init {
         if (style.getLayer(LINE_LAYER) == null) {
@@ -101,7 +102,54 @@ class SectionOverlay(private val style: Style, private val density: Float, darkM
                         PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
                     ),
             )
+            // The shown section, over the others: its rating's colour,
+            // wider, a dark edge inside the white outline (see showSelected).
+            val round = arrayOf(
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            )
+            style.addLayer(
+                LineLayer(SHOWN_CASING_LAYER, SHOWN_SOURCE)
+                    .withProperties(PropertyFactory.lineColor("#ffffff"), *round),
+            )
+            style.addLayer(
+                LineLayer(SHOWN_EDGE_LAYER, SHOWN_SOURCE)
+                    .withProperties(PropertyFactory.lineColor(SHOWN_SECTION_EDGE_COLOR), *round),
+            )
+            style.addLayer(LineLayer(SHOWN_LINE_LAYER, SHOWN_SOURCE).withProperties(*round))
+            style.addLayer(
+                SymbolLayer(SHOWN_ARROW_LAYER, SHOWN_SOURCE)
+                    .withFilter(Expression.eq(Expression.get(ONE_WAY), true))
+                    .withProperties(
+                        PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
+                        PropertyFactory.symbolSpacing(80f),
+                        PropertyFactory.iconImage(ARROW_IMAGE),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true),
+                        PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                    ),
+            )
         }
+    }
+
+    /** Draws the shown (selected) section's [line] as [look] says, with
+     * arrows along it when [arrows] (one-way); null clears it. */
+    fun showSelected(line: List<LatLon>?, look: ShownSectionLook?, arrows: Boolean = false) {
+        if (line == null || look == null || line.size < 2) {
+            shownSource.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            return
+        }
+        style.getLayer(SHOWN_CASING_LAYER)?.setProperties(
+            PropertyFactory.lineWidth(look.casingWidth),
+            PropertyFactory.lineOpacity(look.casingOpacity),
+        )
+        style.getLayer(SHOWN_EDGE_LAYER)?.setProperties(PropertyFactory.lineWidth(look.edgeWidth))
+        style.getLayer(SHOWN_LINE_LAYER)?.setProperties(
+            PropertyFactory.lineWidth(look.lineWidth),
+            PropertyFactory.lineColor(look.color),
+        )
+        val feature = Feature.fromGeometry(line.toLineString()).apply { addBooleanProperty(ONE_WAY, arrows) }
+        shownSource.setGeoJson(FeatureCollection.fromFeatures(listOf(feature)))
     }
 
     /** Draws the sections as [look] says: full strength, or faded while a
@@ -161,6 +209,11 @@ class SectionOverlay(private val style: Style, private val density: Float, darkM
         const val ARROW_LAYER = "moto-sections-arrows"
         const val GRAVEL_SOURCE = "moto-sections-gravel"
         const val GRAVEL_LAYER = "moto-sections-gravel"
+        const val SHOWN_SOURCE = "moto-section-shown"
+        const val SHOWN_CASING_LAYER = "moto-section-shown-casing"
+        const val SHOWN_EDGE_LAYER = "moto-section-shown-edge"
+        const val SHOWN_LINE_LAYER = "moto-section-shown-line"
+        const val SHOWN_ARROW_LAYER = "moto-section-shown-arrows"
         // The dashes' width as a share of the section line's (2 of 5 px).
         const val GRAVEL_WIDTH_SHARE = 0.4f
         const val ARROW_IMAGE = "moto-section-arrow"
@@ -168,7 +221,7 @@ class SectionOverlay(private val style: Style, private val density: Float, darkM
         const val ORDER = "order"
         const val COLOR = "color"
         const val FITS = "fits"
-        const val UNMATCHED_COLOR = "#80868b"
+        const val UNMATCHED_COLOR = UNMATCHED_SECTION_COLOR
         const val ONE_WAY = "oneWay"
         const val HIT_RADIUS_DP = 12f
     }

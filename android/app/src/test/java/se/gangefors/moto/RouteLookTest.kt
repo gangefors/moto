@@ -6,6 +6,7 @@ package se.gangefors.moto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import se.gangefors.moto.core.Rating
 
 class RouteLookTest {
     @Test
@@ -30,5 +31,25 @@ class RouteLookTest {
         assertTrue(sectionLook(routeShown = false, darkMap = true).casingOpacity < 0.8f)
         // Faded sections under a route have no outline either way.
         assertEquals(0f, sectionLook(routeShown = true, darkMap = true).casingOpacity, 0f)
+    }
+
+    @Test
+    fun theShownSectionKeepsItsRatingColour() {
+        for (r in RATINGS) assertEquals(ratingColor(r), shownSectionLook(r, fits = true).color)
+        // One that no longer fits the map is grey, as in the list.
+        assertEquals(UNMATCHED_SECTION_COLOR, shownSectionLook(Rating.EPIC, fits = false).color)
+    }
+
+    @Test
+    fun theShownSectionIsWiderAndEdged() {
+        val shown = shownSectionLook(Rating.GOOD, fits = true)
+        val normal = sectionLook(routeShown = false)
+        // Wider than a section at full strength, with the dark edge showing
+        // round the line and the white outline round the edge.
+        assertTrue(shown.lineWidth > normal.lineWidth)
+        assertTrue(shown.edgeWidth > shown.lineWidth)
+        assertTrue(shown.casingWidth > shown.edgeWidth)
+        assertEquals(0.8f, shown.casingOpacity, 1e-6f)
+        assertTrue(shownSectionLook(Rating.GOOD, fits = true, darkMap = true).casingOpacity < 0.8f)
     }
 }
