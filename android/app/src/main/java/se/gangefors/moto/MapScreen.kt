@@ -337,7 +337,9 @@ fun MapScreen() {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val report = DebugTools.startup("sections re-match") { s.rematch(engine) }
-                    report to if (report.checked > 0uL) s.list(null) else null
+                    // Reloaded when any section was looked at or now waits
+                    // off the open map (a region switched off or removed).
+                    report to if (report.checked > 0uL || report.offMap > 0uL) s.list(null) else null
                 }
             }
         }
