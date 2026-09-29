@@ -1,0 +1,13 @@
+{
+  "name": "Loop from Trelleborg through an epic stretch of road 746",
+  "description": "A loop through a short favourite section far from the start rides it once, with no spur out to a corner and back. Found on a real ride (elsewhere): the loop rode a short epic section and back along it (an epic road ridden again stayed cheaper than a plain one), and a corner past it ran out along a road and back (the leg from the section to the corner was never trimmed). Here a random 2.2 km of road 746 (Ruuthsbovägen) between Svarte and Balkåkra, about 45 km from Trelleborg, rated epic: before the fix the best loop rode it twice (4 % of the loop as measured here); now no loop may ride more than 2 % of itself twice.",
+  "from": [55.3760, 13.1570],
+  "through": [[55.43390, 13.74222], [55.44829, 13.73150]],
+  "favourites": [
+    {"from": [55.43390, 13.74222], "to": [55.44829, 13.73150], "rating": "epic", "one_way": false}
+  ],
+  "expect": {
+    "pass": [[55.43390, 13.74222], [55.44829, 13.73150]],
+    "max_reuse": 0.02
+  }
+}

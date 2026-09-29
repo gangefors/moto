@@ -200,6 +200,10 @@ pub struct Expect {
     pub min_loops: Option<usize>,
     /// Round trips: the most side loops in any loop (see [`side_loops`]).
     pub max_side_loops: Option<usize>,
+    /// Round trips: the largest share of any loop ridden twice outside
+    /// the home zone, as this runner measures it (at most [`MAX_REUSE`]).
+    /// Defaults to [`MAX_REUSE`] plus [`REUSE_SLACK`].
+    pub max_reuse: Option<f64>,
     /// Sections: the number and name of the road it runs on most, as the
     /// app shows them (`1341`, `E22`; `"none"` for no number or name),
     /// and the places named for its start and end (`"none"` for none).
@@ -268,6 +272,9 @@ impl Case {
         } else if names.iter().any(|n| n.is_some()) {
             return Err("road_ref, road_name, start_place and end_place are for sections".into());
         }
+        if e.max_reuse.is_some_and(|m| !(0.0..=MAX_REUSE).contains(&m)) {
+            return Err(format!("max_reuse must be 0–{MAX_REUSE}"));
+        }
         if !case.through.is_empty() {
             if case.to.is_some() || case.round_trip.is_some() || case.section {
                 return Err("a loop through points has no to, loop or section".into());
@@ -292,8 +299,10 @@ impl Case {
         }
         match (case.to, case.round_trip) {
             (Some(_), None) => {
-                if e.min_loops.is_some() || e.max_side_loops.is_some() {
-                    return Err("min_loops and max_side_loops are for round trips".into());
+                if e.min_loops.is_some() || e.max_side_loops.is_some() || e.max_reuse.is_some() {
+                    return Err(
+                        "min_loops, max_side_loops and max_reuse are for round trips".into(),
+                    );
                 }
             }
             (None, Some(t)) => {
@@ -636,11 +645,12 @@ impl Case {
             }
             let reuse = reuse_share(&l.geometry, home);
             worst = worst.max(reuse);
-            if reuse > MAX_REUSE + REUSE_SLACK {
+            let (allowed, limit) = reuse_limit(self.expect.max_reuse);
+            if reuse > limit {
                 out.failures.push(format!(
                     "loop {n}: rides {:.0} % of its length twice, allowed {:.0} %",
                     reuse * 100.0,
-                    MAX_REUSE * 100.0
+                    allowed * 100.0
                 ));
             }
         }
@@ -833,6 +843,16 @@ const REUSE_GAP_M: f64 = 300.0;
 /// ...and the measure may exceed the core's by this much (crossings and
 /// the points either side of them count a little).
 const REUSE_SLACK: f64 = 0.02;
+
+/// The share of a loop allowed ridden twice, and the limit the measure
+/// is held to: a case's own `max_reuse` as measured, else the core's
+/// [`MAX_REUSE`] with [`REUSE_SLACK`].
+fn reuse_limit(max_reuse: Option<f64>) -> (f64, f64) {
+    match max_reuse {
+        Some(m) => (m, m),
+        None => (MAX_REUSE, MAX_REUSE + REUSE_SLACK),
+    }
+}
 
 /// Share of `line`'s length ridden twice, outside `home` metres from its
 /// start: points every [`REUSE_STEP_M`] along it that lie near a point far

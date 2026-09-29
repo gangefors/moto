@@ -91,6 +91,7 @@ fn bad_case_files_are_refused() {
         &case(r#","min_gain":-1"#, ""),            // negative guard
         &case("", r#""pass":[[91.0,13.0]]"#),      // not a coordinate
         &case("", r#""max_side_loops":0"#),        // round trips only
+        &case("", r#""max_reuse":0.02"#),          // round trips only
         &case(
             r#","favourites":[{"from":[55.7,13.19],"to":[55.7,13.19],"rating":"superb"}]"#,
             "",
@@ -495,12 +496,21 @@ fn loops_through_points_are_checked_as_round_trips() {
         o.reuse_share.is_some_and(|r| r <= MAX_REUSE + REUSE_SLACK),
         "{o:?}"
     );
+    // A stricter limit on reuse applies as measured, without the slack.
+    let strict = text.replace(r#""expect":{"#, r#""expect":{"max_reuse":0.0,"#);
+    let o = Case::parse(&strict).unwrap().run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    assert_eq!(reuse_limit(Some(0.02)), (0.02, 0.02));
+    assert_eq!(reuse_limit(None), (MAX_REUSE, MAX_REUSE + REUSE_SLACK));
     // Through points replace to and loop, and take no budget.
     let bad = [
         r#"{"name":"x","from":[55.754,13.496],"to":[55.76,13.5],"through":[[55.79,13.45]],"expect":{}}"#,
         r#"{"name":"x","from":[55.754,13.496],"loop":{"km":20},"through":[[55.79,13.45]],"expect":{}}"#,
         r#"{"name":"x","from":[55.754,13.496],"max_detour":0.2,"through":[[55.79,13.45]],"expect":{}}"#,
         r#"{"name":"x","from":[55.754,13.496],"through":[[95.0,13.45]],"expect":{}}"#,
+        // A share, and never looser than the core's.
+        r#"{"name":"x","from":[55.754,13.496],"through":[[55.79,13.45]],"expect":{"max_reuse":0.5}}"#,
+        r#"{"name":"x","from":[55.754,13.496],"through":[[55.79,13.45]],"expect":{"max_reuse":-0.1}}"#,
     ];
     for b in bad {
         assert!(Case::parse(b).is_err(), "{b}");
