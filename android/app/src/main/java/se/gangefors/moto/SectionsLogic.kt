@@ -149,3 +149,30 @@ class DescriptionCache<E : Any, D : Any> {
         return lines.mapNotNull { l -> byLine[l]?.let { l to it } }.toMap()
     }
 }
+
+/** The name the app gives a new section when saving it ("Map 2026-09-28
+ * 14:02, 3.2 km"), which is no name of the rider's (see [autoSectionName]). */
+private val AUTO_NAME = Regex("""^(Map|Tag) \d{4}-\d{2}-\d{2} \d{2}:\d{2}, \d+\.\d km$""")
+
+/** The rider's own name for a section, or null when it has only the name
+ * the app gave it (or none): then it goes by where it runs. */
+fun riderName(name: String): String? = name.trim().takeUnless { it.isEmpty() || AUTO_NAME.matches(it) }
+
+/** The name to store for what the rider typed: cleaned as route names
+ * are; empty (go by where it runs) when nothing is left. */
+fun sectionNameToStore(typed: String): String = cleanRouteName(typed) ?: ""
+
+/**
+ * The name change to store when the rider saves a section named [stored]
+ * with [typed] in its name field: the typed name (cleaned); empty when
+ * they cleared a name of their own; null (no change) when the field is
+ * empty and it had only the app's name.
+ */
+fun nameUpdate(stored: String, typed: String): String? {
+    val name = sectionNameToStore(typed)
+    return when {
+        name.isNotEmpty() -> name.takeIf { it != stored }
+        riderName(stored) != null -> ""
+        else -> null
+    }
+}
