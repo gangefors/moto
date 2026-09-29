@@ -119,6 +119,10 @@ pub struct Route {
     /// `geometry`, for marking them.
     pub unpaved_m: f64,
     pub unpaved_parts: Vec<Vec<LatLon>>,
+    /// A route worth riding among route choices; the fastest has it too
+    /// when the best choice was the same road (then offered once).
+    #[uniffi(default = false)]
+    pub suggested: bool,
 }
 
 /// Crosses the FFI as a flat error: each variant becomes an exception class
@@ -473,6 +477,7 @@ impl From<moto_core::Route> for Route {
                 .into_iter()
                 .map(|p| p.into_iter().map(Into::into).collect())
                 .collect(),
+            suggested: r.suggested,
         }
     }
 }

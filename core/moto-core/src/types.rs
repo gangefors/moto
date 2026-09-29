@@ -183,6 +183,10 @@ pub struct Route {
     /// The stretches of `geometry` on unpaved roads, in order, each at
     /// least two points: for drawing them marked.
     pub unpaved_parts: Vec<Vec<LatLon>>,
+    /// One of the routes worth riding that route choices offer: every
+    /// choice but the fastest, and the fastest too when the best choice
+    /// comes out as (nearly) the same road, offered once. False elsewhere.
+    pub suggested: bool,
 }
 
 #[cfg(test)]

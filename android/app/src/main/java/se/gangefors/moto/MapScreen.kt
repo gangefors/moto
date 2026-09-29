@@ -722,15 +722,17 @@ fun MapScreen() {
     }
     DisposableEffect(Unit) { onDispose { loopsAhead.clear() } }
     /** Shows route choice [index] of [set] (found with [opts]) with its
-     * figures, the others faint; the fastest of several grey. */
+     * figures, the others faint; the fastest of several says so, and is
+     * grey unless it is also the suggested road. */
     fun showRouteChoice(start: LatLng, end: LatLng, set: List<Route>, index: Int, opts: RouteOptions) {
         val r = set.getOrNull(index) ?: return
         // Loops through a section have no fastest one.
         val fastest = if (routeThrough != null) -1 else fastestChoice(set.size)
+        val dull = fastest?.takeIf { fastestIsDull(set.size, set.last().suggested) }
         val others = set.mapIndexedNotNull { i, l -> if (i == index) null else i to l.geometry }
         overlays?.route?.show(
             start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias,
-            others = others, dull = index == fastest, dullOther = fastest,
+            others = others, dull = index == dull, dullOther = dull,
         )
         routeIndex = index
         routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)

@@ -220,7 +220,9 @@ impl Engine {
     /// then the fastest, always last. Through `via` points each leg
     /// between two stops has its own choices: choice `k` rides each leg's
     /// `k`-th (a leg with fewer rides its first), the fastest rides every
-    /// leg's fastest, and choices that come out the same are offered once.
+    /// leg's fastest, and choices that come out the same are offered once
+    /// (the fastest `suggested` when every leg's fastest is, or a choice
+    /// came out the same as it).
     pub fn route_choices(
         &self,
         from: LatLon,
@@ -265,7 +267,7 @@ impl Engine {
         let most = legs.iter().map(|l| fun(l)).max().unwrap_or(0);
         let mut routes: Vec<Route> = Vec::new();
         for k in 0..most {
-            let joined = crate::route::join(
+            let mut joined = crate::route::join(
                 legs.iter()
                     .map(|l| {
                         // Its k-th choice, else its first, else its fastest.
@@ -278,12 +280,17 @@ impl Engine {
                     })
                     .collect(),
             );
+            joined.suggested = true;
             if routes.iter().all(|r| r.geometry != joined.geometry) {
                 routes.push(joined);
             }
         }
-        let fastest = crate::route::join(legs.iter().filter_map(|l| l.last().cloned()).collect());
+        let mut fastest =
+            crate::route::join(legs.iter().filter_map(|l| l.last().cloned()).collect());
+        let before = routes.len();
         routes.retain(|r| r.geometry != fastest.geometry);
+        fastest.suggested =
+            routes.len() < before || legs.iter().all(|l| l.last().is_some_and(|r| r.suggested));
         routes.push(fastest);
         Ok(routes)
     }

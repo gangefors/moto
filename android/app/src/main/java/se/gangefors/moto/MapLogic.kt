@@ -86,6 +86,14 @@ fun <P> removeVia(vias: List<P>, index: Int): List<P> = vias.filterIndexed { i, 
  * route. */
 fun fastestChoice(count: Int): Int? = if (count > 1) count - 1 else null
 
+/**
+ * Whether the fastest of [count] route choices is drawn grey (the dull
+ * option): only when there are several and it isn't also a suggestion
+ * ([fastestSuggested]: the best choice was the same road, offered once).
+ */
+fun fastestIsDull(count: Int, fastestSuggested: Boolean): Boolean =
+    fastestChoice(count) != null && !fastestSuggested
+
 fun summarize(
     distanceM: Double,
     durationS: Double,
