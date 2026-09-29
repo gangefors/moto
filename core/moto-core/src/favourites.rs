@@ -14,7 +14,7 @@ use crate::region::format::WayRef;
 use crate::region::format::edge_flags::REVERSED;
 use crate::route::{edge_line, is_unpaved};
 use crate::scoring::PARAMS;
-use crate::section::{Direction, Section, Status};
+use crate::section::{Direction, Rating, Section, Status};
 use crate::{CoreError, Engine, LatLon};
 
 /// Favourite edges of one region.
@@ -27,9 +27,9 @@ pub struct Favourites {
     /// indexed by edge id; empty when no edge is a favourite.
     bonus: Vec<f32>,
     /// The stretch of each favourite edge that lies on a section, as
-    /// fractions of its length in travel order, and the section's rating
-    /// weight (see `ScoringParams::favourite_weight`).
-    coverage: HashMap<u32, (f32, f32, f32)>,
+    /// fractions of its length in travel order, the section's rating
+    /// weight (see `ScoringParams::favourite_weight`) and its rating.
+    coverage: HashMap<u32, (f32, f32, f32, Rating)>,
     /// The largest bonus of any edge.
     max_bonus: f64,
     /// The middle of each matched section and its rating weight: places
@@ -61,6 +61,7 @@ struct Span {
     /// `Some(false)` only against it, `None` both ways.
     along_way: Option<bool>,
     bonus: f64,
+    rating: Rating,
 }
 
 impl Favourites {
@@ -101,6 +102,7 @@ impl Favourites {
                     hi,
                     along_way,
                     bonus,
+                    rating: s.rating,
                 });
             }
         }
@@ -128,7 +130,8 @@ impl Favourites {
             let Ok(id) = u32::try_from(id) else {
                 break; // the region format caps edge ids below this
             };
-            let mut best = (0.0f64, (0.0f64, 0.0f64), 0.0f64); // (bonus, stretch, weight)
+            // (bonus, stretch, weight, rating)
+            let mut best = (0.0f64, (0.0f64, 0.0f64), 0.0f64, Rating::Good);
             for s in spans {
                 if s.along_way.is_some_and(|a| a != along_way) {
                     continue;
@@ -163,16 +166,17 @@ impl Favourites {
                 }
                 let b = (stretch.1 - stretch.0) * s.bonus;
                 if b > best.0 {
-                    best = (b, stretch, s.bonus / PARAMS.max_pull);
+                    best = (b, stretch, s.bonus / PARAMS.max_pull, s.rating);
                 }
             }
             if best.0 > 0.0 {
                 // Bonuses and fractions lie in 0–1, where an f32 is exact
                 // enough.
                 bonus[id as usize] = best.0 as f32;
-                favourites
-                    .coverage
-                    .insert(id, (best.1.0 as f32, best.1.1 as f32, best.2 as f32));
+                favourites.coverage.insert(
+                    id,
+                    (best.1.0 as f32, best.1.1 as f32, best.2 as f32, best.3),
+                );
                 favourites.max_bonus = favourites.max_bonus.max(best.0);
             }
         }
@@ -225,17 +229,18 @@ impl Favourites {
     /// Share of edge `id`'s length between fractions `from` and `to` (in
     /// travel order) that lies on a favourite section.
     pub(crate) fn covered_between(&self, id: u32, from: f64, to: f64) -> f64 {
-        self.coverage.get(&id).map_or(0.0, |&(a, b, _)| {
+        self.coverage.get(&id).map_or(0.0, |&(a, b, _, _)| {
             (to.min(f64::from(b)) - from.max(f64::from(a))).max(0.0)
         })
     }
 
     /// The part of the stretch between fractions `from` and `to` (in
-    /// travel order) of edge `id` that lies on a favourite section.
-    pub(crate) fn covered_part(&self, id: u32, from: f64, to: f64) -> Option<(f64, f64)> {
-        let &(a, b, _) = self.coverage.get(&id)?;
+    /// travel order) of edge `id` that lies on a favourite section, and
+    /// the section's rating.
+    pub(crate) fn covered_part(&self, id: u32, from: f64, to: f64) -> Option<(f64, f64, Rating)> {
+        let &(a, b, _, rating) = self.coverage.get(&id)?;
         let (lo, hi) = (from.max(f64::from(a)), to.min(f64::from(b)));
-        (hi > lo).then_some((lo, hi))
+        (hi > lo).then_some((lo, hi, rating))
     }
 
     /// As [`Self::covered_between`], weighted by the section's rating
@@ -244,7 +249,7 @@ impl Favourites {
         let weight = self
             .coverage
             .get(&id)
-            .map_or(0.0, |&(_, _, w)| f64::from(w));
+            .map_or(0.0, |&(_, _, w, _)| f64::from(w));
         self.covered_between(id, from, to) * weight
     }
 

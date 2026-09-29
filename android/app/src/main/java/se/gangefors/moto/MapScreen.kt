@@ -749,7 +749,7 @@ fun MapScreen() {
         val others = set.mapIndexedNotNull { i, l -> if (i == index) null else i to l.geometry }
         overlays?.route?.show(
             start, end, r.geometry, r.favouriteParts, r.unpavedParts, vias,
-            others = others, dull = index == dull, dullOther = dull,
+            others = others, dull = index == dull, dullOther = dull, favouriteRatings = r.favouriteRatings,
         )
         routeIndex = index
         routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
@@ -761,7 +761,10 @@ fun MapScreen() {
     fun showLoop(start: LatLng, set: List<Route>, index: Int) {
         val r = set.getOrNull(index) ?: return
         val others = set.mapIndexedNotNull { i, l -> if (i == index) null else i to l.geometry }
-        overlays?.route?.show(start, null, r.geometry, r.favouriteParts, r.unpavedParts, others = others)
+        overlays?.route?.show(
+            start, null, r.geometry, r.favouriteParts, r.unpavedParts,
+            others = others, favouriteRatings = r.favouriteRatings,
+        )
     }
     // Why the last search found no loop (shown on the loop card instead of
     // figures), or null.

@@ -6,6 +6,7 @@ package se.gangefors.moto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 
 class RouteLookTest {
@@ -51,5 +52,17 @@ class RouteLookTest {
         assertTrue(shown.casingWidth > shown.edgeWidth)
         assertEquals(0.8f, shown.casingOpacity, 1e-6f)
         assertTrue(shownSectionLook(Rating.GOOD, fits = true, darkMap = true).casingOpacity < 0.8f)
+    }
+
+    @Test
+    fun favouritesGlowInTheirRatingsColour() {
+        val a = listOf(LatLon(55.0, 13.0), LatLon(55.1, 13.0))
+        val b = listOf(LatLon(55.1, 13.0), LatLon(55.2, 13.0))
+        val glow = favouriteGlowColors(listOf(a, b), listOf(Rating.GREAT, Rating.GOOD))
+        assertEquals(listOf(a to ratingColor(Rating.GREAT), b to ratingColor(Rating.GOOD)), glow)
+        // Without ratings (an older core) every stretch glows epic purple,
+        // and a stretch of one point is left out.
+        val bare = favouriteGlowColors(listOf(a, listOf(LatLon(55.3, 13.0))), emptyList())
+        assertEquals(listOf(a to ratingColor(Rating.EPIC)), bare)
     }
 }

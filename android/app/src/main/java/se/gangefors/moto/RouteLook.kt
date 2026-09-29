@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 
 /** How saved sections are drawn: line width (dp) and opacity, and the
@@ -60,3 +61,14 @@ fun shownSectionLook(rating: Rating, fits: Boolean, darkMap: Boolean = false): S
 
 /** The shown section's dark edge. */
 const val SHOWN_SECTION_EDGE_COLOR = "#202124"
+
+/**
+ * The favourite stretches of a route with the colour each glows in: its
+ * section's rating colour, the same as the section's own line. A stretch
+ * without a rating (a core that doesn't say) glows epic purple, as all did
+ * before. Stretches of fewer than two points are left out.
+ */
+fun favouriteGlowColors(parts: List<List<LatLon>>, ratings: List<Rating>): List<Pair<List<LatLon>, String>> =
+    parts.mapIndexedNotNull { i, part ->
+        if (part.size < 2) null else part to ratingColor(ratings.getOrNull(i) ?: Rating.EPIC)
+    }

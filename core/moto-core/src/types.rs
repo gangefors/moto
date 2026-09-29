@@ -178,6 +178,9 @@ pub struct Route {
     /// The stretches of `geometry` on favourite sections, in order, each
     /// at least two points: for drawing them highlighted.
     pub favourite_parts: Vec<Vec<LatLon>>,
+    /// The rating of the section each favourite part runs on, one per
+    /// part: for drawing each in its rating's colour.
+    pub favourite_ratings: Vec<crate::section::Rating>,
     /// Metres on gravel and other unpaved roads.
     pub unpaved_m: f64,
     /// The stretches of `geometry` on unpaved roads, in order, each at

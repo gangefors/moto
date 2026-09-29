@@ -115,6 +115,10 @@ pub struct Route {
     pub fastest_duration_s: f64,
     /// The stretches of `geometry` on favourite sections, for highlighting.
     pub favourite_parts: Vec<Vec<LatLon>>,
+    /// The rating of the section each favourite part runs on, one per
+    /// part, for drawing each in its rating's colour.
+    #[uniffi(default = [])]
+    pub favourite_ratings: Vec<sections::Rating>,
     /// Metres on gravel and other unpaved roads, and those stretches of
     /// `geometry`, for marking them.
     pub unpaved_m: f64,
@@ -471,6 +475,7 @@ impl From<moto_core::Route> for Route {
                 .into_iter()
                 .map(|p| p.into_iter().map(Into::into).collect())
                 .collect(),
+            favourite_ratings: r.favourite_ratings.into_iter().map(Into::into).collect(),
             unpaved_m: r.unpaved_m,
             unpaved_parts: r
                 .unpaved_parts

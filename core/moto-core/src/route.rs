@@ -13,6 +13,7 @@ use crate::geo::{haversine_m, polyline_slice};
 use crate::region::Region;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, RoadClass, Surface, edge_flags};
 use crate::scoring::PARAMS;
+use crate::section::Rating;
 use crate::{Avoid, CoreError, Gravel, LatLon, RoadPoint, Route, RouteOptions};
 
 const NONE: u32 = u32::MAX;
@@ -376,6 +377,7 @@ struct Builder {
     /// and `curve_weight`.
     value_s: f64,
     favourite_parts: Vec<Vec<LatLon>>,
+    favourite_ratings: Vec<Rating>,
     unpaved_m: f64,
     unpaved_parts: Vec<Vec<LatLon>>,
 }
@@ -386,6 +388,26 @@ fn push_part(parts: &mut Vec<Vec<LatLon>>, piece: Vec<LatLon>) {
     match parts.last_mut() {
         Some(part) if part.last() == piece.first() => part.extend(piece.into_iter().skip(1)),
         _ if piece.len() >= 2 => parts.push(piece),
+        _ => {}
+    }
+}
+
+/// As [`push_part`] for favourite parts and their ratings: a piece only
+/// continues the last part when it is on a section of the same rating.
+fn push_rated(
+    parts: &mut Vec<Vec<LatLon>>,
+    ratings: &mut Vec<Rating>,
+    piece: Vec<LatLon>,
+    rating: Rating,
+) {
+    match (parts.last_mut(), ratings.last()) {
+        (Some(part), Some(&r)) if r == rating && part.last() == piece.first() => {
+            part.extend(piece.into_iter().skip(1))
+        }
+        _ if piece.len() >= 2 => {
+            parts.push(piece);
+            ratings.push(rating);
+        }
         _ => {}
     }
 }
@@ -403,6 +425,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         curvy_share: 0.0,
         fastest_duration_s: 0.0,
         favourite_parts: Vec::new(),
+        favourite_ratings: Vec::new(),
         unpaved_m: 0.0,
         unpaved_parts: Vec::new(),
         suggested: false,
@@ -419,8 +442,8 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         out.unpaved_m += leg.unpaved_m;
         favourite_m += leg.favourite_share * leg.distance_m;
         curvy_m += leg.curvy_share * leg.distance_m;
-        for p in leg.favourite_parts {
-            push_part(&mut out.favourite_parts, p);
+        for (p, r) in leg.favourite_parts.into_iter().zip(leg.favourite_ratings) {
+            push_rated(&mut out.favourite_parts, &mut out.favourite_ratings, p, r);
         }
         for p in leg.unpaved_parts {
             push_part(&mut out.unpaved_parts, p);
@@ -456,8 +479,13 @@ impl Builder {
         self.value_s +=
             time_s(&e) * ((favourite_value + frac * fun.road_worth(id, &e)).min(frac) - dull);
         let line = edge_line(region, &e);
-        if let Some((lo, hi)) = favourites.covered_part(id, from, to) {
-            push_part(&mut self.favourite_parts, polyline_slice(&line, lo, hi));
+        if let Some((lo, hi, rating)) = favourites.covered_part(id, from, to) {
+            push_rated(
+                &mut self.favourite_parts,
+                &mut self.favourite_ratings,
+                polyline_slice(&line, lo, hi),
+                rating,
+            );
         }
         if is_unpaved(&e) && to > from {
             self.unpaved_m += frac * length_m;
@@ -488,6 +516,7 @@ impl Builder {
                 duration_s: self.duration_s,
                 fastest_duration_s: self.duration_s,
                 favourite_parts: self.favourite_parts,
+                favourite_ratings: self.favourite_ratings,
                 unpaved_m: self.unpaved_m,
                 unpaved_parts: self.unpaved_parts,
                 suggested: false,
@@ -1477,6 +1506,7 @@ mod tests {
             favourite_share: share,
             curvy_share: share,
             fastest_duration_s: 50.0,
+            favourite_ratings: vec![crate::section::Rating::Great; parts.len()],
             favourite_parts: parts.clone(),
             unpaved_m: 0.0,
             unpaved_parts: parts,
@@ -1488,6 +1518,7 @@ mod tests {
         ]);
         assert_eq!(r.geometry, [p(55.0), p(55.1), p(55.2)]);
         assert_eq!(r.favourite_parts, [vec![p(55.05), p(55.1), p(55.15)]]);
+        assert_eq!(r.favourite_ratings, [crate::section::Rating::Great]);
         assert_eq!(r.unpaved_parts.len(), 1);
         assert_eq!(
             (r.distance_m, r.duration_s, r.fastest_duration_s),

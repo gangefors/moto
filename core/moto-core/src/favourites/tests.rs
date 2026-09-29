@@ -383,6 +383,25 @@ fn routes_report_the_fastest_time_and_their_favourite_parts() {
     let close = |p: LatLon, q: LatLon| p.distance_m(&q) < 1.0;
     assert!(close(part[0], ll(55.70, 13.40)) && close(*part.last().unwrap(), ll(55.70, 13.44)));
     assert_eq!(part.len(), 4, "W, N1, N2, E");
+    assert_eq!(r.favourite_ratings, [Rating::Epic]);
+
+    // The same loop as two sections of different ratings: two parts, each
+    // with its own rating, in order.
+    let fav = Favourites::build(
+        &e,
+        &[
+            section(&[(NORTH, 0, 1)], Rating::Good, Direction::Both),
+            section(&[(NORTH, 1, 3)], Rating::Great, Direction::Both),
+        ],
+    );
+    let two = e.route_with(FROM, TO, &detour(0.5), &fav).unwrap();
+    assert!(north_of(&two));
+    assert_eq!(two.favourite_ratings, [Rating::Good, Rating::Great]);
+    assert_eq!(two.favourite_parts.len(), 2);
+    assert_eq!(
+        two.favourite_parts[0].last(),
+        two.favourite_parts[1].first()
+    );
     let len: f64 = part.windows(2).map(|w| w[0].distance_m(&w[1])).sum();
     assert!((len / r.distance_m - r.favourite_share).abs() < 0.01);
 
@@ -398,6 +417,7 @@ fn routes_report_the_fastest_time_and_their_favourite_parts() {
         .route_with(ll(55.70, 13.405), ll(55.70, 13.435), &detour(0.4), &fav)
         .unwrap();
     assert_eq!(r.favourite_parts.len(), 1);
+    assert_eq!(r.favourite_ratings, [Rating::Good]);
     let part = &r.favourite_parts[0];
     assert!(
         close(part[0], ll(55.70, 13.41)) && close(*part.last().unwrap(), ll(55.70, 13.43)),
