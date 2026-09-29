@@ -1434,7 +1434,7 @@ fun MapScreen() {
                         // What to do next, with the X at the top right (like
                         // the route and loop cards): it leaves the task.
                         Row(verticalAlignment = Alignment.Top) {
-                            Text(
+                            IconText(
                                 message ?: via?.let { stringResource(R.string.route_via_selected, it + 1) } ?: "",
                                 modifier = Modifier.weight(1f).padding(top = 12.dp, end = 4.dp),
                             )

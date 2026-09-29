@@ -31,4 +31,10 @@ class HelpTextTest {
         assertEquals(listOf(HelpPart.Words("no icons")), helpParts("no icons", icons))
         assertEquals(emptyList<HelpPart>(), helpParts("", icons))
     }
+
+    @Test
+    fun iconsReadAsTheirButtonsNames() {
+        val parts = helpParts("Zooms of [location]", setOf("location"))
+        assertEquals("Zooms of My location", helpWords(parts, mapOf("location" to "My location")))
+    }
 }

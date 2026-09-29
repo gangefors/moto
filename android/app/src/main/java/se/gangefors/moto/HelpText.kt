@@ -34,3 +34,15 @@ fun helpParts(text: String, icons: Set<String>): List<HelpPart> {
     if (words.isNotEmpty()) parts += HelpPart.Words(words.toString())
     return parts
 }
+
+/**
+ * [parts] as words only, for a screen reader or a plain label: each icon
+ * is its button's name from [names].
+ */
+fun helpWords(parts: List<HelpPart>, names: Map<String, String>): String =
+    parts.joinToString("") {
+        when (it) {
+            is HelpPart.Words -> it.text
+            is HelpPart.Icon -> names[it.key] ?: it.key
+        }
+    }

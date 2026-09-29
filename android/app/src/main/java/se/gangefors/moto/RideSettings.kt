@@ -98,7 +98,7 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
 @Composable
 private fun Heading(title: String, info: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
+        IconText(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium)
         InfoButton(title, info)
     }
 }
