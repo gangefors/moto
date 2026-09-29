@@ -445,14 +445,8 @@ fun MapScreen() {
     }
     LaunchedEffect(recording) {
         when (val r = recording) {
-            is Recording.State.Finished -> {
-                val km = sectionKm(r.track.distanceM)
-                val time = durationText(resources, (((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) / 60).toInt())
-                Toasts.show(
-                    r.batteryPerHour?.let { resources.getString(R.string.recording_saved_battery, km, time, it) }
-                        ?: resources.getString(R.string.recording_saved, km, time),
-                )
-            }
+            // Short, so the toast stays clear of the buttons.
+            is Recording.State.Finished -> Toasts.show(resources.getString(R.string.recording_saved))
             is Recording.State.Failed -> notify(resources.getString(R.string.recording_failed, r.message), long = true)
             else -> Unit
         }
@@ -1934,6 +1928,8 @@ fun MapScreen() {
                         loopStart = null
                         startPicked = null
                         picker.reset()
+                        // One card at a time: the route replaces a shown ride.
+                        shownRide = null
                         shownSaved = ShownSavedRoute(saved, line)
                         val start = LatLng(line.first().lat, line.first().lon)
                         val end = if (saved.isLoop) null else LatLng(line.last().lat, line.last().lon)
@@ -1952,6 +1948,11 @@ fun MapScreen() {
                     if (line.isNullOrEmpty()) {
                         notify(resources.getString(R.string.rides_gone), long = true)
                     } else {
+                        // One card at a time: the ride replaces a shown route.
+                        if (shownSaved != null) {
+                            shownSaved = null
+                            overlays?.route?.show(null, null, null)
+                        }
                         shownRide = ShownRide(track, line)
                         showOnMap(listOf(line), always = true)
                     }

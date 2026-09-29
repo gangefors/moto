@@ -37,7 +37,6 @@ interface LibraryActions {
     fun show(item: LibraryItem)
     fun rename(item: LibraryItem)
     fun share(item: LibraryItem)
-    fun export(item: LibraryItem)
     fun saveAsRoute(item: LibraryItem.Ride)
     fun delete(item: LibraryItem)
 }
@@ -105,10 +104,6 @@ fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
                     actions.rename(item)
                 }
                 if (finished) {
-                    MenuItem(R.drawable.ic_export, stringResource(R.string.library_save_file)) {
-                        closeMenu()
-                        actions.export(item)
-                    }
                     if (item is LibraryItem.Ride) {
                         MenuItem(R.drawable.ic_bookmark, stringResource(R.string.library_save_as_route)) {
                             closeMenu()

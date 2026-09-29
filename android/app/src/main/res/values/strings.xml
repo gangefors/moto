@@ -87,10 +87,10 @@
     <string name="road_details">%1$.1f km to the next junction · OSM way %2$d</string>
     <string name="road_tap_off">%1$d m from where you tapped</string>
     <string name="route_pick_end">Start set. Long-press where you want to go, or ride a loop from here.</string>
-    <string name="route_pick_end_or_me">Point set. Long-press where you want to go from here, route here from your position, or ride a loop from here.</string>
+    <string name="route_pick_end_or_me">Point set. Long-press where you want to go from here, route from your position, or ride a loop from here.</string>
     <string name="loop_from_here">Loop from here</string>
     <string name="loop_from_me">Loops from my position</string>
-    <string name="route_from_me">Route here from my position</string>
+    <string name="route_from_me">Route from my position</string>
     <string name="plan_waiting_gps">Waiting for GPS…</string>
     <string name="plan_last_known">From your last known position</string>
     <string name="loop_computing">Finding loops…</string>
@@ -188,7 +188,7 @@
     <string name="help_plan_title">Plan a ride</string>
     <string name="help_plan">Long-press a place to start there, then long-press where you want to go. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
     <string name="help_sections_title">Favourite roads</string>
-    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your sections. Pick one in Sections to see it, then loop through it or ride it from where you are.</string>
+    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your sections. Pick one in Sections to see it, then loop through it or route through it from where you are.</string>
     <string name="help_ride_title">On a ride</string>
     <string name="help_ride">Record your ride, and tag roads you like as you pass them. After the ride, review each tagged spot: it may be a road you want to save as a section.</string>
     <string name="help_settings_title">Ride settings</string>
@@ -214,7 +214,7 @@
     <string name="help_key_record_what">records your ride; tap the stop square to end it</string>
     <string name="help_key_location">Location button</string>
     <string name="help_key_location_what">centres the map on you and follows you</string>
-    <string name="help_key_route_here">Route here</string>
+    <string name="help_key_route_here">Route from my position</string>
     <string name="help_key_route_here_what">from your position to the place</string>
     <string name="help_key_loop_here">Loop from here</string>
     <string name="help_key_loop_here_what">loops from the place</string>
@@ -279,9 +279,8 @@
     <string name="recording_waiting">Waiting for GPS…</string>
     <string name="recording_progress">%1$.1f km · %2$s</string>
     <string name="recording_stop">Stop</string>
-    <string name="recording_started">Recording. Stop from here or the notification.</string>
-    <string name="recording_saved">Ride saved · %1$.1f km · %2$s</string>
-    <string name="recording_saved_battery">Ride saved · %1$.1f km · %2$s · battery %3$.1f %%/h</string>
+    <string name="recording_started">Recording…</string>
+    <string name="recording_saved">Ride saved</string>
     <string name="recording_saved_later">Some fixes couldn’t be saved yet; they will be on the next start.</string>
     <string name="recording_failed">Recording stopped: %1$s</string>
     <string name="recording_no_permission">Recording needs precise location.</string>
@@ -308,7 +307,6 @@
     <string name="library_ride">Ride · %1$s</string>
     <string name="library_share">Share</string>
     <string name="library_save_as_route">Save as route</string>
-    <string name="library_save_file">Save as file</string>
     <string name="library_more">More for %1$s</string>
     <string name="library_show_on_map">Show on the map</string>
     <string name="library_save_as_route_title">Save ride as route</string>
@@ -324,7 +322,6 @@
     <string name="rides_import">Import GPX…</string>
     <string name="rides_imported">Ride imported: %1$.1f km</string>
     <string name="rides_import_failed">Import failed: %1$s</string>
-    <string name="rides_exported">Ride exported as GPX</string>
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>
     <string name="rides_cannot_write">can’t write to the chosen file</string>
@@ -381,7 +378,7 @@
     <string name="section_hide">Hide the section</string>
     <string name="section_edit">Change rating or direction</string>
     <string name="section_loop_through">Loop through it</string>
-    <string name="section_ride_from_here">Ride it from here</string>
+    <string name="section_ride_from_here">Route through it</string>
     <string name="sections_exported">Sections exported</string>
     <string name="sections_imported">Imported: %1$d added, %3$d replaced, %2$d already there</string>
     <string name="sections_imported_unmatched">%1$s; %2$d don’t fit the map</string>
@@ -389,6 +386,6 @@
     <string name="sections_cannot_read">can’t read the chosen file</string>
     <string name="sections_file_too_large">the file is larger than %1$d MiB</string>
     <string name="format_geojson">GeoJSON</string>
-    <string name="format_zip">ZIP (compressed)</string>
-    <string name="format_gzip">GeoJSON .gz (compressed)</string>
+    <string name="format_zip">.ZIP</string>
+    <string name="format_gzip">.GZ</string>
 </resources>

@@ -279,3 +279,12 @@ fun firstFitting(widths: List<Int>, availablePx: Int): Int? =
  * (segmented buttons share the width equally). */
 fun segmentsFit(widestLabelPx: Int, count: Int, segmentPaddingPx: Int, availablePx: Int): Boolean =
     count > 0 && count * (widestLabelPx + segmentPaddingPx) <= availablePx
+
+/**
+ * Whether a tap on an (i) should open its tooltip: not when the tooltip
+ * closed during that tap ([closedAtMs] at or after the press began, less
+ * [slackMs] for a press reported late inside a scrolling page), as that
+ * tap was the one closing it. Times in ms on one clock.
+ */
+fun opensOnTap(pressedAtMs: Long, closedAtMs: Long, slackMs: Long = 300): Boolean =
+    closedAtMs < pressedAtMs - slackMs
