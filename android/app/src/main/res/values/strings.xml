@@ -15,10 +15,10 @@
     <string name="busy_section">Finding the road…</string>
     <string name="busy_sections">Fitting your sections to the map…</string>
     <string name="busy_region">Checking and installing the map region…</string>
-    <string name="locate_zooms">Location button zoom</string>
+    <string name="locate_zooms">Zooms of [location]</string>
     <string name="locate_zoom_area">Area</string>
     <string name="locate_zoom_close">Close by</string>
-    <string name="locate_zooms_hint">The app starts at the area zoom; tapping the location button on your position switches between the two. Drag the left mark for close by and the right one for the area. Widths are across this screen in southern Sweden.</string>
+    <string name="locate_zooms_hint">The app starts at the area zoom; tapping [location] on your position switches between the two. Drag the left mark for close by and the right one for the area. Widths are across this screen in southern Sweden.</string>
     <string name="locate_zoom_value">%1$s: %2$s across</string>
     <string name="locate_zoom_wider">Wider</string>
     <string name="locate_zoom_closer">Closer</string>
@@ -245,7 +245,7 @@
     <string name="recording_no_store">the ride database can’t be opened</string>
     <string name="menu_open">Menu</string>
     <string name="task_close">Close</string>
-    <string name="delete_tap_again">Tap the bin again to delete</string>
+    <string name="delete_tap_again">Tap [bin] again to delete</string>
     <string name="deleted">Deleted</string>
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>
@@ -295,7 +295,7 @@
         <item quantity="other">Review %1$d tags</item>
     </plurals>
     <string name="tag_review_suggested">Tag %1$d of %2$d · %3$.1f km. Tap near an end to trim it.</string>
-    <string name="tag_review_none">Tag %1$d of %2$d: no suggestion (%3$s). Tap the start to mark it yourself, or discard it with the bin.</string>
+    <string name="tag_review_none">Tag %1$d of %2$d: no suggestion (%3$s). Tap the start to mark it yourself, or discard it with [bin].</string>
     <string name="tag_review_loading">Tag %1$d of %2$d…</string>
     <string name="tag_review_done">All tags reviewed.</string>
     <string name="tag_review_skip">Skip</string>
@@ -315,7 +315,7 @@
     </plurals>
     <string name="sections_km">%1$.1f km</string>
     <string name="sections_epic_count">%1$d epic</string>
-    <string name="sections_empty">No sections yet. Mark a favourite road with the road button on the map, or tag one while you ride and review it after.</string>
+    <string name="sections_empty">No sections yet. Mark a favourite road with [mark] on the map, or tag one with [tag] while you ride and review it after with [flag].</string>
     <string name="sections_none_match">No sections match these filters.</string>
     <string name="sections_sort">Sort: %1$s</string>
     <string name="sort_rating">Rating</string>

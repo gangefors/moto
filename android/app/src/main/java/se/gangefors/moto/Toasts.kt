@@ -87,7 +87,7 @@ fun ToastHost(modifier: Modifier = Modifier) {
             shadowElevation = 4.dp,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         ) {
-            Text(
+            IconText(
                 shown?.text ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),

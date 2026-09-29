@@ -159,7 +159,7 @@ fun SectionsList(
         contentPadding = PaddingValues(start = 24.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
     ) {
         if (sections.isEmpty()) {
-            item(key = "empty") { Text(stringResource(R.string.sections_empty), Modifier.padding(end = 12.dp, top = 8.dp)) }
+            item(key = "empty") { IconText(stringResource(R.string.sections_empty), Modifier.padding(end = 12.dp, top = 8.dp)) }
             return@LazyColumn
         }
         item(key = "summary") {
