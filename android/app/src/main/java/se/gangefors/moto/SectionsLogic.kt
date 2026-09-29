@@ -120,3 +120,32 @@ fun rideDay(atSec: Long, nowSec: Long, zone: java.time.ZoneId, locale: java.util
     val pattern = if (at.year == now.year) "d MMM" else "d MMM yyyy"
     return at.format(java.time.format.DateTimeFormatter.ofPattern(pattern, locale))
 }
+
+/**
+ * Descriptions of lines found with one engine [E] (a region), kept while
+ * it stays loaded and dropped when another takes its place. Keyed by the
+ * line itself, never by a section's id: SQLite gives a new section the id
+ * of a deleted last one, and a saved section's line never changes.
+ */
+class DescriptionCache<E : Any, D : Any> {
+    private var owner: E? = null
+    private val byLine = HashMap<List<LatLon>, D>()
+
+    /** The description of [line] found with [engine], if any. */
+    @Synchronized
+    fun get(engine: E?, line: List<LatLon>): D? = if (engine != null && engine === owner) byLine[line] else null
+
+    /** Describes those of [lines] not yet described (with [describe]; null
+     * leaves one out) and returns the descriptions of all of [lines]. */
+    @Synchronized
+    fun fill(engine: E, lines: List<List<LatLon>>, describe: (List<LatLon>) -> D?): Map<List<LatLon>, D> {
+        if (engine !== owner) {
+            byLine.clear()
+            owner = engine
+        }
+        for (line in lines) {
+            if (!byLine.containsKey(line)) describe(line)?.let { byLine[line] = it }
+        }
+        return lines.mapNotNull { l -> byLine[l]?.let { l to it } }.toMap()
+    }
+}

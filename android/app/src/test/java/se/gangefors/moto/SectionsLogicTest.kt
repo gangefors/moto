@@ -124,4 +124,41 @@ class SectionsLogicTest {
         assertEquals(SectionSort.RATING, sectionSortOf(null))
         assertEquals(SectionSort.RATING, sectionSortOf("SIDEWAYS"))
     }
+
+    @Test
+    fun aNewSectionWithADeletedOnesIdGetsItsOwnDescription() {
+        // A section is deleted and a new one saved gets its id: the new
+        // one must be described afresh, not given the old one's words.
+        val cache = DescriptionCache<Any, String>()
+        val engine = Any()
+        val old = rows[0].section
+        val new = old.copy(geometry = listOf(LatLon(55.9, 13.5), LatLon(55.91, 13.5)))
+        var described = 0
+        fun describe(line: List<LatLon>): String {
+            described++
+            return if (line == old.geometry) "old" else "new"
+        }
+        assertEquals(mapOf(old.geometry to "old"), cache.fill(engine, listOf(old.geometry), ::describe))
+        assertEquals(null, cache.get(engine, new.geometry))
+        assertEquals(mapOf(new.geometry to "new"), cache.fill(engine, listOf(new.geometry), ::describe))
+        assertEquals("new", cache.get(engine, new.geometry))
+        // Described once each; asking again describes nothing.
+        cache.fill(engine, listOf(old.geometry, new.geometry), ::describe)
+        assertEquals(2, described)
+    }
+
+    @Test
+    fun anotherRegionDropsTheDescriptions() {
+        val cache = DescriptionCache<Any, String>()
+        val (a, b) = Any() to Any()
+        val line = rows[0].section.geometry
+        cache.fill(a, listOf(line)) { "on a" }
+        assertEquals("on a", cache.get(a, line))
+        assertEquals(null, cache.get(b, line))
+        assertEquals(null, cache.get(null, line))
+        assertEquals(mapOf(line to "on b"), cache.fill(b, listOf(line)) { "on b" })
+        assertEquals(null, cache.get(a, line))
+        // A line that can't be described is left out, not cached.
+        assertEquals(emptyMap<List<LatLon>, String>(), cache.fill(b, listOf(listOf(LatLon(1.0, 1.0)))) { null })
+    }
 }

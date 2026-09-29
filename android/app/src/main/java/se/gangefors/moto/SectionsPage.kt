@@ -48,7 +48,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.Description
@@ -64,24 +63,15 @@ import se.gangefors.moto.core.SectionStore
  * is loaded: a section's geometry never changes, so it is described once.
  */
 object SectionDescriptions {
-    private var engine: Engine? = null
-    private val cache = ConcurrentHashMap<Long, Description>()
+    private val cache = DescriptionCache<Engine, Description>()
 
     /** The description of [s] on [engine], if found already. */
-    fun cached(engine: Engine?, s: Section): Description? = if (engine === this.engine) cache[s.id] else null
+    fun cached(engine: Engine?, s: Section): Description? = cache.get(engine, s.geometry)
 
-    /** Describes those of [sections] not yet described. Call off the main thread. */
-    @Synchronized
-    fun describeAll(engine: Engine, sections: List<Section>): Map<Long, Description> {
-        if (engine !== this.engine) {
-            cache.clear()
-            this.engine = engine
-        }
-        for (s in sections) {
-            if (!cache.containsKey(s.id)) runCatching { engine.describe(s.geometry) }.onSuccess { cache[s.id] = it }
-        }
-        return HashMap(cache)
-    }
+    /** Describes those of [sections] not yet described, and returns all
+     * of theirs by line. Call off the main thread. */
+    fun describeAll(engine: Engine, sections: List<Section>): Map<List<LatLon>, Description> =
+        cache.fill(engine, sections.map { it.geometry }) { line -> runCatching { engine.describe(line) }.getOrNull() }
 }
 
 /** A section's title: where it runs ("Höör → Sjöbo"), else its road, else
@@ -123,7 +113,8 @@ fun SectionsList(
     initialAttention: Boolean = false,
     rowActions: @Composable (section: Section, close: () -> Unit) -> Unit = { _, _ -> },
 ) {
-    var described by remember(engine) { mutableStateOf<Map<Long, Description>>(emptyMap()) }
+    // By line, not by id: a new section can get a deleted one's id.
+    var described by remember(engine) { mutableStateOf<Map<List<LatLon>, Description>>(emptyMap()) }
     LaunchedEffect(engine, sections) {
         val e = engine ?: return@LaunchedEffect
         described = withContext(Dispatchers.Default) { SectionDescriptions.describeAll(e, sections) }
@@ -142,7 +133,7 @@ fun SectionsList(
     var ratings by remember { mutableStateOf(emptySet<Rating>()) }
     var attention by rememberSaveable { mutableStateOf(initialAttention) }
     val all = remember(sections, described, ridden) {
-        sections.map { SectionRow(it, lengthM(it.geometry), described[it.id], ridden[it.id]) }
+        sections.map { SectionRow(it, lengthM(it.geometry), described[it.geometry], ridden[it.id]) }
     }
     val summary = summarize(all)
     // Nothing left to attend to: the filter is off too.
@@ -375,11 +366,11 @@ fun ShownSectionCard(
     modifier: Modifier = Modifier,
     actions: @Composable () -> Unit = {},
 ) {
-    var description by remember(section.id, engine) { mutableStateOf(SectionDescriptions.cached(engine, section)) }
-    LaunchedEffect(section.id, engine) {
+    var description by remember(section.geometry, engine) { mutableStateOf(SectionDescriptions.cached(engine, section)) }
+    LaunchedEffect(section.geometry, engine) {
         val e = engine ?: return@LaunchedEffect
         if (description == null) {
-            description = withContext(Dispatchers.Default) { SectionDescriptions.describeAll(e, listOf(section))[section.id] }
+            description = withContext(Dispatchers.Default) { SectionDescriptions.describeAll(e, listOf(section))[section.geometry] }
         }
     }
     val row = SectionRow(section, lengthM(section.geometry), description)
