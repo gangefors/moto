@@ -844,3 +844,54 @@ fn a_loop_through_a_section_carries_on_past_its_far_end() {
         assert!(beyond > 1_000.0, "carries on past the far end: {beyond} m");
     }
 }
+
+#[test]
+fn a_loop_through_a_one_way_section_rides_it_its_way() {
+    // A one-way section is ridden from its start to its end, never
+    // against it, whichever end lies nearer the start of the loop.
+    let e = engine(fixture::grid(13));
+    let (south, north) = (ll(55.772, 13.496), ll(55.799, 13.496));
+    for (from, to) in [(south, north), (north, south)] {
+        let d = e.section_between(from, to).unwrap();
+        let fav = Favourites::build(
+            &e,
+            &[Section {
+                id: 1,
+                rider_id: LOCAL_RIDER.into(),
+                name: String::new(),
+                rating: Rating::Epic,
+                direction: Direction::Forward,
+                source: Source::Map,
+                status: Status::Ok,
+                created_at: 0,
+                updated_at: 0,
+                ways: d.ways,
+                geometry: d.geometry,
+            }],
+        );
+        let loops = round_trip_via(
+            &e,
+            CENTRE,
+            &[from, to],
+            false,
+            &RouteOptions::default(),
+            &fav,
+        )
+        .unwrap();
+        assert!(!loops.is_empty());
+        for l in &loops {
+            let at = |p: LatLon| {
+                l.geometry
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &g)| (i, haversine_m(g, p)))
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .unwrap()
+            };
+            let ((i, di), (j, dj)) = (at(from), at(to));
+            assert!(di < 50.0 && dj < 50.0, "rides the section");
+            assert!(i < j, "from its start to its end");
+            assert!(ridden_twice(&l.geometry, 1_000.0) <= MAX_REUSE);
+        }
+    }
+}
