@@ -48,6 +48,7 @@ docs/adr/               architecture decision records (index in README.md)
 - Delete and remove actions use the bin icon (`ic_delete`, in `DELETE_COLOR`; `DeleteButton` where a second tap confirms), never a text-only button. Clearing a single value (like an arrival time) is an X right beside it.
 - UI elements must fit or scale, never squeeze: rows of buttons wrap onto another line (`FlowRow`) when there is no room, button labels stay on one line, and every screen, sheet and banner must work at 360 dp width and with large system font sizes.
 - Debug-only tools (timings, memory, benchmark) live in `android/app/src/debug/` (package `se.gangefors.moto.debug`), reached from the menu → Debug tools; `src/release/` holds a do-nothing `DebugTools` with the same functions. Main code only calls `DebugTools`, so release builds carry none of it and it is easy to remove.
+- Stefan's own data is personal: his sections, rides, routes, places, coordinates, screenshots and exports never go verbatim into code, tests, golden cases, commit messages, ADRs or other repo content. Reproduce what they show with your own examples that behave the same (random roads and starts elsewhere), and describe a report in general terms ("a section ending at a hamlet").
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
 
 ## Security
