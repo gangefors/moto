@@ -139,14 +139,6 @@ fun routeOptions(base: RouteOptions, percent: Int, gravel: Gravel = Gravel.AVOID
         gravel = gravel,
     )
 
-/**
- * Whether the bundled region must be (re)installed: when there is no
- * installed file, or it was installed by another build of the app (a
- * different [currentStamp]).
- */
-fun needsInstall(installedExists: Boolean, installedStamp: String?, currentStamp: String): Boolean =
-    !installedExists || installedStamp != currentStamp
-
 /** Exported route files: "moto-route-2026-09-24-1830.gpx", in local time. */
 fun routeFileName(atSec: Long, zone: java.time.ZoneId): String =
     "moto-route-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)

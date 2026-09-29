@@ -115,14 +115,6 @@ class MapLogicTest {
     }
 
     @Test
-    fun installsWhenMissingOrFromAnotherBuild() {
-        assertTrue(needsInstall(installedExists = false, installedStamp = "1", currentStamp = "1"))
-        assertTrue(needsInstall(installedExists = true, installedStamp = null, currentStamp = "1"))
-        assertTrue(needsInstall(installedExists = true, installedStamp = "1", currentStamp = "2"))
-        assertFalse(needsInstall(installedExists = true, installedStamp = "2", currentStamp = "2"))
-    }
-
-    @Test
     fun routesGetTheFixedExtraTime() {
         assertEquals(80, ROUTE_EXTRA_PERCENT)
         val base = se.gangefors.moto.core.RouteOptions(

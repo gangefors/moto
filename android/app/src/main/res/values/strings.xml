@@ -26,7 +26,6 @@
     <string name="span_km_tenths">%1$.1f km</string>
     <string name="span_m">%1$d m</string>
     <string name="region_title">Map region</string>
-    <string name="region_bundled">Built-in test region (Skåne)</string>
     <string name="region_none">No region: routing needs one</string>
     <string name="region_group_phone">On this phone</string>
     <string name="region_group_available">To download</string>
