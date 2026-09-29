@@ -100,3 +100,18 @@ fun downloadShare(done: Long, total: Long): Float =
 
 /** Megabytes (10⁶ bytes), one decimal, for labels. */
 fun mb(bytes: Long): Double = Math.round(bytes / 100_000.0) / 10.0
+
+/** Map data this much older than the newest in use counts as from an older month. */
+const val REGION_STALE_S = 20L * 24 * 3600
+
+/**
+ * The enabled regions whose map data is from an older month than the
+ * newest enabled one (ADR-0009): a road rebuilt at the border since can
+ * leave a crossing closed until both sides are updated. Regions whose
+ * date is unknown are left out.
+ */
+fun olderNeighbours(installed: List<InstalledRegion>): List<InstalledRegion> {
+    val used = enabledRegions(installed).filter { it.osmTimestamp > 0 }
+    val newest = used.maxOfOrNull { it.osmTimestamp } ?: return emptyList()
+    return used.filter { newest - it.osmTimestamp > REGION_STALE_S }
+}

@@ -33,6 +33,7 @@
     <string name="region_size">%1$.1f MB</string>
     <string name="region_off">Off: not used for routing · %1$.1f MB</string>
     <string name="region_total">%1$d on this phone, %2$.1f MB in all. The regions switched on are one map, joined at their borders.</string>
+    <string name="region_older">Map data for %1$s is from an older month than the others: update it so every border crossing joins.</string>
     <string name="region_all_off">Every region is switched off: switch one on to route.</string>
     <string name="region_progress">%1$.1f of %2$.1f MB</string>
     <string name="region_installing_short">Checking and installing…</string>

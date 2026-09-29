@@ -99,6 +99,15 @@ fun RegionSection() {
                     enabled = !working && !changing,
                 )
             }
+            val older = olderNeighbours(installed)
+            if (older.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.region_older, older.joinToString(", ") { it.name }),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
             if (enabledRegions(installed).isEmpty()) {
                 Text(
                     stringResource(R.string.region_all_off),
