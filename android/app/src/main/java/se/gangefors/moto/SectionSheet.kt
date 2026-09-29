@@ -16,6 +16,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
@@ -47,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Rating
 
 /** What the rider chose in the section sheet. */
-data class SectionChoice(val rating: Rating, val oneWay: Boolean, val name: String = "")
+data class SectionChoice(val rating: Rating, val oneWay: Boolean, val name: String = "", val reverse: Boolean = false)
 
 /**
  * A bottom sheet to rate a section and set its direction: for a new one
@@ -55,7 +57,8 @@ data class SectionChoice(val rating: Rating, val oneWay: Boolean, val name: Stri
  * bin on the left that asks for a second tap). X, Back or a swipe down
  * leave it without saving. The name is the rider's own and may stay
  * empty: the section then goes by where it runs ([suggestion], shown in
- * the empty field).
+ * the empty field). A saved one-way section can be turned round
+ * ([canReverse]): the swap toggle beside the switch, applied on Save.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +69,7 @@ fun SectionSheet(
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
     suggestion: String? = null,
+    canReverse: Boolean = false,
 ) {
     // A text field state (kept over rotation), for the field's label on
     // the border; the name is what it holds.
@@ -73,6 +77,7 @@ fun SectionSheet(
     val name = nameState.text.toString()
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
+    var reverse by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
 
@@ -144,7 +149,10 @@ fun SectionSheet(
                         Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp)
-                            .toggleable(value = oneWay, role = Role.Switch, onValueChange = { oneWay = it }),
+                            .toggleable(value = oneWay, role = Role.Switch, onValueChange = {
+                                oneWay = it
+                                if (!it) reverse = false
+                            }),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // The label and (i) take the room left; the switch
@@ -152,6 +160,18 @@ fun SectionSheet(
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.section_one_way), modifier = Modifier.weight(1f, fill = false))
                             InfoButton(stringResource(R.string.section_one_way), stringResource(R.string.section_one_way_hint))
+                        }
+                        // Turn a one-way section round (on Save), for one
+                        // marked from the wrong end.
+                        if (canReverse && oneWay) {
+                            IconToggleButton(
+                                checked = reverse,
+                                onCheckedChange = { reverse = it },
+                                colors = IconButtonDefaults.filledTonalIconToggleButtonColors(),
+                                modifier = Modifier.padding(end = 8.dp),
+                            ) {
+                                Icon(painterResource(R.drawable.ic_swap), stringResource(R.string.section_reverse))
+                            }
                         }
                         Switch(checked = oneWay, onCheckedChange = null)
                     }
@@ -169,7 +189,7 @@ fun SectionSheet(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    Button(onClick = { onSave(SectionChoice(rating, oneWay, name)) }) {
+                    Button(onClick = { onSave(SectionChoice(rating, oneWay, name, reverse = oneWay && reverse)) }) {
                         OneLine(stringResource(R.string.section_save))
                     }
                 }

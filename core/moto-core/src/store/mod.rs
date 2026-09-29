@@ -17,7 +17,8 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::region::format::COORD_SCALE;
 use crate::section::{
-    Direction, NewSection, Rating, Section, SectionUpdate, Source, Status, WaySpan, validate_name,
+    Direction, NewSection, Rating, Section, SectionUpdate, Source, Status, WaySpan, reversed_ways,
+    validate_name,
 };
 use crate::{CoreError, LatLon};
 
@@ -234,7 +235,8 @@ impl Store {
         rows.into_iter().map(|r| self.finish(r)).collect()
     }
 
-    /// Changes name, rating or direction; returns the updated section, or
+    /// Changes name, rating or direction, and turns the section round if
+    /// asked (all in one transaction); returns the updated section, or
     /// `None` if there is no section with that id.
     pub fn update_section(
         &mut self,
@@ -245,8 +247,8 @@ impl Store {
         if let Some(name) = &update.name {
             validate_name(name)?;
         }
-        let changed = self
-            .conn
+        let tx = self.conn.transaction().map_err(db_err)?;
+        let changed = tx
             .execute(
                 "UPDATE sections SET
                     name = coalesce(?2, name),
@@ -266,6 +268,10 @@ impl Store {
         if changed == 0 {
             return Ok(None);
         }
+        if update.reverse {
+            reverse_section(&tx, id)?;
+        }
+        tx.commit().map_err(db_err)?;
         self.get_section(id)
     }
 
@@ -391,6 +397,42 @@ fn insert_section(
     let id = tx.last_insert_rowid();
     insert_ways(tx, id, &s.ways)?;
     Ok(id)
+}
+
+/// Turns section `id` round in place: its geometry and way spans run the
+/// other way. Its bounds stay the same.
+fn reverse_section(tx: &Transaction<'_>, id: i64) -> Result<(), CoreError> {
+    let corrupt = |what: &str| CoreError::Storage(format!("section {id}: invalid {what}"));
+    let bytes: Vec<u8> = tx
+        .query_row("SELECT geometry FROM sections WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .map_err(db_err)?;
+    let mut geometry = decode_geometry(&bytes).ok_or_else(|| corrupt("geometry"))?;
+    geometry.reverse();
+    tx.execute(
+        "UPDATE sections SET geometry = ?2 WHERE id = ?1",
+        params![id, encode_geometry(&geometry)],
+    )
+    .map_err(db_err)?;
+    let ways = {
+        let mut stmt = tx
+            .prepare("SELECT way_id, from_idx, to_idx FROM section_ways WHERE section_id = ?1 ORDER BY seq")
+            .map_err(db_err)?;
+        stmt.query_map([id], |r| {
+            Ok(WaySpan {
+                way_id: r.get(0)?,
+                from_idx: r.get(1)?,
+                to_idx: r.get(2)?,
+            })
+        })
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?
+    };
+    tx.execute("DELETE FROM section_ways WHERE section_id = ?1", [id])
+        .map_err(db_err)?;
+    insert_ways(tx, id, &reversed_ways(&ways))
 }
 
 fn insert_ways(tx: &Transaction<'_>, section_id: i64, ways: &[WaySpan]) -> Result<(), CoreError> {

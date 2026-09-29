@@ -2027,6 +2027,7 @@ fun MapScreen() {
             initial = SectionChoice(section.rating, isOneWay(section.direction), riderName(section.name) ?: ""),
             suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
             onDismiss = { editing = null },
+            canReverse = true,
             onSave = { choice ->
                 editing = null
                 changeSections(resources.getString(R.string.section_updated)) { st ->
@@ -2036,6 +2037,7 @@ fun MapScreen() {
                             name = nameUpdate(section.name, choice.name),
                             rating = choice.rating,
                             direction = directionOf(choice.oneWay),
+                            reverse = choice.reverse,
                         ),
                     )
                 }

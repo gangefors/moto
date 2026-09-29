@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::section::tests::sample;
-use crate::section::{Direction, LOCAL_RIDER, Rating, SectionUpdate, Status};
+use crate::section::{Direction, LOCAL_RIDER, Rating, SectionUpdate, Status, WaySpan};
 
 const T0: i64 = 1_790_000_000;
 
@@ -177,6 +177,75 @@ fn updates_name_rating_and_direction() {
             .unwrap(),
         None
     );
+}
+
+#[test]
+fn reverses_a_section_in_place() {
+    let mut s = store();
+    let mut new = sample();
+    new.direction = Direction::Forward;
+    new.ways = vec![
+        WaySpan {
+            way_id: 7,
+            from_idx: 2,
+            to_idx: 5,
+        },
+        WaySpan {
+            way_id: 9,
+            from_idx: 4,
+            to_idx: 1,
+        },
+    ];
+    new.geometry.push(ll(56.32, 12.48));
+    let saved = s.add_section(&new, T0).unwrap();
+    let up = SectionUpdate {
+        reverse: true,
+        ..Default::default()
+    };
+    let turned = s.update_section(saved.id, &up, T0 + 60).unwrap().unwrap();
+    let mut back = saved.geometry.clone();
+    back.reverse();
+    assert_eq!(turned.geometry, back);
+    assert_eq!(
+        turned.ways,
+        vec![
+            WaySpan {
+                way_id: 9,
+                from_idx: 1,
+                to_idx: 4
+            },
+            WaySpan {
+                way_id: 7,
+                from_idx: 5,
+                to_idx: 2
+            },
+        ]
+    );
+    assert_eq!(turned.direction, Direction::Forward, "still one-way");
+    assert_eq!(
+        (turned.name, turned.rating),
+        (saved.name.clone(), saved.rating)
+    );
+    assert_eq!(turned.updated_at, T0 + 60);
+    // Twice is the section as it was.
+    let again = s.update_section(saved.id, &up, T0 + 61).unwrap().unwrap();
+    assert_eq!((again.geometry, again.ways), (saved.geometry, saved.ways));
+    // No such section: nothing happens.
+    assert_eq!(s.update_section(saved.id + 1, &up, T0).unwrap(), None);
+}
+
+#[test]
+fn a_failed_update_does_not_turn_the_section() {
+    let mut s = store();
+    let saved = s.add_section(&sample(), T0).unwrap();
+    let bad = SectionUpdate {
+        name: Some("x\u{7}".into()),
+        reverse: true,
+        ..Default::default()
+    };
+    assert!(s.update_section(saved.id, &bad, T0 + 60).is_err());
+    let still = s.get_section(saved.id).unwrap().unwrap();
+    assert_eq!((still.geometry, still.ways), (saved.geometry, saved.ways));
 }
 
 #[test]

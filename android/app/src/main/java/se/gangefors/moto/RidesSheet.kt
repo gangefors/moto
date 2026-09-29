@@ -27,7 +27,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -71,8 +70,8 @@ enum class DataPage { LIBRARY, SECTIONS, REGION }
  * Routes & rides, saved routes and recorded or imported rides in one
  * list, newest first, all or only one kind (filter chips), each shown on
  * the map with a tap ([onShowRoute], [onShow]), renamed, shared (to a
- * nav app), and from its menu deleted (tapped twice), plus Import GPX
- * for rides; [DataPage.SECTIONS], the saved [sections] as a list (see
+ * nav app) and deleted (the bin, tapped twice), plus Import GPX for
+ * rides in the page's ⋮ menu; [DataPage.SECTIONS], the saved [sections] as a list (see
  * [SectionsList]), with import and export (GeoJSON, plain or compressed)
  * in the page's ⋮ menu ([engine] fits imports to the map,
  * [onSectionsChanged] reloads them); [DataPage.REGION], the
@@ -195,6 +194,7 @@ fun RidesSheet(
     // Sections: export in the chosen format, import any supported file.
     var exportFormat by remember { mutableStateOf<ExportFormat?>(null) }
     var formatMenu by remember { mutableStateOf(false) }
+    var libraryMenu by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     val saveSections = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -274,6 +274,24 @@ fun RidesSheet(
         onBack = onDismiss,
         notices = notices,
         actions = {
+            if (page == DataPage.LIBRARY) {
+                // Import is occasional: behind the page's ⋮, as on Sections.
+                Box {
+                    IconButton(onClick = { libraryMenu = true }, enabled = !busy) {
+                        Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.library_menu))
+                    }
+                    DropdownMenu(expanded = libraryMenu, onDismissRequest = { libraryMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.rides_import)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.ic_import), contentDescription = null) },
+                            onClick = {
+                                libraryMenu = false
+                                openRide.launch(arrayOf("*/*"))
+                            },
+                        )
+                    }
+                }
+            }
             if (page == DataPage.SECTIONS) {
                 // Import and export are occasional: behind the page's ⋮.
                 Box {
@@ -324,11 +342,6 @@ fun RidesSheet(
             state = listState,
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
         ) {
-            if (page == DataPage.LIBRARY) item(key = "library-import") {
-                OutlinedButton(onClick = { openRide.launch(arrayOf("*/*")) }, enabled = !busy) {
-                    OneLine(stringResource(R.string.rides_import))
-                }
-            }
             val library = libraryItems(routes, tracks)
             if (page == DataPage.LIBRARY && !library.isNullOrEmpty()) item(key = "library-filters") {
                 // All, only routes or only rides (kept between visits), and

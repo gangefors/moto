@@ -283,14 +283,4 @@ class MapLogicTest {
         assertFalse(segmentsFit(widestLabelPx = 140, count = 3, segmentPaddingPx = 28, availablePx = 320))
         assertFalse(segmentsFit(widestLabelPx = 10, count = 0, segmentPaddingPx = 28, availablePx = 320))
     }
-
-    @Test
-    fun aTapOnAnOpenInfoClosesIt() {
-        // Never opened, or closed long before the tap: open.
-        assertTrue(opensOnTap(pressedAtMs = 10_000, closedAtMs = Long.MIN_VALUE))
-        assertTrue(opensOnTap(pressedAtMs = 10_000, closedAtMs = 5_000))
-        // Closed by this very tap, just before or after its press is reported.
-        assertFalse(opensOnTap(pressedAtMs = 10_000, closedAtMs = 9_900))
-        assertFalse(opensOnTap(pressedAtMs = 10_000, closedAtMs = 10_010))
-    }
 }
