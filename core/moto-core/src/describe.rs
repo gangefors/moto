@@ -63,12 +63,15 @@ const SNAP_M: f64 = 40.0;
 
 /// How far a place of each kind may be and still name a point, metres,
 /// and how much nearer a smaller place must be to win over a bigger one.
+/// A hamlet names only a point right by it: the map labels it there, so
+/// it is what the rider sees at that end (a section ending in a hamlet
+/// is that hamlet's, not a town's a few kilometres away).
 fn reach(kind: PlaceKind) -> (f64, f64) {
     match kind {
         PlaceKind::City => (20_000.0, 3.0),
         PlaceKind::Town => (12_000.0, 2.0),
         PlaceKind::Village => (6_000.0, 1.3),
-        PlaceKind::Hamlet => (2_000.0, 1.0),
+        PlaceKind::Hamlet => (1_500.0, 1.0),
     }
 }
 
@@ -248,8 +251,7 @@ pub fn signed_ref(r: &str) -> String {
 
 /// The place that best names `p`: the nearest, but a bigger place wins
 /// over a smaller one unless the smaller one is clearly nearer (see
-/// [`reach`]). Hamlets only when no bigger place is in reach: riders know
-/// villages and towns. None within reach gives `None`.
+/// [`reach`]). None within reach gives `None`.
 fn nearest_place(region: &Region, p: LatLon) -> Option<PlaceName> {
     let places = region.places();
     // Places are sorted by latitude: look only within the widest reach.
@@ -274,8 +276,7 @@ fn nearest_place(region: &Region, p: LatLon) -> Option<PlaceName> {
         if d > max_m {
             continue;
         }
-        // Anything bigger than a hamlet beats every hamlet.
-        let score = d / weight + if kind == PlaceKind::Hamlet { 1e9 } else { 0.0 };
+        let score = d / weight;
         if best.is_none_or(|b| score < b.0) {
             best = Some((score, q, kind, d));
         }

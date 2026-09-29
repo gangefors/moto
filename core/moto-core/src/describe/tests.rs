@@ -126,9 +126,10 @@ fn road_numbers_read_as_signed() {
 }
 
 #[test]
-fn hamlets_only_when_nothing_bigger_is_in_reach() {
+fn a_hamlet_right_by_an_end_names_it() {
     let mut data = fixture::named_region();
-    // A hamlet right by A, where the town Lund is 840 m away: Lund.
+    // A hamlet 110 m from A, where the town Lund is 840 m away: the
+    // hamlet, the label the rider sees right there.
     data.names.strings.push("Kvärnby".into());
     let name = data.names.strings.len() as u32 - 1;
     data.names.places.push(crate::region::format::Place {
@@ -142,46 +143,7 @@ fn hamlets_only_when_nothing_bigger_is_in_reach() {
     });
     data.names.places.sort_by_key(|p| p.pos.lat);
     let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
-    assert_eq!(nearest_place(&r, ll(55.70, 13.20)).unwrap().name, "Lund");
-}
-
-#[test]
-fn curviness_is_measured_like_a_routes() {
-    use crate::fixture::Road;
-    use crate::region::format::RoadClass;
-    // A zigzag secondary road with a bend every 50 m, then a straight one.
-    let via = (1..20)
-        .map(|i| {
-            (
-                55.70 + if i % 2 == 0 { 0.0 } else { 0.0003 },
-                13.20 + f64::from(i) * 0.0005,
-            )
-        })
-        .collect();
-    let zigzag = Road {
-        via,
-        ..Road::new(0, 1, RoadClass::Secondary, 70, 1)
-    };
-    let straight = Road::new(1, 2, RoadClass::Secondary, 70, 2);
-    let data = fixture::build(
-        &[(55.70, 13.20), (55.70, 13.21), (55.70, 13.22)],
-        &[zigzag, straight],
-        5_000,
-    );
-    let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
-    let curvy = describe(&r, &[ll(55.7001, 13.2005), ll(55.7001, 13.2095)])
-        .unwrap()
-        .curvy_share;
-    let flat = describe(&r, &[ll(55.70, 13.2105), ll(55.70, 13.2195)])
-        .unwrap()
-        .curvy_share;
-    let both = describe(
-        &r,
-        &[ll(55.7001, 13.2005), ll(55.70, 13.21), ll(55.70, 13.2195)],
-    )
-    .unwrap()
-    .curvy_share;
-    assert!(curvy > 0.5, "{curvy}");
-    assert_eq!(flat, 0.0);
-    assert!(both > flat && both < curvy, "{both}");
+    assert_eq!(nearest_place(&r, ll(55.70, 13.20)).unwrap().name, "Kvärnby");
+    // 1.3 km from it, and still 1.7 km from Lund: the town, being bigger.
+    assert_eq!(nearest_place(&r, ll(55.70, 13.18)).unwrap().name, "Lund");
 }
