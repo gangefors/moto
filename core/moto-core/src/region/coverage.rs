@@ -54,6 +54,36 @@ pub fn trace(
     (offsets, points)
 }
 
+/// One outline for several regions' outlines together (ADR-0009): the
+/// areas they cover, rasterised on one grid, joined where they touch or
+/// overlap and with the gaps they enclose filled, traced as in [`trace`].
+/// Each region's rings are read with the even–odd rule, as in
+/// [`contains`]. `None` when the regions are too large for the grid.
+pub fn merge(regions: &[Vec<&[PointE7]>], bbox: BBoxE7) -> Option<(Vec<u32>, Vec<PointE7>)> {
+    let lines: Vec<&[PointE7]> = regions.iter().flatten().copied().collect();
+    let Some(raster) = Raster::new(&lines) else {
+        return lines.is_empty().then(|| (vec![0], Vec::new()));
+    };
+    // The cells the outlines run through, so outlines that meet or come
+    // within a cell of each other join, and the cells inside them.
+    let mut cells = raster.mark(&lines);
+    for rings in regions {
+        raster.fill_rings(rings, &mut cells);
+    }
+    raster.fill_holes(&mut cells);
+    let mut offsets = vec![0u32];
+    let mut points = Vec::new();
+    for ring in raster.outlines(&cells) {
+        let ring = simplify(&ring);
+        if ring.len() < 4 {
+            continue;
+        }
+        points.extend(ring.iter().map(|&(x, y)| raster.point(x, y, bbox)));
+        offsets.push(u32::try_from(points.len()).ok()?);
+    }
+    Some((offsets, points))
+}
+
 /// The polylines of the region's roads (each geometry once), ferries left out.
 fn road_lines<'a>(
     edges: &[Edge],
@@ -159,6 +189,40 @@ impl Raster {
             }
         }
         cells
+    }
+
+    /// Marks the cells whose centre lies inside `rings` (even–odd rule),
+    /// row by row where the rings cross the row's middle.
+    fn fill_rings(&self, rings: &[&[PointE7]], cells: &mut [bool]) {
+        let mut xs: Vec<f64> = Vec::new();
+        for y in 0..self.rows {
+            let lat = self.lat0 as f64 + (y as f64 + 0.5) * self.cell_lat as f64;
+            xs.clear();
+            for ring in rings {
+                for e in ring.windows(2) {
+                    let (a, b) = (e[0], e[1]);
+                    let (ay, by) = (f64::from(a.lat), f64::from(b.lat));
+                    if (ay > lat) != (by > lat) {
+                        let (ax, bx) = (f64::from(a.lon), f64::from(b.lon));
+                        let lon = ax + (lat - ay) * (bx - ax) / (by - ay);
+                        xs.push((lon - self.lon0 as f64) / self.cell_lon as f64);
+                    }
+                }
+            }
+            xs.sort_unstable_by(f64::total_cmp);
+            for pair in xs.as_chunks::<2>().0 {
+                // Cells whose middle (x + 0.5) lies between the crossings.
+                let from = (pair[0] - 0.5).ceil().max(0.0);
+                let to = (pair[1] - 0.5).floor().min(self.cols as f64 - 1.0);
+                if from > to {
+                    continue;
+                }
+                for x in from as usize..=to as usize {
+                    let i = self.index(x, y);
+                    cells[i] = true;
+                }
+            }
+        }
     }
 
     /// Every cell next to (or on) a marked one, diagonals included.
