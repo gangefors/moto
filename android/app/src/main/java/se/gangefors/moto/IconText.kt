@@ -63,8 +63,10 @@ internal val BUTTON_ICONS = mapOf(
 /**
  * [text] with its "[key]"s drawn as the buttons' icons ([BUTTON_ICONS]),
  * at text size, so text that names a button shows the rider which one.
- * Lines of the form "**Term** what it means" make a list: the terms in
- * bold, their meanings lined up beside them ([textBlocks]).
+ * Lines of the form "**Term** what it means" make a list: each term with
+ * its meaning lined up beside it ([textBlocks]). The terms stay in plain
+ * type: the list is enough to set them apart, and bold would look like
+ * the setting headings on How to use.
  */
 @Composable
 fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = LocalTextStyle.current) {
@@ -85,15 +87,15 @@ fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = Loc
 }
 
 /**
- * Terms in bold with what each means beside them, the meanings lined up
- * after the widest term and wrapping under themselves.
+ * Terms with what each means beside them, the meanings lined up after
+ * the widest term and wrapping under themselves.
  */
 @Composable
 private fun TermList(rows: List<Pair<String, String>>, style: TextStyle) {
     Layout(
         content = {
             for ((term, meaning) in rows) {
-                Text(term, style = style.copy(fontWeight = FontWeight.Bold))
+                Text(term, style = style)
                 IconLine(meaning, style = style)
             }
         },
