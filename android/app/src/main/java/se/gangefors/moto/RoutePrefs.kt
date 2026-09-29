@@ -23,6 +23,7 @@ object RoutePrefs {
     private const val MAP_HINTS = "map_hints_shown"
     private const val SECTIONS_SORT = "sections_sort"
     private const val LIBRARY_FILTER = "library_filter"
+    private const val DARK_THEME = "dark_theme"
 
     /** How many starts show how to use the map. */
     private const val MAP_HINT_STARTS = 3
@@ -101,5 +102,19 @@ object RoutePrefs {
 
     fun setLibraryFilter(context: Context, filter: LibraryFilter) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LIBRARY_FILTER, filter.name) }
+    }
+
+    /** The theme the rider chose in the menu: dark, light, or null (as the
+     * phone is, until chosen). */
+    fun darkTheme(context: Context): Boolean? = runCatching {
+        when (context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(DARK_THEME, null)) {
+            "dark" -> true
+            "light" -> false
+            else -> null
+        }
+    }.getOrNull()
+
+    fun setDarkTheme(context: Context, dark: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(DARK_THEME, if (dark) "dark" else "light") }
     }
 }

@@ -293,4 +293,12 @@ class MapLogicTest {
         assertFalse(fastestIsDull(count = 1, fastestSuggested = true))
         assertEquals(null, fastestChoice(1))
     }
+
+    @Test
+    fun theThemeFollowsThePhoneUntilChosen() {
+        assertTrue(themeIsDark(chosen = null, phoneDark = true))
+        assertFalse(themeIsDark(chosen = null, phoneDark = false))
+        assertTrue(themeIsDark(chosen = true, phoneDark = false))
+        assertFalse(themeIsDark(chosen = false, phoneDark = true))
+    }
 }

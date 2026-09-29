@@ -253,6 +253,24 @@ def maven_entries(components, artifacts, licenses_dir, texts):
     return lines
 
 
+# Files from other projects drawn into the app itself rather than linked as
+# a library: (what, SPDX id, where from). The licence text comes from the
+# kept standard texts.
+ICONS = [
+    ("Material Icons: light_mode, dark_mode", "Apache-2.0", "https://github.com/google/material-design-icons"),
+]
+
+
+def icon_entries(icons, licenses_dir, texts):
+    lines = []
+    for what, spdx_id, url in icons:
+        t = standard_text(licenses_dir, spdx_id)
+        if t is None:
+            raise LicenceError(f"{what} ({spdx_id}): no licence text; keep one in licenses/")
+        lines += [what, f"Licence: {spdx_id} · {url}", f"Texts: {texts.add(spdx_id, t, what)}", ""]
+    return lines
+
+
 def parse_maven_list(text):
     out = set()
     for line in text.splitlines():
@@ -272,10 +290,11 @@ def body(text):
     return "\n".join(" " + l if l.startswith("#") else l for l in text.split("\n"))
 
 
-def build(crates, index, components, artifacts, licenses_dir, app_licence):
+def build(crates, index, components, artifacts, licenses_dir, app_licence, icons=()):
     texts = Texts()
     crate_lines = crate_entries(crates, index, licenses_dir, texts)
     maven_lines = maven_entries(components, artifacts, licenses_dir, texts)
+    icon_lines = icon_entries(icons, licenses_dir, texts)
     out = [
         "## moto",
         "",
@@ -295,6 +314,7 @@ def build(crates, index, components, artifacts, licenses_dir, app_licence):
         f"## Android libraries ({len(components)})",
         "",
         *maven_lines,
+        *([f"## Icons ({len(icons)})", "", *icon_lines] if icons else []),
         f"## Licence texts ({len(texts.order)})",
         "",
     ]
@@ -326,7 +346,7 @@ def main(argv=None):
             artifacts = index_artifacts([l.strip() for l in f if l.strip()])
         with open(args.app_licence, encoding="utf-8") as f:
             app_licence = f.read()
-        text = build(crates, index, components, artifacts, args.licenses, app_licence)
+        text = build(crates, index, components, artifacts, args.licenses, app_licence, ICONS)
     except (LicenceError, OSError, ValueError, KeyError, ET.ParseError, zipfile.BadZipFile) as e:
         print(f"third-party licences: {e}", file=sys.stderr)
         return 1

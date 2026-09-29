@@ -162,6 +162,17 @@ class BuildTest(unittest.TestCase):
              ("com.google.guava", "listenablefuture", "1.0"), ("androidx.core", "core", "1.18.0")},
         ))
 
+    def test_icons_are_listed_with_their_licence(self):
+        f = self.f
+        f.write("licenses/Apache-2.0.txt", "Apache License\nVersion 2.0\n")
+        icons = [("Some icons: a, b", "Apache-2.0", "https://example.org/icons")]
+        text = tp.build(set(), f.index(), set(), f.artifacts(), f.licenses, "AGPL text\n", icons)
+        self.assertIn("## Icons (1)\n\nSome icons: a, b\nLicence: Apache-2.0 · https://example.org/icons\nTexts: 1", text)
+        self.assertIn("Used by: Some icons: a, b", text)
+        # Without a kept text for the licence the build fails.
+        with self.assertRaises(tp.LicenceError):
+            tp.build(set(), f.index(), set(), f.artifacts(), f.licenses, "AGPL text\n", [("x", "MIT", "u")])
+
     def test_missing_licences_fail(self):
         f = self.f
         f.crate("nolicence", "1.0.0", "")

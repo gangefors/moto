@@ -24,7 +24,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1374,7 +1373,7 @@ fun MapScreen() {
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
-                .background(if (isSystemInDarkTheme()) DARK_SCRIM else LIGHT_SCRIM),
+                .background(if (LocalTheme.current.dark) DARK_SCRIM else LIGHT_SCRIM),
         )
         // What the app is working on, just below the top panels (not in
         // them, so the map doesn't refit when it shows); after 300 ms only.
@@ -1818,6 +1817,8 @@ fun MapScreen() {
         // The menu, over everything on the map.
         MenuDrawer(
             open = menuOpen,
+            dark = LocalTheme.current.dark,
+            onToggleTheme = LocalTheme.current.toggle,
             onClose = { menuOpen = false },
             onPick = { topic ->
                 when (topic) {
@@ -2219,17 +2220,17 @@ private fun StatusBarIconsFollowMap(mapView: MapView, map: MapLibreMap?, statusB
 
 /**
  * Sets the navigation bar's buttons to contrast with [panel], the colour
- * of an app panel behind the bar, or to the system theme's when there is
+ * of an app panel behind the bar, or to the app's theme when there is
  * none (the theme-coloured scrim is behind them then).
  */
 @Composable
 private fun NavigationBarIconsFollow(panel: Color?) {
     val window = LocalActivity.current?.window ?: return
-    val systemDark = isSystemInDarkTheme()
-    DisposableEffect(window, panel, systemDark) {
+    val appDark = LocalTheme.current.dark
+    DisposableEffect(window, panel, appDark) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.isAppearanceLightNavigationBars =
-            navigationIconsDark(panel?.luminance(), systemDark, controller.isAppearanceLightNavigationBars)
+            navigationIconsDark(panel?.luminance(), appDark, controller.isAppearanceLightNavigationBars)
         onDispose {}
     }
 }
