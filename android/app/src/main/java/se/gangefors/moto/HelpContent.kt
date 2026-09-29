@@ -4,7 +4,7 @@
 package se.gangefors.moto
 
 /** The topics of the how-to page, in page order. */
-enum class HelpTopicId { MAP, PLAN, FAVOURITES, RIDE, SETTINGS }
+enum class HelpTopicId { MAP, PLAN, FAVOURITES, RIDE, LIBRARY, SETTINGS }
 
 /**
  * A button in a topic's key: its icon (a key of [BUTTON_ICONS]), its
@@ -76,6 +76,14 @@ val HELP_TOPICS = listOf(
             HelpKey("record", R.string.help_key_record, R.string.help_key_record_what),
             HelpKey("tag", R.string.help_key_tag, R.string.help_key_tag_what),
             HelpKey("flag", R.string.help_key_review, R.string.help_key_review_what),
+        ),
+    ),
+    // The same line as the Routes & rides page.
+    HelpTopic(
+        HelpTopicId.LIBRARY, R.string.help_library_title, R.string.library_hint,
+        keys = listOf(
+            HelpKey("directions", R.string.library_route_term, R.string.library_route_what),
+            HelpKey("ride", R.string.library_ride_term, R.string.library_ride_what),
         ),
     ),
     HelpTopic(

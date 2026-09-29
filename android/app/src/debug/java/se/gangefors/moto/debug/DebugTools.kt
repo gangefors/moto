@@ -3,7 +3,12 @@
 
 package se.gangefors.moto.debug
 
+import android.content.Context
 import android.os.Debug
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
@@ -94,6 +99,26 @@ object DebugTools {
         _queries.update { (it + record).takeLast(MAX_QUERIES) }
         return result.getOrThrow()
     }
+
+    /**
+     * Records a ride that just ended: its length, time and battery use
+     * (percent per hour, when known). Kept in the debug tools' own
+     * preferences (the last [MAX_RIDES]), so it is still there after the
+     * app restarts.
+     */
+    fun rideEnded(context: Context, km: Double, minutes: Int, batteryPerHour: Double?) {
+        val battery = batteryPerHour?.let { "battery %.1f %%/h".format(Locale.ROOT, it) } ?: "battery unknown"
+        val line = "${RIDE_TIME.format(Instant.now())}: %.1f km, %d min, %s".format(Locale.ROOT, km, minutes, battery)
+        Log.i("moto", "ride: $line")
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val lines = (rideLines(context) + line).takeLast(MAX_RIDES)
+        prefs.edit().putString(RIDES, lines.joinToString("\n")).apply()
+    }
+
+    /** The rides recorded by [rideEnded], oldest first. */
+    internal fun rideLines(context: Context): List<String> =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(RIDES, null)
+            ?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
 
     fun clearQueries() {
         _queries.value = emptyList()
@@ -199,3 +224,8 @@ private class NativePeak {
         const val SAMPLE_MS = 10L
     }
 }
+
+private const val PREFS = "debug_tools"
+private const val RIDES = "rides"
+private const val MAX_RIDES = 20
+private val RIDE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT).withZone(ZoneId.systemDefault())

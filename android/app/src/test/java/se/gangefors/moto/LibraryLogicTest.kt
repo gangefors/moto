@@ -34,4 +34,19 @@ class LibraryLogicTest {
         assertNull(libraryItems(emptyList(), null))
         assertEquals(emptyList<LibraryItem>(), libraryItems(emptyList(), emptyList()))
     }
+
+    @Test
+    fun filtersRoutesOrRidesKeepingTheOrder() {
+        val items = libraryItems(listOf(route(1, 300), route(2, 100)), listOf(ride(3, 200), ride(4, 400)))!!
+        assertEquals(items, filterLibrary(items, LibraryFilter.ALL))
+        assertEquals(listOf("route-1", "route-2"), filterLibrary(items, LibraryFilter.ROUTES).map { it.key })
+        assertEquals(listOf("ride-4", "ride-3"), filterLibrary(items, LibraryFilter.RIDES).map { it.key })
+    }
+
+    @Test
+    fun anUnknownStoredFilterListsAll() {
+        assertEquals(LibraryFilter.RIDES, libraryFilterOf("RIDES"))
+        assertEquals(LibraryFilter.ALL, libraryFilterOf(null))
+        assertEquals(LibraryFilter.ALL, libraryFilterOf("nonsense"))
+    }
 }

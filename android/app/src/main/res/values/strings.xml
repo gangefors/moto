@@ -155,7 +155,6 @@
     <string name="route_name">Name</string>
     <string name="route_saved">Saved as “%1$s”</string>
     <string name="route_save_failed">Saving failed: %1$s</string>
-    <string name="saved_route_rename">Rename</string>
     <string name="saved_route_rename_title">Rename route</string>
     <string name="ride_rename_title">Rename ride</string>
     <string name="saved_route_hide">Hide the saved route</string>
@@ -180,6 +179,7 @@
     <string name="say_flag">the review flag</string>
     <string name="say_settings">the settings button</string>
     <string name="say_bin">the bin</string>
+    <string name="say_ride">the ride mark</string>
     <string name="about_title">About moto</string>
     <string name="about_version">Version %1$s</string>
     <string name="help_title">How to use</string>
@@ -190,6 +190,7 @@
     <string name="help_sections_title">Favourite roads</string>
     <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your sections. Pick one in Sections to see it, then loop through it or route through it from where you are.</string>
     <string name="help_ride_title">On a ride</string>
+    <string name="help_library_title">Routes and rides</string>
     <string name="help_ride">Record your ride, and tag roads you like as you pass them. After the ride, review each tagged spot: it may be a road you want to save as a section.</string>
     <string name="help_settings_title">Ride settings</string>
     <string name="help_settings">The gear on the map opens them, in three groups:</string>
@@ -272,7 +273,6 @@
     <string name="rating_great">Great</string>
     <string name="rating_epic">Epic</string>
     <string name="record_start">Record ride</string>
-    <string name="record_stop">%1$.1f km</string>
     <string name="record_stop_description">Stop recording, %1$.1f km so far</string>
     <string name="recording_channel">Ride recording</string>
     <string name="recording_title">Recording ride</string>
@@ -306,10 +306,18 @@
     <string name="library_loop">Loop · %1$.1f km · %2$s</string>
     <string name="library_ride">Ride · %1$s</string>
     <string name="library_share">Share</string>
-    <string name="library_save_as_route">Save as route</string>
     <string name="library_more">More for %1$s</string>
     <string name="library_show_on_map">Show on the map</string>
-    <string name="library_save_as_route_title">Save ride as route</string>
+    <!-- Shared by the Routes & rides page and How to use, so they can't drift apart. -->
+    <string name="library_hint">A route is a plan to ride; a ride is where you actually rode.</string>
+    <string name="library_filter_all">All</string>
+    <string name="library_filter_routes">Routes · %1$d</string>
+    <string name="library_filter_rides">Rides · %1$d</string>
+    <string name="library_rename">Rename %1$s</string>
+    <string name="library_route_term">A route</string>
+    <string name="library_route_what">a route or loop the app made, which you saved to ride later. Share it to your nav app to follow it on the road.</string>
+    <string name="library_ride_term">A ride</string>
+    <string name="library_ride_what">where you actually rode: recorded with Record, or imported from a GPX file. Rides count how often you’ve ridden your sections, and you can show one on the map to mark sections along it.</string>
     <string name="rides_loading">Loading…</string>
     <string name="rides_summary">%1$.1f km · %2$s</string>
     <string name="rides_recording">Recording · %1$s</string>
@@ -363,7 +371,7 @@
     <string name="sort_curvy">Curviness</string>
     <string name="sort_newest">Newest</string>
     <string name="sort_nearest">Nearest</string>
-    <string name="sort_longest_unridden">Longest unridden</string>
+    <string name="sort_longest_unridden">Longest since ridden</string>
     <plurals name="section_ridden">
         <item quantity="one">Ridden once · last %2$s</item>
         <item quantity="other">Ridden %1$d times · last %2$s</item>

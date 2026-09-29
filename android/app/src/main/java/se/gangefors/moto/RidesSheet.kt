@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -67,10 +69,9 @@ enum class DataPage { LIBRARY, SECTIONS, REGION }
 /**
  * A page of the rider's data, opened from the menu: [DataPage.LIBRARY],
  * Routes & rides, saved routes and recorded or imported rides in one
- * list, newest first, each shown on the map with a tap ([onShowRoute],
- * [onShow]), shared (to a nav app), and from its menu renamed, saved as a
- * GPX file or deleted (tapped twice), and a ride also saved as a route to
- * ride again, plus Import GPX
+ * list, newest first, all or only one kind (filter chips), each shown on
+ * the map with a tap ([onShowRoute], [onShow]), renamed, shared (to a
+ * nav app), and from its menu deleted (tapped twice), plus Import GPX
  * for rides; [DataPage.SECTIONS], the saved [sections] as a list (see
  * [SectionsList]), with import and export (GeoJSON, plain or compressed)
  * in the page's ⋮ menu ([engine] fits imports to the map,
@@ -118,10 +119,9 @@ fun RidesSheet(
     }
     val zone = remember { ZoneId.systemDefault() }
     var tracks by remember { mutableStateOf<List<Track>?>(null) }
-    // Routes & rides: the one being renamed, being saved as a route, or
-    // being saved as a file.
+    // Routes & rides: the one being renamed, and which kind is listed.
     var renaming by remember { mutableStateOf<LibraryItem?>(null) }
-    var savingAsRoute by remember { mutableStateOf<Track?>(null) }
+    var libraryFilter by rememberSaveable { mutableStateOf(RoutePrefs.libraryFilter(context)) }
 
     var routes by remember { mutableStateOf<List<SavedRoute>?>(null) }
 
@@ -175,10 +175,6 @@ fun RidesSheet(
                     onFailure = { failed(resources.getString(R.string.route_share_failed, it.message ?: it.toString())) },
                 )
             }
-        }
-
-        override fun saveAsRoute(item: LibraryItem.Ride) {
-            savingAsRoute = item.track
         }
 
         override fun delete(item: LibraryItem) {
@@ -334,6 +330,38 @@ fun RidesSheet(
                 }
             }
             val library = libraryItems(routes, tracks)
+            if (page == DataPage.LIBRARY && !library.isNullOrEmpty()) item(key = "library-filters") {
+                // All, only routes or only rides (kept between visits), and
+                // what tells them apart (the same line as How to use).
+                Column(Modifier.padding(top = 12.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val routeCount = library.count { it is LibraryItem.Route }
+                        LibraryFilter.entries.forEach { f ->
+                            FilterChip(
+                                selected = libraryFilter == f,
+                                onClick = {
+                                    libraryFilter = f
+                                    RoutePrefs.setLibraryFilter(context, f)
+                                },
+                                label = {
+                                    OneLine(
+                                        when (f) {
+                                            LibraryFilter.ALL -> stringResource(R.string.library_filter_all)
+                                            LibraryFilter.ROUTES -> stringResource(R.string.library_filter_routes, routeCount)
+                                            LibraryFilter.RIDES -> stringResource(R.string.library_filter_rides, library.size - routeCount)
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.library_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             if (page == DataPage.LIBRARY) when {
                 library == null -> item(key = "library-loading") {
                     Text(stringResource(R.string.rides_loading), Modifier.padding(vertical = 16.dp))
@@ -341,7 +369,7 @@ fun RidesSheet(
                 library.isEmpty() -> item(key = "library-none") {
                     Text(stringResource(R.string.library_none), Modifier.padding(vertical = 16.dp))
                 }
-                else -> items(library, key = { it.key }) { item ->
+                else -> items(filterLibrary(library, libraryFilter), key = { it.key }) { item ->
                     LibraryRow(item, zone, actions)
                 }
             }
@@ -366,24 +394,6 @@ fun RidesSheet(
                             }
                         }
                     }
-                    reload()
-                }
-            },
-        )
-    }
-    savingAsRoute?.let { t ->
-        RouteNameDialog(
-            title = stringResource(R.string.library_save_as_route_title),
-            initial = rideName(t.name, t.startedAt, zone),
-            onDismiss = { savingAsRoute = null },
-            onSave = { name ->
-                savingAsRoute = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) { runCatching { store.saveTrackAsRoute(t.id, name) } }
-                    result.fold(
-                        onSuccess = { done(resources.getString(R.string.route_saved, it?.name ?: name)) },
-                        onFailure = { failed(resources.getString(R.string.route_save_failed, it.message ?: it.toString())) },
-                    )
                     reload()
                 }
             },

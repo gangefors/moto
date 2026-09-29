@@ -3,6 +3,7 @@
 
 package se.gangefors.moto.debug
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.LatLon
@@ -41,6 +42,8 @@ object DebugTools {
     ): List<Route> = block()
 
     fun <T> query(kind: String, block: () -> T): T = block()
+
+    fun rideEnded(context: Context, km: Double, minutes: Int, batteryPerHour: Double?) = Unit
 
     @Composable
     fun MenuEntry(onOpen: () -> Unit) = Unit
