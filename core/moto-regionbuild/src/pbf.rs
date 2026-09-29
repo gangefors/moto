@@ -11,6 +11,7 @@ use osmpbf::{BlobDecode, BlobReader, Element};
 use rayon::prelude::*;
 
 use crate::graph::RawWay;
+use crate::speed::Country;
 use crate::tags;
 
 /// What the builder needs from an extract.
@@ -26,9 +27,10 @@ pub struct Osm {
     pub timestamp: Option<i64>,
 }
 
-/// Reads the extract, decoding blobs in parallel. Errors (unreadable or
+/// Reads the extract, decoding blobs in parallel; `country`'s speed
+/// limits apply to its roads. Errors (unreadable or
 /// malformed files) come back as messages; nothing panics on bad input.
-pub fn read(path: &Path, bbox: &BBoxE7) -> Result<Osm, String> {
+pub fn read(path: &Path, bbox: &BBoxE7, country: Country) -> Result<Osm, String> {
     let reader = BlobReader::from_path(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let inside = |lat: i32, lon: i32| {
         (bbox.min_lat..=bbox.max_lat).contains(&lat) && (bbox.min_lon..=bbox.max_lon).contains(&lon)
@@ -68,7 +70,7 @@ pub fn read(path: &Path, bbox: &BBoxE7) -> Result<Osm, String> {
                     }
                     Element::Way(w) => {
                         let tags: Vec<(&str, &str)> = w.tags().collect();
-                        if let Some(attrs) = tags::classify(&tags) {
+                        if let Some(attrs) = tags::classify(&tags, country) {
                             let (road_ref, name) = tags::road_names(&tags);
                             out.ways.push(RawWay {
                                 id: w.id(),
@@ -111,7 +113,12 @@ mod tests {
     #[test]
     fn reads_nodes_ways_and_timestamp() {
         let b = FIXTURE_BBOX;
-        let osm = read(Path::new(FIXTURE), &bbox_e7(b[0], b[1], b[2], b[3])).unwrap();
+        let osm = read(
+            Path::new(FIXTURE),
+            &bbox_e7(b[0], b[1], b[2], b[3]),
+            Country::Sweden,
+        )
+        .unwrap();
         // 2026-09-22T20:22:59Z, set when the fixture was cut.
         assert_eq!(osm.timestamp, Some(1_790_108_579));
         assert_eq!(osm.nodes.len(), 1678);
@@ -125,7 +132,7 @@ mod tests {
     fn keeps_only_nodes_inside_the_box() {
         // A box around the south-west quarter of the fixture.
         let small = bbox_e7(55.7040, 13.1900, 55.7050, 13.1920);
-        let osm = read(Path::new(FIXTURE), &small).unwrap();
+        let osm = read(Path::new(FIXTURE), &small, Country::Sweden).unwrap();
         assert!(!osm.nodes.is_empty() && osm.nodes.len() < 1678);
         for (_, p) in &osm.nodes {
             assert!((small.min_lat..=small.max_lat).contains(&p.lat));
@@ -139,16 +146,23 @@ mod tests {
         let junk = dir.join(format!("moto-junk-{}.osm.pbf", std::process::id()));
         std::fs::write(&junk, vec![0x42u8; 5000]).unwrap();
         let bbox = bbox_e7(55.0, 13.0, 56.0, 14.0);
-        let res = read(&junk, &bbox);
+        let res = read(&junk, &bbox, Country::Sweden);
         std::fs::remove_file(&junk).unwrap();
         assert!(res.is_err());
-        assert!(read(Path::new("/definitely/not/here.osm.pbf"), &bbox).is_err());
+        assert!(
+            read(
+                Path::new("/definitely/not/here.osm.pbf"),
+                &bbox,
+                Country::Sweden
+            )
+            .is_err()
+        );
 
         // A real file cut short.
         let bytes = std::fs::read(FIXTURE).unwrap();
         let cut = dir.join(format!("moto-cut-{}.osm.pbf", std::process::id()));
         std::fs::write(&cut, &bytes[..bytes.len() / 2]).unwrap();
-        let res = read(&cut, &bbox);
+        let res = read(&cut, &bbox, Country::Sweden);
         std::fs::remove_file(&cut).unwrap();
         assert!(res.is_err());
     }

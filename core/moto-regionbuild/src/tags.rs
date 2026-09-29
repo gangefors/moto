@@ -5,6 +5,8 @@
 
 use moto_core::region::format::{PlaceKind, RoadClass, Surface, edge_flags};
 
+use crate::speed::{self, Country, RoadKind};
+
 /// Travel direction allowed on a way, relative to its node order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Oneway {
@@ -24,8 +26,9 @@ pub struct WayAttrs {
     pub oneway: Oneway,
 }
 
-/// Returns the attributes of a motorcycle-routable way, or `None`.
-pub fn classify(tags: &[(&str, &str)]) -> Option<WayAttrs> {
+/// Returns the attributes of a motorcycle-routable way in `country`, or
+/// `None`.
+pub fn classify(tags: &[(&str, &str)], country: Country) -> Option<WayAttrs> {
     let tag = |k: &str| tags.iter().find(|(key, _)| *key == k).map(|(_, v)| *v);
     let yes = |v: Option<&str>| matches!(v, Some("yes" | "designated" | "permissive"));
 
@@ -110,9 +113,33 @@ pub fn classify(tags: &[(&str, &str)]) -> Option<WayAttrs> {
         _ => Oneway::No,
     };
 
+    // The signed number, else the limit an implicit code names, else the
+    // road class's typical speed within the country's legal limit.
+    let code = || {
+        ["maxspeed:type", "source:maxspeed", "zone:maxspeed"]
+            .iter()
+            .find_map(|k| tag(k).and_then(speed::code_limit))
+    };
+    let kind = if class == RoadClass::Motorway {
+        RoadKind::Motorway
+    } else if tag("motorroad") == Some("yes") {
+        RoadKind::Motorroad
+    } else if class == RoadClass::LivingStreet {
+        RoadKind::LivingStreet
+    } else {
+        RoadKind::Rural
+    };
     let speed_kmh = tag("maxspeed")
         .and_then(parse_maxspeed)
-        .unwrap_or_else(|| default_speed(class, link));
+        .or_else(code)
+        .unwrap_or_else(|| {
+            let typical = default_speed(class, link);
+            if class == RoadClass::Ferry {
+                typical
+            } else {
+                typical.min(country.limits().of(kind))
+            }
+        });
 
     Some(WayAttrs {
         class,
@@ -182,7 +209,8 @@ pub fn place(tags: &[(&str, &str)]) -> Option<(PlaceKind, String)> {
     Some((kind, clean_name(tag("name")?)?))
 }
 
-/// Default speeds in km/h, from Swedish general limits.
+/// Typical speeds in km/h by road class, for roads without a signed
+/// limit (measured on Swedish roads; capped by each country's legal limit).
 fn default_speed(class: RoadClass, link: bool) -> u8 {
     if link {
         return 60;
@@ -202,20 +230,19 @@ fn default_speed(class: RoadClass, link: bool) -> u8 {
     }
 }
 
-/// Parses `maxspeed` values like `70`, `30 mph`, `SE:rural`.
+/// Parses `maxspeed` values like `70`, `30 mph`, `walk` or an implicit
+/// code like `SE:rural` (see [`speed::code_limit`]).
 fn parse_maxspeed(v: &str) -> Option<u8> {
-    let kmh = match v.trim() {
-        "SE:urban" => 50.0,
-        "SE:rural" => 70.0,
-        "SE:motorway" => 110.0,
-        "walk" | "SE:walk" => 7.0,
-        v => {
-            if let Some(mph) = v.strip_suffix("mph") {
-                mph.trim().parse::<f64>().ok()? * 1.609_344
-            } else {
-                v.trim_end_matches("km/h").trim().parse::<f64>().ok()?
-            }
-        }
+    let v = v.trim();
+    if let Some(kmh) = speed::code_limit(v) {
+        return Some(kmh);
+    }
+    let kmh = if v == "walk" {
+        f64::from(speed::WALK)
+    } else if let Some(mph) = v.strip_suffix("mph") {
+        mph.trim().parse::<f64>().ok()? * 1.609_344
+    } else {
+        v.trim_end_matches("km/h").trim().parse::<f64>().ok()?
     };
     (kmh.is_finite() && kmh >= 1.0).then(|| kmh.round().min(250.0) as u8)
 }
@@ -242,7 +269,11 @@ mod tests {
     use super::*;
 
     fn c(tags: &[(&str, &str)]) -> Option<WayAttrs> {
-        classify(tags)
+        classify(tags, Country::Sweden)
+    }
+
+    fn speed_in(country: Country, tags: &[(&str, &str)]) -> u8 {
+        classify(tags, country).unwrap().speed_kmh
     }
 
     #[test]
@@ -346,8 +377,125 @@ mod tests {
         assert_eq!(parse_maxspeed("none"), None);
         assert_eq!(parse_maxspeed("0"), None);
         assert_eq!(parse_maxspeed("signals"), None);
+        assert_eq!(parse_maxspeed("walk"), Some(7));
+        assert_eq!(parse_maxspeed("DK:rural"), Some(80));
+        assert_eq!(parse_maxspeed("50;70"), None);
         let s = c(&[("highway", "tertiary"), ("maxspeed", "80")]).unwrap();
         assert_eq!(s.speed_kmh, 80);
+    }
+
+    #[test]
+    fn a_signed_number_wins_everywhere() {
+        for country in Country::ALL {
+            assert_eq!(
+                speed_in(country, &[("highway", "primary"), ("maxspeed", "100")]),
+                100
+            );
+            // Even over a code that says otherwise.
+            assert_eq!(
+                speed_in(
+                    country,
+                    &[
+                        ("highway", "primary"),
+                        ("maxspeed", "60"),
+                        ("maxspeed:type", "SE:rural")
+                    ]
+                ),
+                60
+            );
+        }
+    }
+
+    #[test]
+    fn codes_in_other_keys_name_the_limit() {
+        for key in ["maxspeed:type", "source:maxspeed", "zone:maxspeed"] {
+            assert_eq!(
+                speed_in(
+                    Country::Denmark,
+                    &[("highway", "tertiary"), (key, "DK:rural")]
+                ),
+                80,
+                "{key}"
+            );
+            assert_eq!(
+                speed_in(
+                    Country::Norway,
+                    &[("highway", "primary"), (key, "NO:urban")]
+                ),
+                50,
+                "{key}"
+            );
+        }
+        // A code with no number of its own is passed over.
+        assert_eq!(
+            speed_in(
+                Country::Finland,
+                &[("highway", "tertiary"), ("source:maxspeed", "sign")]
+            ),
+            60
+        );
+    }
+
+    #[test]
+    fn untagged_roads_keep_their_typical_speed_within_the_law() {
+        // Sweden allows 70 outside built-up areas: a primary road's
+        // typical 80 is capped, a tertiary road's 60 stays.
+        assert_eq!(speed_in(Country::Sweden, &[("highway", "primary")]), 70);
+        assert_eq!(speed_in(Country::Sweden, &[("highway", "trunk")]), 70);
+        assert_eq!(speed_in(Country::Sweden, &[("highway", "tertiary")]), 60);
+        // The other three allow 80.
+        for country in [Country::Denmark, Country::Norway, Country::Finland] {
+            assert_eq!(
+                speed_in(country, &[("highway", "primary")]),
+                80,
+                "{country:?}"
+            );
+            assert_eq!(
+                speed_in(country, &[("highway", "trunk")]),
+                80,
+                "{country:?}"
+            );
+            assert_eq!(
+                speed_in(country, &[("highway", "secondary")]),
+                70,
+                "{country:?}"
+            );
+        }
+        // Motorways and motorroads by their own limits.
+        assert_eq!(speed_in(Country::Sweden, &[("highway", "motorway")]), 110);
+        assert_eq!(speed_in(Country::Denmark, &[("highway", "motorway")]), 110);
+        assert_eq!(speed_in(Country::Finland, &[("highway", "motorway")]), 80);
+        assert_eq!(
+            speed_in(
+                Country::Denmark,
+                &[("highway", "trunk"), ("motorroad", "yes")]
+            ),
+            80
+        );
+        assert_eq!(
+            speed_in(
+                Country::Sweden,
+                &[("highway", "trunk"), ("motorroad", "yes")]
+            ),
+            70
+        );
+        // Links and slow roads are below every limit.
+        assert_eq!(
+            speed_in(Country::Finland, &[("highway", "motorway_link")]),
+            60
+        );
+        assert_eq!(
+            speed_in(Country::Denmark, &[("highway", "living_street")]),
+            7
+        );
+        // Ferries keep their crossing speed.
+        assert_eq!(
+            speed_in(
+                Country::Norway,
+                &[("route", "ferry"), ("motor_vehicle", "yes")]
+            ),
+            15
+        );
     }
 
     #[test]

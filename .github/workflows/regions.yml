@@ -62,7 +62,7 @@ jobs:
           mkdir -p "$out"
           pbf="$RUNNER_TEMP/sweden-latest.osm.pbf"
           curl -sSfL --proto '=https' --retry 3 -o "$pbf" "$OSM_EXTRACT_URL"
-          core/target/release/moto-regionbuild "$pbf" "$out/sweden.region" --bbox 55.0,10.5,69.2,24.3
+          core/target/release/moto-regionbuild "$pbf" "$out/sweden.region" --bbox 55.0,10.5,69.2,24.3 --country SE
           rm "$pbf"
           # -n: no file name or time in the header, so the same region
           # always compresses to the same bytes.
