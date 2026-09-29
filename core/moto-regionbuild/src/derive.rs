@@ -259,6 +259,8 @@ pub fn data_of(region: &Region) -> RegionData {
         way_refs: region.way_refs().to_vec(),
         grid_cell: (grid.cell_lat, grid.cell_lon),
         names: names_of(region),
+        border: region.border_nodes().to_vec(),
+        meta: region.meta(),
     }
 }
 

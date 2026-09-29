@@ -426,8 +426,8 @@ fn profile_open_times_each_step() {
     let steps = profile_open(&path).unwrap();
     let names: Vec<&str> = steps.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(names.first(), Some(&"map the file"));
-    assert_eq!(names.last(), Some(&"coverage"));
-    assert_eq!(names.len(), 8);
+    assert_eq!(names.last(), Some(&"border"));
+    assert_eq!(names.len(), 9);
     assert!(steps.iter().all(|(_, ms)| *ms >= 0.0));
     std::fs::remove_file(&path).unwrap();
 }
@@ -649,5 +649,103 @@ fn corrupted_names_never_panic() {
             let _ = engine.describe(&line);
             let _ = engine.road_at(line[0]);
         }
+    }
+}
+
+/// The fixture with a border table and a country (format 1.3, ADR-0009).
+fn with_border(border: Vec<BorderNode>, country: [u8; 2]) -> RegionData {
+    let mut d = fixture::region();
+    d.border = border;
+    d.meta = Some(RegionMeta {
+        country,
+        reserved: [0; 14],
+    });
+    d
+}
+
+fn bn(osm_id: i64, node: u32, flags: u32) -> BorderNode {
+    BorderNode {
+        osm_id,
+        node,
+        flags,
+    }
+}
+
+#[test]
+fn border_table_and_country_round_trip() {
+    let d = with_border(
+        vec![bn(-5, 0, 0), bn(7, 1, border_flags::OUTSIDE), bn(9, 2, 0)],
+        *b"NO",
+    );
+    let r = Region::from_bytes(&d.to_bytes().unwrap()).unwrap();
+    assert_eq!(r.border_nodes(), d.border.as_slice());
+    assert_eq!(r.country(), Some("NO"));
+    assert_eq!(r.meta(), d.meta);
+    // Older files have neither.
+    let plain = Region::from_bytes(&fixture::region().to_bytes().unwrap()).unwrap();
+    assert!(plain.border_nodes().is_empty());
+    assert_eq!(plain.country(), None);
+}
+
+#[test]
+fn bad_border_tables_and_countries_are_refused() {
+    let nodes = fixture::region().nodes.len() as u32;
+    for (border, country) in [
+        (vec![bn(7, 0, 0), bn(7, 1, 0)], *b"SE"), // repeated id
+        (vec![bn(9, 0, 0), bn(7, 1, 0)], *b"SE"), // unsorted
+        (vec![bn(7, nodes, 0)], *b"SE"),          // no such node
+        (vec![bn(7, 0, 1 << 5)], *b"SE"),         // unknown flag
+        (vec![bn(7, 0, 0)], *b"se"),              // lower case
+        (vec![bn(7, 0, 0)], [b'S', 0]),           // not a letter
+    ] {
+        let d = with_border(border, country);
+        assert!(d.to_bytes().is_err(), "writer took {:?}", d.border);
+    }
+    // The reader refuses the same when the bytes are crafted by hand.
+    let good = with_border(vec![bn(7, 0, 0), bn(9, 1, 0)], *b"SE")
+        .to_bytes()
+        .unwrap();
+    let sec = section::BORDER_NODES;
+    for (f, why) in [
+        (
+            Box::new(|b: &mut Vec<u8>| patch(b, sec, 1, bn(7, 1, 0))) as Box<dyn Fn(&mut Vec<u8>)>,
+            "border nodes not sorted",
+        ),
+        (
+            Box::new(|b| patch(b, sec, 1, bn(9, u32::MAX, 0))),
+            "invalid border node",
+        ),
+        (
+            Box::new(|b| patch(b, sec, 0, bn(7, 0, 0x80))),
+            "invalid border node",
+        ),
+        (
+            Box::new(|b| {
+                let meta = RegionMeta {
+                    country: *b"s1",
+                    reserved: [0; 14],
+                };
+                patch(b, section::REGION_META, 0, meta)
+            }),
+            "invalid region meta",
+        ),
+        (
+            Box::new(|b| {
+                let meta = RegionMeta {
+                    country: *b"SE",
+                    reserved: [1; 14],
+                };
+                patch(b, section::REGION_META, 0, meta)
+            }),
+            "invalid region meta",
+        ),
+        (
+            Box::new(|b| patch_entry(b, section::REGION_META, |e| e.len = 0)),
+            "exactly one record",
+        ),
+    ] {
+        let mut b = good.clone();
+        f(&mut b);
+        assert_rejected(&b, why);
     }
 }

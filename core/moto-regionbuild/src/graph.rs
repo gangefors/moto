@@ -13,12 +13,13 @@ use moto_core::geo::polyline_length_m;
 use std::collections::HashMap;
 
 use moto_core::region::format::{
-    BBoxE7, COORD_SCALE, CurvatureMetrics, Edge, GeometryName, NO_NAME, Place, PlaceKind, PointE7,
-    WayRef, edge_flags,
+    BBoxE7, BorderNode, COORD_SCALE, CurvatureMetrics, Edge, GeometryName, NO_NAME, Place,
+    PlaceKind, PointE7, WayRef, border_flags, edge_flags,
 };
 use moto_core::region::{RegionData, RegionInfo, RoadNames};
 
 use crate::hilbert;
+use crate::poly::{Border, Side};
 use crate::tags::{Oneway, WayAttrs};
 
 /// A routable way as read from OSM.
@@ -126,25 +127,78 @@ pub struct GraphStats {
     pub shape_points: usize,
 }
 
+/// Which side of the region's border each node lies on, worked out once
+/// per node as ways ask (ADR-0009). Without a border every node is inside.
+struct Sides<'a> {
+    border: Option<&'a Border>,
+    index: &'a NodeIndex,
+    /// 0 = not asked yet, else `Side as u8 + 1`.
+    cache: Vec<u8>,
+}
+
+impl Sides<'_> {
+    fn of(&mut self, n: u32) -> Side {
+        let Some(border) = self.border else {
+            return Side::Inside;
+        };
+        let c = &mut self.cache[n as usize];
+        if *c == 0 {
+            *c = match border.side(self.index.pos[n as usize]) {
+                Side::Inside => 1,
+                Side::OnLine => 2,
+                Side::Outside => 3,
+            };
+        }
+        match *c {
+            1 => Side::Inside,
+            2 => Side::OnLine,
+            _ => Side::Outside,
+        }
+    }
+}
+
 /// Builds the routing graph of `ways`. Networks of connected roads
 /// shorter than `min_network_m` in all are left out (see
-/// [`drop_fragments`]).
+/// [`drop_fragments`]). With a `border` (ADR-0009) roads are cut one node
+/// past it: that node is a stub, and it, points on the line and their
+/// neighbours along the road are routing nodes, listed in the border
+/// table so the phone can link the region to its neighbours.
 pub fn build(
     ways: &[RawWay],
     index: &NodeIndex,
     info: RegionInfo,
     grid_cell: (i32, i32),
     min_network_m: f64,
+    border: Option<&Border>,
 ) -> (RegionData, GraphStats) {
-    // Pieces of ways inside the region: runs of consecutive known nodes.
+    let mut sides = Sides {
+        border,
+        index,
+        cache: if border.is_some() {
+            vec![0; index.len()]
+        } else {
+            Vec::new()
+        },
+    };
+    // Pieces of ways inside the region: runs of consecutive known nodes
+    // that lie inside the border or right next to a node that does.
     let mut pieces: Vec<(u32, u32, Vec<u32>)> = Vec::new(); // (way, first idx, nodes)
     for (w, way) in ways.iter().enumerate() {
+        let known: Vec<Option<(u32, bool)>> = way
+            .refs
+            .iter()
+            .map(|&r| index.find(r).map(|n| (n, sides.of(n) != Side::Outside)))
+            .collect();
+        let inside_at = |i: usize| known.get(i).copied().flatten().is_some_and(|k| k.1);
         let mut run: Vec<u32> = Vec::new();
         let mut start = 0u32;
-        for (i, &r) in way.refs.iter().enumerate() {
-            match index.find(r) {
-                Some(n) if run.last() == Some(&n) => {} // repeated node
-                Some(n) => {
+        for (i, k) in known.iter().enumerate() {
+            let keep = k.filter(|&(_, inside)| {
+                inside || inside_at(i + 1) || i.checked_sub(1).is_some_and(inside_at)
+            });
+            match keep {
+                Some((n, _)) if run.last() == Some(&n) => {} // repeated node
+                Some((n, _)) => {
                     if run.is_empty() {
                         start = i as u32;
                     }
@@ -183,6 +237,23 @@ pub fn build(
     }
     for (r, &u) in routing.iter_mut().zip(&uses) {
         *r |= u >= 2;
+    }
+    // At the border: stubs, points on the line and their neighbours along
+    // the road are routing nodes, so every node a neighbour's stub stands
+    // for is one here.
+    let mut at_border = vec![false; if border.is_some() { index.len() } else { 0 }];
+    if border.is_some() {
+        for (_, _, nodes) in &pieces {
+            for (k, &n) in nodes.iter().enumerate() {
+                if sides.of(n) != Side::Inside {
+                    let (lo, hi) = (k.saturating_sub(1), (k + 1).min(nodes.len() - 1));
+                    for &m in &nodes[lo..=hi] {
+                        at_border[m as usize] = true;
+                        routing[m as usize] = true;
+                    }
+                }
+            }
+        }
     }
     // A stretch that starts and ends at the same node would be a self-loop;
     // make its middle node a routing node so it becomes two edges.
@@ -312,6 +383,21 @@ pub fn build(
         edges: drafts.len(),
         shape_points: shape_points.len(),
     };
+    // The border table, sorted by OSM id as the node index is.
+    let border_nodes: Vec<BorderNode> = at_border
+        .iter()
+        .enumerate()
+        .filter(|&(n, &b)| b && id_of[n] != u32::MAX)
+        .map(|(n, _)| BorderNode {
+            osm_id: index.ids[n],
+            node: id_of[n],
+            flags: if sides.of(n as u32) == Side::Outside {
+                border_flags::OUTSIDE
+            } else {
+                0
+            },
+        })
+        .collect();
     let data = RegionData {
         info,
         nodes,
@@ -326,6 +412,8 @@ pub fn build(
             geometry_names,
             places: Vec::new(),
         },
+        border: border_nodes,
+        meta: None,
     };
     (data, stats)
 }
@@ -469,11 +557,115 @@ mod tests {
     }
 
     fn build_region(ways: &[RawWay]) -> (Region, GraphStats) {
-        let (data, stats) = build(ways, &index(), info(), (5_000, 5_000), 0.0);
+        let (data, stats) = build(ways, &index(), info(), (5_000, 5_000), 0.0, None);
         (
             Region::from_bytes(&data.to_bytes().unwrap()).unwrap(),
             stats,
         )
+    }
+
+    /// A box from lon `w` to `e` (degrees) around the test grid.
+    fn country(w: f64, e: f64) -> Border {
+        let d = |v: f64| (v * COORD_SCALE).round() as i64;
+        Border::from_rings(&[vec![
+            (d(w), d(55.4)),
+            (d(e), d(55.4)),
+            (d(e), d(55.6)),
+            (d(w), d(55.4) + d(0.2)),
+        ]])
+        .unwrap()
+    }
+
+    /// The border table as (OSM id, stub).
+    fn table(ways: &[RawWay], border: &Border) -> Vec<(i64, bool)> {
+        let (data, _) = build(ways, &index(), info(), (5_000, 5_000), 0.0, Some(border));
+        let region = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
+        region
+            .border_nodes()
+            .iter()
+            .map(|b| {
+                assert!((b.node as usize) < region.nodes().len());
+                (b.osm_id, b.flags & border_flags::OUTSIDE != 0)
+            })
+            .collect()
+    }
+
+    /// Every stub on one side stands for a node that is a routing node,
+    /// not a stub, on the other.
+    fn stubs_link(a: &[(i64, bool)], b: &[(i64, bool)]) {
+        for (x, y) in [(a, b), (b, a)] {
+            for &(id, stub) in x {
+                if stub {
+                    assert!(y.contains(&(id, false)), "stub {id} has no twin in {y:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cuts_roads_one_node_past_the_border() {
+        // The road 1-2-3-4 crosses a border between 2 and 3; the side road
+        // 2-5-6 stays in the west.
+        let ways = [
+            RawWay {
+                id: 10,
+                refs: vec![1, 2, 3, 4],
+                attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
+            },
+            RawWay {
+                id: 11,
+                refs: vec![2, 5, 6],
+                attrs: attrs(Oneway::No),
+                road_ref: None,
+                name: None,
+            },
+        ];
+        let (west, east) = (country(13.4, 13.515), country(13.515, 13.6));
+        let w = table(&ways, &west);
+        let e = table(&ways, &east);
+        // The west keeps 3 as its stub; the east keeps 2 as its stub.
+        assert_eq!(w, vec![(2, false), (3, true)]);
+        assert_eq!(e, vec![(2, true), (3, false)]);
+        stubs_link(&w, &e);
+        // The west has no node past its stub, the east none of the side road.
+        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0, Some(&east));
+        assert_eq!(data.nodes.len(), 3, "east: 2 (stub), 3 (next to it) and 4");
+        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0, Some(&west));
+        assert_eq!(data.nodes.len(), 4, "west: 1, 2, 3 (stub) and 6");
+    }
+
+    #[test]
+    fn a_node_on_the_line_belongs_to_both() {
+        // The border runs through node 3 itself.
+        let ways = [RawWay {
+            id: 10,
+            refs: vec![1, 2, 3, 4],
+            attrs: attrs(Oneway::No),
+            road_ref: None,
+            name: None,
+        }];
+        let (west, east) = (country(13.4, 13.52), country(13.52, 13.6));
+        let w = table(&ways, &west);
+        let e = table(&ways, &east);
+        assert_eq!(w, vec![(2, false), (3, false), (4, true)]);
+        assert_eq!(e, vec![(2, true), (3, false), (4, false)]);
+        stubs_link(&w, &e);
+    }
+
+    #[test]
+    fn without_a_border_there_is_no_table() {
+        let ways = [RawWay {
+            id: 10,
+            refs: vec![1, 2, 3, 4],
+            attrs: attrs(Oneway::No),
+            road_ref: None,
+            name: None,
+        }];
+        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0, None);
+        assert!(data.border.is_empty());
+        assert_eq!(data.nodes.len(), 2);
     }
 
     #[test]
@@ -597,7 +789,7 @@ mod tests {
             road_ref: None,
             name: None,
         }];
-        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
+        let (data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0, None);
         let keys: Vec<u64> = data
             .nodes
             .iter()
@@ -627,9 +819,9 @@ mod tests {
                 name: None,
             },
         ];
-        let (_, all) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
+        let (_, all) = build(&ways, &index(), info(), (5_000, 5_000), 0.0, None);
         assert_eq!((all.fragments, all.segments), (0, 2));
-        let (data, kept) = build(&ways, &index(), info(), (5_000, 5_000), 1_000.0);
+        let (data, kept) = build(&ways, &index(), info(), (5_000, 5_000), 1_000.0, None);
         assert_eq!((kept.fragments, kept.segments, kept.nodes), (1, 1, 2));
         assert!((kept.fragment_m - 630.0).abs() < 10.0, "{kept:?}");
         let r = Region::from_bytes(&data.to_bytes().unwrap()).unwrap();
@@ -646,10 +838,10 @@ mod tests {
                 name: None,
             },
         ];
-        let (_, s) = build(&joined, &index(), info(), (5_000, 5_000), 1_000.0);
+        let (_, s) = build(&joined, &index(), info(), (5_000, 5_000), 1_000.0, None);
         assert_eq!(s.fragments, 0);
         // Everything too short: the largest network still stays.
-        let (_, one) = build(&ways, &index(), info(), (5_000, 5_000), 1e9);
+        let (_, one) = build(&ways, &index(), info(), (5_000, 5_000), 1e9, None);
         assert_eq!((one.fragments, one.segments), (1, 1));
     }
 
@@ -667,7 +859,7 @@ mod tests {
             named(11, vec![2, 5, 6], Some("13"), None),
             named(12, vec![4, 8], None, None),
         ];
-        let (mut data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0);
+        let (mut data, _) = build(&ways, &index(), info(), (5_000, 5_000), 0.0, None);
         add_places(
             &mut data.names,
             &[

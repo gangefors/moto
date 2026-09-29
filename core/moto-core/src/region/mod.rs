@@ -73,6 +73,10 @@ struct Sections {
     coverage: Option<(Range<usize>, Range<usize>)>,
     /// All four or none (files before format 1.2 have no names).
     names: Option<NameSections>,
+    /// Border table (format 1.3); none in older files and island regions.
+    border: Option<Range<usize>>,
+    /// What the region is (format 1.3).
+    meta: Option<RegionMeta>,
 }
 
 /// Validated byte ranges of the name sections (format 1.2).
@@ -108,7 +112,7 @@ fn map_open(file: &File, path: &Path) -> Result<Mmap, CoreError> {
 /// Domain tag of [`fingerprint`]. Bump its version whenever [`validate`]
 /// gains a check, so a file proven only by an older build's validation is
 /// validated in full again.
-const FINGERPRINT_TAG: &[u8] = b"moto-region-fingerprint-v2";
+const FINGERPRINT_TAG: &[u8] = b"moto-region-fingerprint-v3";
 /// The file is hashed in this many parts at once.
 const FINGERPRINT_PARTS: u64 = 4;
 const FINGERPRINT_CHUNK: usize = 1 << 20;
@@ -388,6 +392,27 @@ impl Region {
         }
     }
 
+    /// The routing nodes at the region's border, sorted by OSM id
+    /// (ADR-0009); empty for older files and regions without neighbours.
+    pub fn border_nodes(&self) -> &[BorderNode] {
+        match &self.sections.border {
+            Some(r) => self.slice(r),
+            None => &[],
+        }
+    }
+
+    /// What the file says the region is (format 1.3).
+    pub fn meta(&self) -> Option<RegionMeta> {
+        self.sections.meta
+    }
+
+    /// The region's country, ISO 3166-1 alpha-2 (e.g. `SE`), if the file
+    /// says (format 1.3).
+    pub fn country(&self) -> Option<&str> {
+        let meta = self.sections.meta.as_ref()?;
+        std::str::from_utf8(&meta.country).ok()
+    }
+
     /// Whether the file has road names and places (format 1.2).
     pub fn has_names(&self) -> bool {
         self.sections.names.is_some()
@@ -567,6 +592,8 @@ fn validate_marked(
         way_refs: find(section::WAY_REFS)?,
         coverage: None,
         names: None,
+        border: None,
+        meta: None,
     };
     mark("header and section table");
     let nodes: &[PointE7] = typed(bytes, &s.node_pos, section::NODE_POS)?;
@@ -674,6 +701,29 @@ fn validate_marked(
         }
         _ => return Err(err("names need all four of their sections")),
     };
+    let border = match find(section::BORDER_NODES).ok() {
+        None => None,
+        Some(r) => {
+            let list: &[BorderNode] = typed(bytes, &r, section::BORDER_NODES)?;
+            if full {
+                writer::check_border(list, n).map_err(err)?;
+            } else if list.len() > MAX_BORDER_NODES {
+                return Err(err("too many border nodes"));
+            }
+            Some(r)
+        }
+    };
+    let region_meta = match find(section::REGION_META).ok() {
+        None => None,
+        Some(r) => {
+            let [m] = typed::<RegionMeta>(bytes, &r, section::REGION_META)? else {
+                return Err(err("region meta must be exactly one record"));
+            };
+            writer::check_meta(m).map_err(err)?;
+            Some(*m)
+        }
+    };
+    mark("border");
     let info = RegionInfo {
         osm_timestamp: header.osm_timestamp,
         bbox: header.bbox,
@@ -686,6 +736,8 @@ fn validate_marked(
             grid_meta: *meta,
             coverage,
             names,
+            border,
+            meta: region_meta,
             ..s
         },
     ))
