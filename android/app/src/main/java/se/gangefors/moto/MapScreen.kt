@@ -1774,9 +1774,10 @@ fun MapScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
-                    // A flag (the spots tagged on rides) with how many wait.
-                    FloatingActionButton(onClick = { startReview() }) {
-                        BadgedBox(badge = { Badge { Text(pendingTags.toString()) } }) {
+                    // A flag (the spots tagged on rides) with how many wait,
+                    // the count on the button's corner, clear of the flag.
+                    BadgedBox(badge = { Badge { Text(badgeCount(pendingTags)) } }) {
+                        FloatingActionButton(onClick = { startReview() }) {
                             Icon(
                                 painterResource(R.drawable.ic_flag),
                                 contentDescription = pluralStringResource(R.plurals.tags_review, pendingTags, pendingTags),
