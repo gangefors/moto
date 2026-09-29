@@ -848,9 +848,10 @@ fun MapScreen() {
     }
     /**
      * Shows saved section [s] with its card (the same whether picked on
-     * the map or in Menu > Sections): drawn as a route line, so it stands
-     * out from the other sections (faded meanwhile) and one that no longer
-     * fits the map shows too; the map moves to it when [fit] (from the
+     * the map or in Menu > Sections): in its rating's colour, wider and
+     * edged, so it stands out from the other sections (faded meanwhile)
+     * and one that no longer fits the map shows too (grey); the map moves
+     * to it when [fit] (from the
      * page), not when it was tapped where the rider looks.
      */
     fun showSection(s: Section, fit: Boolean) {
@@ -862,17 +863,23 @@ fun MapScreen() {
         roadInfo = null
         overlays?.snap?.clear()
         shownSectionId = s.id
-        overlays?.route?.show(null, null, s.geometry, arrows = isOneWay(s.direction))
+        // What was on the route layer (a saved route or ride) goes.
+        overlays?.route?.show(null, null, null)
         if (fit) showOnMap(listOf(s.geometry), always = true)
     }
     // While the shown section is edited: the direction the sheet's one-way
     // switch and turn-round toggle would give it (null: as saved).
     var editPreview by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
     val shownForEdit = shownSectionId?.let { id -> sections.firstOrNull { it.id == id } }
-    LaunchedEffect(overlays, shownForEdit, editPreview) {
-        val s = shownForEdit ?: return@LaunchedEffect
+    LaunchedEffect(overlays, shownForEdit, editPreview, darkMap) {
+        val s = shownForEdit
+        if (s == null) {
+            overlays?.sections?.showSelected(null, null)
+            return@LaunchedEffect
+        }
         val (line, arrows) = shownSectionLine(s.geometry, isOneWay(s.direction), editPreview)
-        overlays?.route?.show(null, null, line, arrows = arrows)
+        val look = shownSectionLook(s.rating, fitsTheMap(s.status), darkMap)
+        overlays?.sections?.showSelected(line, look, arrows)
     }
     // Another section shown (or none): no longer the one from the page.
     LaunchedEffect(shownSectionId) {

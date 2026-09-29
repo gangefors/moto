@@ -134,6 +134,21 @@ class SectionLogicTest {
     }
 
     @Test
+    fun neighbouringRatingsAreClearlyApart() {
+        // Good and great were once two oranges hard to tell apart; every
+        // step up the scale must be as plain as great to epic.
+        fun rgb(c: String) = listOf(1, 3, 5).map { c.substring(it, it + 2).toInt(16) }
+        fun distance(a: Rating, b: Rating): Double {
+            val (x, y) = rgb(ratingColor(a)) to rgb(ratingColor(b))
+            return kotlin.math.sqrt(x.zip(y).sumOf { (p, q) -> ((p - q) * (p - q)).toDouble() })
+        }
+        RATINGS.zipWithNext().forEach { (a, b) ->
+            assertTrue("$a → $b", distance(a, b) > 100.0)
+        }
+        assertFalse(ratingColor(Rating.GREAT) == UNMATCHED_SECTION_COLOR)
+    }
+
+    @Test
     fun oneWayIsTheForwardDirection() {
         assertTrue(isOneWay(Direction.FORWARD))
         assertFalse(isOneWay(Direction.BOTH))

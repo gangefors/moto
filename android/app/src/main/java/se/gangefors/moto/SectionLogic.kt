@@ -127,12 +127,16 @@ fun autoSectionName(fromTag: Boolean, savedAtSec: Long, distanceM: Double, zone:
 /** Length for labels: one decimal in km, e.g. 12.3. */
 fun sectionKm(distanceM: Double): Double = (distanceM / 100.0).roundToInt() / 10.0
 
-/** Line colour of a saved section on the map, by rating. */
+/** Line colour of a saved section on the map, by rating: a warm scale
+ * with even steps (yellow, red-orange) up to purple. */
 fun ratingColor(rating: Rating): String = when (rating) {
-    Rating.GOOD -> "#f9ab00"
-    Rating.GREAT -> "#e8710a"
+    Rating.GOOD -> "#fbc02d"
+    Rating.GREAT -> "#e64a19"
     Rating.EPIC -> "#a142f4"
 }
+
+/** Line colour of a section that no longer fits the map's roads. */
+const val UNMATCHED_SECTION_COLOR = "#80868b"
 
 /** Ratings from lowest to highest, as offered to the rider. */
 val RATINGS: List<Rating> = listOf(Rating.GOOD, Rating.GREAT, Rating.EPIC)
