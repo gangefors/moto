@@ -33,7 +33,7 @@ import se.gangefors.moto.core.Section
  * and finds the section under a tap. The map only draws
  * and hit-tests; the sections come from the core's store.
  */
-class SectionOverlay(private val style: Style, private val density: Float) {
+class SectionOverlay(private val style: Style, private val density: Float, darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
     private val gravelSource = style.getSourceAs(GRAVEL_SOURCE) ?: GeoJsonSource(GRAVEL_SOURCE).also(style::addSource)
 
@@ -45,7 +45,7 @@ class SectionOverlay(private val style: Style, private val density: Float) {
                     PropertyFactory.lineSortKey(Expression.get(ORDER)),
                     PropertyFactory.lineColor("#ffffff"),
                     PropertyFactory.lineWidth(8f),
-                    PropertyFactory.lineOpacity(0.8f),
+                    PropertyFactory.lineOpacity(0.8f * outlineStrength(darkMap)),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 ),

@@ -206,13 +206,22 @@ fun MapScreen() {
         }
     }
 
+    // The map's own style follows the app's theme: OpenFreeMap's light or
+    // dark map. A change loads the other style; everything drawn on the map
+    // is redrawn on it (the overlays are made anew for each style).
+    val darkMap = LocalTheme.current.dark
+    LaunchedEffect(map, darkMap) {
+        val m = map ?: return@LaunchedEffect
+        val url = mapStyleUrl(resources, darkMap)
+        if (m.style?.uri != url) m.setStyle(url) { s -> style = s }
+    }
     // Load the style once the map is ready.
     LaunchedEffect(mapView) {
         mapView.getMapAsync { m ->
             m.uiSettings.isAttributionEnabled = true
             m.uiSettings.isLogoEnabled = true
             m.cameraPosition = initialCamera(resources)
-            m.setStyle(resources.getString(R.string.map_style_url)) { s ->
+            m.setStyle(mapStyleUrl(resources, darkMap)) { s ->
                 map = m
                 style = s
                 DebugTools.mark("map style loaded")
@@ -427,7 +436,13 @@ fun MapScreen() {
     // proposed section, the route, the snap marker.
     val overlays = remember(style) {
         style?.let { s ->
-            Overlays(SectionOverlay(s, density.density), RideOverlay(s), SectionDraftOverlay(s), RouteOverlay(s, density.density), SnapMarker(s))
+            Overlays(
+                SectionOverlay(s, density.density, darkMap),
+                RideOverlay(s),
+                SectionDraftOverlay(s),
+                RouteOverlay(s, density.density, darkMap),
+                SnapMarker(s),
+            )
         }
     }
 
@@ -961,7 +976,7 @@ fun MapScreen() {
     var savingRoute by remember { mutableStateOf<Pair<Route, Boolean>?>(null) }
     LaunchedEffect(overlays, routeEnds, loopStart, shownSaved, shownSectionId) {
         val routeShown = routeEnds != null || loopStart != null || shownSaved != null || shownSectionId != null
-        overlays?.sections?.setLook(sectionLook(routeShown = routeShown))
+        overlays?.sections?.setLook(sectionLook(routeShown = routeShown, darkMap = darkMap))
     }
     LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
@@ -1100,7 +1115,7 @@ fun MapScreen() {
         val s = style
         if (m == null || o == null || s == null) return@DisposableEffect onDispose {}
         val ready = region as? RegionState.Ready
-        ready?.let { showRegionOutline(s, it.engine.info(), it.engine.coverage()) }
+        ready?.let { showRegionOutline(s, it.engine.info(), it.engine.coverage(), darkMap) }
         val onClick = MapLibreMap.OnMapClickListener { tap ->
             if (marking) {
                 if (ready == null) notify(regionStatus(resources, region), long = true) else onMarkTap(ready, tap)
@@ -2132,7 +2147,9 @@ private fun TopMapButton(icon: Int, description: String, onClick: () -> Unit, mo
             .size(TOP_BUTTON_SIZE)
             .semantics { contentDescription = description },
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
+        // The accent colour, as the other map buttons (Material's floating
+        // action buttons): lilac on the light theme, deep purple on the dark.
+        color = MaterialTheme.colorScheme.primaryContainer,
         tonalElevation = 3.dp,
         shadowElevation = 3.dp,
     ) {
@@ -2426,3 +2443,7 @@ private data class LoopRequest(
 /** How long the section sheet's top edge must stay put before the map
  * fits the section above it, ms (the sheet slides up first). */
 private const val EDIT_FIT_SETTLE_MS = 250L
+
+/** OpenFreeMap's light or dark map style (config.xml). */
+private fun mapStyleUrl(resources: android.content.res.Resources, dark: Boolean): String =
+    resources.getString(if (dark) R.string.map_style_url_dark else R.string.map_style_url)
