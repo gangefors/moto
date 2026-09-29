@@ -112,6 +112,8 @@ fun sectionFacts(row: SectionRow): String = listOfNotNull(
  * need attention after a map update, and a choice of order. Tapping a
  * row shows the section on the map ([onShow]); its ⋮ menu has
  * [rowActions] and Delete (a second tap confirms). [onDelete] deletes.
+ * The chips show [filter] and change it through [onFilter], so the page
+ * can open again as the rider left it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -122,7 +124,8 @@ fun SectionsList(
     here: LatLon?,
     onShow: (Section) -> Unit,
     onDelete: (List<Long>) -> Unit,
-    initialAttention: Boolean = false,
+    filter: SectionFilter = SectionFilter(),
+    onFilter: (SectionFilter) -> Unit = {},
     rowActions: @Composable (section: Section, close: () -> Unit) -> Unit = { _, _ -> },
 ) {
     // By line, not by id: a new section can get a deleted one's id.
@@ -142,8 +145,8 @@ fun SectionsList(
     // The order last chosen, kept between visits.
     val context = LocalContext.current
     var sort by rememberSaveable { mutableStateOf(RoutePrefs.sectionsSort(context)) }
-    var ratings by remember { mutableStateOf(emptySet<Rating>()) }
-    var attention by rememberSaveable { mutableStateOf(initialAttention) }
+    val ratings = filter.ratings
+    val attention = filter.attention
     val all = remember(sections, described, ridden) {
         sections.map { SectionRow(it, lengthM(it.geometry), described[it.geometry], ridden[it.id]) }
     }
@@ -182,7 +185,7 @@ fun SectionsList(
                 RATINGS.reversed().forEach { r ->
                     FilterChip(
                         selected = r in ratings,
-                        onClick = { ratings = toggled(ratings, r) },
+                        onClick = { onFilter(filter.copy(ratings = toggled(ratings, r))) },
                         label = { OneLine(stringResource(ratingLabel(r))) },
                         leadingIcon = { RatingDot(r) },
                     )
@@ -190,7 +193,7 @@ fun SectionsList(
                 if (summary.attention > 0) {
                     FilterChip(
                         selected = onlyAttention,
-                        onClick = { attention = !attention },
+                        onClick = { onFilter(filter.copy(attention = !attention)) },
                         label = { OneLine(stringResource(R.string.sections_attention, summary.attention)) },
                         colors = FilterChipDefaults.filterChipColors(labelColor = MaterialTheme.colorScheme.error),
                     )

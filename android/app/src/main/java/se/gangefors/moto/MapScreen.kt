@@ -296,7 +296,10 @@ fun MapScreen() {
     var sections by remember { mutableStateOf<List<Section>>(emptyList()) }
     // The Sections page opens showing only sections that need attention
     // (from the notice after a map update).
-    var sectionsAttention by remember { mutableStateOf(false) }
+    var sectionFilter by remember { mutableStateOf(SectionFilter()) }
+    // A section shown from the Sections page, with the page's filter then:
+    // deleting it goes back to the page as it was, to carry on tidying up.
+    var shownFromPage by remember { mutableStateOf<Pair<Long, SectionFilter>?>(null) }
     // The menu topic open as a page, if any.
     var dataPage by remember { mutableStateOf<DataPage?>(null) }
     LaunchedEffect(Unit) {
@@ -345,7 +348,7 @@ fun MapScreen() {
                             duration = SnackbarDuration.Indefinite,
                         )
                         if (answer == SnackbarResult.ActionPerformed) {
-                            sectionsAttention = true
+                            sectionFilter = SectionFilter(attention = true)
                             dataPage = DataPage.SECTIONS
                         }
                     }
@@ -857,6 +860,10 @@ fun MapScreen() {
         val (line, arrows) = shownSectionLine(s.geometry, isOneWay(s.direction), editPreview)
         overlays?.route?.show(null, null, line, arrows = arrows)
     }
+    // Another section shown (or none): no longer the one from the page.
+    LaunchedEffect(shownSectionId) {
+        if (shownFromPage?.first != shownSectionId) shownFromPage = null
+    }
     // Planning takes the map over: the shown section goes.
     LaunchedEffect(routeEnds, loopStart) {
         if (routeEnds != null || loopStart != null) shownSectionId = null
@@ -1297,7 +1304,7 @@ fun MapScreen() {
         val oneWay = isOneWay(s.direction)
         val (near, far) = sectionEnds(s.geometry, oneWay, from.toLatLon()) ?: return
         dataPage = null
-        sectionsAttention = false
+        sectionFilter = SectionFilter()
         hideSection()
         shownSaved = null
         roadInfo = null
@@ -1928,7 +1935,7 @@ fun MapScreen() {
             },
             onDismiss = {
                 dataPage = null
-                sectionsAttention = false
+                sectionFilter = SectionFilter()
             },
             onShowRoute = { saved ->
                 dataPage = null
@@ -1975,11 +1982,13 @@ fun MapScreen() {
             },
             gravel = gravel,
             sections = sections,
-            sectionsAttention = sectionsAttention,
+            sectionFilter = sectionFilter,
+            onSectionFilter = { sectionFilter = it },
             here = mapFix(map)?.position,
             onShowSection = { s ->
                 dataPage = null
-                sectionsAttention = false
+                shownFromPage = s.id to sectionFilter
+                sectionFilter = SectionFilter()
                 showSection(s, fit = true)
             },
             sectionActions = { s, close ->
@@ -2081,6 +2090,12 @@ fun MapScreen() {
                 changeSections(null) { st ->
                     st.delete(section.id)
                 }
+                // Shown from the Sections page: back to it, as it was.
+                pageAfterDelete(shownFromPage, section.id)?.let {
+                    sectionFilter = it
+                    dataPage = DataPage.SECTIONS
+                }
+                shownFromPage = null
             },
         )
     }

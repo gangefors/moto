@@ -32,6 +32,14 @@ fun sectionSortOf(name: String?): SectionSort = SectionSort.entries.firstOrNull 
  * empty), or only those that no longer fit the map ([attention]). */
 data class SectionFilter(val ratings: Set<Rating> = emptySet(), val attention: Boolean = false)
 
+/**
+ * The Sections page filter to go back to after section [deletedId] is
+ * deleted: the one the page had when that section was shown from it
+ * ([shownFromPage]: its id and the filter), else null (stay on the map).
+ */
+fun pageAfterDelete(shownFromPage: Pair<Long, SectionFilter>?, deletedId: Long): SectionFilter? =
+    shownFromPage?.takeIf { it.first == deletedId }?.second
+
 /** A section the rider should look at: re-matching after a map update
  * found it no longer fits the roads. */
 fun needsAttention(s: Section): Boolean = s.status == SectionStatus.UNMATCHED
