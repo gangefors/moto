@@ -629,7 +629,18 @@ fn loop_at(
     let mut waypoint = |b: f64, radius: f64| -> Option<RoadPoint> {
         if let Some(p) = anchor_near(start.position, b, radius, favourites, &taken) {
             taken.push(p);
-            return engine.snap(p).ok();
+            // Not on a one-way road (a dual carriageway): the loop would
+            // ride on to the next turning and back up the other side.
+            // The favourite still pulls; the waypoint goes where it would
+            // without it.
+            let region = engine.region();
+            if let Some(rp) = engine
+                .snap(p)
+                .ok()
+                .filter(|rp| crate::route::twin(region, rp.edge).is_some())
+            {
+                return Some(rp);
+            }
         }
         // A waypoint with no road for a loop near it (the sea, the
         // region's edge, forest) is pulled in towards the start; the
@@ -731,18 +742,41 @@ fn ride_loop(
         }
     }
     // Side loops (out to a dead end at a waypoint and back) are cut on the
-    // way out and the way home, never through the stops to visit.
+    // way out and the way home, never through the stops to visit. A cut
+    // can leave the two halves of an out-and-back facing each other (a
+    // turn in a junction's loop, cut out): those go too.
     let parts = match first {
         Some(first) => {
             let mut rest = parts;
             let tail = rest.split_off(kept);
             let through = rest.split_off(first);
-            let mut out = cut_side_loops(region, fun, rest, side_loop_max);
+            let mut out = Vec::new();
+            append_leg(
+                region,
+                &mut out,
+                cut_side_loops(region, fun, rest, side_loop_max),
+                0,
+            );
             out.extend(through);
-            out.extend(cut_side_loops(region, fun, tail, side_loop_max));
+            let keep = out.len();
+            append_leg(
+                region,
+                &mut out,
+                cut_side_loops(region, fun, tail, side_loop_max),
+                keep,
+            );
             out
         }
-        None => cut_side_loops(region, fun, parts, side_loop_max),
+        None => {
+            let mut out = Vec::new();
+            append_leg(
+                region,
+                &mut out,
+                cut_side_loops(region, fun, parts, side_loop_max),
+                0,
+            );
+            out
+        }
     };
     let mut roads: HashMap<u32, f64> = HashMap::new();
     let mut reused = 0.0;
@@ -764,31 +798,46 @@ fn ride_loop(
     })
 }
 
-/// Appends `leg` to `parts`, cutting out an out-and-back where they
-/// meet: at a waypoint partway along a road, the next leg may start by
-/// riding back the way the last one came (the waypoint is only a guide,
-/// not a place to visit). While the last piece so far and the leg's first
-/// piece run opposite ways along the same road, the shared stretch is
-/// removed from both, but never the first `keep` parts (they ride
-/// through a stop the loop must visit).
+/// Appends `leg` to `parts`, cutting out every out-and-back it makes
+/// with them: at a waypoint partway along a road, the next leg may start
+/// by riding back the way the last one came, or ride on to the next
+/// crossing, turn there and come back all the way (the waypoint is only a
+/// guide, not a place to visit). Whenever a piece rides back along the
+/// road the loop just came (the twin edge, continuing where the last
+/// piece ends), the shared stretch is removed from both, however far it
+/// goes back, favourite or not; a piece that carries on along the same
+/// edge first joins the last one, so a turn beyond the waypoint is caught
+/// too. The first `keep` parts are never touched (they ride through a
+/// stop the loop must visit).
 fn append_leg(
     region: &crate::region::Region,
     parts: &mut Vec<Partial>,
     leg: Vec<Partial>,
     keep: usize,
 ) {
+    for piece in leg {
+        push_piece(region, parts, piece, keep);
+    }
+}
+
+/// Pushes `next` onto `parts`, cancelling it against the last piece where
+/// it rides back along it (see [`append_leg`]).
+fn push_piece(
+    region: &crate::region::Region,
+    parts: &mut Vec<Partial>,
+    mut next: Partial,
+    keep: usize,
+) {
     const EPS: f64 = 1e-9;
-    let mut leg = leg.into_iter().peekable();
-    while let (Some(&prev), Some(&next)) = (parts.last(), leg.peek()) {
-        if parts.len() <= keep {
-            break;
+    loop {
+        if next.to - next.from <= EPS {
+            return;
         }
+        let Some(&prev) = parts.last().filter(|_| parts.len() > keep) else {
+            break;
+        };
         if prev.to - prev.from <= EPS {
             parts.pop();
-            continue;
-        }
-        if next.to - next.from <= EPS {
-            leg.next();
             continue;
         }
         let edges = region.edges();
@@ -796,6 +845,13 @@ fn append_leg(
         else {
             break;
         };
+        // Carrying on along the same edge: one piece.
+        if prev.edge == next.edge && (next.from - prev.to).abs() <= 1e-6 {
+            if let Some(last) = parts.last_mut() {
+                last.to = next.to;
+            }
+            return;
+        }
         // Opposite ways along one road: the twin edge, where fraction x
         // is 1 - x of the other; and the next piece starts where the last
         // one ends.
@@ -809,21 +865,14 @@ fn append_leg(
             if let Some(last) = parts.last_mut() {
                 last.to = back_to;
             }
-            leg.next();
-            break;
-        } else if back_to < prev.from - EPS {
-            // Rides back past the start of the last piece: that piece
-            // goes, and the next one starts where it started.
-            parts.pop();
-            if let Some(n) = leg.peek_mut() {
-                n.from = 1.0 - prev.from;
-            }
-        } else {
-            parts.pop();
-            leg.next();
+            return;
         }
+        // Rides back to or past the start of the last piece: that piece
+        // goes, and whatever is left of the next one rides on back.
+        parts.pop();
+        next.from = 1.0 - prev.from;
     }
-    parts.extend(leg);
+    parts.push(next);
 }
 
 /// `parts` without their side loops: where the loop comes back to a
@@ -831,7 +880,8 @@ fn append_leg(
 /// in between is cut out. Such a stretch is a detour through town streets
 /// or out to a waypoint and back that only makes up length; a loop's
 /// length is a guide, not worth a detour that goes nowhere. Side loops
-/// that ride a favourite stay: the loop may have been led there for it.
+/// that ride favourites for at least half their length stay: the loop may
+/// have been led there for them.
 fn cut_side_loops(
     region: &crate::region::Region,
     fun: &Fun,
@@ -859,7 +909,19 @@ fn cut_side_loops(
         let node = e.head;
         if let Some(&i) = at.get(&node) {
             let (_, len, before) = passed[i];
-            let favourite = out[len..].iter().any(|q| fun.is_favourite(q.edge));
+            // Kept when at least half of it rides favourites: the loop was
+            // led there for them. A turn that only touches one is cut.
+            let metres = |q: &Partial| {
+                edges.get(q.edge as usize).map_or(0.0, |e| {
+                    (q.to - q.from).max(0.0) * f64::from(e.length_dm) / 10.0
+                })
+            };
+            let favourite_m: f64 = out[len..]
+                .iter()
+                .filter(|q| fun.is_favourite(q.edge))
+                .map(metres)
+                .sum();
+            let favourite = favourite_m * 2.0 >= ridden - before;
             if ridden - before <= max_m && !favourite {
                 out.truncate(len);
                 ridden = before;
@@ -901,7 +963,10 @@ fn overlap(a: &Loop, b: &Loop) -> f64 {
 /// posted over `slow_kmh` and outside built-up areas (a waypoint in a
 /// town leads the loop into it), and paved unless the rider
 /// prefers gravel. Never a service road, driveway, residential street,
-/// track or ferry, which the loop would ride out to and back for nothing.
+/// track or ferry, which the loop would ride out to and back for nothing,
+/// and never a one-way road such as one carriageway of a dual
+/// carriageway: the loop would ride down it to the next turning and back
+/// up the other carriageway, an out-and-back no trimming can see.
 fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<RoadPoint> {
     let region = engine.region();
     crate::snap::nearby(region, p, WAYPOINT_SEARCH_M, WAYPOINT_CANDIDATES)
@@ -927,7 +992,8 @@ fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<Roa
             // Not on a town street: a waypoint there leads the loop into
             // town. Gravel roads are mostly 50 km/h, so they may be slow.
             let out_of_town = e.speed_kmh > PARAMS.slow_kmh || (prefer && !paved);
-            through && open && !town && (prefer || paved) && out_of_town
+            let two_way = crate::route::twin(region, rp.edge).is_some();
+            through && open && !town && (prefer || paved) && out_of_town && two_way
         })
 }
 

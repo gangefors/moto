@@ -1,0 +1,13 @@
+{
+  "name": "Loop of 2 hours from Huaröd without a spur to a favourite",
+  "description": "Four made-up favourites around a start by Huaröd (random roads, not rated by anyone). A loop's waypoint lands in the middle of the epic one on road 1096 by Skartofta, 2 km before its road's next junction: the next leg used to ride on to that junction, turn and come all the way back, a 2 km out-and-back along the favourite (found on a real ride of the same kind, 2026-09-29). The way to a guide and back is cut however far it goes, so no loop has a side loop outside its home zone.",
+  "from": [55.83446, 13.98604],
+  "loop": {"minutes": 120},
+  "favourites": [
+    {"from": [55.71625, 13.65677], "to": [55.73153, 13.65428], "rating": "epic"},
+    {"from": [55.69121, 13.95929], "to": [55.70824, 13.96476], "rating": "epic"},
+    {"from": [56.03366, 13.63939], "to": [56.04697, 13.65564], "rating": "good"},
+    {"from": [55.64963, 13.84475], "to": [55.63448, 13.86590], "rating": "epic"}
+  ],
+  "expect": {"max_side_loops": 0}
+}
