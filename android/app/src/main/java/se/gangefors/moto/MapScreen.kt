@@ -244,6 +244,8 @@ fun MapScreen() {
     var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var sheetTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var cardsTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    // The section edit sheet's top edge while it is open.
+    var editTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     fun fitPaddingNow(): FitPadding {
         val (w, h) = mapSize.width to mapSize.height
         val panels = Panels(
@@ -252,7 +254,7 @@ fun MapScreen() {
             left = insets.left,
             top = max(topPanelBottom, insets.top),
             right = max(w - buttonsLeft, insets.right),
-            bottom = maxOf(h - tagTop, h - sheetTop, h - cardsTop, insets.bottom),
+            bottom = maxOf(h - tagTop, h - sheetTop, h - cardsTop, h - editTop, insets.bottom),
         )
         return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
     }
@@ -841,8 +843,17 @@ fun MapScreen() {
         roadInfo = null
         overlays?.snap?.clear()
         shownSectionId = s.id
-        overlays?.route?.show(null, null, s.geometry)
+        overlays?.route?.show(null, null, s.geometry, arrows = isOneWay(s.direction))
         if (fit) showOnMap(listOf(s.geometry), always = true)
+    }
+    // While the shown section is edited: the direction the sheet's one-way
+    // switch and turn-round toggle would give it (null: as saved).
+    var editPreview by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
+    val shownForEdit = shownSectionId?.let { id -> sections.firstOrNull { it.id == id } }
+    LaunchedEffect(overlays, shownForEdit, editPreview) {
+        val s = shownForEdit ?: return@LaunchedEffect
+        val (line, arrows) = shownSectionLine(s.geometry, isOneWay(s.direction), editPreview)
+        overlays?.route?.show(null, null, line, arrows = arrows)
     }
     // Planning takes the map over: the shown section goes.
     LaunchedEffect(routeEnds, loopStart) {
@@ -2020,14 +2031,34 @@ fun MapScreen() {
         )
     }
 
-    // Change or delete a saved section.
+    // Change or delete a saved section: the map fits it above the sheet
+    // once the sheet has come up (its top edge settles). The direction
+    // shown goes back to the saved one when the sheet is left, or once
+    // the saved sections have reloaded after Save (so a turned section
+    // doesn't flip back and forth).
+    LaunchedEffect(sections, shownSectionId) { if (editing == null) editPreview = null }
+    LaunchedEffect(editing?.id, editTop) {
+        val section = editing
+        if (section == null) {
+            editTop = Int.MAX_VALUE
+            return@LaunchedEffect
+        }
+        if (editTop >= mapSize.height) return@LaunchedEffect
+        delay(EDIT_FIT_SETTLE_MS)
+        showOnMap(listOf(section.geometry), always = true)
+    }
     editing?.let { section ->
         SectionSheet(
             title = stringResource(R.string.section_edit_title, sectionKm(lengthM(section.geometry))),
             initial = SectionChoice(section.rating, isOneWay(section.direction), riderName(section.name) ?: ""),
             suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
-            onDismiss = { editing = null },
+            onDismiss = {
+                editing = null
+                editPreview = null
+            },
             canReverse = true,
+            onPreview = { oneWay, turn -> editPreview = oneWay to turn },
+            onTop = { editTop = it },
             onSave = { choice ->
                 editing = null
                 changeSections(resources.getString(R.string.section_updated)) { st ->
@@ -2373,3 +2404,7 @@ private data class LoopRequest(
     val favourites: Favourites?,
     val shape: LoopOptions,
 )
+
+/** How long the section sheet's top edge must stay put before the map
+ * fits the section above it, ms (the sheet slides up first). */
+private const val EDIT_FIT_SETTLE_MS = 250L

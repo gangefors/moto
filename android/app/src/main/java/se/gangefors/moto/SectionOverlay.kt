@@ -244,7 +244,7 @@ private fun List<LatLon>.toLineString(): LineString =
     LineString.fromLngLats(map { Point.fromLngLat(it.lon, it.lat) })
 
 /** A small chevron pointing along the line (to the right), white-edged. */
-private fun arrowBitmap(density: Float): Bitmap {
+internal fun arrowBitmap(density: Float): Bitmap {
     val size = (14 * density).toInt().coerceAtLeast(8)
     val bitmap = createBitmap(size, size)
     val s = size.toFloat()

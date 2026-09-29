@@ -212,3 +212,17 @@ fun gravelParts(gravel: List<SectionGravel>, shown: List<Section>): List<List<La
     val ids = shown.filter { fitsTheMap(it.status) }.map { it.id }.toSet()
     return gravel.filter { it.sectionId in ids }.flatMap { it.parts }
 }
+
+/**
+ * How a shown section is drawn: its line, in the direction it runs, and
+ * whether it has arrows (one-way). [preview] is the edit sheet's one-way
+ * switch and turn-round toggle while it is open (null: as saved).
+ */
+fun shownSectionLine(
+    geometry: List<LatLon>,
+    oneWay: Boolean,
+    preview: Pair<Boolean, Boolean>?,
+): Pair<List<LatLon>, Boolean> {
+    val (arrows, turn) = preview ?: (oneWay to false)
+    return (if (turn) geometry.asReversed() else geometry) to arrows
+}
