@@ -11,6 +11,11 @@ printed. Only reads the manifests' JSON, never runs or trusts anything
 else in them: the ids name files only after the builder has checked them.
 
     python3 regions_changed.py published.manifest regions-vN.json <dir>
+    python3 regions_changed.py --same-sources published.json current.json
+
+The second form prints the ids whose sources (extract, border polygon,
+builder) are the same as when their published region was built: those
+need no new download or build (2026-09-29).
 """
 
 import json
@@ -48,7 +53,30 @@ def changed(published: dict, manifest: dict) -> list:
     return out
 
 
+def same_sources(published: dict, current: dict) -> list:
+    """Ids whose source fingerprint equals the published one, sorted."""
+    return sorted(
+        rid
+        for rid, src in current.items()
+        if ID.match(rid) and isinstance(src, str) and published.get(rid) == src
+    )
+
+
+def read_json(path: str):
+    """The JSON in `path`, or {} when it is missing or unreadable."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def main(argv: list) -> int:
+    if len(argv) == 4 and argv[1] == "--same-sources":
+        for rid in same_sources(read_json(argv[2]), read_json(argv[3])):
+            print(rid)
+        return 0
     if len(argv) != 4:
         print(__doc__, file=sys.stderr)
         return 2
