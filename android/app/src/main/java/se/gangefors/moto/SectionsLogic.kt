@@ -51,7 +51,8 @@ private fun rank(r: Rating): Int = when (r) {
 /**
  * [rows] in [sort] order: best rated first (then longest), longest,
  * curviest, newest, nearest to [here] (then as by rating; without a
- * position, as by rating), or longest since ridden (never ridden first).
+ * position, as by rating), or longest since ridden (never ridden first;
+ * the best rated first among equals).
  * Ties keep a stable order by id.
  */
 fun sortSections(rows: List<SectionRow>, sort: SectionSort, here: LatLon?): List<SectionRow> {

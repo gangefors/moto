@@ -7,8 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -37,7 +39,6 @@ interface LibraryActions {
     fun show(item: LibraryItem)
     fun rename(item: LibraryItem)
     fun share(item: LibraryItem)
-    fun saveAsRoute(item: LibraryItem.Ride)
     fun delete(item: LibraryItem)
 }
 
@@ -48,11 +49,12 @@ fun libraryTitle(item: LibraryItem, zone: ZoneId): String = when (item) {
 }
 
 /**
- * One route or ride, as a list row the Material way: tap it to show it on
- * the map; Share (to a nav app, the usual next step) beside it; the rest
- * behind the three dots: Rename, Save as file, Save as route (a ride) and
- * Delete, which asks for a second tap in the menu. A ride still recording
- * can only be renamed.
+ * One route or ride, as a list row the Material way: its kind as an icon
+ * (route, loop or ride, the icons How to use explains), tap it to show it
+ * on the map; Rename and Share (to a nav app, the usual next step) beside
+ * it; Delete behind the three dots, which asks for a second tap in the
+ * menu. A ride still recording can
+ * only be renamed.
  */
 @Composable
 fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
@@ -76,7 +78,18 @@ fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+        Icon(
+            painterResource(
+                when (item) {
+                    is LibraryItem.Route -> if (item.route.isLoop) R.drawable.ic_loop else R.drawable.ic_directions
+                    is LibraryItem.Ride -> R.drawable.ic_ride
+                },
+            ),
+            contentDescription = null,
+            modifier = Modifier.padding(end = 12.dp).size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(Modifier.weight(1f).padding(end = 4.dp)) {
             Text(title)
             Text(
                 when (item) {
@@ -91,41 +104,36 @@ fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        IconButton(onClick = { actions.rename(item) }) {
+            Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.library_rename, title))
+        }
         IconButton(onClick = { actions.share(item) }, enabled = finished) {
             Icon(painterResource(R.drawable.ic_share), stringResource(R.string.library_share))
         }
-        Box {
+        // A ride still recording has nothing more to offer; the space
+        // keeps its buttons in line with the other rows'.
+        if (!finished) {
+            Spacer(Modifier.size(48.dp))
+        } else Box {
             IconButton(onClick = { menu = true }) {
                 Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.library_more, title))
             }
             DropdownMenu(expanded = menu, onDismissRequest = { closeMenu() }) {
-                MenuItem(R.drawable.ic_edit, stringResource(R.string.saved_route_rename)) {
-                    closeMenu()
-                    actions.rename(item)
-                }
-                if (finished) {
-                    if (item is LibraryItem.Ride) {
-                        MenuItem(R.drawable.ic_bookmark, stringResource(R.string.library_save_as_route)) {
-                            closeMenu()
-                            actions.saveAsRoute(item)
-                        }
-                    }
-                    // The first tap arms it (the menu stays open, saying so),
-                    // the second deletes.
-                    val deleted = stringResource(R.string.deleted)
-                    MenuItem(
-                        R.drawable.ic_delete,
-                        stringResource(if (armed) R.string.delete_confirm else R.string.delete),
-                        color = DELETE_COLOR,
-                        strong = armed,
-                    ) {
-                        if (armed) {
-                            closeMenu()
-                            actions.delete(item)
-                            Toasts.show(deleted)
-                        } else {
-                            armed = true
-                        }
+                // The first tap arms it (the menu stays open, saying so),
+                // the second deletes.
+                val deleted = stringResource(R.string.deleted)
+                MenuItem(
+                    R.drawable.ic_delete,
+                    stringResource(if (armed) R.string.delete_confirm else R.string.delete),
+                    color = DELETE_COLOR,
+                    strong = armed,
+                ) {
+                    if (armed) {
+                        closeMenu()
+                        actions.delete(item)
+                        Toasts.show(deleted)
+                    } else {
+                        armed = true
                     }
                 }
             }

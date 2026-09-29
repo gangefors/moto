@@ -58,6 +58,7 @@ internal val BUTTON_ICONS = mapOf(
     "flag" to ButtonIcon(R.drawable.ic_flag, R.string.say_flag),
     "settings" to ButtonIcon(R.drawable.ic_settings, R.string.say_settings),
     "bin" to ButtonIcon(R.drawable.ic_delete, R.string.say_bin),
+    "ride" to ButtonIcon(R.drawable.ic_ride, R.string.say_ride),
 )
 
 /**

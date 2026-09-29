@@ -445,8 +445,13 @@ fun MapScreen() {
     }
     LaunchedEffect(recording) {
         when (val r = recording) {
-            // Short, so the toast stays clear of the buttons.
-            is Recording.State.Finished -> Toasts.show(resources.getString(R.string.recording_saved))
+            // Short, so the toast stays clear of the buttons; the figures
+            // (battery use too) go to the debug tools.
+            is Recording.State.Finished -> {
+                Toasts.show(resources.getString(R.string.recording_saved))
+                val minutes = (((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) / 60).toInt()
+                DebugTools.rideEnded(context, sectionKm(r.track.distanceM), minutes, r.batteryPerHour)
+            }
             is Recording.State.Failed -> notify(resources.getString(R.string.recording_failed, r.message), long = true)
             else -> Unit
         }
@@ -1721,17 +1726,14 @@ fun MapScreen() {
                     }
                 }
                 }
-                // Record: a red dot. While recording: a red stop square with
-                // the distance so far, readable at a glance on the bike.
+                // Record: a red dot. While recording: a stop square with a
+                // red arc running round the button, the same size as the
+                // others; the distance is in the notification.
                 val active = recording as? Recording.State.Active
                 if (active != null) {
-                    val km = sectionKm(active.distanceM)
-                    val stopDescription = stringResource(R.string.record_stop_description, km)
-                    ExtendedFloatingActionButton(
-                        onClick = { RecordingService.stop(context) },
-                        icon = { Icon(painterResource(R.drawable.ic_stop), contentDescription = null, tint = RECORD_RED) },
-                        text = { OneLine(stringResource(R.string.record_stop, km)) },
-                        modifier = Modifier.semantics { contentDescription = stopDescription },
+                    RecordingButton(
+                        onStop = { RecordingService.stop(context) },
+                        description = stringResource(R.string.record_stop_description, sectionKm(active.distanceM)),
                     )
                 } else {
                     FloatingActionButton(onClick = { recordPermissions.launch(recordingPermissions()) }) {

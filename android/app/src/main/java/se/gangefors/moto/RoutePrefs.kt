@@ -22,6 +22,7 @@ object RoutePrefs {
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
     private const val MAP_HINTS = "map_hints_shown"
     private const val SECTIONS_SORT = "sections_sort"
+    private const val LIBRARY_FILTER = "library_filter"
 
     /** How many starts show how to use the map. */
     private const val MAP_HINT_STARTS = 3
@@ -91,5 +92,14 @@ object RoutePrefs {
 
     fun setSectionsSort(context: Context, sort: SectionSort) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(SECTIONS_SORT, sort.name) }
+    }
+
+    /** What Routes & rides lists, as last chosen (all at first). */
+    fun libraryFilter(context: Context): LibraryFilter = libraryFilterOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(LIBRARY_FILTER, null) }.getOrNull(),
+    )
+
+    fun setLibraryFilter(context: Context, filter: LibraryFilter) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LIBRARY_FILTER, filter.name) }
     }
 }

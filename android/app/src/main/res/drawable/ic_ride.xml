@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+-->
+<!-- A ride: the dotted trail of GPS fixes between its start and end. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4,17.5a2.5,2.5 0,1 1,0 5a2.5,2.5 0,1 1,0 -5zM20,1.5a2.5,2.5 0,1 1,0 5a2.5,2.5 0,1 1,0 -5zM8.5,15a1.5,1.5 0,1 1,0 3a1.5,1.5 0,1 1,0 -3zM11,10.5a1.5,1.5 0,1 1,0 3a1.5,1.5 0,1 1,0 -3zM14.5,7.5a1.5,1.5 0,1 1,0 3a1.5,1.5 0,1 1,0 -3zM16,3a1.5,1.5 0,1 1,0 3a1.5,1.5 0,1 1,0 -3z" />
+</vector>

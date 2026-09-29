@@ -48,7 +48,8 @@ import se.gangefors.moto.RegionState
 import se.gangefors.moto.Regions
 
 /**
- * Debug tools: phone and build, memory, start steps, the region check, a
+ * Debug tools: phone and build, memory, battery use of recent rides,
+ * start steps, the region check, a
  * fixed benchmark and every route, loop and snap since the app started.
  * Copy report puts it all on the clipboard as text.
  */
@@ -72,8 +73,10 @@ internal fun DebugDialog(onDismiss: () -> Unit) {
     }
     LaunchedEffect(Unit) { refresh() }
 
+    val rides = remember { DebugTools.rideLines(context).asReversed() }
     fun sections() = listOf(
         ReportSection("Memory", memory),
+        ReportSection("Rides: battery use (latest first)", rides),
         ReportSection("Start", startup),
         ReportSection("Region check", check),
         ReportSection("Benchmark (no favourites; cold / warm)", bench.map(::benchLine)),

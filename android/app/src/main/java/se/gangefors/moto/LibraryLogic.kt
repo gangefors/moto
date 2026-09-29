@@ -36,3 +36,16 @@ fun libraryItems(routes: List<SavedRoute>?, tracks: List<Track>?): List<LibraryI
     return (routes.map { LibraryItem.Route(it) } + tracks.map { LibraryItem.Ride(it) })
         .sortedWith(compareByDescending<LibraryItem> { it.at }.thenBy { it.key })
 }
+
+/** Which of Routes & rides to list. */
+enum class LibraryFilter { ALL, ROUTES, RIDES }
+
+/** The filter named [name] (as stored), else all. */
+fun libraryFilterOf(name: String?): LibraryFilter = LibraryFilter.entries.firstOrNull { it.name == name } ?: LibraryFilter.ALL
+
+/** [items] that [filter] lets through, in their order. */
+fun filterLibrary(items: List<LibraryItem>, filter: LibraryFilter): List<LibraryItem> = when (filter) {
+    LibraryFilter.ALL -> items
+    LibraryFilter.ROUTES -> items.filterIsInstance<LibraryItem.Route>()
+    LibraryFilter.RIDES -> items.filterIsInstance<LibraryItem.Ride>()
+}
