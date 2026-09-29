@@ -15,7 +15,7 @@
     <string name="busy_section">Finding the road…</string>
     <string name="busy_sections">Fitting your sections to the map…</string>
     <string name="busy_region">Checking and installing the map region…</string>
-    <string name="locate_zooms">Zooms of [location]</string>
+    <string name="locate_zooms">Location button zoom</string>
     <string name="locate_zoom_area">Area</string>
     <string name="locate_zoom_close">Close by</string>
     <string name="locate_zooms_hint">The app starts at the area zoom; tapping [location] on your position switches between the two. Drag the left mark for close by and the right one for the area. Widths are across this screen in southern Sweden.</string>
@@ -245,7 +245,7 @@
     <string name="recording_no_store">the ride database can’t be opened</string>
     <string name="menu_open">Menu</string>
     <string name="task_close">Close</string>
-    <string name="delete_tap_again">Tap [bin] again to delete</string>
+    <string name="delete_tap_again">Tap the bin again to delete</string>
     <string name="deleted">Deleted</string>
     <string name="ride_settings_open">Ride settings</string>
     <string name="ride_settings_title">Ride settings</string>

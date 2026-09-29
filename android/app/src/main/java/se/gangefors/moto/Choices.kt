@@ -85,13 +85,13 @@ fun InfoButton(title: String, text: String) {
     val scope = rememberCoroutineScope()
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-        tooltip = { RichTooltip(title = { IconText(title) }) { IconText(text) } },
+        tooltip = { RichTooltip(title = { Text(title) }) { IconText(text) } },
         state = state,
     ) {
         IconButton(onClick = { scope.launch { state.show() } }) {
             Icon(
                 painterResource(R.drawable.ic_info),
-                contentDescription = stringResource(R.string.settings_info, iconTextWords(title)),
+                contentDescription = stringResource(R.string.settings_info, title),
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

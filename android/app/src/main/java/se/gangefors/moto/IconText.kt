@@ -96,9 +96,3 @@ fun IconText(text: String, modifier: Modifier = Modifier, style: TextStyle = Loc
     Text(annotated, modifier, style = style, inlineContent = inline)
 }
 
-/** [text] as words only, each "[key]" read as its button's name. */
-@Composable
-fun iconTextWords(text: String): String {
-    val names = BUTTON_ICONS.mapValues { stringResource(it.value.description) }
-    return helpWords(helpParts(text, BUTTON_ICONS.keys), names)
-}
