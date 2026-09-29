@@ -44,11 +44,10 @@ fun deviceLines(context: Context): List<String> {
     val active = Regions.active.value
     val region = when (val s = active.state) {
         is RegionState.Ready -> {
-            val file = Regions.installedFile(context)
-            val name = active.downloaded?.name ?: "unnamed"
-            val size = if (active.downloaded != null && file.isFile) ", ${mb(file.length())}" else ""
-            val date = s.engine.info().osmTimestamp.takeIf { it > 0 }?.let { ", map data ${TIME.format(Instant.ofEpochSecond(it))}" } ?: ""
-            "$name$size$date"
+            val used = active.installed.filter { it.enabled }
+            val names = used.joinToString(" + ") { "${it.name} ${mb(it.bytes)}" }.ifEmpty { "unnamed" }
+            val date = s.engine.info().osmTimestamp.takeIf { it > 0 }?.let { ", oldest map data ${TIME.format(Instant.ofEpochSecond(it))}" } ?: ""
+            "$names, ${s.engine.linkCount()} border links$date"
         }
         else -> s.toString()
     }
@@ -83,13 +82,15 @@ fun memoryLines(): List<String> {
     )
 }
 
-/** The region check, twice, step by step, on the downloaded region. Call off the main thread. */
+/** The region check, twice, step by step, on each downloaded region. Call off the main thread. */
 fun regionCheckLines(context: Context): List<String> {
-    val file = Regions.installedFile(context)
-    if (!file.isFile) return listOf("No downloaded region.")
-    return (1..2).flatMap { run ->
-        val steps = profileRegionOpen(file.path)
-        listOf("Run $run: ${ms(steps.sumOf { it.ms })}") + steps.map { "  ${it.name}: ${ms(it.ms)}" }
+    val files = Regions.installedFiles(context).filter { it.isFile }
+    if (files.isEmpty()) return listOf("No downloaded region.")
+    return files.flatMap { file ->
+        listOf(file.name) + (1..2).flatMap { run ->
+            val steps = profileRegionOpen(file.path)
+            listOf("Run $run: ${ms(steps.sumOf { it.ms })}") + steps.map { "  ${it.name}: ${ms(it.ms)}" }
+        }
     }
 }
 

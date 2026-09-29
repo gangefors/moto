@@ -44,6 +44,10 @@ fun pageAfterDelete(shownFromPage: Pair<Long, SectionFilter>?, deletedId: Long):
  * found it no longer fits the roads. */
 fun needsAttention(s: Section): Boolean = s.status == SectionStatus.UNMATCHED
 
+/** A section on no map in use (ADR-0009): its region is switched off or
+ * removed; it waits, and is matched again once its region is back. */
+fun offTheMap(s: Section): Boolean = s.status == SectionStatus.NEEDS_REMATCH
+
 fun filterSections(rows: List<SectionRow>, filter: SectionFilter): List<SectionRow> = rows.filter {
     (!filter.attention || needsAttention(it.section)) &&
         (filter.ratings.isEmpty() || it.section.rating in filter.ratings)

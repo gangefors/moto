@@ -80,7 +80,27 @@ pub struct RematchReport {
     pub matched: u64,
     /// Sections that no longer fit: kept, flagged `unmatched`.
     pub unmatched: u64,
+    /// Sections no open region covers (their region is switched off or
+    /// removed, ADR-0009): kept as they are, still `needs_rematch`, and
+    /// matched again once their region is open.
+    pub off_map: u64,
 }
+
+/// Whether `section` lies on the open map: every point in the open
+/// regions' covered area or within [`OFF_MAP_REACH_M`] of one of their
+/// roads. A section in a region that isn't open
+/// fails this; one whose road changed or went (inside an open region) has
+/// roads around it and passes, and is then matched or flagged.
+fn on_open_map(engine: &Engine, section: &Section) -> bool {
+    section.geometry.iter().all(|&p| {
+        engine.covers(p) == Some(true)
+            || crate::snap::snap(engine.net(), p, OFF_MAP_REACH_M).is_ok()
+    })
+}
+
+/// How far from any road of the open regions a section's point may be and
+/// still count as on their map.
+const OFF_MAP_REACH_M: f64 = 1_000.0;
 
 /// Brings the store's sections up to date with `engine`'s region, if the
 /// region changed since they were last matched (or a previous run was cut
@@ -91,12 +111,25 @@ pub struct RematchReport {
 pub fn rematch_store(store: &mut Store, engine: &Engine) -> Result<RematchReport, CoreError> {
     let key = region_key(engine);
     let pending = store.sections_with_status(Status::NeedsRematch)?;
-    if store.region_key()?.as_deref() == Some(key.as_str()) && pending.is_empty() {
-        return Ok(RematchReport::default());
+    let same_map = store.region_key()?.as_deref() == Some(key.as_str());
+    if same_map && pending.iter().all(|s| !on_open_map(engine, s)) {
+        // Nothing new: the sections waiting are all off the open map.
+        return Ok(RematchReport {
+            off_map: pending.len() as u64,
+            ..RematchReport::default()
+        });
     }
-    store.flag_all_for_rematch()?;
+    // Another map: every section is matched again. The same map with
+    // sections waiting (a run cut short): only those.
+    if !same_map {
+        store.flag_all_for_rematch()?;
+    }
     let mut report = RematchReport::default();
     for section in store.sections_with_status(Status::NeedsRematch)? {
+        if !on_open_map(engine, &section) {
+            report.off_map += 1;
+            continue;
+        }
         report.checked += 1;
         match rematch(engine, &section) {
             Some((ways, geometry)) => {

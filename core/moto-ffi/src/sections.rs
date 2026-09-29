@@ -214,6 +214,7 @@ impl SectionStore {
             checked: r.checked,
             matched: r.matched,
             unmatched: r.unmatched,
+            off_map: r.off_map,
         })
     }
 }
@@ -326,6 +327,10 @@ pub struct RematchReport {
     pub checked: u64,
     pub matched: u64,
     pub unmatched: u64,
+    /// Sections no open region covers (switched off or removed): kept,
+    /// waiting, and matched again once their region is open.
+    #[uniffi(default = 0)]
+    pub off_map: u64,
 }
 
 // --- conversions ---
@@ -641,7 +646,8 @@ mod tests {
             RematchReport {
                 checked: 1,
                 matched: 1,
-                unmatched: 0
+                unmatched: 0,
+                off_map: 0,
             }
         );
         assert_eq!(store.get(s.id).unwrap().unwrap().status, SectionStatus::Ok);
@@ -652,7 +658,8 @@ mod tests {
             RematchReport {
                 checked: 0,
                 matched: 0,
-                unmatched: 0
+                unmatched: 0,
+                off_map: 0,
             }
         );
     }

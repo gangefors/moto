@@ -57,13 +57,42 @@ fun isUpdate(installedOsmTimestamp: Long?, offeredOsmTimestamp: Long): Boolean =
 enum class OfferAction { DOWNLOAD, UPDATE, INSTALLED }
 
 /** [OfferAction] for an offer ([offerId], [offerOsmTimestamp]) with the
- * region [installedId] (its data from [installedOsmTimestamp]) on the phone. */
-fun offerAction(installedId: String?, installedOsmTimestamp: Long?, offerId: String, offerOsmTimestamp: Long): OfferAction =
-    when {
-        installedId != offerId -> OfferAction.DOWNLOAD
-        isUpdate(installedOsmTimestamp, offerOsmTimestamp) -> OfferAction.UPDATE
-        else -> OfferAction.INSTALLED
-    }
+ * regions [installed] on the phone (ADR-0009: several side by side). */
+fun offerAction(installed: List<InstalledRegion>, offerId: String, offerOsmTimestamp: Long): OfferAction {
+    val mine = installed.firstOrNull { it.id == offerId } ?: return OfferAction.DOWNLOAD
+    return if (isUpdate(mine.osmTimestamp, offerOsmTimestamp)) OfferAction.UPDATE else OfferAction.INSTALLED
+}
+
+/**
+ * A region installed from a download (ADR-0008, ADR-0009): its id and
+ * name from the manifest, the day its map data is from (0 while unknown),
+ * its file size, and whether it is used (a disabled region stays on the
+ * phone but isn't opened).
+ */
+data class InstalledRegion(
+    val id: String,
+    val name: String,
+    val osmTimestamp: Long,
+    val bytes: Long,
+    val enabled: Boolean,
+)
+
+/** A region id the core accepts in a manifest: `[a-z0-9-]`, 1–32 long. It
+ * names the region's file, so nothing else is ever used as one. */
+fun isRegionId(id: String): Boolean = id.matches(Regex("[a-z0-9-]{1,32}"))
+
+/** The file name of region [id] in the app's region folder. */
+fun regionFileName(id: String): String {
+    require(isRegionId(id)) { "bad region id" }
+    return "$id.region"
+}
+
+/** The regions that are used, in a stable order (by id), for opening. */
+fun enabledRegions(installed: List<InstalledRegion>): List<InstalledRegion> =
+    installed.filter { it.enabled }.sortedBy { it.id }
+
+/** Bytes of all installed regions, enabled or not. */
+fun installedBytes(installed: List<InstalledRegion>): Long = installed.sumOf { it.bytes }
 
 /** How far a download is, 0 to 1 ([total] 0 or less reads as none). */
 fun downloadShare(done: Long, total: Long): Float =
@@ -71,27 +100,3 @@ fun downloadShare(done: Long, total: Long): Float =
 
 /** Megabytes (10⁶ bytes), one decimal, for labels. */
 fun mb(bytes: Long): Double = Math.round(bytes / 100_000.0) / 10.0
-
-/** An opened region, and whether its fingerprint still needs recording. */
-data class OpenedRegion<T>(val region: T, val needsFingerprint: Boolean)
-
-/**
- * Opens an installed region (ADR-0005): by its recorded [fingerprint]
- * when there is one (fast), else, or when the file no longer matches it,
- * with the full check; after a full check the caller records the file's
- * fingerprint anew. A file that fails the full check throws.
- */
-fun <T> openRegion(
-    fingerprint: String?,
-    openFingerprinted: (String) -> T,
-    openFull: () -> T,
-): OpenedRegion<T> {
-    if (fingerprint != null) {
-        try {
-            return OpenedRegion(openFingerprinted(fingerprint), needsFingerprint = false)
-        } catch (_: Exception) {
-            // Changed or unreadable: the full check decides.
-        }
-    }
-    return OpenedRegion(openFull(), needsFingerprint = true)
-}

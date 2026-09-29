@@ -240,8 +240,9 @@ fn one_way_sections_only_cover_the_same_way() {
 }
 
 #[test]
-fn sections_off_the_map_are_imported_as_unmatched() {
-    // A friend's section 500 km away.
+fn sections_off_the_map_are_imported_waiting_for_their_region() {
+    // A friend's section 500 km away: no open region covers it, so it
+    // waits for one (ADR-0009) rather than being flagged.
     let json = br#"{"type":"FeatureCollection","features":[{"type":"Feature",
         "geometry":{"type":"LineString","coordinates":[[18.0,59.3],[18.01,59.31]]},
         "properties":{"rating":"great"}}]}"#;
@@ -251,7 +252,7 @@ fn sections_off_the_map_are_imported_as_unmatched() {
     let s = &store.list_sections(None).unwrap()[0];
     assert_eq!(
         (s.status, s.rating, s.direction),
-        (Status::Unmatched, Rating::Great, Direction::Both)
+        (Status::NeedsRematch, Rating::Great, Direction::Both)
     );
 }
 

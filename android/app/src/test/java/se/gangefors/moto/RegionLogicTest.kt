@@ -60,35 +60,15 @@ class RegionLogicTest {
     }
 
     @Test
-    fun opensByFingerprintAndFallsBackToTheFullCheck() {
-        val calls = mutableListOf<String>()
-        val fast = { fp: String -> calls += "fast $fp"; if (fp == "good") "region" else error("mismatch") }
-        val full = { calls += "full"; "region" }
-
-        assertEquals(OpenedRegion("region", needsFingerprint = false), openRegion("good", fast, full))
-        assertEquals(listOf("fast good"), calls)
-
-        calls.clear()
-        assertEquals(OpenedRegion("region", needsFingerprint = true), openRegion("stale", fast, full))
-        assertEquals(listOf("fast stale", "full"), calls)
-
-        calls.clear()
-        assertEquals(OpenedRegion("region", needsFingerprint = true), openRegion(null, fast, full))
-        assertEquals(listOf("full"), calls)
-
-        // A file that fails the full check is not opened.
-        assertThrows(IllegalStateException::class.java) {
-            openRegion<String>("stale", fast) { error("corrupt") }
-        }
-    }
-
-    @Test
     fun offerRowsOfferTheRightAction() {
-        assertEquals(OfferAction.DOWNLOAD, offerAction(null, null, "sweden", 200))
-        assertEquals(OfferAction.DOWNLOAD, offerAction("skane", 300, "sweden", 200))
-        assertEquals(OfferAction.UPDATE, offerAction("sweden", 100, "sweden", 200))
-        assertEquals(OfferAction.INSTALLED, offerAction("sweden", 200, "sweden", 200))
-        assertEquals(OfferAction.INSTALLED, offerAction("sweden", 300, "sweden", 200))
+        val se = InstalledRegion("sweden", "Sweden", 200, 400_000_000, enabled = true)
+        val no = InstalledRegion("norway", "Norway", 100, 470_000_000, enabled = false)
+        assertEquals(OfferAction.DOWNLOAD, offerAction(emptyList(), "sweden", 200))
+        assertEquals(OfferAction.DOWNLOAD, offerAction(listOf(no), "sweden", 200))
+        assertEquals(OfferAction.INSTALLED, offerAction(listOf(no, se), "sweden", 200))
+        assertEquals(OfferAction.INSTALLED, offerAction(listOf(se), "sweden", 150))
+        // A disabled region is still installed, and still offered updates.
+        assertEquals(OfferAction.UPDATE, offerAction(listOf(se, no), "norway", 300))
     }
 
     @Test
@@ -97,5 +77,26 @@ class RegionLogicTest {
         assertEquals(1f, downloadShare(150, 100))
         assertEquals(0f, downloadShare(-5, 100))
         assertEquals(0f, downloadShare(10, 0))
+    }
+
+    @Test
+    fun regionIdsNameFilesSafely() {
+        assertTrue(isRegionId("sweden"))
+        assertTrue(isRegionId("se-2"))
+        for (bad in listOf("", "Sweden", "../x", "a/b", "a".repeat(33), "sv.region", "é")) {
+            assertFalse(bad, isRegionId(bad))
+        }
+        assertEquals("finland.region", regionFileName("finland"))
+        assertThrows(IllegalArgumentException::class.java) { regionFileName("../../prefs") }
+    }
+
+    @Test
+    fun onlyEnabledRegionsOpenInAStableOrder() {
+        val se = InstalledRegion("sweden", "Sweden", 1, 10, enabled = true)
+        val dk = InstalledRegion("denmark", "Denmark", 1, 20, enabled = true)
+        val no = InstalledRegion("norway", "Norway", 1, 30, enabled = false)
+        assertEquals(listOf(dk, se), enabledRegions(listOf(se, no, dk)))
+        assertEquals(60L, installedBytes(listOf(se, no, dk)))
+        assertTrue(enabledRegions(listOf(no)).isEmpty())
     }
 }

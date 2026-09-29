@@ -331,6 +331,13 @@ private fun SectionRowItem(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            if (offTheMap(row.section)) {
+                Text(
+                    stringResource(R.string.section_off_map_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Box {
             IconButton(onClick = { menu = true }) {
@@ -407,6 +414,13 @@ fun ShownSectionCard(
                 stringResource(R.string.section_attention_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (offTheMap(section)) {
+            Text(
+                stringResource(R.string.section_off_map_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (onLoop != null || onRide != null) {
