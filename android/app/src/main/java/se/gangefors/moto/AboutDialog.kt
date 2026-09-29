@@ -56,12 +56,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     LazyColumn(Modifier.fillMaxSize().scrollHints(list).padding(horizontal = 24.dp), state = list) {
                         item {
                             Text(stringResource(R.string.about_version, appVersion(context)), Modifier.padding(top = 8.dp))
-                            Text(
-                                stringResource(R.string.about_howto_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(top = 16.dp),
-                            )
-                            Text(stringResource(R.string.about_howto), Modifier.padding(top = 4.dp))
                             Text(stringResource(R.string.about_licence), Modifier.padding(top = 12.dp))
                             Text(stringResource(R.string.about_source), Modifier.padding(top = 12.dp))
                             Text(

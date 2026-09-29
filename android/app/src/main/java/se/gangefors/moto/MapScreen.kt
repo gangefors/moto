@@ -386,6 +386,7 @@ fun MapScreen() {
     // The menu, and the page it opened.
     var menuOpen by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
     var showDebug by remember { mutableStateOf(false) }
     // Ride settings, one tap from the map.
     var showSettings by remember { mutableStateOf(false) }
@@ -1808,12 +1809,14 @@ fun MapScreen() {
                     MenuTopic.LIBRARY -> dataPage = DataPage.LIBRARY
                     MenuTopic.SECTIONS -> dataPage = DataPage.SECTIONS
                     MenuTopic.REGION -> dataPage = DataPage.REGION
+                    MenuTopic.HELP -> showHelp = true
                     MenuTopic.ABOUT -> showAbout = true
                     MenuTopic.DEBUG -> showDebug = true
                 }
             },
         )
     }
+    if (showHelp) HelpPage(onDismiss = { showHelp = false })
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
     if (showDebug) DebugTools.Page(onDismiss = { showDebug = false })
 
