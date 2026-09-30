@@ -43,6 +43,9 @@ const TRACK_NOISE_M: f64 = 8.0;
 /// Timed repetitions; the fastest run counts, being the one least disturbed
 /// by the rest of the machine. Short timings get more rounds.
 const ROUNDS: usize = 5;
+// Snapping is also timed once more after each later phase (routing,
+// favourites, loops, matching): its rounds are short (tens of ms), and a
+// slow stretch of a shared CI machine could otherwise cover all of them.
 const SHORT_ROUNDS: usize = 15;
 
 /// Everything `--check` measures.
@@ -130,6 +133,21 @@ impl Rng {
     }
 }
 
+/// Snaps every point once: the time per point in µs, and the points that
+/// snapped to a road.
+fn snap_round(engine: &Engine, points: &[LatLon]) -> (f64, Vec<LatLon>) {
+    let t = Instant::now();
+    let snapped: Vec<LatLon> = points
+        .iter()
+        .copied()
+        .filter(|&p| engine.snap(p).is_ok())
+        .collect();
+    (
+        t.elapsed().as_secs_f64() * 1e6 / points.len().max(1) as f64,
+        snapped,
+    )
+}
+
 fn fastest(v: Vec<f64>) -> f64 {
     v.into_iter().reduce(f64::min).unwrap_or(0.0)
 }
@@ -193,15 +211,11 @@ pub fn run(path: &Path) -> Result<Report, String> {
     let mut on_road = Vec::new();
     let mut snap_runs = Vec::new();
     for _ in 0..ROUNDS {
-        let t = Instant::now();
-        on_road = points
-            .iter()
-            .copied()
-            .filter(|&p| engine.snap(p).is_ok())
-            .collect();
-        snap_runs.push(t.elapsed().as_secs_f64() * 1e6 / points.len() as f64);
+        let (us, snapped) = snap_round(&engine, &points);
+        snap_runs.push(us);
+        on_road = snapped;
     }
-    let snap_us_mean = fastest(snap_runs);
+    let snap_again = |runs: &mut Vec<f64>| runs.push(snap_round(&engine, &points).0);
 
     let pairs = route_pairs(&on_road);
     let opts = RouteOptions::default();
@@ -236,6 +250,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
         }
     }
     let times = sorted(per_pair);
+    snap_again(&mut snap_runs);
 
     // Routing with favourites: sections drawn from road points not used
     // as route ends.
@@ -297,6 +312,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
         }
     }
     let fav_times = sorted(fav_per_pair);
+    snap_again(&mut snap_runs);
 
     // Curvature alone: no favourites.
     let none = Favourites::none();
@@ -316,6 +332,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
         }
     }
     let curvy_times = sorted(curvy_per_pair);
+    snap_again(&mut snap_runs);
     gains.sort_by(f64::total_cmp);
 
     // Routes to choose from, with the favourites.
@@ -335,6 +352,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
         }
     }
     let choices_times = sorted(choices_per_pair);
+    snap_again(&mut snap_runs);
 
     // Round trips from some of the starts, with the favourites.
     let loop_requests: Vec<(LatLon, f64)> = pairs
@@ -343,12 +361,14 @@ pub fn run(path: &Path) -> Result<Report, String> {
         .flat_map(|&(a, _)| LOOP_KM.map(|km| (a, km)))
         .collect();
     let loops = time_loops(&engine, &loop_requests, &opts, &favourites);
+    snap_again(&mut snap_runs);
     let long_requests: Vec<(LatLon, f64)> = pairs
         .iter()
         .take(LOOP_STARTS)
         .map(|&(a, _)| (a, LONG_LOOP_KM))
         .collect();
     let long_loops = time_loops(&engine, &long_requests, &opts, &favourites);
+    snap_again(&mut snap_runs);
 
     // Map matching: noisy synthetic tracks along some of the routes.
     let mut noise = Rng(0x1234_5678_9abc_def1);
@@ -374,6 +394,8 @@ pub fn run(path: &Path) -> Result<Report, String> {
         match_runs.push(ms(t));
     }
     let match_ms = fastest(match_runs);
+    snap_again(&mut snap_runs);
+    let snap_us_mean = fastest(snap_runs);
 
     let unroutable: Vec<(LatLon, LatLon)> = pairs
         .iter()
