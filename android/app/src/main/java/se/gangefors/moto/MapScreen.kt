@@ -799,6 +799,15 @@ fun MapScreen() {
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
 
+    /** Forgets the last loops, so a new loop sheet starts empty (finding
+     * loops) instead of showing the old figures, dimmed, until the new
+     * ones come. */
+    fun clearLoops() {
+        loops = emptyList()
+        loopIndex = 0
+        loopProblem = null
+    }
+
     /** Loops from [start], heading the default way: the standard set
      * (seed 0), or the set of [seed]. */
     fun startLoop(start: LatLng, seed: UInt = 0u) {
@@ -807,6 +816,7 @@ fun MapScreen() {
         message = null
         loopSeed = seed
         loopDirection = defaultDirection
+        clearLoops()
         loopStart = start
     }
 
@@ -975,6 +985,7 @@ fun MapScreen() {
 
     fun closeLoop() {
         loopStart = null
+        clearLoops()
         loopsAhead.clear()
         overlays?.route?.show(null, null, null)
     }
