@@ -85,6 +85,12 @@ fun HelpPage(onDismiss: () -> Unit) {
                     }
                 }
                 for (group in topic.groups) SettingsGroup(group)
+                if (topic.figures.isNotEmpty()) {
+                    topic.figuresText?.let { Text(stringResource(it), Modifier.padding(top = 12.dp)) }
+                    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (key in topic.figures) KeyRow(key, null) {}
+                    }
+                }
             }
         }
     }

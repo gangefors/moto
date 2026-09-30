@@ -32,6 +32,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -621,36 +622,67 @@ private fun SheetTop(
         return
     }
     if (shown == null) return
-    // What the route is worth, as small chips that wrap.
-    val stats = buildList {
-        if (shown.fastest) add(stringResource(R.string.route_fastest))
-        if (shown.extraMinutes > 0) add(stringResource(R.string.route_extra, shown.extraMinutes))
-        if (shown.favouritePercent > 0) add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
-        if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
-        if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
-        if (shown.tollKm > 0.0) add(stringResource(R.string.route_toll, shown.tollKm))
-    }
+    // What the route is worth, as icons and figures on one quiet line.
+    // At rest the sheet grows from the bottom, so should the line ever
+    // wrap (large fonts) it pushes the figures up, never the switcher down.
     FlowRow(
-        modifier = Modifier.padding(top = 4.dp, end = 8.dp).then(dim),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(top = 6.dp, end = 8.dp).then(dim),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        stats.forEach { StatChip(it) }
+        routeStats(shown).forEach { StatFigure(it, shown) }
     }
 }
 
-/** A figure about the route or loop, e.g. "+22 min" (not a button). */
+/** One figure about the route or loop, its icon before it ("[star] 18 %");
+ * a screen reader says it in words ("18 % on favourites"). Not a button. */
 @Composable
-private fun StatChip(text: String) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+private fun StatFigure(stat: RouteStat, s: RouteSummary) {
+    val (icon, text, said) = when (stat.kind) {
+        RouteStatKind.FASTEST -> Triple(null, stringResource(R.string.route_fastest), stringResource(R.string.route_fastest))
+        RouteStatKind.EXTRA -> Triple(
+            R.drawable.ic_time,
+            stringResource(R.string.route_stat_minutes, s.extraMinutes),
+            stringResource(R.string.route_extra, s.extraMinutes),
         )
+        RouteStatKind.FAVOURITES -> Triple(
+            R.drawable.ic_star,
+            stringResource(R.string.route_stat_percent, s.favouritePercent),
+            stringResource(R.string.route_on_favourites, s.favouritePercent),
+        )
+        RouteStatKind.CURVY -> Triple(
+            R.drawable.ic_curvy,
+            stringResource(R.string.route_stat_percent, s.curvyPercent),
+            stringResource(R.string.route_curvy, s.curvyPercent),
+        )
+        RouteStatKind.GRAVEL -> Triple(
+            R.drawable.ic_gravel,
+            stringResource(R.string.route_km, s.gravelKm),
+            stringResource(R.string.route_gravel, s.gravelKm),
+        )
+        RouteStatKind.TOLL -> Triple(
+            R.drawable.ic_toll,
+            stringResource(R.string.route_km, s.tollKm),
+            stringResource(R.string.route_toll, s.tollKm),
+        )
+    }
+    Row(
+        Modifier
+            .alpha(if (stat.zero) 0.45f else 1f)
+            .clearAndSetSemantics { contentDescription = said },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        icon?.let {
+            Icon(
+                painterResource(it),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(noBreak(text), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
 
