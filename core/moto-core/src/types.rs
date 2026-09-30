@@ -18,18 +18,25 @@ pub struct RoadPoint {
     pub offset: f64,
 }
 
-/// Road types a route should stay off.
+/// Road types a route should stay off where it can (`avoid_penalty`,
+/// `toll_penalty`): all three by default (Stefan: ride, don't travel).
+/// An avoided road is still ridden when there is no other way, and one
+/// that is allowed still counts as the least fun kind of road.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Avoid {
     pub motorways: bool,
     pub ferries: bool,
+    /// Roads a motorcycle pays toll on (`edge_flags::TOLL`; a ferry
+    /// counts as a ferry, whatever it costs).
+    pub tolls: bool,
 }
 
 impl Default for Avoid {
     fn default() -> Self {
         Self {
             motorways: true,
-            ferries: false,
+            ferries: true,
+            tolls: true,
         }
     }
 }
@@ -183,6 +190,8 @@ pub struct Route {
     pub favourite_ratings: Vec<crate::section::Rating>,
     /// Metres on gravel and other unpaved roads.
     pub unpaved_m: f64,
+    /// Metres on roads a motorcycle pays toll on (ferries not counted).
+    pub toll_m: f64,
     /// The stretches of `geometry` on unpaved roads, in order, each at
     /// least two points: for drawing them marked.
     pub unpaved_parts: Vec<Vec<LatLon>>,

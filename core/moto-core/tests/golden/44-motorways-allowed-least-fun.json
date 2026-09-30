@@ -1,0 +1,9 @@
+{
+  "name": "Hörby to Kristianstad with motorways allowed",
+  "description": "Motorways allowed count as the least fun roads: the route within its budget keeps to curvy roads for most of the way instead of the E22 (11.6 km on 100+ km/h roads when added; the fastest route rides 37.7).",
+  "from": [55.8540, 13.6610],
+  "to": [56.0294, 14.1567],
+  "motorways": true,
+  "max_detour": 0.8,
+  "expect": {"max_fast_km": 15, "min_curvy_share": 0.15}
+}

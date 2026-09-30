@@ -4,5 +4,6 @@
   "from": [55.676, 12.568],
   "to": [55.605, 13.000],
   "motorways": true,
+  "tolls": true,
   "expect": {"pass": [[55.56547, 12.89461]], "max_detour_ratio": 1.4}
 }

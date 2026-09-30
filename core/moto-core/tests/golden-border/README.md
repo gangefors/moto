@@ -9,4 +9,4 @@ moto-regionbuild denmark-latest.osm.pbf dk.region --country DK --poly dk.poly --
 moto-regionbuild --golden se.region,no.region,dk.region moto-core/tests/golden-border
 ```
 
-The polygons come from `https://polygons.openstreetmap.fr/get_poly.py?id=<relation>&params=0` (Sweden 52822, Norway 2978650, Denmark 50046). `motorways: true` allows motorways (the app avoids them by default), for the Öresund bridge.
+The polygons come from `https://polygons.openstreetmap.fr/get_poly.py?id=<relation>&params=0` (Sweden 52822, Norway 2978650, Denmark 50046). `motorways: true` and `tolls: true` allow motorways and toll roads (the app avoids them, and ferries, by default), for the Öresund bridge.

@@ -51,20 +51,40 @@ impl Off {
     }
 }
 
-/// The extra cost of edge `e` for being a kind of road to avoid:
-/// `avoid_penalty - 1` times its travel time, else 0. It is added after
-/// the fun factor, so no pull makes an avoided road cheaper than that.
+/// A ferry.
+fn is_ferry(e: &Edge) -> bool {
+    e.flags & edge_flags::FERRY != 0
+}
+
+/// A road a motorcycle pays toll on; a ferry counts as a ferry.
+pub(crate) fn is_toll(e: &Edge) -> bool {
+    e.flags & edge_flags::TOLL != 0 && !is_ferry(e)
+}
+
+/// Motorways, ferries and toll roads: the kinds a rider can avoid, and
+/// the least fun roads when allowed.
+fn is_travel_road(e: &Edge) -> bool {
+    RoadClass::from_u8(e.class) == Some(RoadClass::Motorway) || is_ferry(e) || is_toll(e)
+}
+
+/// The extra cost of edge `e` for being a kind of road to avoid: the
+/// largest factor that applies (`avoid_penalty`, or `toll_penalty` for a
+/// toll road; they never add up) less 1, times its travel time; else 0.
+/// It is added after the fun factor, so no pull makes an avoided road
+/// cheaper than that.
 fn avoid_extra(off: &Off, e: &Edge) -> f64 {
     let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
-    let unpaved = is_unpaved(e);
-    let ferry = e.flags & edge_flags::FERRY != 0;
-    let avoided =
-        off.avoid.motorways && motorway || off.unpaved && unpaved || off.avoid.ferries && ferry;
-    if avoided {
-        time_s(e) * (PARAMS.avoid_penalty - 1.0)
-    } else {
-        0.0
+    let mut factor: f64 = 1.0;
+    if off.avoid.motorways && motorway
+        || off.unpaved && is_unpaved(e)
+        || off.avoid.ferries && is_ferry(e)
+    {
+        factor = PARAMS.avoid_penalty;
     }
+    if off.avoid.tolls && is_toll(e) {
+        factor = factor.max(PARAMS.toll_penalty);
+    }
+    time_s(e) * (factor - 1.0)
 }
 
 /// What makes a road worth riding (R5, R6): the rider's favourites
@@ -119,8 +139,13 @@ impl<'a> Fun<'a> {
             .is_some_and(|e| self.favourite_bonus(id, &e) > 0.0)
     }
 
-    /// How curvy edge `id` is, 0–1, whether or not curvature pulls.
+    /// How curvy edge `id` is, 0–1, whether or not curvature pulls. Toll
+    /// roads count as not curvy (motorways and ferries are not by class):
+    /// they are the least fun roads.
     fn curviness(&self, id: u32, e: &Edge) -> f64 {
+        if is_toll(e) {
+            return 0.0;
+        }
         let m = self.region.curvature(id);
         PARAMS.curviness(
             &m,
@@ -167,6 +192,14 @@ impl<'a> Fun<'a> {
             PARAMS.slow_penalty
         } else {
             1.0
+        };
+        // Motorways, ferries and toll roads, when allowed, are the least
+        // fun roads (Stefan): as dull as the fastest band, whatever their
+        // speed.
+        let band = if is_travel_road(e) {
+            band.max(PARAMS.fast_penalty)
+        } else {
+            band
         };
         if e.flags & edge_flags::BUILT_UP != 0 {
             band.max(PARAMS.built_up_penalty)
@@ -379,6 +412,7 @@ struct Builder {
     favourite_ratings: Vec<Rating>,
     unpaved_m: f64,
     unpaved_parts: Vec<Vec<LatLon>>,
+    toll_m: f64,
 }
 
 /// Adds `piece` to `parts`, continuing the last part when the piece
@@ -427,6 +461,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         favourite_ratings: Vec::new(),
         unpaved_m: 0.0,
         unpaved_parts: Vec::new(),
+        toll_m: 0.0,
         suggested: false,
     };
     let (mut favourite_m, mut curvy_m) = (0.0, 0.0);
@@ -439,6 +474,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         out.duration_s += leg.duration_s;
         out.fastest_duration_s += leg.fastest_duration_s;
         out.unpaved_m += leg.unpaved_m;
+        out.toll_m += leg.toll_m;
         favourite_m += leg.favourite_share * leg.distance_m;
         curvy_m += leg.curvy_share * leg.distance_m;
         for (p, r) in leg.favourite_parts.into_iter().zip(leg.favourite_ratings) {
@@ -490,6 +526,9 @@ impl Builder {
             self.unpaved_m += frac * length_m;
             push_part(&mut self.unpaved_parts, polyline_slice(&line, from, to));
         }
+        if is_toll(&e) {
+            self.toll_m += frac * length_m;
+        }
         for p in polyline_slice(&line, from, to) {
             if self.geometry.last() != Some(&p) {
                 self.geometry.push(p);
@@ -518,6 +557,7 @@ impl Builder {
                 favourite_ratings: self.favourite_ratings,
                 unpaved_m: self.unpaved_m,
                 unpaved_parts: self.unpaved_parts,
+                toll_m: self.toll_m,
                 suggested: false,
             },
         }
@@ -1029,6 +1069,7 @@ mod tests {
     use crate::geo::haversine_m;
     use crate::region::Region;
     use crate::region::format::{COORD_SCALE, Surface};
+    use crate::region::format::{Edge, RoadClass, edge_flags};
     use crate::{Avoid, CoreError, Engine, Gravel, LatLon, RouteOptions};
 
     fn engine(data: crate::region::RegionData) -> Engine {
@@ -1044,6 +1085,7 @@ mod tests {
             avoid: Avoid {
                 motorways,
                 ferries: false,
+                tolls: false,
             },
             gravel: if unpaved {
                 Gravel::Avoid
@@ -1504,6 +1546,7 @@ mod tests {
             favourite_parts: parts.clone(),
             unpaved_m: 0.0,
             unpaved_parts: parts,
+            toll_m: 100.0,
             suggested: false,
         };
         let r = super::join(vec![
@@ -1514,6 +1557,7 @@ mod tests {
         assert_eq!(r.favourite_parts, [vec![p(55.05), p(55.1), p(55.15)]]);
         assert_eq!(r.favourite_ratings, [crate::section::Rating::Great]);
         assert_eq!(r.unpaved_parts.len(), 1);
+        assert_eq!(r.toll_m, 200.0);
         assert_eq!(
             (r.distance_m, r.duration_s, r.fastest_duration_s),
             (2000.0, 120.0, 100.0)
@@ -1583,5 +1627,142 @@ mod tests {
             &e.route_with(from, to, &RouteOptions::default(), &none)
                 .unwrap()
         ));
+    }
+
+    fn edge(class: RoadClass, flags: u8) -> Edge {
+        Edge {
+            tail: 0,
+            head: 1,
+            length_dm: 10_000,
+            geometry: 0,
+            speed_kmh: 72,
+            class: class as u8,
+            surface: Surface::Asphalt as u8,
+            flags,
+        }
+    }
+
+    fn off(motorways: bool, ferries: bool, tolls: bool) -> super::Off {
+        super::Off {
+            avoid: Avoid {
+                motorways,
+                ferries,
+                tolls,
+            },
+            unpaved: false,
+        }
+    }
+
+    #[test]
+    fn avoided_kinds_cost_their_factor_once() {
+        use crate::scoring::PARAMS;
+        let all = off(true, true, true);
+        let factor = |o: &super::Off, e: &Edge| 1.0 + super::avoid_extra(o, e) / super::time_s(e);
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        let (tertiary, motorway, ferry) =
+            (RoadClass::Tertiary, RoadClass::Motorway, RoadClass::Ferry);
+        assert!(close(factor(&all, &edge(tertiary, 0)), 1.0));
+        assert!(close(
+            factor(&all, &edge(motorway, 0)),
+            PARAMS.avoid_penalty
+        ));
+        assert!(close(
+            factor(&all, &edge(ferry, edge_flags::FERRY)),
+            PARAMS.avoid_penalty
+        ));
+        assert!(close(
+            factor(&all, &edge(tertiary, edge_flags::TOLL)),
+            PARAMS.toll_penalty
+        ));
+        // A tolled motorway (a bridge) counts once, at the larger factor.
+        assert!(close(
+            factor(&all, &edge(motorway, edge_flags::TOLL)),
+            PARAMS.toll_penalty
+        ));
+        // A ferry with a fare counts as a ferry, avoided or not.
+        let paid_ferry = edge(ferry, edge_flags::FERRY | edge_flags::TOLL);
+        assert!(close(factor(&all, &paid_ferry), PARAMS.avoid_penalty));
+        assert!(close(factor(&off(false, false, true), &paid_ferry), 1.0));
+        // Allowed: no extra.
+        let none = off(false, false, false);
+        for e in [
+            edge(motorway, edge_flags::TOLL),
+            edge(tertiary, edge_flags::TOLL),
+            paid_ferry,
+        ] {
+            assert!(close(factor(&none, &e), 1.0));
+        }
+    }
+
+    /// A toll road straight east (70 km/h, about 6 km) and a free road
+    /// round by the north, about twice as long, between short free roads
+    /// at each end; without `detour` the free road is left out.
+    fn toll_or_detour(detour: bool) -> Engine {
+        let nodes = [
+            (55.70, 13.40),
+            (55.70, 13.50),
+            (55.75, 13.45),
+            (55.70, 13.39),
+            (55.70, 13.51),
+        ];
+        let mut toll = fixture::Road::new(0, 1, RoadClass::Tertiary, 70, 1);
+        toll.flags = edge_flags::TOLL;
+        let mut roads = vec![
+            toll,
+            fixture::Road::new(3, 0, RoadClass::Tertiary, 70, 4),
+            fixture::Road::new(1, 4, RoadClass::Tertiary, 70, 5),
+        ];
+        if detour {
+            roads.push(fixture::Road::new(0, 2, RoadClass::Tertiary, 70, 2));
+            roads.push(fixture::Road::new(2, 1, RoadClass::Tertiary, 70, 3));
+        }
+        engine(fixture::build(&nodes, &roads, 50_000))
+    }
+
+    #[test]
+    fn toll_roads_are_avoided_unless_there_is_no_other_way() {
+        let (a, b) = (ll(55.70, 13.391), ll(55.70, 13.509));
+        let plain = |tolls: bool| RouteOptions {
+            avoid: Avoid {
+                motorways: true,
+                ferries: true,
+                tolls,
+            },
+            curvy: false,
+            ..RouteOptions::default()
+        };
+        let e = toll_or_detour(true);
+        let around = e.route(a, b, &plain(true)).unwrap();
+        assert!(around.geometry.iter().any(|p| p.lat > 55.74), "{around:?}");
+        assert_eq!(around.toll_m, 0.0);
+        let over = e.route(a, b, &plain(false)).unwrap();
+        assert!(over.geometry.iter().all(|p| p.lat < 55.71), "{over:?}");
+        assert!((over.toll_m - 6300.0).abs() < 100.0, "{over:?}");
+        assert!(over.duration_s < around.duration_s);
+        // The only way: ridden even when avoided, and counted.
+        let only = toll_or_detour(false).route(a, b, &plain(true)).unwrap();
+        assert!(only.toll_m > 6000.0, "{only:?}");
+    }
+
+    #[test]
+    fn allowed_travel_roads_are_the_least_fun() {
+        use crate::scoring::PARAMS;
+        let e = toll_or_detour(true);
+        let none = crate::Favourites::none();
+        let o = RouteOptions::default();
+        let fun = super::Fun::new(e.net(), &none, &o);
+        for (i, road) in e.net().regions()[0].edges().iter().enumerate() {
+            let id = i as u32;
+            if road.flags & edge_flags::TOLL != 0 {
+                assert_eq!(fun.speed_penalty(id, road), PARAMS.fast_penalty);
+                assert_eq!(fun.curviness(id, road), 0.0);
+            } else {
+                assert_eq!(fun.speed_penalty(id, road), 1.0, "a 70 road is not dull");
+            }
+        }
+        let motorway = edge(RoadClass::Motorway, 0);
+        let ferry = edge(RoadClass::Ferry, edge_flags::FERRY);
+        assert_eq!(fun.speed_penalty(0, &motorway), PARAMS.fast_penalty);
+        assert_eq!(fun.speed_penalty(0, &ferry), PARAMS.fast_penalty);
     }
 }

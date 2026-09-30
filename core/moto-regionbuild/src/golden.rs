@@ -70,10 +70,14 @@ pub struct Case {
     /// false for cases about favourites or gravel alone.
     #[serde(default = "yes")]
     pub curvy: bool,
-    /// Whether motorways may be ridden (default false: the app avoids
-    /// them unless the rider allows them).
+    /// Whether motorways, ferries and toll roads may be ridden (default
+    /// false: the app avoids them unless the rider allows them).
     #[serde(default)]
     pub motorways: bool,
+    #[serde(default)]
+    pub ferries: bool,
+    #[serde(default)]
+    pub tolls: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
     /// A loop from `from` through these points in order and back (as the
@@ -377,9 +381,9 @@ impl Case {
         }
         opts.gravel = self.gravel.into();
         opts.curvy = self.curvy;
-        if self.motorways {
-            opts.avoid.motorways = false;
-        }
+        opts.avoid.motorways = !self.motorways;
+        opts.avoid.ferries = !self.ferries;
+        opts.avoid.tolls = !self.tolls;
         opts
     }
 

@@ -40,10 +40,14 @@ pub struct RoadPoint {
     pub offset: f64,
 }
 
+/// Road types to stay off where possible; all avoided by default.
 #[derive(Debug, Clone, Copy, uniffi::Record)]
 pub struct Avoid {
     pub motorways: bool,
     pub ferries: bool,
+    /// Roads a motorcycle pays toll on.
+    #[uniffi(default = true)]
+    pub tolls: bool,
 }
 
 /// What a route does with gravel and other unpaved roads.
@@ -123,6 +127,9 @@ pub struct Route {
     /// `geometry`, for marking them.
     pub unpaved_m: f64,
     pub unpaved_parts: Vec<Vec<LatLon>>,
+    /// Metres on roads a motorcycle pays toll on (ferries not counted).
+    #[uniffi(default = 0.0)]
+    pub toll_m: f64,
     /// A route worth riding among route choices; the fastest has it too
     /// when the best choice was the same road (then offered once).
     #[uniffi(default = false)]
@@ -488,6 +495,7 @@ impl From<Avoid> for moto_core::Avoid {
         Self {
             motorways: a.motorways,
             ferries: a.ferries,
+            tolls: a.tolls,
         }
     }
 }
@@ -497,6 +505,7 @@ impl From<moto_core::Avoid> for Avoid {
         Self {
             motorways: a.motorways,
             ferries: a.ferries,
+            tolls: a.tolls,
         }
     }
 }
@@ -576,6 +585,7 @@ impl From<moto_core::Route> for Route {
                 .collect(),
             favourite_ratings: r.favourite_ratings.into_iter().map(Into::into).collect(),
             unpaved_m: r.unpaved_m,
+            toll_m: r.toll_m,
             unpaved_parts: r
                 .unpaved_parts
                 .into_iter()
@@ -978,10 +988,19 @@ mod tests {
         let a = Avoid {
             motorways: false,
             ferries: true,
+            tolls: false,
         };
         let core: moto_core::Avoid = a.into();
         let back: Avoid = core.into();
-        assert_eq!((back.motorways, back.ferries), (false, true));
+        assert_eq!(
+            (back.motorways, back.ferries, back.tolls),
+            (false, true, false)
+        );
+        let d = default_route_options().avoid;
+        assert!(
+            d.motorways && d.ferries && d.tolls,
+            "all avoided by default"
+        );
         for g in [Gravel::Avoid, Gravel::Allow, Gravel::Prefer] {
             let core: moto_core::Gravel = g.into();
             assert_eq!(Gravel::from(core), g);
