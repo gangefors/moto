@@ -354,7 +354,7 @@ private fun RouteCardDetails(
         OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
         FavouritesChips(favourites, onFavourites)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
-        AvoidChips(avoid, onAvoid)
+        AllowChips(avoid, onAvoid)
         if (pickingTime) {
             ArriveByDialog(
                 initial = arriveBy,
@@ -563,7 +563,7 @@ private fun LoopCardDetails(
         OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
         FavouritesChips(favourites, onFavourites)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
-        AvoidChips(avoid, onAvoid)
+        AllowChips(avoid, onAvoid)
     }
 }
 

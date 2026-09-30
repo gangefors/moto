@@ -194,8 +194,14 @@ fun withAvoided(avoid: Avoid, kind: AvoidKind, avoided: Boolean): Avoid = when (
     AvoidKind.TOLLS -> avoid.copy(tolls = avoided)
 }
 
+/** Whether [avoid] allows roads of [kind]: its Allow chip is on. */
+fun allows(avoid: Avoid, kind: AvoidKind): Boolean = !avoids(avoid, kind)
+
+/** [avoid] with roads of [kind] allowed or not: its Allow chip tapped. */
+fun withAllowed(avoid: Avoid, kind: AvoidKind, allowed: Boolean): Avoid = withAvoided(avoid, kind, !allowed)
+
 /** The kinds [avoid] allows, in the order offered. */
-fun allowedKinds(avoid: Avoid): List<AvoidKind> = AvoidKind.entries.filterNot { avoids(avoid, it) }
+fun allowedKinds(avoid: Avoid): List<AvoidKind> = AvoidKind.entries.filter { allows(avoid, it) }
 
 /** How [avoid] is stored in preferences: the allowed kinds' keys. */
 fun avoidKey(avoid: Avoid): String = allowedKinds(avoid).joinToString(",") { it.key }

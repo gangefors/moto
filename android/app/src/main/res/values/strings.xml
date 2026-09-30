@@ -169,11 +169,11 @@
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_gravel">%1$.1f km gravel</string>
     <string name="route_toll">%1$.1f km toll road</string>
-    <string name="avoid_heading">Avoid</string>
+    <string name="avoid_heading">Allow routes on</string>
     <string name="avoid_motorways">Motorways</string>
     <string name="avoid_ferries">Ferries</string>
     <string name="avoid_tolls">Toll roads</string>
-    <string name="avoid_hint">[motorway] Motorways, [ferry] ferries and [toll] toll roads are avoided while their chip is on. An avoided road is still used when there is no other way there. Allowed, it counts as the least fun road: routes and loops keep off it, and only the fastest route seeks it out.\nToll roads are those a motorcycle pays for, like the Öresund bridge and private toll roads; automatic tolls and congestion charges are free for motorcycles.</string>
+    <string name="avoid_hint">[motorway] Motorways, [ferry] ferries and [toll] toll roads are allowed while their chip is on. Off (the default), they are avoided but still used when there is no other way there. Allowed, a road counts as the least fun road: routes and loops keep off it, and only the fastest route seeks it out.\nToll roads are those a motorcycle pays for, like the Öresund bridge and private toll roads; automatic tolls and congestion charges are free for motorcycles.</string>
     <string name="avoid_allowed">%1$s allowed</string>
     <string name="about_open">About and licences</string>
     <string name="help_open">How to use</string>
