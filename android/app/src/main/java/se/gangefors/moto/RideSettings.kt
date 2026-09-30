@@ -31,11 +31,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Avoid
+import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 
 /** The settings on the Ride settings page, as they are now. */
 data class RideSettings(
     val gravel: Gravel,
+    val favourites: FavouritesMode,
     val avoid: Avoid,
     val loopLength: LoopChoice,
     val zooms: LocateZooms,
@@ -45,7 +47,7 @@ data class RideSettings(
 /**
  * Ride settings, one tap from the map (the gear at the top right), in
  * groups as Android's own settings are: routes and loops (gravel roads,
- * roads to allow, the length a new loop starts at), the map (the location button's two
+ * favourites, roads to allow, the length a new loop starts at), the map (the location button's two
  * zooms, as a range) and recording (keeping the screen on). Each change
  * applies at once ([onChange]); Back or the arrow closes the page.
  */
@@ -57,6 +59,10 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
             SettingsGroup(stringResource(R.string.settings_group_routing), first = true)
             Heading(stringResource(R.string.routing_gravel), stringResource(R.string.routing_gravel_hint))
             GravelChips(settings.gravel) { onChange(settings.copy(gravel = it)) }
+            Box(Modifier.padding(top = 16.dp)) {
+                Heading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
+            }
+            FavouritesChips(settings.favourites) { onChange(settings.copy(favourites = it)) }
             Box(Modifier.padding(top = 16.dp)) {
                 Heading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
             }

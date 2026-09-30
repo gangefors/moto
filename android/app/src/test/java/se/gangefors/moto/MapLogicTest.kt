@@ -163,6 +163,18 @@ class MapLogicTest {
     }
 
     @Test
+    fun favouritesChoicesAreStoredByName() {
+        val prefer = se.gangefors.moto.core.FavouritesMode.PREFER
+        val avoid = se.gangefors.moto.core.FavouritesMode.AVOID
+        for (f in FAVOURITES_CHOICES) assertEquals(f, favouritesOf(favouritesKey(f)))
+        assertEquals("avoid", favouritesKey(avoid))
+        // Nothing or anything else stored: preferred.
+        assertEquals(prefer, favouritesOf(null))
+        assertEquals(prefer, favouritesOf("AVOID"))
+        assertEquals(prefer, favouritesOf("../x"))
+    }
+
+    @Test
     fun roadsToAvoidAreStoredAsTheAllowedKinds() {
         // Nothing stored: everything avoided (the default).
         assertEquals(AVOID_ALL, avoidOf(null))

@@ -694,7 +694,7 @@ private fun OptionChips(labels: List<String>, allowed: List<AvoidKind>, onClick:
 }
 
 /** "Avoid favourites" while they are avoided; nothing while preferred
- * (every route starts so). */
+ * (the usual choice). */
 @Composable
 private fun favouritesSummary(f: FavouritesMode): String? =
     if (f == FavouritesMode.AVOID) stringResource(R.string.favourites_summary_avoid) else null

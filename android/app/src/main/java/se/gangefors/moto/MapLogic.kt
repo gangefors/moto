@@ -147,6 +147,14 @@ fun gravelOf(stored: String?, legacyAllow: Boolean = false): Gravel =
 /** The favourites choices, in the order they are offered. */
 val FAVOURITES_CHOICES: List<FavouritesMode> = listOf(FavouritesMode.PREFER, FavouritesMode.AVOID)
 
+/** How a favourites choice is stored in preferences. */
+fun favouritesKey(f: FavouritesMode): String = f.name.lowercase()
+
+/** A stored favourites choice, or preferred. Preferences are read back as
+ * untrusted input: anything else counts as unset. */
+fun favouritesOf(stored: String?): FavouritesMode =
+    FAVOURITES_CHOICES.firstOrNull { favouritesKey(it) == stored } ?: FavouritesMode.PREFER
+
 /**
  * [base] (the core's defaults) with [percent] extra time allowed, and
  * gravel (unpaved) roads avoided, allowed or preferred. Avoided means

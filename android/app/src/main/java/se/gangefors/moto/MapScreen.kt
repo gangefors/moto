@@ -709,9 +709,12 @@ fun MapScreen() {
     var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
     var routeIndex by remember { mutableIntStateOf(0) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
-    // Favourites preferred, or avoided to find new roads: a choice for one
-    // route or loop, back to preferred when it closes.
-    var favouritesMode by remember { mutableStateOf(FavouritesMode.PREFER) }
+    // Favourites preferred, or avoided to find new roads.
+    var favouritesMode by remember { mutableStateOf(RoutePrefs.favourites(context)) }
+    fun changeFavourites(f: FavouritesMode) {
+        favouritesMode = f
+        RoutePrefs.setFavourites(context, f)
+    }
     // Motorways, ferries and toll roads: all avoided until allowed.
     var avoid by remember { mutableStateOf(RoutePrefs.avoid(context)) }
     fun changeAvoid(a: Avoid) {
@@ -1000,12 +1003,6 @@ fun MapScreen() {
     LaunchedEffect(overlays, routeEnds, loopStart, shownSaved, shownSectionId) {
         val routeShown = routeEnds != null || loopStart != null || shownSaved != null || shownSectionId != null
         overlays?.sections?.setLook(sectionLook(routeShown = routeShown, darkMap = darkMap))
-    }
-    // Nothing planned any more, however it ended: favourites preferred
-    // again for the next route or loop.
-    val planningAny = routeEnds != null || loopStart != null
-    LaunchedEffect(planningAny) {
-        if (!planningAny) favouritesMode = FavouritesMode.PREFER
     }
     LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, avoid, favouritesMode, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
@@ -1678,7 +1675,7 @@ fun MapScreen() {
                                 RoutePrefs.setGravel(context, g)
                             },
                             favourites = favouritesMode,
-                            onFavourites = { favouritesMode = it },
+                            onFavourites = { changeFavourites(it) },
                             avoid = avoid,
                             onAvoid = { changeAvoid(it) },
                             onClose = { closeRoute() },
@@ -1753,7 +1750,7 @@ fun MapScreen() {
                                 RoutePrefs.setGravel(context, g)
                             },
                             favourites = favouritesMode,
-                            onFavourites = { favouritesMode = it },
+                            onFavourites = { changeFavourites(it) },
                             avoid = avoid,
                             onAvoid = { changeAvoid(it) },
                             onClose = { closeLoop() },
@@ -2073,12 +2070,13 @@ fun MapScreen() {
     }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(gravel, avoid, loopChoice, locateZooms, keepScreenOn),
+            settings = RideSettings(gravel, favouritesMode, avoid, loopChoice, locateZooms, keepScreenOn),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
                     RoutePrefs.setGravel(context, new.gravel)
                 }
+                if (new.favourites != favouritesMode) changeFavourites(new.favourites)
                 if (new.avoid != avoid) changeAvoid(new.avoid)
                 loopLength.pick(new.loopLength)
                 if (new.zooms != locateZooms) {

@@ -6,6 +6,7 @@ package se.gangefors.moto
 import android.content.Context
 import androidx.core.content.edit
 import se.gangefors.moto.core.Avoid
+import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 
 /**
@@ -17,6 +18,7 @@ object RoutePrefs {
     /** The old Allow gravel switch (a boolean), read once as a fallback. */
     private const val ALLOW_GRAVEL = "allow_gravel"
     private const val GRAVEL = "gravel"
+    private const val FAVOURITES = "favourites"
     /** The kinds of road allowed (motorways, ferries, tolls); unset: all
      * avoided. */
     private const val ALLOWED_ROADS = "allowed_roads"
@@ -47,6 +49,16 @@ object RoutePrefs {
             putString(GRAVEL, gravelKey(gravel))
             remove(ALLOW_GRAVEL)
         }
+    }
+
+    /** Whether routes prefer or avoid the rider's favourites; preferred
+     * by default. */
+    fun favourites(context: Context): FavouritesMode = favouritesOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(FAVOURITES, null) }.getOrNull(),
+    )
+
+    fun setFavourites(context: Context, favourites: FavouritesMode) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(FAVOURITES, favouritesKey(favourites)) }
     }
 
     /** The roads routes avoid; everything avoided until the rider allows

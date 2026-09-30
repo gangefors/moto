@@ -219,7 +219,7 @@
     <string name="help_key_tag">TAG</string>
     <string name="help_key_tag_what">saves the spot you are on</string>
     <string name="help_key_settings">Ride settings</string>
-    <string name="help_key_settings_what">gravel, loop length, zooms, screen</string>
+    <string name="help_key_settings_what">gravel, favourites, loop length, zooms, screen</string>
     <string name="help_key_loop">Loop</string>
     <string name="help_key_loop_what">plans loops from where you are</string>
     <string name="help_key_mark">Mark section</string>
@@ -259,7 +259,7 @@
     <string name="favourites_prefer">Prefer</string>
     <string name="favourites_avoid">Avoid</string>
     <string name="favourites_summary_avoid">Avoid favourites</string>
-    <string name="favourites_hint">**Prefer** seek out your favourites within a route’s extra time\n**Avoid** keep off them where possible, to find new roads; a favourite that is the only way is still used\nEvery new route or loop starts at Prefer.</string>
+    <string name="favourites_hint">**Prefer** seek out your favourites within a route’s extra time\n**Avoid** keep off them where possible, to find new roads; a favourite that is the only way is still used</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
