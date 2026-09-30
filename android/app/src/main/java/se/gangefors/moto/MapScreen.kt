@@ -800,8 +800,7 @@ fun MapScreen() {
     val planning = routeEnds != null || loopStart != null
 
     /** Forgets the last loops, so a new loop sheet starts empty (finding
-     * loops) instead of showing the old figures, dimmed, until the new
-     * ones come. */
+     * loops) instead of showing the old ones' count and figures. */
     fun clearLoops() {
         loops = emptyList()
         loopIndex = 0
@@ -974,8 +973,8 @@ fun MapScreen() {
     }
 
     /** Forgets the last route choices, so a new route sheet starts empty
-     * (finding routes) instead of showing the old figures, dimmed, until
-     * the new ones come. A route recalculated on an open sheet keeps them. */
+     * (finding routes) instead of showing the old ones' figures. Every
+     * recalculation forgets them too. */
     fun clearRoutes() {
         routeSummary = null
         shownRoute = null
@@ -1033,14 +1032,22 @@ fun MapScreen() {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
-        loops = emptyList()
-        loopIndex = 0
-        o.route.show(start, null, null)
         val favs = favourites
         val opts = routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid, favouritesMode)
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         val request = LoopRequest(start, choice, opts, favs, shape)
+        // Found ahead (Shuffle), or found now. A newer request cancels
+        // this one; its result is then dropped.
+        val ahead = loopsAhead.take(request)
+        // A new set on its way: the old loops and their figures go, so the
+        // sheet says it is finding them. Loops Shuffle already has replace
+        // the old ones straight away, without "finding" in between.
+        if (ahead?.isCompleted != true) {
+            loops = emptyList()
+            loopIndex = 0
+            o.route.show(start, null, null)
+        }
         loopProblem = null
         // No loop this time: the start and the card stay, with why, so the
         // rider can Shuffle or change the length or direction from here.
@@ -1058,9 +1065,6 @@ fun MapScreen() {
                 }
             }
         }
-        // Found ahead (Shuffle), or found now. A newer request cancels
-        // this one; its result is then dropped.
-        val ahead = loopsAhead.take(request)
         val result = busy.run(R.string.busy_loops) { ahead?.await() ?: withContext(Dispatchers.Default) { find(request, false) } }
         result.fold(
             onSuccess = { found ->
