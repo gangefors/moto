@@ -99,6 +99,8 @@ pub(crate) struct Fun<'a> {
     gravel: bool,
     /// Gravel is avoided: favourites on it count for nothing.
     no_gravel: bool,
+    /// The kinds of road the rider avoids.
+    avoid: crate::Avoid,
 }
 
 impl<'a> Fun<'a> {
@@ -109,7 +111,14 @@ impl<'a> Fun<'a> {
             curvy: opts.curvy,
             gravel: opts.gravel == Gravel::Prefer,
             no_gravel: opts.gravel == Gravel::Avoid,
+            avoid: opts.avoid,
         }
+    }
+
+    /// Whether `e` is a paid crossing the rider avoids: a toll road or a
+    /// ferry.
+    pub(crate) fn avoided_paid(&self, e: &Edge) -> bool {
+        self.avoid.tolls && is_toll(e) || self.avoid.ferries && is_ferry(e)
     }
 
     /// Whether no road is worth more than another: plain fastest routes.
@@ -413,6 +422,7 @@ struct Builder {
     unpaved_m: f64,
     unpaved_parts: Vec<Vec<LatLon>>,
     toll_m: f64,
+    paid_s: f64,
 }
 
 /// Adds `piece` to `parts`, continuing the last part when the piece
@@ -529,6 +539,11 @@ impl Builder {
         if is_toll(&e) {
             self.toll_m += frac * length_m;
         }
+        // Time on an avoided toll road or ferry counts against the worth.
+        if fun.avoided_paid(&e) {
+            self.paid_s += frac * time_s(&e);
+            self.value_s -= frac * time_s(&e) * PARAMS.paid_worth;
+        }
         for p in polyline_slice(&line, from, to) {
             if self.geometry.last() != Some(&p) {
                 self.geometry.push(p);
@@ -546,6 +561,7 @@ impl Builder {
         };
         Routed {
             value_s: self.value_s,
+            paid_s: self.paid_s,
             route: Route {
                 curvy_share: share(self.curvy_m),
                 favourite_share: share(self.favourite_m),
@@ -568,8 +584,11 @@ impl Builder {
 pub(crate) struct Routed {
     pub(crate) route: Route,
     /// Seconds on favourites, curvy road and preferred gravel, weighted
-    /// (see `Fun::worth`).
+    /// (see `Fun::worth`), less those on dull roads and avoided paid
+    /// crossings (`dull_worth`, `paid_worth`).
     pub(crate) value_s: f64,
+    /// Seconds on avoided toll roads and ferries.
+    pub(crate) paid_s: f64,
 }
 
 /// The route with the path pieces `parts`.

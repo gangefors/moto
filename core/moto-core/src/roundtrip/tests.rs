@@ -956,3 +956,50 @@ fn a_guide_after_a_section_loses_its_out_and_back() {
         l.routed.route.geometry
     );
 }
+
+/// The 13 × 13 km grid with every road across a north–south line 1.5 km
+/// west of a start by its east side (`TOLL_START`) a toll road, like a
+/// bridge to a neighbour: west of it lies the only land that way.
+fn grid_with_toll_line() -> Engine {
+    let mut data = fixture::grid(13);
+    let line = (13.52 * crate::region::format::COORD_SCALE) as i32;
+    let nodes = data.nodes.clone();
+    for e in &mut data.edges {
+        let (a, b) = (nodes[e.tail as usize].lon, nodes[e.head as usize].lon);
+        if (a < line) != (b < line) {
+            e.flags |= crate::region::format::edge_flags::TOLL;
+        }
+    }
+    engine(data)
+}
+
+const TOLL_START: LatLon = LatLon {
+    lat: 55.754,
+    lon: 13.544,
+};
+
+#[test]
+fn loops_cross_an_avoided_toll_road_only_when_worth_it() {
+    let e = grid_with_toll_line();
+    let none = Favourites::none();
+    let west = LoopOptions {
+        seed: 0,
+        bearing: Some(270.0),
+    };
+    let avoided = RouteOptions::default();
+    let mut allowed = RouteOptions::default();
+    allowed.avoid.tolls = false;
+    // Allowed, loops heading west ride over the toll roads.
+    let over = loops(&e, TOLL_START, km(20.0), &allowed, &none, &west).unwrap();
+    assert!(over.iter().any(|l| l.toll_m > 0.0), "{over:?}");
+    // Avoided, a flat grid's loops over there are worth no more than
+    // those on this side, so the loops stay this side, west asked or not.
+    for shape in [west, LoopOptions::default()] {
+        let set = loops(&e, TOLL_START, km(20.0), &avoided, &none, &shape).unwrap();
+        assert!(!set.is_empty());
+        for l in &set {
+            assert_eq!(l.toll_m, 0.0, "{shape:?}: {l:?}");
+            assert!((l.distance_m - 20_000.0).abs() <= 20_000.0 * TOLERANCE);
+        }
+    }
+}

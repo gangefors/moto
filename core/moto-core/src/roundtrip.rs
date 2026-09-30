@@ -178,7 +178,26 @@ pub fn loops(
     };
     // The loops that way first; when there are fewer than two (the sea,
     // the region's edge), the best of any way fill up to two.
-    let found = collect(Candidates::new(shape.seed, shape.bearing));
+    let mut found = collect(Candidates::new(shape.seed, shape.bearing));
+    // A loop over an avoided toll road or ferry only when it is worth as
+    // much as the best loop without one (the rider: a 3 h loop over the
+    // bridge and back isn't worth the little it rides in Denmark). When
+    // every loop that way crosses one (west from the coast), the loops
+    // of any way that don't come in its place.
+    let best = best_free(&found);
+    if best.is_none() && shape.bearing.is_some() && found.iter().any(is_paid) {
+        let others = collect(Candidates::new(shape.seed, None));
+        if let Some(best) = best_free(&others) {
+            found.retain(|l| worth_per_s(l) >= best);
+            found.extend(
+                others
+                    .into_iter()
+                    .filter(|l| !is_paid(l) || worth_per_s(l) >= best),
+            );
+        }
+    } else if let Some(best) = best {
+        found.retain(|l| !is_paid(l) || worth_per_s(l) >= best);
+    }
     let mut kept = if shape.seed != 0 && shape.bearing.is_none() {
         pick_shuffled(found, shape.seed, MAX_LOOPS)
     } else {
@@ -501,6 +520,21 @@ fn middle_bearing(start: &RoadPoint, line: &[LatLon]) -> f64 {
 
 fn worth_per_s(l: &Loop) -> f64 {
     l.routed.value_s / l.routed.route.duration_s.max(1.0)
+}
+
+/// Whether the loop rides an avoided toll road or ferry.
+fn is_paid(l: &Loop) -> bool {
+    l.routed.paid_s > 0.0
+}
+
+/// The best worth per second of the loops that ride no avoided toll road
+/// or ferry, if any.
+fn best_free(loops: &[Loop]) -> Option<f64> {
+    loops
+        .iter()
+        .filter(|l| !is_paid(l))
+        .map(worth_per_s)
+        .max_by(f64::total_cmp)
 }
 
 /// One candidate loop: the waypoints lie `spread` degrees either side of

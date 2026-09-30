@@ -169,7 +169,8 @@ jobs:
         id: border-key
         env:
           SOURCES_HASH: ${{ hashFiles('core/moto-regionbuild/src/**', 'core/moto-core/src/region/**', 'core/moto-core/src/curvature.rs', 'core/moto-core/src/geo.rs') }}
-        run: echo "key=region-border-$(date -u +%G-W%V)-$SOURCES_HASH" >> "$GITHUB_OUTPUT"
+        # v2: the Swedish cut reaches 14.0°E (room for loops east of Lund).
+        run: echo "key=region-border-v2-$(date -u +%G-W%V)-$SOURCES_HASH" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: border-cache
@@ -194,7 +195,7 @@ jobs:
               --country "$country" --poly "$poly" --bbox "$bbox"
             rm "$pbf"
           }
-          cut sweden se SE 52822 55.3,10.9,59.35,13.4
+          cut sweden se SE 52822 55.3,10.9,59.35,14.0
           cut norway no NO 2978650 58.9,10.6,59.4,11.8
           cut denmark dk DK 50046 55.5,12.3,55.8,13.0
 
