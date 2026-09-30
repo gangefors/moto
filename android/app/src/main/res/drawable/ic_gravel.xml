@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2026 Stefan Gangefors
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Loose stones of a few sizes: gravel roads. -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M6.5,15a2,2 0 1,1 0,4a2,2 0 1,1 0,-4z M13,16.5a1.5,1.5 0 1,1 0,3a1.5,1.5 0 1,1 0,-3z M18,13.3a2.2,2.2 0 1,1 0,4.4a2.2,2.2 0 1,1 0,-4.4z M9.5,9.4a1.6,1.6 0 1,1 0,3.2a1.6,1.6 0 1,1 0,-3.2z M15.5,7.7a1.3,1.3 0 1,1 0,2.6a1.3,1.3 0 1,1 0,-2.6z M8,4.4a1.1,1.1 0 1,1 0,2.2a1.1,1.1 0 1,1 0,-2.2z" />
+</vector>

@@ -23,7 +23,8 @@ data class HelpGroup(val title: Int, val settings: List<HelpSetting>)
 
 /**
  * A topic: its heading (with the icon after it, if any), its text, then
- * its key of buttons or its groups of settings.
+ * its key of buttons or its groups of settings, and after them, with
+ * [figuresText] as their lead, a key of the icons on its [figures].
  */
 data class HelpTopic(
     val id: HelpTopicId,
@@ -32,6 +33,8 @@ data class HelpTopic(
     val keys: List<HelpKey> = emptyList(),
     val groups: List<HelpGroup> = emptyList(),
     val titleIcon: String? = null,
+    val figuresText: Int? = null,
+    val figures: List<HelpKey> = emptyList(),
 )
 
 /**
@@ -61,6 +64,14 @@ val HELP_TOPICS = listOf(
             HelpKey("loop", R.string.help_key_loop_here, R.string.help_key_loop_here_what),
             HelpKey("share", R.string.help_key_share, R.string.help_key_share_what),
             HelpKey("save", R.string.help_key_save, R.string.help_key_save_what),
+        ),
+        figuresText = R.string.help_plan_figures,
+        figures = listOf(
+            HelpKey("time", R.string.help_figure_time, R.string.help_figure_time_what),
+            HelpKey("sections", R.string.help_figure_favourites, R.string.help_figure_favourites_what),
+            HelpKey("curvy", R.string.help_figure_curvy, R.string.help_figure_curvy_what),
+            HelpKey("gravel", R.string.help_figure_gravel, R.string.help_figure_gravel_what),
+            HelpKey("toll", R.string.help_figure_toll, R.string.help_figure_toll_what),
         ),
     ),
     HelpTopic(

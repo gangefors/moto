@@ -62,6 +62,9 @@ internal val BUTTON_ICONS = mapOf(
     "motorway" to ButtonIcon(R.drawable.ic_motorway, R.string.say_motorway),
     "ferry" to ButtonIcon(R.drawable.ic_ferry, R.string.say_ferry),
     "toll" to ButtonIcon(R.drawable.ic_toll, R.string.say_toll),
+    "time" to ButtonIcon(R.drawable.ic_time, R.string.say_time),
+    "curvy" to ButtonIcon(R.drawable.ic_curvy, R.string.say_curvy),
+    "gravel" to ButtonIcon(R.drawable.ic_gravel, R.string.say_gravel),
 )
 
 /**

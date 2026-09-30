@@ -91,6 +91,32 @@ class MapLogicTest {
     }
 
     @Test
+    fun theFiguresLineAlwaysHasFavouritesAndCurvy() {
+        assertEquals(
+            listOf(RouteStat(RouteStatKind.FAVOURITES, zero = true), RouteStat(RouteStatKind.CURVY, zero = true)),
+            routeStats(RouteSummary(12.3, 15)),
+        )
+    }
+
+    @Test
+    fun theFiguresLineShowsWhatTheRouteHas() {
+        val all = RouteSummary(64.2, 58, favouritePercent = 2, extraMinutes = 32, curvyPercent = 31, gravelKm = 4.2, tollKm = 3.1)
+        assertEquals(
+            listOf(
+                RouteStat(RouteStatKind.EXTRA),
+                RouteStat(RouteStatKind.FAVOURITES),
+                RouteStat(RouteStatKind.CURVY),
+                RouteStat(RouteStatKind.GRAVEL),
+                RouteStat(RouteStatKind.TOLL),
+            ),
+            routeStats(all),
+        )
+        // The fastest says so instead of its minutes over itself.
+        assertEquals(RouteStat(RouteStatKind.FASTEST), routeStats(all.copy(fastest = true)).first())
+        assertEquals(RouteStat(RouteStatKind.FAVOURITES), routeStats(all.copy(extraMinutes = 0)).first())
+    }
+
+    @Test
     fun summarizesRoutes() {
         assertEquals(RouteSummary(12.3, 15), summarize(12_345.0, 900.0))
         assertEquals(RouteSummary(0.0, 0), summarize(0.0, 0.0))

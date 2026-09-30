@@ -170,6 +170,8 @@
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_gravel">%1$.1f km gravel</string>
     <string name="route_toll">%1$.1f km toll road</string>
+    <string name="route_stat_minutes">+%1$d min</string>
+    <string name="route_stat_percent">%1$d %%</string>
     <string name="avoid_heading">Allow routes on</string>
     <string name="avoid_motorways">Motorways</string>
     <string name="avoid_ferries">Ferries</string>
@@ -193,6 +195,9 @@
     <string name="say_motorway">the motorway chip</string>
     <string name="say_ferry">the ferry chip</string>
     <string name="say_toll">the toll road chip</string>
+    <string name="say_time">the stopwatch</string>
+    <string name="say_curvy">the curvy road</string>
+    <string name="say_gravel">the stones</string>
     <string name="say_settings">the settings button</string>
     <string name="say_bin">the bin</string>
     <string name="say_ride">the ride mark</string>
@@ -239,6 +244,17 @@
     <string name="help_key_share_what">to your nav app, as GPX</string>
     <string name="help_key_save">Save</string>
     <string name="help_key_save_what">keeps it under Routes &amp; rides in the menu</string>
+    <string name="help_plan_figures">Under a route’s or loop’s length and time, its figures:</string>
+    <string name="help_figure_time">Minutes over the fastest</string>
+    <string name="help_figure_time_what">the extra time this route takes over the fastest one; the fastest says Fastest instead</string>
+    <string name="help_figure_favourites">On favourites</string>
+    <string name="help_figure_favourites_what">the share of it on your favourite sections</string>
+    <string name="help_figure_curvy">Curvy</string>
+    <string name="help_figure_curvy_what">the share of it on curvy roads</string>
+    <string name="help_figure_gravel">Gravel</string>
+    <string name="help_figure_gravel_what">km on gravel roads, when it has any</string>
+    <string name="help_figure_toll">Toll roads</string>
+    <string name="help_figure_toll_what">km on roads a motorcycle pays for, when it has any</string>
     <string name="help_key_sections">Favourite sections</string>
     <string name="help_key_sections_what">in the menu: all your favourite sections</string>
     <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>

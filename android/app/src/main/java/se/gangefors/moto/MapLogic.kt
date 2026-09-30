@@ -81,6 +81,30 @@ data class RouteSummary(
     val fastest: Boolean = false,
 )
 
+/** A figure on the route or loop sheet's line of figures. */
+enum class RouteStatKind { FASTEST, EXTRA, FAVOURITES, CURVY, GRAVEL, TOLL }
+
+/** One figure: its [kind], and whether it is nothing ([zero], dimmed). */
+data class RouteStat(val kind: RouteStatKind, val zero: Boolean = false)
+
+/**
+ * The figures [s] shows on the sheet, in order: "Fastest" or the minutes
+ * over the fastest (when there are any), the share on favourites and on
+ * curvy roads (always, so the line is always there; dimmed at 0 %), then
+ * gravel and toll roads only when the route has them.
+ */
+fun routeStats(s: RouteSummary): List<RouteStat> = buildList {
+    if (s.fastest) {
+        add(RouteStat(RouteStatKind.FASTEST))
+    } else if (s.extraMinutes > 0) {
+        add(RouteStat(RouteStatKind.EXTRA))
+    }
+    add(RouteStat(RouteStatKind.FAVOURITES, zero = s.favouritePercent == 0))
+    add(RouteStat(RouteStatKind.CURVY, zero = s.curvyPercent == 0))
+    if (s.gravelKm > 0.0) add(RouteStat(RouteStatKind.GRAVEL))
+    if (s.tollKm > 0.0) add(RouteStat(RouteStatKind.TOLL))
+}
+
 /** [vias] without the one at [index] (all of them when there is none). */
 fun <P> removeVia(vias: List<P>, index: Int): List<P> = vias.filterIndexed { i, _ -> i != index }
 
