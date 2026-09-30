@@ -928,6 +928,59 @@ impl<'a> Search<'a> {
     }
 }
 
+/// Nodes per page of [`NodeState`] (as a power of two).
+const PAGE_BITS: u32 = 12;
+const PAGE_MASK: u32 = (1 << PAGE_BITS) - 1;
+
+/// A search's cost so far and edge arrived by for each node it reaches,
+/// in pages of 4096 nodes made when the search first reaches one. Node
+/// ids follow the map (Hilbert order), so a search only makes the pages
+/// around its route. Filling one array per node of every open region
+/// before each search took longer than a short search itself: about
+/// 20 ms per search over the four linked Nordic regions (4.7 M nodes),
+/// and route choices run a dozen or more searches.
+struct NodeState {
+    pages: Vec<Option<Page>>,
+}
+
+/// One page of [`NodeState`]: cost so far and edge arrived by per node.
+type Page = Box<[(f64, u32)]>;
+
+impl NodeState {
+    fn new(nodes: usize) -> Self {
+        Self {
+            pages: vec![None; nodes.div_ceil(1 << PAGE_BITS)],
+        }
+    }
+
+    /// Cost so far and edge arrived by of `v`: infinite and `NONE` until
+    /// set. Panics for a node out of range, like a slice.
+    #[inline]
+    fn get(&self, v: u32) -> (f64, u32) {
+        match &self.pages[(v >> PAGE_BITS) as usize] {
+            Some(page) => page[(v & PAGE_MASK) as usize],
+            None => (f64::INFINITY, NONE),
+        }
+    }
+
+    #[inline]
+    fn dist(&self, v: u32) -> f64 {
+        self.get(v).0
+    }
+
+    #[inline]
+    fn parent(&self, v: u32) -> u32 {
+        self.get(v).1
+    }
+
+    #[inline]
+    fn set(&mut self, v: u32, dist: f64, parent: u32) {
+        let page = self.pages[(v >> PAGE_BITS) as usize]
+            .get_or_insert_with(|| vec![(f64::INFINITY, NONE); 1 << PAGE_BITS].into_boxed_slice());
+        page[(v & PAGE_MASK) as usize] = (dist, parent);
+    }
+}
+
 /// Cheapest path from `from` to `to` under `cost`, as edge pieces in
 /// travel order. The stretches of road the two points lie on count at their
 /// plain cost. `max_speed_kmh` bounds every edge's speed and keeps the A*
@@ -962,9 +1015,7 @@ pub(crate) fn path(
         }
     }
 
-    let n = region.node_count();
-    let mut dist = vec![f64::INFINITY; n];
-    let mut parent = vec![NONE; n];
+    let mut state = NodeState::new(region.node_count());
     let mut heap = BinaryHeap::new();
     let target = to.position;
     let max_mps = max_speed_kmh.max(1.0) / 3.6;
@@ -974,13 +1025,13 @@ pub(crate) fn path(
 
     for &(node, l) in &leave {
         let c = cost.partial(&region.edge(l.edge), l.to - l.from);
-        if c < dist[node as usize] {
-            dist[node as usize] = c;
+        if c < state.dist(node) {
+            state.set(node, c, NONE);
             heap.push(Reverse((key(c + h(node)), node)));
         }
     }
     while let Some(Reverse((k, v))) = heap.pop() {
-        let g = dist[v as usize];
+        let g = state.dist(v);
         if f64::from_bits(k) >= best_cost {
             break;
         }
@@ -1000,10 +1051,8 @@ pub(crate) fn path(
         for id in region.out_edges(v) {
             let e = region.edge(id);
             let c = g + cost.edge(id, &e);
-            let w = e.head as usize;
-            if c < dist[w] {
-                dist[w] = c;
-                parent[w] = id;
+            if c < state.dist(e.head) {
+                state.set(e.head, c, id);
                 heap.push(Reverse((key(c + h(e.head)), e.head)));
             }
         }
@@ -1020,8 +1069,8 @@ pub(crate) fn path(
     // Walk back from the entry node to a start node.
     let mut path = Vec::new();
     let mut v = entry;
-    while parent[v as usize] != NONE {
-        let id = parent[v as usize];
+    while state.parent(v) != NONE {
+        let id = state.parent(v);
         path.push(id);
         v = region.edge(id).tail;
     }
@@ -1857,5 +1906,23 @@ mod tests {
         let ferry = edge(RoadClass::Ferry, edge_flags::FERRY);
         assert_eq!(fun.speed_penalty(0, &motorway), PARAMS.fast_penalty);
         assert_eq!(fun.speed_penalty(0, &ferry), PARAMS.fast_penalty);
+    }
+
+    #[test]
+    fn node_state_makes_pages_only_where_a_search_goes() {
+        use super::{NONE, NodeState};
+        // Two and a bit pages of nodes.
+        let mut state = NodeState::new(2 * 4096 + 10);
+        assert_eq!(state.pages.len(), 3);
+        assert_eq!(state.get(5), (f64::INFINITY, NONE));
+        state.set(4096 + 7, 12.5, 3);
+        assert_eq!(state.dist(4096 + 7), 12.5);
+        assert_eq!(state.parent(4096 + 7), 3);
+        // Only the page reached exists; the rest still reads as unreached.
+        assert!(state.pages[0].is_none() && state.pages[1].is_some() && state.pages[2].is_none());
+        assert_eq!(state.get(4096 + 8), (f64::INFINITY, NONE));
+        // The last node of the partial last page.
+        state.set(2 * 4096 + 9, 1.0, NONE);
+        assert_eq!(state.get(2 * 4096 + 9), (1.0, NONE));
     }
 }
