@@ -167,6 +167,15 @@ class MapLogicTest {
         assertEquals(listOf(AvoidKind.FERRIES, AvoidKind.TOLLS), allowedKinds(ferriesAndTolls))
         assertTrue(avoids(ferriesAndTolls, AvoidKind.MOTORWAYS))
         assertFalse(avoids(ferriesAndTolls, AvoidKind.FERRIES))
+        // Allow chips: all off with nothing stored (first install); a chip
+        // is on exactly while its kind is allowed, and tapping flips only it.
+        AvoidKind.entries.forEach { assertFalse(allows(avoidOf(null), it)) }
+        assertTrue(allows(ferriesAndTolls, AvoidKind.FERRIES))
+        assertFalse(allows(ferriesAndTolls, AvoidKind.MOTORWAYS))
+        val motorwaysOn = withAllowed(AVOID_ALL, AvoidKind.MOTORWAYS, true)
+        assertEquals(listOf(AvoidKind.MOTORWAYS), allowedKinds(motorwaysOn))
+        assertEquals("motorways", avoidKey(motorwaysOn))
+        assertEquals(AVOID_ALL, withAllowed(motorwaysOn, AvoidKind.MOTORWAYS, false))
         // Read back as untrusted: unknown keys ignored, spaces trimmed.
         assertEquals(
             withAvoided(AVOID_ALL, AvoidKind.MOTORWAYS, false),

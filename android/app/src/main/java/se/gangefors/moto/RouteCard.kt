@@ -345,7 +345,7 @@ private fun RouteCardDetails(
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
-        AvoidChips(avoid, onAvoid)
+        AllowChips(avoid, onAvoid)
         if (pickingTime) {
             ArriveByDialog(
                 initial = arriveBy,
@@ -545,7 +545,7 @@ private fun LoopCardDetails(
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
-        AvoidChips(avoid, onAvoid)
+        AllowChips(avoid, onAvoid)
     }
 }
 
