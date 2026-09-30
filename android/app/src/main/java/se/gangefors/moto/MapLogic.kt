@@ -105,6 +105,15 @@ fun routeStats(s: RouteSummary): List<RouteStat> = buildList {
     if (s.tollKm > 0.0) add(RouteStat(RouteStatKind.TOLL))
 }
 
+/** What the route or loop switcher's count shows: [position] of [count]
+ * once found, none of none (-1 to 0) when nothing was found, and nothing
+ * (null) while a new set is being found: the old count no longer applies. */
+fun choiceCount(found: Boolean, failed: Boolean, position: Int, count: Int): Pair<Int, Int>? = when {
+    found -> position to count
+    failed -> -1 to 0
+    else -> null
+}
+
 /** [vias] without the one at [index] (all of them when there is none). */
 fun <P> removeVia(vias: List<P>, index: Int): List<P> = vias.filterIndexed { i, _ -> i != index }
 

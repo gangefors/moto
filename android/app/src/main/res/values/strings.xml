@@ -117,6 +117,8 @@
     <string name="route_via_selected">Waypoint %1$d</string>
     <string name="route_via_remove">Remove this waypoint</string>
     <string name="loop_count">%1$d / %2$d</string>
+    <!-- The switcher's count while a new set of loops is being found. -->
+    <string name="loop_count_finding">– / –</string>
     <string name="loop_heading_any">Any direction</string>
     <string name="loop_heading_north">North</string>
     <string name="loop_heading_east">East</string>

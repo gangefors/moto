@@ -32,6 +32,14 @@ class MapLogicTest {
     }
 
     @Test
+    fun theSwitcherForgetsTheOldCountWhileFinding() {
+        assertEquals(1 to 3, choiceCount(found = true, failed = false, position = 1, count = 3))
+        assertEquals(-1 to 0, choiceCount(found = false, failed = true, position = 1, count = 3))
+        // A new set on its way: the old count no longer applies.
+        assertNull(choiceCount(found = false, failed = false, position = 1, count = 3))
+    }
+
+    @Test
     fun aStartGivenByTheAppActsLikeALongPress() {
         // "Route here from my position": the long-pressed point becomes the
         // end, the rider's position the start, and further long-presses

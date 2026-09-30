@@ -51,7 +51,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -458,10 +457,11 @@ fun LoopCard(
 /**
  * Which of the routes or loops to choose from is shown, with the previous
  * and next ones, and for loops Shuffle ([onShuffle]) for another set.
- * While they are being found the row keeps the last figures, its buttons
- * off, so the sheet doesn't move; when none were found ([failed]) Shuffle
- * still works. With Shuffle the count always shows, 1 / 1 too, so the
- * button never moves. Nothing to choose from and no Shuffle: no row.
+ * While they are being found the old count is gone (a new set is on its
+ * way, Stefan): loops show "– / –" with the buttons off, routes no row;
+ * when none were found ([failed]) Shuffle still works. With Shuffle the
+ * count always shows, 1 / 1 too, so the button never moves. Nothing to
+ * choose from and no Shuffle: no row.
  */
 @Composable
 private fun ChoiceSwitcher(
@@ -475,14 +475,9 @@ private fun ChoiceSwitcher(
     nextDescription: String,
     onShuffle: (() -> Unit)? = null,
 ) {
-    val last = remember { mutableStateOf(position to count) }
-    SideEffect { if (found) last.value = position to count }
-    // None found: 0 / 0, its buttons off.
-    val (shownPosition, shownCount) = when {
-        found -> position to count
-        failed -> -1 to 0
-        else -> last.value
-    }
+    // None found: 0 / 0, its buttons off; finding: no count.
+    val shown = choiceCount(found, failed, position, count)
+    val shownCount = shown?.second ?: 0
     if (shownCount <= 1 && !failed && onShuffle == null) return
     FlowRow(
         modifier = Modifier.padding(top = 4.dp),
@@ -502,11 +497,11 @@ private fun ChoiceSwitcher(
                     Icon(painterResource(R.drawable.ic_chevron_left), previousDescription)
                 }
                 Text(
-                    stringResource(
-                        R.string.loop_count,
-                        if (shownCount == 0) 0 else shownPosition + 1,
-                        shownCount,
-                    ),
+                    if (shown == null) {
+                        stringResource(R.string.loop_count_finding)
+                    } else {
+                        stringResource(R.string.loop_count, if (shownCount == 0) 0 else shown.first + 1, shownCount)
+                    },
                     style = MaterialTheme.typography.titleSmall,
                 )
                 IconButton(onClick = onNext, enabled = switchable) {
@@ -558,8 +553,8 @@ private fun LoopCardDetails(
  * [problem]: why nothing was), then Save, Share (both only once something
  * is found) and the cross, as icons in every state of the sheet; below,
  * across the whole width, what the route is worth (or the problem). While
- * a new route is being found the last figures stay, dimmed, so the sheet
- * keeps its size; [computing] shows only before the first one.
+ * a new route or loop is being found, [computing] shows and the old
+ * figures are gone, so it is clear they no longer apply (Stefan).
  */
 @Composable
 private fun SheetTop(
@@ -572,10 +567,7 @@ private fun SheetTop(
     closeDescription: String,
     problem: String? = null,
 ) {
-    val last = remember { mutableStateOf(summary) }
-    SideEffect { if (summary != null) last.value = summary }
-    val shown = summary ?: last.value
-    val dim = if (summary == null && problem == null) Modifier.alpha(0.5f) else Modifier
+    val shown = summary
     Row(verticalAlignment = Alignment.CenterVertically) {
         // The distance and the time on one line, in the largest of a few
         // sizes that fits; when not even the smallest does (very large
@@ -593,7 +585,7 @@ private fun SheetTop(
         val measurer = rememberTextMeasurer()
         val gap = 12.dp
         val gapPx = with(LocalDensity.current) { gap.roundToPx() }
-        BoxWithConstraints(Modifier.weight(1f).then(dim)) {
+        BoxWithConstraints(Modifier.weight(1f)) {
             val widths = styles.map { st ->
                 texts.sumOf { measurer.measure(it, st, softWrap = false, maxLines = 1).size.width } + gapPx * (texts.size - 1)
             }
@@ -626,7 +618,7 @@ private fun SheetTop(
     // At rest the sheet grows from the bottom, so should the line ever
     // wrap (large fonts) it pushes the figures up, never the switcher down.
     FlowRow(
-        modifier = Modifier.padding(top = 6.dp, end = 8.dp).then(dim),
+        modifier = Modifier.padding(top = 6.dp, end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
