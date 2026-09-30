@@ -42,6 +42,12 @@ pub struct Net {
     /// stubs in other regions.
     extra_out: HashMap<u32, Vec<u32>>,
     extra_in: HashMap<u32, Vec<u32>>,
+    /// One bit per global node, set for the nodes in `canon`, `extra_out`
+    /// or `extra_in`: nearly every node is in none of them, and a search
+    /// asks about every edge it looks at, so the maps are only consulted
+    /// for the few hundred border nodes (a hash lookup per edge made
+    /// searches over linked regions several times slower).
+    linked: Vec<u64>,
     /// Several regions' coverage as one outline (offsets, points), so
     /// neighbours join at their border instead of overlapping.
     merged: Option<(Vec<u32>, Vec<PointE7>)>,
@@ -83,6 +89,7 @@ impl Net {
             canon: HashMap::new(),
             extra_out: HashMap::new(),
             extra_in: HashMap::new(),
+            linked: Vec::new(),
             merged: None,
         }
     }
@@ -118,6 +125,7 @@ impl Net {
             canon: HashMap::new(),
             extra_out: HashMap::new(),
             extra_in: HashMap::new(),
+            linked: Vec::new(),
             merged: None,
         };
         net.link();
@@ -157,6 +165,27 @@ impl Net {
                 self.extra_in.entry(twin).or_default().extend(inn);
             }
         }
+        self.linked = vec![0; self.node_count().div_ceil(64)];
+        let nodes: Vec<u32> = self
+            .canon
+            .keys()
+            .chain(self.extra_out.keys())
+            .chain(self.extra_in.keys())
+            .copied()
+            .collect();
+        for n in nodes {
+            if let Some(w) = self.linked.get_mut(n as usize / 64) {
+                *w |= 1 << (n % 64);
+            }
+        }
+    }
+
+    /// Whether `node` has an entry in `canon`, `extra_out` or `extra_in`.
+    #[inline]
+    fn is_linked(&self, node: u32) -> bool {
+        self.linked
+            .get(node as usize / 64)
+            .is_some_and(|w| w >> (node % 64) & 1 == 1)
     }
 
     /// Joins the regions' coverage into one outline. Overlapping outlines
@@ -201,7 +230,7 @@ impl Net {
     /// The stub's twin, or the node itself.
     #[inline]
     fn canonical(&self, node: u32) -> u32 {
-        if self.canon.is_empty() {
+        if !self.is_linked(node) {
             node
         } else {
             self.canon.get(&node).copied().unwrap_or(node)
@@ -273,7 +302,7 @@ impl Net {
         map: &'a HashMap<u32, Vec<u32>>,
         node: u32,
     ) -> std::slice::Iter<'a, u32> {
-        if map.is_empty() {
+        if !self.is_linked(node) {
             return [].iter();
         }
         map.get(&node).map_or([].iter(), |v| v.iter())
