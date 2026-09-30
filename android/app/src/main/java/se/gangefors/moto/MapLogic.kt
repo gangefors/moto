@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
@@ -65,7 +66,7 @@ fun classify(e: Throwable): CoreProblem = when (e) {
  * Route summary for the route card: distance in km (one decimal), whole
  * minutes, whole minutes over the fastest route (never negative), the
  * whole percent of the distance on favourite sections and on curvy roads,
- * and the km on gravel (one decimal).
+ * and the km on gravel and on toll roads (one decimal).
  */
 data class RouteSummary(
     val km: Double,
@@ -74,6 +75,7 @@ data class RouteSummary(
     val extraMinutes: Int = 0,
     val curvyPercent: Int = 0,
     val gravelKm: Double = 0.0,
+    val tollKm: Double = 0.0,
     /** The fastest of several routes to choose from (the dull option). */
     val fastest: Boolean = false,
 )
@@ -101,6 +103,7 @@ fun summarize(
     fastestDurationS: Double = durationS,
     curvyShare: Double = 0.0,
     unpavedM: Double = 0.0,
+    tollM: Double = 0.0,
 ): RouteSummary =
     RouteSummary(
         km = Math.round(distanceM / 100.0) / 10.0,
@@ -108,8 +111,13 @@ fun summarize(
         favouritePercent = percent(favouriteShare),
         extraMinutes = Math.round(((durationS - fastestDurationS) / 60.0).coerceAtLeast(0.0)).toInt(),
         curvyPercent = percent(curvyShare),
-        gravelKm = Math.round(unpavedM.coerceIn(0.0, distanceM.coerceAtLeast(0.0)) / 100.0) / 10.0,
+        gravelKm = tenthsOfKm(unpavedM, distanceM),
+        tollKm = tenthsOfKm(tollM, distanceM),
     )
+
+/** [m] metres of a route [distanceM] long, in km to one decimal. */
+private fun tenthsOfKm(m: Double, distanceM: Double): Double =
+    Math.round(m.coerceIn(0.0, distanceM.coerceAtLeast(0.0)) / 100.0) / 10.0
 
 private fun percent(share: Double): Int = Math.round(share.coerceIn(0.0, 1.0) * 100.0).toInt()
 
@@ -141,11 +149,50 @@ fun gravelOf(stored: String?, legacyAllow: Boolean = false): Gravel =
  * "where possible": the core counts them as much slower, it doesn't ban
  * them; preferred means they pull the route within the extra time.
  */
-fun routeOptions(base: RouteOptions, percent: Int, gravel: Gravel = Gravel.AVOID): RouteOptions =
+fun routeOptions(base: RouteOptions, percent: Int, gravel: Gravel = Gravel.AVOID, avoid: Avoid = AVOID_ALL): RouteOptions =
     base.copy(
         budget = TimeBudget.Extra(percent / 100.0),
         gravel = gravel,
+        avoid = avoid,
     )
+
+/** The kinds of road a rider can avoid or allow, in the order offered. */
+enum class AvoidKind(val key: String) {
+    MOTORWAYS("motorways"),
+    FERRIES("ferries"),
+    TOLLS("tolls"),
+}
+
+/** Motorways, ferries and toll roads all avoided: the default (the rider:
+ * ride, don't travel). */
+val AVOID_ALL = Avoid(motorways = true, ferries = true, tolls = true)
+
+/** Whether [avoid] avoids roads of [kind]. */
+fun avoids(avoid: Avoid, kind: AvoidKind): Boolean = when (kind) {
+    AvoidKind.MOTORWAYS -> avoid.motorways
+    AvoidKind.FERRIES -> avoid.ferries
+    AvoidKind.TOLLS -> avoid.tolls
+}
+
+/** [avoid] with roads of [kind] avoided or not. */
+fun withAvoided(avoid: Avoid, kind: AvoidKind, avoided: Boolean): Avoid = when (kind) {
+    AvoidKind.MOTORWAYS -> avoid.copy(motorways = avoided)
+    AvoidKind.FERRIES -> avoid.copy(ferries = avoided)
+    AvoidKind.TOLLS -> avoid.copy(tolls = avoided)
+}
+
+/** The kinds [avoid] allows, in the order offered. */
+fun allowedKinds(avoid: Avoid): List<AvoidKind> = AvoidKind.entries.filterNot { avoids(avoid, it) }
+
+/** How [avoid] is stored in preferences: the allowed kinds' keys. */
+fun avoidKey(avoid: Avoid): String = allowedKinds(avoid).joinToString(",") { it.key }
+
+/** A stored choice of roads to avoid; read back as untrusted: unknown
+ * keys are ignored, and without one everything is avoided. */
+fun avoidOf(stored: String?): Avoid {
+    val allowed = stored.orEmpty().split(',').map { it.trim() }.toSet()
+    return AvoidKind.entries.fold(AVOID_ALL) { a, k -> withAvoided(a, k, k.key !in allowed) }
+}
 
 /** Exported route files: "moto-route-2026-09-24-1830.gpx", in local time. */
 fun routeFileName(atSec: Long, zone: java.time.ZoneId): String =
@@ -219,11 +266,12 @@ const val ARRIVE_MARGIN = 0.10
  * it may be spent on favourites and curvy roads (guard off). Too little
  * time gives the fastest route.
  */
-fun arriveByOptions(base: RouteOptions, nowSec: Long, arriveAtSec: Long, gravel: Gravel): RouteOptions =
+fun arriveByOptions(base: RouteOptions, nowSec: Long, arriveAtSec: Long, gravel: Gravel, avoid: Avoid = AVOID_ALL): RouteOptions =
     base.copy(
         budget = TimeBudget.Total((arriveAtSec - nowSec).coerceAtLeast(0L) * (1.0 - ARRIVE_MARGIN)),
         minGain = 0.0,
         gravel = gravel,
+        avoid = avoid,
     )
 
 /** The next [hour]:[minute] after [nowSec] in [zone]: today, or tomorrow

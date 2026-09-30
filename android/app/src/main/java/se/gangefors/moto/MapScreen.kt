@@ -121,6 +121,7 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.LatLon
@@ -707,6 +708,12 @@ fun MapScreen() {
     var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
     var routeIndex by remember { mutableIntStateOf(0) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
+    // Motorways, ferries and toll roads: all avoided until allowed.
+    var avoid by remember { mutableStateOf(RoutePrefs.avoid(context)) }
+    fun changeAvoid(a: Avoid) {
+        avoid = a
+        RoutePrefs.setAvoid(context, a)
+    }
     LaunchedEffect(overlays, sections, sectionGravel, gravel) {
         val hidden = hiddenForGravel(sectionGravel, gravel)
         val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
@@ -755,7 +762,7 @@ fun MapScreen() {
             others = others, dull = index == dull, dullOther = dull, favouriteRatings = r.favouriteRatings,
         )
         routeIndex = index
-        routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM)
+        routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM, r.tollM)
             .copy(fastest = index == fastest)
         shownRoute = r to opts
     }
@@ -990,7 +997,7 @@ fun MapScreen() {
         val routeShown = routeEnds != null || loopStart != null || shownSaved != null || shownSectionId != null
         overlays?.sections?.setLook(sectionLook(routeShown = routeShown, darkMap = darkMap))
     }
-    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, favourites, overlays) {
+    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, avoid, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -998,7 +1005,7 @@ fun MapScreen() {
         loopIndex = 0
         o.route.show(start, null, null)
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel)
+        val opts = routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid)
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         val request = LoopRequest(start, choice, opts, favs, shape)
@@ -1052,7 +1059,7 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, vias, arriveBy, gravel, favourites, overlays, routeThrough) {
+    LaunchedEffect(routeEnds, vias, arriveBy, gravel, avoid, favourites, overlays, routeThrough) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -1064,9 +1071,9 @@ fun MapScreen() {
         val now = System.currentTimeMillis() / 1000
         val by = arriveBy
         val opts = if (by != null) {
-            arriveByOptions(defaultRouteOptions(), now, by, gravel)
+            arriveByOptions(defaultRouteOptions(), now, by, gravel, avoid)
         } else {
-            routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel)
+            routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid)
         }
         // A newer request cancels this one; its result is then dropped.
         val result = busy.run(R.string.busy_routes) {
@@ -1572,7 +1579,7 @@ fun MapScreen() {
                     SavedRouteCard(
                         s,
                         onShare = {
-                            shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel))
+                            shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
                         },
                         onClose = {
                             shownSaved = null
@@ -1660,6 +1667,8 @@ fun MapScreen() {
                                 gravel = g
                                 RoutePrefs.setGravel(context, g)
                             },
+                            avoid = avoid,
+                            onAvoid = { changeAvoid(it) },
                             onClose = { closeRoute() },
                             onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
                             onSave = { shownRoute?.let { (r, _) -> savingRoute = r to (routeThrough != null) } },
@@ -1708,7 +1717,7 @@ fun MapScreen() {
                             onExpandedChange = { cardExpanded = it },
                             maxHeight = sheetMaxHeight,
                             summary = shown?.let { r ->
-                                summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM)
+                                summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM)
                             },
                             problem = loopProblem,
                             position = loopIndex,
@@ -1731,6 +1740,8 @@ fun MapScreen() {
                                 gravel = g
                                 RoutePrefs.setGravel(context, g)
                             },
+                            avoid = avoid,
+                            onAvoid = { changeAvoid(it) },
                             onClose = { closeLoop() },
                             onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
                             onSave = { shown?.let { savingRoute = it to true } },
@@ -2009,6 +2020,7 @@ fun MapScreen() {
                 }
             },
             gravel = gravel,
+            avoid = avoid,
             sections = sections,
             sectionFilter = sectionFilter,
             onSectionFilter = { sectionFilter = it },
@@ -2047,12 +2059,13 @@ fun MapScreen() {
     }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(gravel, loopChoice, locateZooms, keepScreenOn),
+            settings = RideSettings(gravel, avoid, loopChoice, locateZooms, keepScreenOn),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
                     RoutePrefs.setGravel(context, new.gravel)
                 }
+                if (new.avoid != avoid) changeAvoid(new.avoid)
                 loopLength.pick(new.loopLength)
                 if (new.zooms != locateZooms) {
                     locateZooms = new.zooms
