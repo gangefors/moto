@@ -973,8 +973,19 @@ fun MapScreen() {
         }
     }
 
+    /** Forgets the last route choices, so a new route sheet starts empty
+     * (finding routes) instead of showing the old figures, dimmed, until
+     * the new ones come. A route recalculated on an open sheet keeps them. */
+    fun clearRoutes() {
+        routeSummary = null
+        shownRoute = null
+        routeChoices = emptyList()
+        routeIndex = 0
+    }
+
     fun closeRoute() {
         routeEnds = null
+        clearRoutes()
         routeThrough = null
         picker.reset()
         vias = emptyList()
@@ -1253,6 +1264,7 @@ fun MapScreen() {
                         vias = emptyList()
                         arriveBy = null
                     }
+                    if (routeEnds == null) clearRoutes()
                     routeEnds = step.start to step.end
                 }
             }
@@ -1370,6 +1382,7 @@ fun MapScreen() {
         picker.reset()
         picker.startAt(from)
         val ends = LatLng(near.lat, near.lon) to LatLng(far.lat, far.lon)
+        clearRoutes()
         if (loop) {
             vias = listOf(ends.first, ends.second)
             routeThrough = !oneWay
@@ -1546,6 +1559,7 @@ fun MapScreen() {
                                         overlays?.route?.show(from, to, null)
                                         vias = emptyList()
                                         arriveBy = null
+                                        if (routeEnds == null) clearRoutes()
                                         routeEnds = from to to
                                     }
                                 }
