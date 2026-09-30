@@ -141,10 +141,20 @@ pub fn classify(tags: &[(&str, &str)], country: Country) -> Option<WayAttrs> {
             }
         });
 
+    // Gravel and other unpaved roads never above the country's limit for
+    // unsigned rural roads (2026-09-30): nobody rides gravel
+    // faster, whatever the sign says, and a few are tagged 90-120.
+    let surface = surface(tag("surface"));
+    let speed_kmh = if surface.is_paved() || class == RoadClass::Ferry {
+        speed_kmh
+    } else {
+        speed_kmh.min(country.limits().rural)
+    };
+
     Some(WayAttrs {
         class,
         speed_kmh,
-        surface: surface(tag("surface")),
+        surface,
         flags,
         oneway,
     })
@@ -657,5 +667,59 @@ mod tests {
         assert_eq!(f.flags & edge_flags::TOLL, 0);
         assert!(is_toll_booth(&[("barrier", "toll_booth")]));
         assert!(!is_toll_booth(&[("highway", "toll_gantry")]));
+    }
+
+    #[test]
+    fn gravel_roads_stay_within_the_unsigned_rural_limit() {
+        let gravel = |speed: Option<&'static str>| {
+            let mut tags = vec![("highway", "tertiary"), ("surface", "gravel")];
+            if let Some(s) = speed {
+                tags.push(("maxspeed", s));
+            }
+            tags
+        };
+        // Signed faster than the country's rural limit: capped to it.
+        assert_eq!(speed_in(Country::Sweden, &gravel(Some("120"))), 70);
+        assert_eq!(speed_in(Country::Norway, &gravel(Some("100"))), 80);
+        assert_eq!(speed_in(Country::Finland, &gravel(Some("90"))), 80);
+        assert_eq!(speed_in(Country::Denmark, &gravel(Some("90"))), 80);
+        // Signed slower: kept.
+        assert_eq!(speed_in(Country::Sweden, &gravel(Some("50"))), 50);
+        // Unsigned: the class's typical speed within the rural limit.
+        assert_eq!(speed_in(Country::Sweden, &gravel(None)), 60);
+        let primary = [("highway", "primary"), ("surface", "dirt")];
+        assert_eq!(speed_in(Country::Sweden, &primary), 70);
+        assert_eq!(speed_in(Country::Norway, &primary), 80);
+        // Paved roads, and roads of unknown surface, keep their signed speed.
+        assert_eq!(
+            speed_in(
+                Country::Sweden,
+                &[("highway", "tertiary"), ("maxspeed", "90")]
+            ),
+            90
+        );
+        assert_eq!(
+            speed_in(
+                Country::Sweden,
+                &[
+                    ("highway", "tertiary"),
+                    ("surface", "asphalt"),
+                    ("maxspeed", "90")
+                ]
+            ),
+            90
+        );
+        // A built-up gravel street keeps its lower limit.
+        assert_eq!(
+            speed_in(
+                Country::Sweden,
+                &[
+                    ("highway", "residential"),
+                    ("surface", "gravel"),
+                    ("maxspeed", "SE:urban")
+                ]
+            ),
+            50
+        );
     }
 }
