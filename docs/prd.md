@@ -89,6 +89,7 @@ Persona: **Solo rider (Stefan)** — plans rides at home, rides in southern Swed
 - As a rider, I want a round trip from my location with a target distance or duration so that I can go for a ride without a destination.
 - As a rider, I want to limit the detour (e.g. max +40 % time vs fastest) so that the route stays realistic for the time I have.
 - As a rider, I want to avoid motorways, gravel and ferries so that the route suits my bike and mood.
+- As a rider, I want a route or loop that keeps off my favourites so that I find new roads that might become favourites.
 - As a rider, I want to see how much of a route is favourites / curvy, plus distance and time, so that I can compare options.
 
 **Riding the route**
