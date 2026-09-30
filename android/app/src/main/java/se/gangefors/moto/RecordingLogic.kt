@@ -235,7 +235,7 @@ fun readCapped(input: java.io.InputStream, limit: Int): ByteArray? {
     return out.toByteArray()
 }
 
-/** Suggested export file name: "moto-sections-2026-09-24.zip". */
+/** Suggested export file name: "moto-favourite-sections-2026-09-24.zip". */
 fun sectionsFileName(atSec: Long, zone: java.time.ZoneId, extension: String): String =
-    "moto-sections-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
+    "moto-favourite-sections-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT)) + "." + extension

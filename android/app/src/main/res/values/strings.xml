@@ -13,7 +13,7 @@
     <string name="busy_routes">Finding routes…</string>
     <string name="busy_loops">Finding loops…</string>
     <string name="busy_section">Finding the road…</string>
-    <string name="busy_sections">Fitting your sections to the map…</string>
+    <string name="busy_sections">Fitting your favourite sections to the map…</string>
     <string name="busy_region">Checking and installing the map region…</string>
     <string name="locate_zooms">Zooms of [location]</string>
     <string name="locate_zoom_area">Area</string>
@@ -51,7 +51,7 @@
     <string name="region_hint">Regions are downloaded from the app’s GitHub page and checked before use. Map data © OpenStreetMap contributors (ODbL).</string>
     <string name="region_failed">Region failed to load: %1$s</string>
     <string name="region_outside">Outside the region: routing only works where the map isn’t greyed out</string>
-    <string name="map_hint">Tap a road to see what it is, or a section to open it. Long-press a place to plan a route or a loop from it.</string>
+    <string name="map_hint">Tap a road to see what it is, or a favourite section to open it. Long-press a place to plan a route or a loop from it.</string>
     <string name="road_close">Close road info</string>
     <string name="road_motorway">Motorway</string>
     <string name="road_trunk">Trunk road</string>
@@ -177,14 +177,14 @@
     <string name="avoid_allowed">%1$s allowed</string>
     <string name="about_open">About and licences</string>
     <string name="help_open">How to use</string>
-    <!-- What a screen reader says for a button's icon in text: words that fit the sentence (the star is silent: it sits beside the word Sections). -->
+    <!-- What a screen reader says for a button's icon in text: words that fit the sentence (the star is silent: it sits beside the words Favourite sections). -->
     <string name="say_menu">the menu</string>
     <string name="say_location">the location button</string>
     <string name="say_loop">the loop button</string>
     <string name="say_directions">the route button</string>
     <string name="say_share">the share button</string>
     <string name="say_save">the save button</string>
-    <string name="say_mark">the mark section button</string>
+    <string name="say_mark">the mark favourite section button</string>
     <string name="say_sections">" "</string>
     <string name="say_record">the record button</string>
     <string name="say_tag">the TAG button</string>
@@ -199,20 +199,20 @@
     <string name="about_version">Version %1$s</string>
     <string name="help_title">How to use</string>
     <string name="help_map_title">The map</string>
-    <string name="help_map">Tap a road to see what it is, or a section to open its card. The buttons on the map:</string>
+    <string name="help_map">Tap a road to see what it is, or a favourite section to open its card. The buttons on the map:</string>
     <string name="help_plan_title">Plan a ride</string>
     <string name="help_plan">Long-press a place to start there, then long-press where you want to go. Pull a route’s or loop’s card up for its choices, like avoiding your favourites to find new roads. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
-    <string name="help_sections_title">Favourite roads</string>
-    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your sections. Pick one in Sections to see it, then loop through it or route through it from where you are.</string>
+    <string name="help_sections_title">Favourite sections</string>
+    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your favourite sections. Pick one in Favourite sections to see it, then loop through it or route through it from where you are.</string>
     <string name="help_ride_title">On a ride</string>
     <string name="help_library_title">Routes and rides</string>
-    <string name="help_ride">Record your ride, and tag roads you like as you pass them. After the ride, review each tagged spot: it may be a road you want to save as a section.</string>
+    <string name="help_ride">Record your ride, and tag roads you like as you pass them. After the ride, review each tagged spot: it may be a road you want to save as a favourite section.</string>
     <string name="help_settings_title">Ride settings</string>
     <string name="help_settings">The gear on the map opens them, in three groups:</string>
     <!-- The keys of the how-to page: a button's name, then what it does. -->
     <string name="help_see">see %1$s</string>
     <string name="help_key_menu">Menu</string>
-    <string name="help_key_menu_what">routes and rides, sections, map regions (the countries on the phone, each switched on or off; those on are one map, joined at the borders), this page, About; the sun or moon at its top switches light and dark</string>
+    <string name="help_key_menu_what">routes and rides, favourite sections, map regions (the countries on the phone, each switched on or off; those on are one map, joined at the borders), this page, About; the sun or moon at its top switches light and dark</string>
     <string name="help_key_review">Review</string>
     <string name="help_key_review_map">shown when tagged spots wait</string>
     <string name="help_key_review_what">how many tagged spots wait; tap to go through them</string>
@@ -222,7 +222,7 @@
     <string name="help_key_settings_what">gravel, favourites, loop length, zooms, screen</string>
     <string name="help_key_loop">Loop</string>
     <string name="help_key_loop_what">plans loops from where you are</string>
-    <string name="help_key_mark">Mark section</string>
+    <string name="help_key_mark">Mark favourite section</string>
     <string name="help_key_mark_map">saves a road you like</string>
     <string name="help_key_mark_what">starts marking a road</string>
     <string name="help_key_record">Record</string>
@@ -238,8 +238,8 @@
     <string name="help_key_share_what">to your nav app, as GPX</string>
     <string name="help_key_save">Save</string>
     <string name="help_key_save_what">keeps it under Routes &amp; rides in the menu</string>
-    <string name="help_key_sections">Sections</string>
-    <string name="help_key_sections_what">in the menu: all your sections</string>
+    <string name="help_key_sections">Favourite sections</string>
+    <string name="help_key_sections_what">in the menu: all your favourite sections</string>
     <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>
     <string name="about_source">Source code: https://github.com/gangefors/moto</string>
     <string name="about_map_attribution">Map data © OpenStreetMap contributors, available under the Open Database License (ODbL). Map tiles by OpenFreeMap, © OpenMapTiles.</string>
@@ -254,7 +254,7 @@
     <string name="gravel_allow">Allow</string>
     <string name="gravel_prefer">Prefer</string>
     <string name="routing_gravel">Gravel roads</string>
-    <string name="routing_gravel_hint">**Avoid** stay off unpaved roads where possible and hide your mostly-gravel sections\n**Allow** ride them like any other road\n**Prefer** seek them out within a route’s extra time\nGravel shows as a dashed centre line.</string>
+    <string name="routing_gravel_hint">**Avoid** stay off unpaved roads where possible and hide your mostly-gravel favourite sections\n**Allow** ride them like any other road\n**Prefer** seek them out within a route’s extra time\nGravel shows as a dashed centre line.</string>
     <string name="favourites_label">Favourites</string>
     <string name="favourites_prefer">Prefer</string>
     <string name="favourites_avoid">Avoid</string>
@@ -264,16 +264,16 @@
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>
     <string name="cancel">Cancel</string>
-    <string name="sections_failed">Saved sections unavailable: %1$s</string>
-    <string name="section_mark">Mark section</string>
-    <string name="section_pick_start">Tap where the section starts.</string>
-    <string name="section_pick_end">Start set. Tap where the section ends.</string>
+    <string name="sections_failed">Favourite sections unavailable: %1$s</string>
+    <string name="section_mark">Mark favourite section</string>
+    <string name="section_pick_start">Tap where the favourite starts.</string>
+    <string name="section_pick_end">Start set. Tap where the favourite ends.</string>
     <string name="section_proposing">Finding the road…</string>
     <string name="section_proposed">%1$.1f km. Tap near an end to move it.</string>
     <string name="section_save_ellipsis">Save…</string>
     <string name="section_save">Save</string>
-    <string name="section_new_title">New section · %1$.1f km</string>
-    <string name="section_edit_title">Section · %1$.1f km</string>
+    <string name="section_new_title">New favourite · %1$.1f km</string>
+    <string name="section_edit_title">Favourite · %1$.1f km</string>
     <string name="section_one_way">One-way</string>
     <string name="section_one_way_hint">Only good in the direction it was marked (arrows). Marked from the wrong end? The arrows button beside the switch turns it round when you save.</string>
     <string name="section_reverse">Turn round: ride it the other way</string>
@@ -283,13 +283,13 @@
     <string name="section_name_clear">Clear the name</string>
     <string name="delete">Delete</string>
     <string name="delete_confirm">Tap again to delete</string>
-    <string name="section_saved">Section saved</string>
-    <string name="section_covered">Not saved: a section on this road, rated at least as high, already covers it</string>
+    <string name="section_saved">Favourite saved</string>
+    <string name="section_covered">Not saved: a favourite on this road, rated at least as high, already covers it</string>
     <plurals name="section_saved_replacing">
-        <item quantity="one">Section saved. It replaces %d section it covers.</item>
-        <item quantity="other">Section saved. It replaces %d sections it covers.</item>
+        <item quantity="one">Favourite saved. It replaces %d favourite it covers.</item>
+        <item quantity="other">Favourite saved. It replaces %d favourites it covers.</item>
     </plurals>
-    <string name="section_updated">Section updated</string>
+    <string name="section_updated">Favourite updated</string>
     <string name="rating_good">Good</string>
     <string name="rating_great">Great</string>
     <string name="rating_epic">Epic</string>
@@ -341,7 +341,7 @@
     <string name="library_route_term">A route</string>
     <string name="library_route_what">a route or loop the app made, which you saved to ride later. Share it to your nav app to follow it on the road.</string>
     <string name="library_ride_term">A ride</string>
-    <string name="library_ride_what">where you actually rode: recorded with Record, or imported from a GPX file. Rides count how often you’ve ridden your sections, and you can show one on the map to mark sections along it.</string>
+    <string name="library_ride_what">where you actually rode: recorded with Record, or imported from a GPX file. Rides count how often you’ve ridden your favourite sections, and you can show one on the map to mark favourite sections along it.</string>
     <string name="rides_loading">Loading…</string>
     <string name="rides_summary">%1$.1f km · %2$s</string>
     <string name="rides_recording">Recording · %1$s</string>
@@ -376,19 +376,19 @@
         <item quantity="other">Review done. %1$d skipped tags stay for the next review.</item>
     </plurals>
     <plurals name="sections_unmatched">
-        <item quantity="one">%d section no longer fits the updated map; it is left out of routes until you look at it.</item>
-        <item quantity="other">%d sections no longer fit the updated map; they are left out of routes until you look at them.</item>
+        <item quantity="one">%d favourite section no longer fits the updated map; it is left out of routes until you look at it.</item>
+        <item quantity="other">%d favourite sections no longer fit the updated map; they are left out of routes until you look at them.</item>
     </plurals>
     <string name="sections_unmatched_action">Show</string>
-    <string name="sections_title">Sections</string>
+    <string name="sections_title">Favourite sections</string>
     <plurals name="sections_count">
-        <item quantity="one">%d section</item>
-        <item quantity="other">%d sections</item>
+        <item quantity="one">%d favourite</item>
+        <item quantity="other">%d favourites</item>
     </plurals>
     <string name="sections_km">%1$.1f km</string>
     <string name="sections_epic_count">%1$d epic</string>
-    <string name="sections_empty">No sections yet. Mark a favourite road with [mark] on the map, or tag one with [tag] while you ride and review it after with [flag].</string>
-    <string name="sections_none_match">No sections match these filters.</string>
+    <string name="sections_empty">No favourite sections yet. Mark a road you like with [mark] on the map, or tag one with [tag] while you ride and review it after with [flag].</string>
+    <string name="sections_none_match">No favourites match these filters.</string>
     <string name="sections_sort">Sort: %1$s</string>
     <string name="sort_rating">Rating</string>
     <string name="sort_length">Length</string>
@@ -404,15 +404,15 @@
     <string name="sections_attention">Needs attention (%1$d)</string>
     <string name="section_off_map_note">Not on a map in use: switch its region on in Map region to ride it.</string>
     <string name="section_attention_note">Doesn’t fit the updated map. Look at it, then keep it or delete it.</string>
-    <string name="section_fallback">Section · %1$.1f km</string>
-    <string name="sections_menu">More for Sections</string>
+    <string name="section_fallback">Favourite · %1$.1f km</string>
+    <string name="sections_menu">More for Favourite sections</string>
     <string name="sections_export_as">Export as %1$s</string>
-    <string name="sections_import_menu">Import sections…</string>
-    <string name="section_hide">Hide the section</string>
+    <string name="sections_import_menu">Import favourites…</string>
+    <string name="section_hide">Hide the favourite</string>
     <string name="section_edit">Change rating or direction</string>
     <string name="section_loop_through">Loop through it</string>
     <string name="section_ride_from_here">Route through it</string>
-    <string name="sections_exported">Sections exported</string>
+    <string name="sections_exported">Favourites exported</string>
     <string name="sections_imported">Imported: %1$d added, %3$d replaced, %2$d already there</string>
     <string name="sections_imported_unmatched">%1$s; %2$d don’t fit the map</string>
     <string name="sections_import_failed">Import failed: %1$s</string>
