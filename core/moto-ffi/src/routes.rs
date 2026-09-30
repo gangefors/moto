@@ -131,6 +131,7 @@ mod tests {
             favourite_ratings: vec![],
             unpaved_m: 0.0,
             unpaved_parts: vec![],
+            toll_m: 0.0,
             suggested: false,
         };
         let saved = store

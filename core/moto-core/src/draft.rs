@@ -234,6 +234,7 @@ mod tests {
             avoid: Avoid {
                 motorways: false,
                 ferries: false,
+                tolls: false,
             },
             gravel: crate::Gravel::Allow,
             ..RouteOptions::default()

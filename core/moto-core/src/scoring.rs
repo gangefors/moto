@@ -28,6 +28,14 @@ pub struct ScoringParams {
     /// possible", not a ban: a farm on a gravel road must still be
     /// reachable.
     pub avoid_penalty: f64,
+    /// Cost factor on toll roads when tolls are avoided, in place of
+    /// `avoid_penalty` (the rider: they cost money on top of the detour).
+    /// Measured on routes to Copenhagen (2026-09-30), with motorways and
+    /// ferries avoided at 10: at 10 the Öresund bridge (about 10 min)
+    /// always beat the Helsingborg ferry (about 21 min), even from
+    /// Halmstad; at 20 the ferry won from Landskrona north; at 30 even
+    /// from Malmö. 15 is the rider's pick between them.
+    pub toll_penalty: f64,
     /// How much a metre of road in each turn-radius bin (`RADIUS_BINS_M`:
     /// ≤ 30, 60, 100, 175, 300, 500 m) counts as curvy. Sweepers count
     /// most; hairpins less (slow, and often junction artefacts); wide
@@ -154,6 +162,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     max_pull: 0.8,
     min_gain: 1.0,
     avoid_penalty: 10.0,
+    toll_penalty: 15.0,
     curve_bin_weight: [0.6, 1.0, 1.0, 0.8, 0.5, 0.2],
     curve_full: 0.4,
     //                 motorway trunk primary secondary tertiary unclassified
@@ -195,6 +204,7 @@ mod tests {
         const { assert!(PARAMS.favourite_weight[0] > 0.0 && PARAMS.favourite_weight[2] <= 1.0) };
         const { assert!(PARAMS.min_gain >= 0.0) };
         const { assert!(PARAMS.avoid_penalty >= 1.0) };
+        const { assert!(PARAMS.toll_penalty >= 1.0) };
         const { assert!(PARAMS.curve_full > 0.0 && PARAMS.curve_weight <= 1.0) };
     }
 

@@ -209,6 +209,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
         avoid: Avoid {
             motorways: false,
             ferries: false,
+            tolls: false,
         },
         gravel: Gravel::Allow,
         ..opts.clone()

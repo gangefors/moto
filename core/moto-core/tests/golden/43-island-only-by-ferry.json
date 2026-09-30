@@ -1,0 +1,7 @@
+{
+  "name": "Landskrona to Ven, only by ferry",
+  "description": "Ferries are avoided by default, but an island reached only by ferry is still reached: avoiding is where possible, never a ban.",
+  "from": [55.8708, 12.8302],
+  "to": [55.9080, 12.6960],
+  "expect": {"max_detour_ratio": 1.2}
+}
