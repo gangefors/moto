@@ -20,14 +20,20 @@ on:
     paths:
       - "android/**"
       - "core/**"
-      - ".github/**"
+      # The code CodeQL scans in .github: workflows (actions) and CI
+      # scripts (python). Other config there has nothing to scan.
+      - ".github/workflows/**"
+      - ".github/scripts/**"
       # Documentation alone has no code to scan; the weekly run covers the rest.
       - "!**/*.md"
   pull_request:
     paths:
       - "android/**"
       - "core/**"
-      - ".github/**"
+      # The code CodeQL scans in .github: workflows (actions) and CI
+      # scripts (python). Other config there has nothing to scan.
+      - ".github/workflows/**"
+      - ".github/scripts/**"
       # Documentation alone has no code to scan; the weekly run covers the rest.
       - "!**/*.md"
   schedule:
