@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
 #
-# CI for every push, to main and to the workspaces' branches, and every
-# pull request (see "Testing and performance" in CLAUDE.md). A branch is
+# CI for every push that changes code (android/ or core/), to main and to
+# the workspaces' branches, and every such pull request (see "Testing and
+# performance" in CLAUDE.md). A branch is
 # merged into main once this is green on its newest commit.
 # - core: rustfmt, clippy, the Rust tests and cargo-deny; builds the M0
 #   region file from the OSM Sweden extract (cached); runs the golden routes
@@ -30,17 +31,17 @@ on:
     paths:
       - "android/**"
       - "core/**"
-      - ".github/workflows/android.yml"
-      - ".github/scripts/**"
-      # Documentation alone never needs a build.
+      # Only code: changes to this workflow or the CI scripts alone
+      # (their tests run in core) wait for the next code change, or
+      # workflow_dispatch. Documentation alone never needs a build.
       - "!**/*.md"
   pull_request:
     paths:
       - "android/**"
       - "core/**"
-      - ".github/workflows/android.yml"
-      - ".github/scripts/**"
-      # Documentation alone never needs a build.
+      # Only code: changes to this workflow or the CI scripts alone
+      # (their tests run in core) wait for the next code change, or
+      # workflow_dispatch. Documentation alone never needs a build.
       - "!**/*.md"
   workflow_dispatch:
 
