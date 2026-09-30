@@ -40,8 +40,15 @@ pub const MAX_LOOPS: usize = 3;
 pub const MIN_TARGET_M: f64 = 5_000.0;
 pub const MAX_TARGET_M: f64 = 400_000.0;
 /// Shares of the radius tried for a waypoint, in order, until one lies
-/// near a road.
-const WAYPOINT_PULL_IN: [f64; 3] = [1.0, 0.8, 0.6];
+/// near a road. Down to 0.3 for long loops from a start with the sea on
+/// several sides (Trelleborg, Ystad, Malmö): measured on 150 long-loop
+/// sets (2026-09-30), 2.53 -> 2.67 loops a set with 0.45 and 0.3 added.
+const WAYPOINT_PULL_IN: [f64; 5] = [1.0, 0.8, 0.6, 0.45, 0.3];
+/// A zig-zag loop (see [`loop_at`]): its three waypoints spread this many
+/// times the candidate's spread either side of its heading, the middle
+/// one this share as far out as the others.
+const ZIGZAG_SPREAD: f64 = 1.5;
+const ZIGZAG_NEAR: f64 = 0.5;
 /// How far from a waypoint's place a road for it is looked for.
 const WAYPOINT_SEARCH_M: f64 = 1_500.0;
 /// Most roads looked at for a waypoint.
@@ -139,42 +146,71 @@ pub fn loops(
 
     let radius = target_m / (3.0 * PARAMS.loop_detour);
     let home = home_radius_m(target_m);
+    // The loop of candidate `c` (heading number `heading`), a zig-zag
+    // when `zigzag`: resized once towards the target, kept if it rides
+    // little twice.
+    let attempt = |&(heading, c): &(usize, Candidate), zigzag: bool| -> Option<Loop> {
+        let at = |scale: f64| {
+            loop_at(
+                engine,
+                &fun,
+                opts,
+                &s,
+                c.bearing,
+                c.spread,
+                (radius * c.size.0 * scale, radius * c.size.1 * scale),
+                home,
+                favourites,
+                side_loop_max,
+                zigzag,
+            )
+        };
+        let first = at(1.0)?;
+        // One resize towards the target.
+        let mut l = if fits(&first.routed.route) {
+            first
+        } else {
+            let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
+            at(scale).filter(|l| fits(&l.routed.route))?
+        };
+        l.heading = heading;
+        l.bearing = middle_bearing(&s, &l.routed.route.geometry);
+        (reuse_share(&l) <= MAX_REUSE).then_some(l)
+    };
     // Every candidate on its own, side by side (see `par`); kept in the
     // candidates' order, so the loops are the same as one after the other.
-    let collect = |candidates: Candidates| {
+    // When they give fewer loops that differ than a set shows (the sea on
+    // several sides of the start), each candidate that gave none is tried
+    // again as a zig-zag, which fits its length into less land (measured
+    // on 150 long-loop sets, 2026-09-30: with the deeper pull-in, sets of
+    // three loops 97 -> 121, curvy share kept, the time only where it is
+    // needed). Only from `zig_from` loops that differ: a direction with
+    // fewer is topped up from every direction anyway (and there, the sea
+    // that way stops a zig-zag too).
+    let collect = |candidates: Candidates, zig_from: usize| {
         let candidates: Vec<(usize, Candidate)> = candidates.enumerate().collect();
-        let found = crate::par::map(&candidates, |&(heading, c)| {
-            let at = |scale: f64| {
-                loop_at(
-                    engine,
-                    &fun,
-                    opts,
-                    &s,
-                    c.bearing,
-                    c.spread,
-                    (radius * c.size.0 * scale, radius * c.size.1 * scale),
-                    home,
-                    favourites,
-                    side_loop_max,
-                )
-            };
-            let first = at(1.0)?;
-            // One resize towards the target.
-            let mut l = if fits(&first.routed.route) {
-                first
-            } else {
-                let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
-                at(scale).filter(|l| fits(&l.routed.route))?
-            };
-            l.heading = heading;
-            l.bearing = middle_bearing(&s, &l.routed.route.geometry);
-            (reuse_share(&l) <= MAX_REUSE).then_some(l)
-        });
-        found.into_iter().flatten().collect::<Vec<Loop>>()
+        let found = crate::par::map(&candidates, |c| attempt(c, false));
+        let mut loops = Vec::new();
+        let mut failed = Vec::new();
+        for (c, l) in candidates.iter().zip(found) {
+            match l {
+                Some(l) => loops.push(l),
+                None => failed.push(*c),
+            }
+        }
+        let differ = distinct(&loops);
+        if (zig_from..MAX_LOOPS).contains(&differ) && !failed.is_empty() {
+            let zigzags = crate::par::map(&failed, |c| attempt(c, true));
+            loops.extend(zigzags.into_iter().flatten());
+        }
+        loops
     };
     // The loops that way first; when there are fewer than two (the sea,
     // the region's edge), the best of any way fill up to two.
-    let mut found = collect(Candidates::new(shape.seed, shape.bearing));
+    let mut found = collect(
+        Candidates::new(shape.seed, shape.bearing),
+        if shape.bearing.is_some() { 2 } else { 0 },
+    );
     // A loop over an avoided toll road or ferry only when it is worth as
     // much as the best loop without one (Stefan: a 3 h loop over the
     // bridge and back isn't worth the little it rides in Denmark). When
@@ -182,7 +218,7 @@ pub fn loops(
     // of any way that don't come in its place.
     let best = best_free(&found);
     if best.is_none() && shape.bearing.is_some() && found.iter().any(is_paid) {
-        let others = collect(Candidates::new(shape.seed, None));
+        let others = collect(Candidates::new(shape.seed, None), 0);
         if let Some(best) = best_free(&others) {
             found.retain(|l| worth_per_s(l) >= best);
             found.extend(
@@ -200,7 +236,7 @@ pub fn loops(
         pick(Vec::new(), found, MAX_LOOPS)
     };
     if shape.bearing.is_some() && kept.len() < 2 {
-        kept = pick(kept, collect(Candidates::new(shape.seed, None)), 2);
+        kept = pick(kept, collect(Candidates::new(shape.seed, None), 0), 2);
     }
     if kept.is_empty() {
         return Err(CoreError::NoRoute(
@@ -424,6 +460,27 @@ fn pick(mut kept: Vec<Loop>, mut loops: Vec<Loop>, max: usize) -> Vec<Loop> {
     kept
 }
 
+/// How many of `loops` a set could show (as [`pick`] keeps them, at most
+/// [`MAX_LOOPS`]).
+fn distinct(loops: &[Loop]) -> usize {
+    let mut order: Vec<&Loop> = loops.iter().collect();
+    order.sort_by(|a, b| {
+        worth_per_s(b)
+            .total_cmp(&worth_per_s(a))
+            .then(a.heading.cmp(&b.heading))
+    });
+    let mut kept: Vec<&Loop> = Vec::new();
+    for l in order {
+        if kept.len() >= MAX_LOOPS {
+            break;
+        }
+        if kept.iter().all(|k| overlap(k, l) < MAX_OVERLAP) {
+            kept.push(l);
+        }
+    }
+    kept.len()
+}
+
 /// A shuffled set, so that a set doesn't always head the best way: the
 /// best loop; then the best loop heading within `loop_focus_deg` of a
 /// direction drawn from `seed`, if it is worth at least
@@ -641,7 +698,11 @@ impl Iterator for Candidates {
 /// The loop through two waypoints `spread` degrees either side of
 /// `bearing` at `radius` (the first, the second), or through a favourite
 /// near a waypoint; `None` when a
-/// waypoint has no road or a leg no route. Roads within `home` metres of
+/// waypoint has no road or a leg no route. A `zigzag` loop goes through
+/// three, far, near and far again ([`ZIGZAG_SPREAD`], [`ZIGZAG_NEAR`]),
+/// sized to be as long as the two-waypoint loop, so the same length fits
+/// into less land; a waypoint with no road is left out (at least two
+/// stay). Roads within `home` metres of
 /// the start are free to ride twice. Side loops up to `side_loop_max`
 /// metres are cut out (see [`cut_side_loops`]).
 #[allow(clippy::too_many_arguments)]
@@ -656,6 +717,7 @@ fn loop_at(
     home: f64,
     favourites: &Favourites,
     side_loop_max: f64,
+    zigzag: bool,
 ) -> Option<Loop> {
     let mut taken: Vec<LatLon> = Vec::new();
     let mut waypoint = |b: f64, radius: f64| -> Option<RoadPoint> {
@@ -688,17 +750,43 @@ fn loop_at(
                 engine.snap(p).ok().inspect(|_| taken.push(p))
             })
     };
-    let w1 = waypoint(bearing - spread, radius.0)?;
-    let w2 = waypoint(bearing + spread, radius.1)?;
-    ride_loop(
-        engine,
-        fun,
-        opts,
-        start,
-        &[(w1, false), (w2, false)],
-        home,
-        side_loop_max,
-    )
+    let stops = if zigzag {
+        let half = spread * ZIGZAG_SPREAD;
+        let shape = [(-half, 1.0), (0.0, ZIGZAG_NEAR), (half, 1.0)];
+        let scale = zigzag_scale(&shape);
+        let radii = [radius.0, radius.1, radius.1];
+        let stops: Vec<(RoadPoint, bool)> = shape
+            .iter()
+            .zip(radii)
+            .filter_map(|(&(off, share), r)| waypoint(bearing + off, r * share * scale))
+            .map(|w| (w, false))
+            .collect();
+        if stops.len() < 2 {
+            return None;
+        }
+        stops
+    } else {
+        let w1 = waypoint(bearing - spread, radius.0)?;
+        let w2 = waypoint(bearing + spread, radius.1)?;
+        vec![(w1, false), (w2, false)]
+    };
+    ride_loop(engine, fun, opts, start, &stops, home, side_loop_max)
+}
+
+/// How much a zig-zag's waypoints (bearing offset in degrees, share of
+/// the radius) are scaled so it is as long in a straight line as the
+/// two-waypoint triangle (three radii at a 30° spread): the start, the
+/// waypoints in order and back.
+fn zigzag_scale(shape: &[(f64, f64)]) -> f64 {
+    let at = |&(off, r): &(f64, f64)| (r * off.to_radians().cos(), r * off.to_radians().sin());
+    let mut length = 0.0;
+    let mut prev = (0.0, 0.0);
+    for q in shape.iter().map(at) {
+        length += (q.0 - prev.0).hypot(q.1 - prev.1);
+        prev = q;
+    }
+    length += prev.0.hypot(prev.1);
+    3.0 / length
 }
 
 /// The loop from `start` through `stops` in order and back, each leg
