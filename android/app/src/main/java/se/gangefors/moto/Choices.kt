@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Gravel
 
 /**
@@ -170,5 +171,44 @@ fun IconTextButton(icon: Int, label: String, onClick: () -> Unit) {
         Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.width(ButtonDefaults.IconSpacing))
         OneLine(label)
+    }
+}
+
+/** The icon of each kind of road to avoid, as on its chip. */
+fun avoidIcon(kind: AvoidKind): Int = when (kind) {
+    AvoidKind.MOTORWAYS -> R.drawable.ic_motorway
+    AvoidKind.FERRIES -> R.drawable.ic_ferry
+    AvoidKind.TOLLS -> R.drawable.ic_toll
+}
+
+/** "Motorways", "Ferries" or "Toll roads". */
+@Composable
+fun avoidLabel(kind: AvoidKind): String = stringResource(
+    when (kind) {
+        AvoidKind.MOTORWAYS -> R.string.avoid_motorways
+        AvoidKind.FERRIES -> R.string.avoid_ferries
+        AvoidKind.TOLLS -> R.string.avoid_tolls
+    },
+)
+
+/**
+ * Motorways, ferries and toll roads as chips that are on while that kind
+ * is avoided, each with its road icon; they wrap when there is no room.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AvoidChips(avoid: Avoid, onAvoid: (Avoid) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AvoidKind.entries.forEach { kind ->
+            val avoided = avoids(avoid, kind)
+            FilterChip(
+                selected = avoided,
+                onClick = { onAvoid(withAvoided(avoid, kind, !avoided)) },
+                label = { OneLine(avoidLabel(kind)) },
+                leadingIcon = {
+                    Icon(painterResource(avoidIcon(kind)), contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+            )
+        }
     }
 }

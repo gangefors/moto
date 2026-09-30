@@ -50,6 +50,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.LatLon
@@ -90,8 +91,9 @@ fun RidesSheet(
     onDismiss: () -> Unit,
     onShow: (Track) -> Unit,
     onShowRoute: (SavedRoute) -> Unit,
-    /** For the route points of an exported route (the rider's setting). */
+    /** For the route points of an exported route (the rider's settings). */
     gravel: Gravel,
+    avoid: Avoid,
     /** The saved sections, for the Sections page. */
     sections: List<Section> = emptyList(),
     /** Open Sections showing only those that need attention. */
@@ -140,7 +142,7 @@ fun RidesSheet(
         is LibraryItem.Route -> {
             val e = engine ?: error(resources.getString(R.string.region_missing))
             val line = store.routeGeometry(item.route.id) ?: error(resources.getString(R.string.rides_gone))
-            e.routeGpx(line, item.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel))
+            e.routeGpx(line, item.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
         }
     }
 

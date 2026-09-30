@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Gravel
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
@@ -201,6 +202,8 @@ fun RouteCard(
     summary: RouteSummary?,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    avoid: Avoid,
+    onAvoid: (Avoid) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
@@ -250,12 +253,12 @@ fun RouteCard(
                     if (viaCount > 0) add(pluralStringResource(R.plurals.route_via_count, viaCount, viaCount))
                     add(gravelSummary(gravel))
                 }
-                OptionChips(parts) { onExpandedChange(true) }
+                OptionChips(parts, allowedKinds(avoid)) { onExpandedChange(true) }
             }
         },
         details = {
             RouteCardDetails(
-                gravel, onGravel,
+                gravel, onGravel, avoid, onAvoid,
                 viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
             )
         },
@@ -268,6 +271,8 @@ fun RouteCard(
 private fun RouteCardDetails(
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    avoid: Avoid,
+    onAvoid: (Avoid) -> Unit,
     viaCount: Int,
     onAddVia: () -> Unit,
     onClearVia: () -> Unit,
@@ -339,6 +344,8 @@ private fun RouteCardDetails(
         }
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
+        OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
+        AvoidChips(avoid, onAvoid)
         if (pickingTime) {
             ArriveByDialog(
                 initial = arriveBy,
@@ -376,6 +383,8 @@ fun LoopCard(
     onChoice: (LoopChoice) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    avoid: Avoid,
+    onAvoid: (Avoid) -> Unit,
     onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
@@ -422,10 +431,12 @@ fun LoopCard(
                         LoopDirection.WEST -> R.string.loop_heading_west
                     },
                 )
-                OptionChips(listOf(loopLengthText(choice), heading, gravelSummary(gravel))) { onExpandedChange(true) }
+                OptionChips(listOf(loopLengthText(choice), heading, gravelSummary(gravel)), allowedKinds(avoid)) {
+                    onExpandedChange(true)
+                }
             }
         },
-        details = { LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel) },
+        details = { LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel, avoid, onAvoid) },
     )
 }
 
@@ -509,6 +520,8 @@ private fun LoopCardDetails(
     onChoice: (LoopChoice) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    avoid: Avoid,
+    onAvoid: (Avoid) -> Unit,
 ) {
     Column(Modifier.padding(end = 8.dp)) {
         LoopLengthSlider(stringResource(R.string.loop_length), choice, onChoice)
@@ -531,6 +544,8 @@ private fun LoopCardDetails(
         )
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
+        OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
+        AvoidChips(avoid, onAvoid)
     }
 }
 
@@ -610,6 +625,7 @@ private fun SheetTop(
         if (shown.favouritePercent > 0) add(stringResource(R.string.route_on_favourites, shown.favouritePercent))
         if (shown.curvyPercent > 0) add(stringResource(R.string.route_curvy, shown.curvyPercent))
         if (shown.gravelKm > 0.0) add(stringResource(R.string.route_gravel, shown.gravelKm))
+        if (shown.tollKm > 0.0) add(stringResource(R.string.route_toll, shown.tollKm))
     }
     FlowRow(
         modifier = Modifier.padding(top = 4.dp, end = 8.dp).then(dim),
@@ -635,16 +651,24 @@ private fun StatChip(text: String) {
     }
 }
 
-/** The choices as chips, then an arrow; tapping any pulls the sheet up
- * to change them. */
+/** The choices as chips, the kinds of road [allowed] as their icons
+ * alone (none while all are avoided, the default), then an arrow;
+ * tapping any pulls the sheet up to change them. */
 @Composable
-private fun OptionChips(labels: List<String>, onClick: () -> Unit) {
+private fun OptionChips(labels: List<String>, allowed: List<AvoidKind>, onClick: () -> Unit) {
     FlowRow(
         modifier = Modifier.padding(top = 4.dp, end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         labels.forEach { SuggestionChip(onClick = onClick, label = { OneLine(it) }) }
+        allowed.forEach { kind ->
+            val said = stringResource(R.string.avoid_allowed, avoidLabel(kind))
+            SuggestionChip(
+                onClick = onClick,
+                label = { Icon(painterResource(avoidIcon(kind)), contentDescription = said, modifier = Modifier.size(18.dp)) },
+            )
+        }
         IconButton(onClick = onClick) {
             Icon(painterResource(R.drawable.ic_expand_less), contentDescription = stringResource(R.string.card_expand))
         }

@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import android.content.Context
 import androidx.core.content.edit
+import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Gravel
 
 /**
@@ -16,6 +17,9 @@ object RoutePrefs {
     /** The old Allow gravel switch (a boolean), read once as a fallback. */
     private const val ALLOW_GRAVEL = "allow_gravel"
     private const val GRAVEL = "gravel"
+    /** The kinds of road allowed (motorways, ferries, tolls); unset: all
+     * avoided. */
+    private const val ALLOWED_ROADS = "allowed_roads"
     private const val LOOP = "loop_length"
     private const val AREA_ZOOM = "locate_area_zoom"
     private const val CLOSE_ZOOM = "locate_close_zoom"
@@ -43,6 +47,16 @@ object RoutePrefs {
             putString(GRAVEL, gravelKey(gravel))
             remove(ALLOW_GRAVEL)
         }
+    }
+
+    /** The roads routes avoid; everything avoided until the rider allows
+     * something. A value of another type throws; it counts as unset. */
+    fun avoid(context: Context): Avoid = avoidOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(ALLOWED_ROADS, null) }.getOrNull(),
+    )
+
+    fun setAvoid(context: Context, avoid: Avoid) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(ALLOWED_ROADS, avoidKey(avoid)) }
     }
 
     /** The length a new loop starts at (Ride settings), or the default. */

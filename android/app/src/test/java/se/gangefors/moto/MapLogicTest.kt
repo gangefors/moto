@@ -112,6 +112,11 @@ class MapLogicTest {
         assertEquals(1.0, summarize(1_000.0, 90.0, unpavedM = 5_000.0).gravelKm, 1e-9)
         assertEquals(0.0, summarize(1_000.0, 90.0, unpavedM = Double.NaN).gravelKm, 1e-9)
         assertEquals(0.0, summarize(1_000.0, 90.0, unpavedM = -5.0).gravelKm, 1e-9)
+        // Km on toll roads the same way.
+        assertEquals(12.6, summarize(40_000.0, 1800.0, tollM = 12_560.0).tollKm, 1e-9)
+        assertEquals(0.0, summarize(40_000.0, 1800.0).tollKm, 1e-9)
+        assertEquals(1.0, summarize(1_000.0, 90.0, tollM = 5_000.0).tollKm, 1e-9)
+        assertEquals(0.0, summarize(1_000.0, 90.0, tollM = Double.NaN).tollKm, 1e-9)
     }
 
     @Test
@@ -126,7 +131,10 @@ class MapLogicTest {
         )
         val o = routeOptions(base, 20)
         assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
-        assertEquals(base.avoid, o.avoid)
+        // Roads to avoid: all of them unless the rider allows some.
+        assertEquals(AVOID_ALL, o.avoid)
+        val ferries = se.gangefors.moto.core.Avoid(motorways = true, ferries = false, tolls = true)
+        assertEquals(ferries, routeOptions(base, 20, avoid = ferries).avoid)
         assertEquals(1.0, o.minGain, 0.0)
         assertTrue(o.curvy)
         // Gravel: avoided unless allowed; the other avoid options stay.
@@ -137,8 +145,33 @@ class MapLogicTest {
             se.gangefors.moto.core.Gravel.PREFER,
             routeOptions(base, 40, se.gangefors.moto.core.Gravel.PREFER).gravel,
         )
-        assertTrue(gravel.avoid.motorways)
-        assertFalse(gravel.avoid.ferries)
+        assertTrue(gravel.avoid.motorways && gravel.avoid.ferries && gravel.avoid.tolls)
+        val arrive = arriveByOptions(base, 0L, 3600L, se.gangefors.moto.core.Gravel.AVOID, ferries)
+        assertEquals(ferries, arrive.avoid)
+    }
+
+    @Test
+    fun roadsToAvoidAreStoredAsTheAllowedKinds() {
+        // Nothing stored: everything avoided (the default).
+        assertEquals(AVOID_ALL, avoidOf(null))
+        assertEquals(AVOID_ALL, avoidOf(""))
+        assertEquals("", avoidKey(AVOID_ALL))
+        assertEquals(emptyList<AvoidKind>(), allowedKinds(AVOID_ALL))
+        // Every combination survives a round trip.
+        for (bits in 0 until 8) {
+            val a = se.gangefors.moto.core.Avoid(bits and 1 != 0, bits and 2 != 0, bits and 4 != 0)
+            assertEquals(a, avoidOf(avoidKey(a)))
+        }
+        val ferriesAndTolls = withAvoided(withAvoided(AVOID_ALL, AvoidKind.FERRIES, false), AvoidKind.TOLLS, false)
+        assertEquals("ferries,tolls", avoidKey(ferriesAndTolls))
+        assertEquals(listOf(AvoidKind.FERRIES, AvoidKind.TOLLS), allowedKinds(ferriesAndTolls))
+        assertTrue(avoids(ferriesAndTolls, AvoidKind.MOTORWAYS))
+        assertFalse(avoids(ferriesAndTolls, AvoidKind.FERRIES))
+        // Read back as untrusted: unknown keys ignored, spaces trimmed.
+        assertEquals(
+            withAvoided(AVOID_ALL, AvoidKind.MOTORWAYS, false),
+            avoidOf("x, motorways ,,<script>,MOTORWAYS\u0000"),
+        )
     }
 
     @Test

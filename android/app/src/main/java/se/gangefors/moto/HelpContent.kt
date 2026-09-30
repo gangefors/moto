@@ -94,6 +94,7 @@ val HELP_TOPICS = listOf(
                 R.string.settings_group_routing,
                 listOf(
                     HelpSetting(R.string.routing_gravel, R.string.routing_gravel_hint),
+                    HelpSetting(R.string.avoid_heading, R.string.avoid_hint),
                     HelpSetting(R.string.settings_loop_length, R.string.settings_loop_length_hint),
                 ),
             ),

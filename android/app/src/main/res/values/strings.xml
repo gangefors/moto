@@ -168,6 +168,13 @@
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_gravel">%1$.1f km gravel</string>
+    <string name="route_toll">%1$.1f km toll road</string>
+    <string name="avoid_heading">Avoid</string>
+    <string name="avoid_motorways">Motorways</string>
+    <string name="avoid_ferries">Ferries</string>
+    <string name="avoid_tolls">Toll roads</string>
+    <string name="avoid_hint">[motorway] Motorways, [ferry] ferries and [toll] toll roads are avoided while their chip is on. An avoided road is still used when there is no other way there. Allowed, it counts as the least fun road: routes and loops keep off it, and only the fastest route seeks it out.\nToll roads are those a motorcycle pays for, like the Öresund bridge and private toll roads; automatic tolls and congestion charges are free for motorcycles.</string>
+    <string name="avoid_allowed">%1$s allowed</string>
     <string name="about_open">About and licences</string>
     <string name="help_open">How to use</string>
     <!-- What a screen reader says for a button's icon in text: words that fit the sentence (the star is silent: it sits beside the word Sections). -->
@@ -182,6 +189,9 @@
     <string name="say_record">the record button</string>
     <string name="say_tag">the TAG button</string>
     <string name="say_flag">the review flag</string>
+    <string name="say_motorway">the motorway chip</string>
+    <string name="say_ferry">the ferry chip</string>
+    <string name="say_toll">the toll road chip</string>
     <string name="say_settings">the settings button</string>
     <string name="say_bin">the bin</string>
     <string name="say_ride">the ride mark</string>
