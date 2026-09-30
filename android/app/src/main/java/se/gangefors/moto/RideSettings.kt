@@ -45,7 +45,7 @@ data class RideSettings(
 /**
  * Ride settings, one tap from the map (the gear at the top right), in
  * groups as Android's own settings are: routes and loops (gravel roads,
- * roads to avoid, the length a new loop starts at), the map (the location button's two
+ * roads to allow, the length a new loop starts at), the map (the location button's two
  * zooms, as a range) and recording (keeping the screen on). Each change
  * applies at once ([onChange]); Back or the arrow closes the page.
  */
@@ -60,7 +60,7 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
             Box(Modifier.padding(top = 16.dp)) {
                 Heading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
             }
-            AvoidChips(settings.avoid) { onChange(settings.copy(avoid = it)) }
+            AllowChips(settings.avoid) { onChange(settings.copy(avoid = it)) }
             val loopTitle = stringResource(R.string.settings_loop_length)
             Box(Modifier.padding(top = 16.dp)) {
                 LoopLengthSlider(

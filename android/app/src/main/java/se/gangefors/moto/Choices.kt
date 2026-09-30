@@ -174,7 +174,7 @@ fun IconTextButton(icon: Int, label: String, onClick: () -> Unit) {
     }
 }
 
-/** The icon of each kind of road to avoid, as on its chip. */
+/** The icon of each kind of road to allow, as on its chip. */
 fun avoidIcon(kind: AvoidKind): Int = when (kind) {
     AvoidKind.MOTORWAYS -> R.drawable.ic_motorway
     AvoidKind.FERRIES -> R.drawable.ic_ferry
@@ -193,17 +193,18 @@ fun avoidLabel(kind: AvoidKind): String = stringResource(
 
 /**
  * Motorways, ferries and toll roads as chips that are on while that kind
- * is avoided, each with its road icon; they wrap when there is no room.
+ * is allowed (all off by default: avoided), each with its road icon; they
+ * wrap when there is no room.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AvoidChips(avoid: Avoid, onAvoid: (Avoid) -> Unit) {
+fun AllowChips(avoid: Avoid, onAvoid: (Avoid) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AvoidKind.entries.forEach { kind ->
-            val avoided = avoids(avoid, kind)
+            val allowed = allows(avoid, kind)
             FilterChip(
-                selected = avoided,
-                onClick = { onAvoid(withAvoided(avoid, kind, !avoided)) },
+                selected = allowed,
+                onClick = { onAvoid(withAllowed(avoid, kind, !allowed)) },
                 label = { OneLine(avoidLabel(kind)) },
                 leadingIcon = {
                     Icon(painterResource(avoidIcon(kind)), contentDescription = null, modifier = Modifier.size(18.dp))
