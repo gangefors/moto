@@ -5,6 +5,7 @@
 import datetime as dt
 import tomllib
 import unittest
+from urllib.parse import urlparse
 
 import dependency_age as da
 
@@ -88,7 +89,8 @@ class DependencyAgeTest(unittest.TestCase):
 
         def fetch(url):
             urls.append(url)
-            return "Fri, 18 Sep 2026 14:15:56 GMT" if "repo1.maven.org" in url else None
+            host = urlparse(url).hostname
+            return "Fri, 18 Sep 2026 14:15:56 GMT" if host == "repo1.maven.org" else None
 
         date = da.pom_date("org.maplibre.gl", "android-sdk", "13.6.1", fetch)
         self.assertEqual(dt.datetime(2026, 9, 18, 14, 15, 56, tzinfo=dt.timezone.utc), date)
