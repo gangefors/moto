@@ -4,9 +4,10 @@
 //! Reading an OSM `.osm.pbf` extract: node positions inside the region and
 //! every motorcycle-routable way.
 
+use std::collections::HashSet;
 use std::path::Path;
 
-use moto_core::region::format::{BBoxE7, PlaceKind, PointE7};
+use moto_core::region::format::{BBoxE7, PlaceKind, PointE7, edge_flags};
 use osmpbf::{BlobDecode, BlobReader, Element};
 use rayon::prelude::*;
 
@@ -25,6 +26,10 @@ pub struct Osm {
     pub places: Vec<(PointE7, PlaceKind, String)>,
     /// The extract's replication timestamp, if its header has one.
     pub timestamp: Option<i64>,
+    /// Toll booths inside the bounding box, and the ways a booth would
+    /// make toll roads ([`tags::motorcycle_toll`]); used up by `read`.
+    booths: Vec<i64>,
+    booth_ways: Vec<i64>,
 }
 
 /// Reads the extract, decoding blobs in parallel; `country`'s speed
@@ -55,6 +60,9 @@ pub fn read(path: &Path, bbox: &BBoxE7, country: Country) -> Result<Osm, String>
                             if let Some((kind, name)) = tags::place(&tags) {
                                 out.places.push((pos, kind, name));
                             }
+                            if tags::is_toll_booth(&tags) {
+                                out.booths.push(n.id());
+                            }
                         }
                     }
                     Element::Node(n) => {
@@ -66,11 +74,17 @@ pub fn read(path: &Path, bbox: &BBoxE7, country: Country) -> Result<Osm, String>
                             if let Some((kind, name)) = tags::place(&tags) {
                                 out.places.push((pos, kind, name));
                             }
+                            if tags::is_toll_booth(&tags) {
+                                out.booths.push(n.id());
+                            }
                         }
                     }
                     Element::Way(w) => {
                         let tags: Vec<(&str, &str)> = w.tags().collect();
                         if let Some(attrs) = tags::classify(&tags, country) {
+                            if tags::motorcycle_toll(&tags, attrs.class, country).is_none() {
+                                out.booth_ways.push(w.id());
+                            }
                             let (road_ref, name) = tags::road_names(&tags);
                             out.ways.push(RawWay {
                                 id: w.id(),
@@ -95,12 +109,31 @@ pub fn read(path: &Path, bbox: &BBoxE7, country: Country) -> Result<Osm, String>
         all.ways.append(&mut p.ways);
         all.places.append(&mut p.places);
         all.timestamp = all.timestamp.or(p.timestamp);
+        all.booths.append(&mut p.booths);
+        all.booth_ways.append(&mut p.booth_ways);
     }
+    let (booths, booth_ways) = (
+        std::mem::take(&mut all.booths),
+        std::mem::take(&mut all.booth_ways),
+    );
+    mark_booth_tolls(&mut all.ways, &booths, &booth_ways);
     // Blob order is lost in parallel; keep the output deterministic.
     all.ways.sort_unstable_by_key(|w| w.id);
     all.places
         .sort_unstable_by(|a, b| (a.0.lat, a.0.lon, a.1, &a.2).cmp(&(b.0.lat, b.0.lon, b.1, &b.2)));
     Ok(all)
+}
+
+/// Makes each of `booth_ways` a toll road when one of `booths` stands on
+/// it (see [`tags::motorcycle_toll`]).
+fn mark_booth_tolls(ways: &mut [RawWay], booths: &[i64], booth_ways: &[i64]) {
+    let booths: HashSet<i64> = booths.iter().copied().collect();
+    let booth_ways: HashSet<i64> = booth_ways.iter().copied().collect();
+    for w in ways {
+        if booth_ways.contains(&w.id) && w.refs.iter().any(|r| booths.contains(r)) {
+            w.attrs.flags |= edge_flags::TOLL;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -165,5 +198,30 @@ mod tests {
         let res = read(&cut, &bbox, Country::Sweden);
         std::fs::remove_file(&cut).unwrap();
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn a_booth_makes_only_open_ways_toll_roads() {
+        let attrs = tags::classify(&[("highway", "unclassified")], Country::Norway).unwrap();
+        let way = |id: i64, refs: Vec<i64>| RawWay {
+            id,
+            refs,
+            attrs,
+            road_ref: None,
+            name: None,
+        };
+        // 1: a booth on a way left open; 2: left open, no booth on it;
+        // 3: a booth, but the way's tags settled it.
+        let mut ways = vec![
+            way(1, vec![10, 11]),
+            way(2, vec![12, 13]),
+            way(3, vec![11, 14]),
+        ];
+        mark_booth_tolls(&mut ways, &[11], &[1, 2]);
+        let tolled: Vec<bool> = ways
+            .iter()
+            .map(|w| w.attrs.flags & edge_flags::TOLL != 0)
+            .collect();
+        assert_eq!(tolled, [true, false, false]);
     }
 }
