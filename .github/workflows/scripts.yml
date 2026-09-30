@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Unit tests of the CI scripts in .github/scripts, for every push and pull
+# request that changes them. They need neither Rust nor the Android SDK,
+# so a script change doesn't build the app (CI, android.yml, runs for
+# third_party.py too, as the app build runs it).
+#
+# Actions are pinned by commit SHA.
+name: Scripts
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/scripts.yml"
+  pull_request:
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/scripts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scripts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test CI scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Test
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'

@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
 #
-# CI for every push that changes code (android/ or core/), to main and to
-# the workspaces' branches, and every such pull request (see "Testing and
-# performance" in CLAUDE.md). A branch is
+# CI for every push that changes code (android/, core/ or the licence
+# notice script the app build runs), to main and to the workspaces'
+# branches, and every such pull request (see "Testing and performance" in
+# CLAUDE.md). The CI scripts' own tests are in scripts.yml. A branch is
 # merged into main once this is green on its newest commit.
 # - core: rustfmt, clippy, the Rust tests and cargo-deny; builds the M0
 #   region file from the OSM Sweden extract (cached); runs the golden routes
@@ -31,17 +32,21 @@ on:
     paths:
       - "android/**"
       - "core/**"
-      # Only code: changes to this workflow or the CI scripts alone
-      # (their tests run in core) wait for the next code change, or
-      # workflow_dispatch. Documentation alone never needs a build.
+      # The app build runs it for the licence notices.
+      - ".github/scripts/third_party.py"
+      # Only code: a change to this workflow alone waits for the next code
+      # change, or workflow_dispatch. The other CI scripts are tested in
+      # scripts.yml. Documentation alone never needs a build.
       - "!**/*.md"
   pull_request:
     paths:
       - "android/**"
       - "core/**"
-      # Only code: changes to this workflow or the CI scripts alone
-      # (their tests run in core) wait for the next code change, or
-      # workflow_dispatch. Documentation alone never needs a build.
+      # The app build runs it for the licence notices.
+      - ".github/scripts/third_party.py"
+      # Only code: a change to this workflow alone waits for the next code
+      # change, or workflow_dispatch. The other CI scripts are tested in
+      # scripts.yml. Documentation alone never needs a build.
       - "!**/*.md"
   workflow_dispatch:
 
@@ -100,9 +105,6 @@ jobs:
       - name: Check dependencies
         working-directory: core
         run: cargo deny --locked check
-
-      - name: Test CI scripts
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Build moto-regionbuild
         working-directory: core
