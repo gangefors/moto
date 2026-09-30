@@ -139,9 +139,11 @@ pub fn loops(
 
     let radius = target_m / (3.0 * PARAMS.loop_detour);
     let home = home_radius_m(target_m);
+    // Every candidate on its own, side by side (see `par`); kept in the
+    // candidates' order, so the loops are the same as one after the other.
     let collect = |candidates: Candidates| {
-        let mut loops = Vec::new();
-        for (heading, c) in candidates.enumerate() {
+        let candidates: Vec<(usize, Candidate)> = candidates.enumerate().collect();
+        let found = crate::par::map(&candidates, |&(heading, c)| {
             let at = |scale: f64| {
                 loop_at(
                     engine,
@@ -156,25 +158,19 @@ pub fn loops(
                     side_loop_max,
                 )
             };
-            let Some(first) = at(1.0) else {
-                continue;
-            };
+            let first = at(1.0)?;
             // One resize towards the target.
-            let found = if fits(&first.routed.route) {
-                Some(first)
+            let mut l = if fits(&first.routed.route) {
+                first
             } else {
                 let scale = (target_m / size(&first.routed.route).max(1.0)).clamp(0.5, 2.0);
-                at(scale).filter(|l| fits(&l.routed.route))
+                at(scale).filter(|l| fits(&l.routed.route))?
             };
-            if let Some(mut l) = found {
-                l.heading = heading;
-                l.bearing = middle_bearing(&s, &l.routed.route.geometry);
-                if reuse_share(&l) <= MAX_REUSE {
-                    loops.push(l);
-                }
-            }
-        }
-        loops
+            l.heading = heading;
+            l.bearing = middle_bearing(&s, &l.routed.route.geometry);
+            (reuse_share(&l) <= MAX_REUSE).then_some(l)
+        });
+        found.into_iter().flatten().collect::<Vec<Loop>>()
     };
     // The loops that way first; when there are fewer than two (the sea,
     // the region's edge), the best of any way fill up to two.
@@ -394,16 +390,18 @@ fn through_loops(
         }
         candidates.push(c);
     }
-    candidates
-        .iter()
-        .enumerate()
-        .filter_map(|(i, c)| {
-            ride_loop(engine, fun, opts, start, c, home, side_loop_max).map(|mut l| {
-                l.heading = i;
-                l
-            })
+    // Each candidate on its own, side by side, in order (see `par`).
+    let candidates: Vec<(usize, Vec<(RoadPoint, bool)>)> =
+        candidates.into_iter().enumerate().collect();
+    crate::par::map(&candidates, |(i, c)| {
+        ride_loop(engine, fun, opts, start, c, home, side_loop_max).map(|mut l| {
+            l.heading = *i;
+            l
         })
-        .collect()
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// `kept` plus the best of `loops` (worth per second; ties by heading, so

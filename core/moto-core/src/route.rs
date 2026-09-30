@@ -686,10 +686,14 @@ pub(crate) fn route_choices(
         used.extend(fastest_roads.keys().copied());
         while kept.len() < MAX_CHOICES {
             let mut found = None;
-            for pull in CHOICE_PULLS {
+            // The pulls side by side, taken in order (see `par`).
+            let tried = crate::par::map(&CHOICE_PULLS, |&pull| {
                 let cost = Cost::Loop(search.off, search.fun, pull, &used, false);
-                let parts = path(region, from, to, cost, max_speed_kmh)?;
-                let r = build(&search.fun, &parts);
+                path(region, from, to, cost, max_speed_kmh)
+                    .map(|parts| (build(&search.fun, &parts), parts))
+            });
+            for t in tried {
+                let (r, parts) = t?;
                 let roads = roads_of(&parts);
                 let apart = std::iter::once(&fastest_roads)
                     .chain(kept_roads.iter())
@@ -839,15 +843,50 @@ impl<'a> Search<'a> {
         if self.fun.is_empty() {
             return Ok(None);
         }
-        let full = self.pulled(1.0)?;
+        // The bisection below, with each pull it needs found side by side
+        // with the two it may need next (see `par`): the same pulls, so
+        // the same route, in about half the time. The full pull comes with
+        // the first two steps.
+        type Found = Result<(Routed, Vec<Partial>), CoreError>;
+        let mut ahead: Vec<(f64, Found)> = Vec::new();
+        let find = |pulls: &[f64], ahead: &mut Vec<(f64, Found)>| {
+            let want: Vec<f64> = pulls
+                .iter()
+                .copied()
+                .filter(|p| !ahead.iter().any(|(q, _)| q.to_bits() == p.to_bits()))
+                .collect();
+            let found = crate::par::map(&want, |&p| self.pulled(p));
+            ahead.extend(want.into_iter().zip(found));
+        };
+        let take = |pull: f64, ahead: &mut Vec<(f64, Found)>| -> Found {
+            match ahead
+                .iter()
+                .position(|(q, _)| q.to_bits() == pull.to_bits())
+            {
+                Some(i) => ahead.swap_remove(i).1,
+                None => self.pulled(pull),
+            }
+        };
+        let steps = PARAMS.detour_steps;
+        let (mut lo, mut hi) = (0.0_f64, 1.0_f64);
+        let first = (lo + hi) / 2.0;
+        if steps > 0 {
+            find(
+                &[1.0, first, (lo + first) / 2.0, (first + hi) / 2.0],
+                &mut ahead,
+            );
+        }
+        let full = take(1.0, &mut ahead)?;
         if self.passes(&full.0) {
             return Ok(Some(full));
         }
         let mut best = None;
-        let (mut lo, mut hi) = (0.0, 1.0);
-        for _ in 0..PARAMS.detour_steps {
+        for step in 0..steps {
             let pull = (lo + hi) / 2.0;
-            let r = self.pulled(pull)?;
+            if step + 1 < steps && !ahead.iter().any(|(q, _)| q.to_bits() == pull.to_bits()) {
+                find(&[pull, (lo + pull) / 2.0, (pull + hi) / 2.0], &mut ahead);
+            }
+            let r = take(pull, &mut ahead)?;
             if self.passes(&r.0) {
                 lo = pull;
                 best = Some(r);
