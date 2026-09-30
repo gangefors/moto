@@ -222,9 +222,10 @@ impl Engine {
             .chain(via.iter().copied())
             .chain(std::iter::once(to))
             .collect();
-        let legs = stops
-            .windows(2)
-            .map(|w| self.route_with(w[0], w[1], opts, favourites))
+        // The legs side by side (see `par`); the first error in order.
+        let pairs: Vec<&[LatLon]> = stops.windows(2).collect();
+        let legs = crate::par::map(&pairs, |w| self.route_with(w[0], w[1], opts, favourites))
+            .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
         Ok(crate::route::join(legs))
     }
@@ -258,22 +259,24 @@ impl Engine {
             .chain(via.iter().copied())
             .chain(std::iter::once(to))
             .collect();
-        let mut legs: Vec<Vec<Route>> = Vec::with_capacity(stops.len() - 1);
-        for w in stops.windows(2) {
+        // The legs side by side (see `par`); the first error in order.
+        let pairs: Vec<&[LatLon]> = stops.windows(2).collect();
+        let mut legs: Vec<Vec<Route>> = crate::par::map(&pairs, |w| {
             w[0].validate()?;
             w[1].validate()?;
             let start = self.snap(w[0])?;
             let end = self.snap(w[1])?;
-            let choices = crate::route::route_choices(
+            crate::route::route_choices(
                 &self.net,
                 &start,
                 &end,
                 opts,
                 favourites,
                 self.max_speed_kmh,
-            )?;
-            legs.push(choices);
-        }
+            )
+        })
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
         if let [only] = legs.as_mut_slice() {
             return Ok(std::mem::take(only));
         }

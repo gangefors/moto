@@ -25,6 +25,7 @@ pub mod handoff;
 pub mod matching;
 pub mod net;
 pub mod overlap;
+mod par;
 pub mod region;
 pub mod rematch;
 pub mod ridden;
