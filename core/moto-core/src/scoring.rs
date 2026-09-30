@@ -36,6 +36,12 @@ pub struct ScoringParams {
     /// Halmstad; at 20 the ferry won from Landskrona north; at 30 even
     /// from Malmö. 15 is Stefan's pick between them.
     pub toll_penalty: f64,
+    /// What a second on an avoided toll road or ferry takes off a route's
+    /// worth (Stefan: paying for the bridge or sitting on the ferry is
+    /// hard on a ride). A loop across one is offered only when it is
+    /// still worth at least the best loop without one (see
+    /// `roundtrip::loops`).
+    pub paid_worth: f64,
     /// How much a metre of road in each turn-radius bin (`RADIUS_BINS_M`:
     /// ≤ 30, 60, 100, 175, 300, 500 m) counts as curvy. Sweepers count
     /// most; hairpins less (slow, and often junction artefacts); wide
@@ -163,6 +169,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     min_gain: 1.0,
     avoid_penalty: 10.0,
     toll_penalty: 15.0,
+    paid_worth: 3.0,
     curve_bin_weight: [0.6, 1.0, 1.0, 0.8, 0.5, 0.2],
     curve_full: 0.4,
     //                 motorway trunk primary secondary tertiary unclassified
@@ -205,6 +212,7 @@ mod tests {
         const { assert!(PARAMS.min_gain >= 0.0) };
         const { assert!(PARAMS.avoid_penalty >= 1.0) };
         const { assert!(PARAMS.toll_penalty >= 1.0) };
+        const { assert!(PARAMS.paid_worth >= 0.0) };
         const { assert!(PARAMS.curve_full > 0.0 && PARAMS.curve_weight <= 1.0) };
     }
 

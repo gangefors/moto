@@ -1,0 +1,7 @@
+{
+  "name": "Loop of 200 km west from Lund stays in Sweden",
+  "description": "Heading west from Lund every waypoint lands across the sound in Denmark, reached only over the Öresund bridge (a toll road) or by ferry. With tolls and ferries avoided (the default), a loop that pays to cross is offered only when it is worth as much as the best loop without one; a 200 km loop isn't, so the loops stay in Sweden, along the coast instead.",
+  "from": [55.7047, 13.1910],
+  "loop": {"km": 200, "direction": 270},
+  "expect": {"avoid": [[55.56547, 12.89461]]}
+}
