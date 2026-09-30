@@ -541,23 +541,8 @@ private fun LoopCardDetails(
 ) {
     Column(Modifier.padding(end = 8.dp)) {
         LoopLengthSlider(stringResource(R.string.loop_length), choice, onChoice)
-        OptionHeading(stringResource(R.string.loop_direction))
-        SingleChoice(
-            options = LoopDirection.entries,
-            selected = direction,
-            label = {
-                stringResource(
-                    when (it) {
-                        LoopDirection.ANY -> R.string.loop_direction_any
-                        LoopDirection.NORTH -> R.string.loop_direction_north
-                        LoopDirection.EAST -> R.string.loop_direction_east
-                        LoopDirection.SOUTH -> R.string.loop_direction_south
-                        LoopDirection.WEST -> R.string.loop_direction_west
-                    },
-                )
-            },
-            onSelect = onDirection,
-        )
+        OptionHeading(stringResource(R.string.loop_direction), stringResource(R.string.loop_direction_hint))
+        DirectionChips(direction, onDirection)
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
         OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))

@@ -93,10 +93,11 @@ val HELP_TOPICS = listOf(
             HelpGroup(
                 R.string.settings_group_routing,
                 listOf(
+                    HelpSetting(R.string.settings_loop_length, R.string.settings_loop_length_hint),
+                    HelpSetting(R.string.settings_loop_direction, R.string.settings_loop_direction_hint),
                     HelpSetting(R.string.routing_gravel, R.string.routing_gravel_hint),
                     HelpSetting(R.string.favourites_label, R.string.favourites_hint),
                     HelpSetting(R.string.avoid_heading, R.string.avoid_hint),
-                    HelpSetting(R.string.settings_loop_length, R.string.settings_loop_length_hint),
                 ),
             ),
             HelpGroup(R.string.settings_group_map, listOf(HelpSetting(R.string.locate_zooms, R.string.locate_zooms_hint))),

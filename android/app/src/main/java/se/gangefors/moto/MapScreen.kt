@@ -744,8 +744,11 @@ fun MapScreen() {
     // 0: the standard loops; Shuffle picks another seed. A new start goes
     // back to the standard loops.
     var loopSeed by remember { mutableStateOf(0u) }
-    // Which way the loops should head; any way again for a new start.
-    var loopDirection by remember { mutableStateOf(LoopDirection.ANY) }
+    // Which way every new loop heads at first (Ride settings), and which
+    // way these loops head: the default again for each new start; a
+    // change on the loop sheet is for that loop alone.
+    var defaultDirection by remember { mutableStateOf(RoutePrefs.loopDirection(context)) }
+    var loopDirection by remember { mutableStateOf(defaultDirection) }
     // The seed the next Shuffle uses, and its loops, found in the
     // background while the rider looks at these so Shuffle is instant.
     // One set ahead at most, only while the loop card is open; dropped
@@ -796,14 +799,14 @@ fun MapScreen() {
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
 
-    /** Loops from [start], in any direction: the standard set (seed 0),
-     * or the set of [seed]. */
+    /** Loops from [start], heading the default way: the standard set
+     * (seed 0), or the set of [seed]. */
     fun startLoop(start: LatLng, seed: UInt = 0u) {
         startPicked = null
         // A plan replaces the step that led to it ("Point set…").
         message = null
         loopSeed = seed
-        loopDirection = LoopDirection.ANY
+        loopDirection = defaultDirection
         loopStart = start
     }
 
@@ -2070,7 +2073,7 @@ fun MapScreen() {
     }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(gravel, favouritesMode, avoid, loopChoice, locateZooms, keepScreenOn),
+            settings = RideSettings(loopChoice, defaultDirection, gravel, favouritesMode, avoid, locateZooms, keepScreenOn),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
@@ -2079,6 +2082,10 @@ fun MapScreen() {
                 if (new.favourites != favouritesMode) changeFavourites(new.favourites)
                 if (new.avoid != avoid) changeAvoid(new.avoid)
                 loopLength.pick(new.loopLength)
+                if (new.loopDirection != defaultDirection) {
+                    defaultDirection = new.loopDirection
+                    RoutePrefs.setLoopDirection(context, new.loopDirection)
+                }
                 if (new.zooms != locateZooms) {
                     locateZooms = new.zooms
                     RoutePrefs.setLocateZooms(context, new.zooms)

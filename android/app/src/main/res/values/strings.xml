@@ -102,6 +102,7 @@
     <string name="loop_next">Next loop</string>
     <string name="loop_shuffle">Shuffle</string>
     <string name="loop_direction">Direction</string>
+    <string name="loop_direction_hint">For this loop only: every new loop starts at the Direction default in Ride settings.</string>
     <string name="loop_direction_any">Any</string>
     <string name="loop_direction_north">N</string>
     <string name="loop_direction_east">E</string>
@@ -316,8 +317,10 @@
     <string name="ride_settings_title">Ride settings</string>
     <string name="settings_back">Back</string>
     <string name="settings_info">About %1$s</string>
-    <string name="settings_loop_length">New loops start at</string>
+    <string name="settings_loop_length">Loop length</string>
     <string name="settings_loop_length_hint">The length a new loop starts at: the last one you picked, here or on the loop sheet.</string>
+    <string name="settings_loop_direction">Direction default</string>
+    <string name="settings_loop_direction_hint">The way every new loop heads at first: any way, or roughly north, east, south or west. Change it on the loop sheet for that loop alone; the next loop starts here again.</string>
     <string name="settings_keep_screen_on">Keep the screen on while recording</string>
     <string name="settings_keep_screen_on_hint">For the phone on a handlebar mount. Uses more battery.</string>
     <string name="settings_group_routing">Routes and loops</string>

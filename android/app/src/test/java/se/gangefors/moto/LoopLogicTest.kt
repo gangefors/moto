@@ -119,6 +119,20 @@ class LoopLogicTest {
         length.pick(LoopChoice.Minutes(180))
         assertEquals(listOf(LoopChoice.Km(150), LoopChoice.Minutes(180)), saved)
     }
+
+    @Test
+    fun directionsAreStoredByKey() {
+        LoopDirection.entries.forEach { assertEquals(it, loopDirectionOf(loopDirectionKey(it))) }
+        assertEquals(LoopDirection.NORTH, loopDirectionOf("north"))
+    }
+
+    @Test
+    fun anUnknownStoredDirectionIsAnyWay() {
+        assertEquals(LoopDirection.ANY, loopDirectionOf(null))
+        assertEquals(LoopDirection.ANY, loopDirectionOf(""))
+        assertEquals(LoopDirection.ANY, loopDirectionOf("NORTH"))
+        assertEquals(LoopDirection.ANY, loopDirectionOf("north-east"))
+    }
 }
 
 class OneAheadTest {

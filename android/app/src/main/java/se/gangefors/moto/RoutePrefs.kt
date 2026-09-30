@@ -23,6 +23,7 @@ object RoutePrefs {
      * avoided. */
     private const val ALLOWED_ROADS = "allowed_roads"
     private const val LOOP = "loop_length"
+    private const val LOOP_DIRECTION = "loop_direction"
     private const val AREA_ZOOM = "locate_area_zoom"
     private const val CLOSE_ZOOM = "locate_close_zoom"
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
@@ -77,6 +78,16 @@ object RoutePrefs {
 
     fun setLoopChoice(context: Context, choice: LoopChoice) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP, choice.key) }
+    }
+
+    /** The way every new loop heads at first (Ride settings); any way by
+     * default. A change on the loop sheet is for that loop alone. */
+    fun loopDirection(context: Context): LoopDirection = loopDirectionOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(LOOP_DIRECTION, null) }.getOrNull(),
+    )
+
+    fun setLoopDirection(context: Context, direction: LoopDirection) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LOOP_DIRECTION, loopDirectionKey(direction)) }
     }
 
     /** Whether this start shows how to use the map (the first few do);

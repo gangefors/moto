@@ -165,6 +165,27 @@ fun GravelChips(gravel: Gravel, onGravel: (Gravel) -> Unit) {
     )
 }
 
+/** Any / N / E / S / W for the way loops head, one of them selected. */
+@Composable
+fun DirectionChips(direction: LoopDirection, onDirection: (LoopDirection) -> Unit) {
+    SingleChoice(
+        options = LoopDirection.entries,
+        selected = direction,
+        label = {
+            stringResource(
+                when (it) {
+                    LoopDirection.ANY -> R.string.loop_direction_any
+                    LoopDirection.NORTH -> R.string.loop_direction_north
+                    LoopDirection.EAST -> R.string.loop_direction_east
+                    LoopDirection.SOUTH -> R.string.loop_direction_south
+                    LoopDirection.WEST -> R.string.loop_direction_west
+                },
+            )
+        },
+        onSelect = onDirection,
+    )
+}
+
 /** Prefer / Avoid favourites, one of them selected. */
 @Composable
 fun FavouritesChips(favourites: FavouritesMode, onFavourites: (FavouritesMode) -> Unit) {
