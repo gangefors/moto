@@ -83,6 +83,14 @@ enum class LoopDirection(val bearing: Double?) {
     WEST(270.0),
 }
 
+/** The stored key of a direction: "any", "north", ... */
+fun loopDirectionKey(d: LoopDirection): String = d.name.lowercase()
+
+/** A stored direction, or any way when it isn't one (preferences are
+ * read back as untrusted input). */
+fun loopDirectionOf(stored: String?): LoopDirection =
+    LoopDirection.entries.firstOrNull { loopDirectionKey(it) == stored } ?: LoopDirection.ANY
+
 /** A seed for another set of loops: never 0 (the standard loops). */
 fun shuffleSeed(random: kotlin.random.Random = kotlin.random.Random.Default): UInt =
     random.nextInt(1, Int.MAX_VALUE).toUInt()

@@ -34,4 +34,20 @@ class HelpContentTest {
     fun everyKeyHasAButtonIcon() {
         for (key in HELP_TOPICS.flatMap { it.keys }) assertTrue(key.icon, key.icon in BUTTON_ICONS)
     }
+
+    @Test
+    fun routingSettingsFollowTheLoopSheetsOrder() {
+        val settings = HELP_TOPICS.first { it.id == HelpTopicId.SETTINGS }
+        val routing = settings.groups.first { it.title == R.string.settings_group_routing }
+        assertEquals(
+            listOf(
+                R.string.settings_loop_length,
+                R.string.settings_loop_direction,
+                R.string.routing_gravel,
+                R.string.favourites_label,
+                R.string.avoid_heading,
+            ),
+            routing.settings.map { it.name },
+        )
+    }
 }

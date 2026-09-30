@@ -36,19 +36,21 @@ import se.gangefors.moto.core.Gravel
 
 /** The settings on the Ride settings page, as they are now. */
 data class RideSettings(
+    val loopLength: LoopChoice,
+    val loopDirection: LoopDirection,
     val gravel: Gravel,
     val favourites: FavouritesMode,
     val avoid: Avoid,
-    val loopLength: LoopChoice,
     val zooms: LocateZooms,
     val keepScreenOn: Boolean,
 )
 
 /**
  * Ride settings, one tap from the map (the gear at the top right), in
- * groups as Android's own settings are: routes and loops (gravel roads,
- * favourites, roads to allow, the length a new loop starts at), the map (the location button's two
- * zooms, as a range) and recording (keeping the screen on). Each change
+ * groups as Android's own settings are: routes and loops (in the loop
+ * sheet's order: the length and the direction a new loop starts at,
+ * gravel roads, favourites, roads to allow), the map (the location
+ * button's two zooms, as a range) and recording (keeping the screen on). Each change
  * applies at once ([onChange]); Back or the arrow closes the page.
  */
 @Composable
@@ -57,7 +59,23 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
         val scroll = rememberScrollState()
         Column(Modifier.scrollHints(scroll).verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 8.dp)) {
             SettingsGroup(stringResource(R.string.settings_group_routing), first = true)
-            Heading(stringResource(R.string.routing_gravel), stringResource(R.string.routing_gravel_hint))
+            val loopTitle = stringResource(R.string.settings_loop_length)
+            LoopLengthSlider(
+                loopTitle,
+                settings.loopLength,
+                { onChange(settings.copy(loopLength = it)) },
+                info = { InfoButton(loopTitle, stringResource(R.string.settings_loop_length_hint)) },
+                titleStyle = MaterialTheme.typography.titleMedium,
+                titleColor = MaterialTheme.colorScheme.onSurface,
+                titleAlone = true,
+            )
+            Box(Modifier.padding(top = 16.dp)) {
+                Heading(stringResource(R.string.settings_loop_direction), stringResource(R.string.settings_loop_direction_hint))
+            }
+            DirectionChips(settings.loopDirection) { onChange(settings.copy(loopDirection = it)) }
+            Box(Modifier.padding(top = 16.dp)) {
+                Heading(stringResource(R.string.routing_gravel), stringResource(R.string.routing_gravel_hint))
+            }
             GravelChips(settings.gravel) { onChange(settings.copy(gravel = it)) }
             Box(Modifier.padding(top = 16.dp)) {
                 Heading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
@@ -67,18 +85,6 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                 Heading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
             }
             AllowChips(settings.avoid) { onChange(settings.copy(avoid = it)) }
-            val loopTitle = stringResource(R.string.settings_loop_length)
-            Box(Modifier.padding(top = 16.dp)) {
-                LoopLengthSlider(
-                    loopTitle,
-                    settings.loopLength,
-                    { onChange(settings.copy(loopLength = it)) },
-                    info = { InfoButton(loopTitle, stringResource(R.string.settings_loop_length_hint)) },
-                    titleStyle = MaterialTheme.typography.titleMedium,
-                    titleColor = MaterialTheme.colorScheme.onSurface,
-                    titleAlone = true,
-                )
-            }
 
             SettingsGroup(stringResource(R.string.settings_group_map))
             Heading(stringResource(R.string.locate_zooms), stringResource(R.string.locate_zooms_hint))
