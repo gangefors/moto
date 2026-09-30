@@ -201,7 +201,7 @@
     <string name="help_map_title">The map</string>
     <string name="help_map">Tap a road to see what it is, or a section to open its card. The buttons on the map:</string>
     <string name="help_plan_title">Plan a ride</string>
-    <string name="help_plan">Long-press a place to start there, then long-press where you want to go. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
+    <string name="help_plan">Long-press a place to start there, then long-press where you want to go. Pull a route’s or loop’s card up for its choices, like avoiding your favourites to find new roads. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
     <string name="help_sections_title">Favourite roads</string>
     <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your sections. Pick one in Sections to see it, then loop through it or route through it from where you are.</string>
     <string name="help_ride_title">On a ride</string>
@@ -255,6 +255,11 @@
     <string name="gravel_prefer">Prefer</string>
     <string name="routing_gravel">Gravel roads</string>
     <string name="routing_gravel_hint">**Avoid** stay off unpaved roads where possible and hide your mostly-gravel sections\n**Allow** ride them like any other road\n**Prefer** seek them out within a route’s extra time\nGravel shows as a dashed centre line.</string>
+    <string name="favourites_label">Favourites</string>
+    <string name="favourites_prefer">Prefer</string>
+    <string name="favourites_avoid">Avoid</string>
+    <string name="favourites_summary_avoid">Avoid favourites</string>
+    <string name="favourites_hint">**Prefer** seek out your favourites within a route’s extra time\n**Avoid** keep off them where possible, to find new roads; a favourite that is the only way is still used\nEvery new route or loop starts at Prefer.</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>

@@ -25,8 +25,8 @@ use moto_core::geo::{distance_to_line, haversine_m};
 use moto_core::roundtrip::{MAX_LOOPS, MAX_REUSE, TOLERANCE, home_radius_m};
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
 use moto_core::{
-    Engine, Favourites, Gravel, LatLon, LoopOptions, RoundTripTarget, Route, RouteOptions,
-    TimeBudget,
+    Engine, Favourites, FavouritesMode, Gravel, LatLon, LoopOptions, RoundTripTarget, Route,
+    RouteOptions, TimeBudget,
 };
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +66,10 @@ pub struct Case {
     /// "allow" or "prefer", like the app's gravel choice.
     #[serde(default)]
     pub gravel: GravelName,
+    /// What the route does with `favourites`: "prefer" (the default) or
+    /// "avoid" (to find new roads), like the app's choice.
+    #[serde(default)]
+    pub favourites_mode: FavouritesModeName,
     /// Whether curvy roads pull the route (default true, as in the app);
     /// false for cases about favourites or gravel alone.
     #[serde(default = "yes")]
@@ -154,6 +158,23 @@ impl From<GravelName> for Gravel {
             GravelName::Avoid => Gravel::Avoid,
             GravelName::Allow => Gravel::Allow,
             GravelName::Prefer => Gravel::Prefer,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FavouritesModeName {
+    #[default]
+    Prefer,
+    Avoid,
+}
+
+impl From<FavouritesModeName> for FavouritesMode {
+    fn from(f: FavouritesModeName) -> Self {
+        match f {
+            FavouritesModeName::Prefer => FavouritesMode::Prefer,
+            FavouritesModeName::Avoid => FavouritesMode::Avoid,
         }
     }
 }
@@ -381,6 +402,7 @@ impl Case {
         }
         opts.gravel = self.gravel.into();
         opts.curvy = self.curvy;
+        opts.favourites = self.favourites_mode.into();
         opts.avoid.motorways = !self.motorways;
         opts.avoid.ferries = !self.ferries;
         opts.avoid.tolls = !self.tolls;

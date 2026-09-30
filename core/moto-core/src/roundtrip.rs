@@ -20,7 +20,8 @@ use crate::region::format::{RoadClass, Surface, edge_flags};
 use crate::route::{Cost, Fun, Off, Partial, Routed, build, latlon, path};
 use crate::scoring::PARAMS;
 use crate::{
-    CoreError, Engine, Gravel, LatLon, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
+    CoreError, Engine, FavouritesMode, Gravel, LatLon, LoopOptions, RoadPoint, RoundTripTarget,
+    Route, RouteOptions,
 };
 
 /// Headings tried, evenly spread.
@@ -134,6 +135,13 @@ pub fn loops(
     }
     let s = engine.snap(start)?;
     let fun = Fun::new(engine.net(), favourites, opts);
+    // Loops head for no favourite while favourites are avoided.
+    let none = Favourites::none();
+    let favourites = if opts.favourites == FavouritesMode::Avoid {
+        &none
+    } else {
+        favourites
+    };
     let side_loop_max = SIDE_LOOP_MAX_M.min(target_m * SIDE_LOOP_SHARE);
     let fits = |r: &Route| match target {
         RoundTripTarget::DistanceM(m) => (r.distance_m - m).abs() <= m * TOLERANCE,
@@ -290,6 +298,13 @@ pub fn round_trip_via(
         .map(|&p| engine.snap(p))
         .collect::<Result<_, _>>()?;
     let fun = Fun::new(engine.net(), favourites, opts);
+    // Loops head for no favourite while favourites are avoided.
+    let none = Favourites::none();
+    let favourites = if opts.favourites == FavouritesMode::Avoid {
+        &none
+    } else {
+        favourites
+    };
     let home = through_home_m(
         s.position,
         &snapped.iter().map(|p| p.position).collect::<Vec<_>>(),

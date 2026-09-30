@@ -50,5 +50,6 @@ pub use geo::LatLon;
 pub use road::RoadInfo;
 pub use suggest::TAG_REACH_M;
 pub use types::{
-    Avoid, Gravel, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions, TimeBudget,
+    Avoid, FavouritesMode, Gravel, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
+    TimeBudget,
 };

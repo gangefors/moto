@@ -1,0 +1,20 @@
+{
+  "name": "Loop of 60 km from Sjöbo avoiding an epic road",
+  "description": "The epic road of case 27, which that loop rides, with favourites avoided: no waypoint lands on it and the legs keep off it, so the best loop rides none of it and passes neither checkpoint. Curvy roads still pull, as in the app.",
+  "from": [55.631, 13.707],
+  "loop": {"km": 60},
+  "favourites_mode": "avoid",
+  "favourites": [
+    {"from": [55.61264, 13.77559], "to": [55.61537, 13.80751], "rating": "epic"},
+    {"from": [55.61537, 13.80751], "to": [55.62243, 13.8371], "rating": "epic"},
+    {"from": [55.62243, 13.8371], "to": [55.61955, 13.86874], "rating": "epic"},
+    {"from": [55.61955, 13.86874], "to": [55.61873, 13.90069], "rating": "epic"},
+    {"from": [55.61873, 13.90069], "to": [55.60879, 13.92555], "rating": "epic"},
+    {"from": [55.60879, 13.92555], "to": [55.61007, 13.95722], "rating": "epic"},
+    {"from": [55.61007, 13.95722], "to": [55.61309, 13.98916], "rating": "epic"},
+    {"from": [55.61309, 13.98916], "to": [55.60704, 14.01909], "rating": "epic"},
+    {"from": [55.60704, 14.01909], "to": [55.59957, 14.0478], "rating": "epic"},
+    {"from": [55.59957, 14.0478], "to": [55.61729, 14.05107], "rating": "epic"}
+  ],
+  "expect": {"avoid": [[55.61007, 13.95722], [55.62243, 13.8371]], "max_favourite_share": 0.05}
+}

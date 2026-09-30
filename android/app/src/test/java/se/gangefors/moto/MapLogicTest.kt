@@ -128,6 +128,7 @@ class MapLogicTest {
             1.0,
             true,
             se.gangefors.moto.core.Gravel.AVOID,
+            se.gangefors.moto.core.FavouritesMode.AVOID,
         )
         val o = routeOptions(base, 20)
         assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
@@ -148,6 +149,17 @@ class MapLogicTest {
         assertTrue(gravel.avoid.motorways && gravel.avoid.ferries && gravel.avoid.tolls)
         val arrive = arriveByOptions(base, 0L, 3600L, se.gangefors.moto.core.Gravel.AVOID, ferries)
         assertEquals(ferries, arrive.avoid)
+        // Favourites: preferred unless this route avoids them.
+        val prefer = se.gangefors.moto.core.FavouritesMode.PREFER
+        val avoidFavs = se.gangefors.moto.core.FavouritesMode.AVOID
+        assertEquals(listOf(prefer, avoidFavs), FAVOURITES_CHOICES)
+        assertEquals(prefer, routeOptions(base, 40).favourites)
+        assertEquals(avoidFavs, routeOptions(base, 40, favourites = avoidFavs).favourites)
+        assertEquals(prefer, arrive.favourites)
+        assertEquals(
+            avoidFavs,
+            arriveByOptions(base, 0L, 3600L, se.gangefors.moto.core.Gravel.AVOID, favourites = avoidFavs).favourites,
+        )
     }
 
     @Test
@@ -253,6 +265,7 @@ class MapLogicTest {
             1.0,
             true,
             se.gangefors.moto.core.Gravel.AVOID,
+            se.gangefors.moto.core.FavouritesMode.AVOID,
         )
         val o = arriveByOptions(base, 1_000, 1_000 + 3_600, se.gangefors.moto.core.Gravel.PREFER)
         assertEquals(se.gangefors.moto.core.TimeBudget.Total(3_240.0), o.budget)

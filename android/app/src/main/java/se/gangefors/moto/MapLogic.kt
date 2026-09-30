@@ -4,6 +4,7 @@
 package se.gangefors.moto
 
 import se.gangefors.moto.core.Avoid
+import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
@@ -143,17 +144,29 @@ fun gravelKey(g: Gravel): String = g.name.lowercase()
 fun gravelOf(stored: String?, legacyAllow: Boolean = false): Gravel =
     GRAVEL_CHOICES.firstOrNull { gravelKey(it) == stored } ?: if (legacyAllow) Gravel.ALLOW else Gravel.AVOID
 
+/** The favourites choices, in the order they are offered. */
+val FAVOURITES_CHOICES: List<FavouritesMode> = listOf(FavouritesMode.PREFER, FavouritesMode.AVOID)
+
 /**
  * [base] (the core's defaults) with [percent] extra time allowed, and
  * gravel (unpaved) roads avoided, allowed or preferred. Avoided means
  * "where possible": the core counts them as much slower, it doesn't ban
- * them; preferred means they pull the route within the extra time.
+ * them; preferred means they pull the route within the extra time. The
+ * rider's favourites are preferred, or avoided (where possible) to find
+ * new roads.
  */
-fun routeOptions(base: RouteOptions, percent: Int, gravel: Gravel = Gravel.AVOID, avoid: Avoid = AVOID_ALL): RouteOptions =
+fun routeOptions(
+    base: RouteOptions,
+    percent: Int,
+    gravel: Gravel = Gravel.AVOID,
+    avoid: Avoid = AVOID_ALL,
+    favourites: FavouritesMode = FavouritesMode.PREFER,
+): RouteOptions =
     base.copy(
         budget = TimeBudget.Extra(percent / 100.0),
         gravel = gravel,
         avoid = avoid,
+        favourites = favourites,
     )
 
 /** The kinds of road a rider can avoid or allow, in the order offered. */
@@ -266,12 +279,20 @@ const val ARRIVE_MARGIN = 0.10
  * it may be spent on favourites and curvy roads (guard off). Too little
  * time gives the fastest route.
  */
-fun arriveByOptions(base: RouteOptions, nowSec: Long, arriveAtSec: Long, gravel: Gravel, avoid: Avoid = AVOID_ALL): RouteOptions =
+fun arriveByOptions(
+    base: RouteOptions,
+    nowSec: Long,
+    arriveAtSec: Long,
+    gravel: Gravel,
+    avoid: Avoid = AVOID_ALL,
+    favourites: FavouritesMode = FavouritesMode.PREFER,
+): RouteOptions =
     base.copy(
         budget = TimeBudget.Total((arriveAtSec - nowSec).coerceAtLeast(0L) * (1.0 - ARRIVE_MARGIN)),
         minGain = 0.0,
         gravel = gravel,
         avoid = avoid,
+        favourites = favourites,
     )
 
 /** The next [hour]:[minute] after [nowSec] in [zone]: today, or tomorrow
