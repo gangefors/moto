@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
 #
-# CI for every push and pull request (see "Testing and performance" in
-# CLAUDE.md):
+# CI for every push, to main and to the workspaces' branches, and every
+# pull request (see "Testing and performance" in CLAUDE.md). A branch is
+# merged into main once this is green on its newest commit.
 # - core: rustfmt, clippy, the Rust tests and cargo-deny; builds the M0
 #   region file from the OSM Sweden extract (cached); runs the golden routes
 #   (before/after against the last main build).
@@ -15,7 +16,7 @@
 #   pre-release for the phone, once core and build pass.
 #
 # Only the newest push is built: a newer push cancels core, bench and
-# build of the one before (on main too). Publishing is never cancelled halfway,
+# build of the one before on the same branch (on main too). Publishing is never cancelled halfway,
 # as that could leave a half-made release; a waiting publish is replaced
 # by a newer one.
 #
@@ -25,7 +26,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     paths:
       - "android/**"
       - "core/**"
