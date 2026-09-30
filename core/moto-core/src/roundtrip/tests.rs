@@ -1003,3 +1003,74 @@ fn loops_cross_an_avoided_toll_road_only_when_worth_it() {
         }
     }
 }
+
+#[test]
+fn a_zigzag_is_as_long_as_the_triangle() {
+    // The two-waypoint triangle scales by 1.
+    assert!((zigzag_scale(&[(-SPREAD_DEG, 1.0), (SPREAD_DEG, 1.0)]) - 1.0).abs() < 1e-9);
+    // Far, near, far: longer at the same radius, so its radius shrinks.
+    let half = SPREAD_DEG * ZIGZAG_SPREAD;
+    let s = zigzag_scale(&[(-half, 1.0), (0.0, ZIGZAG_NEAR), (half, 1.0)]);
+    assert!(s > 0.5 && s < 1.0, "{s}");
+}
+
+#[test]
+fn a_zigzag_loop_rides_about_as_far_in_less_land() {
+    let e = engine(fixture::grid(13));
+    let opts = RouteOptions::default();
+    let none = Favourites::none();
+    let s = e.snap(CENTRE).unwrap();
+    let fun = Fun::new(e.net(), &none, &opts);
+    let at = |zigzag| {
+        loop_at(
+            &e,
+            &fun,
+            &opts,
+            &s,
+            0.0,
+            SPREAD_DEG,
+            (3_500.0, 3_500.0),
+            1_000.0,
+            &none,
+            1_000.0,
+            zigzag,
+        )
+        .unwrap()
+    };
+    let (triangle, zigzag) = (at(false), at(true));
+    let far = |l: &Loop| {
+        l.routed
+            .route
+            .geometry
+            .iter()
+            .map(|p| haversine_m(CENTRE, *p))
+            .fold(0.0, f64::max)
+    };
+    let (t, z) = (
+        triangle.routed.route.distance_m,
+        zigzag.routed.route.distance_m,
+    );
+    assert!((z - t).abs() < 0.35 * t, "triangle {t}, zig-zag {z}");
+    assert!(
+        far(&zigzag) < far(&triangle),
+        "{} {}",
+        far(&zigzag),
+        far(&triangle)
+    );
+}
+
+#[test]
+fn loops_that_differ_are_counted_as_a_set_shows_them() {
+    let e = engine(fixture::grid(13));
+    let set = loops(
+        &e,
+        CENTRE,
+        km(20.0),
+        &RouteOptions::default(),
+        &Favourites::none(),
+        &LoopOptions::default(),
+    )
+    .unwrap();
+    assert!(set.len() >= 2);
+    assert_eq!(distinct(&[]), 0);
+}
