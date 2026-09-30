@@ -41,6 +41,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import se.gangefors.moto.core.Avoid
+import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 
 /**
@@ -161,6 +162,24 @@ fun GravelChips(gravel: Gravel, onGravel: (Gravel) -> Unit) {
             )
         },
         onSelect = onGravel,
+    )
+}
+
+/** Prefer / Avoid favourites, one of them selected. */
+@Composable
+fun FavouritesChips(favourites: FavouritesMode, onFavourites: (FavouritesMode) -> Unit) {
+    SingleChoice(
+        options = FAVOURITES_CHOICES,
+        selected = favourites,
+        label = {
+            stringResource(
+                when (it) {
+                    FavouritesMode.PREFER -> R.string.favourites_prefer
+                    FavouritesMode.AVOID -> R.string.favourites_avoid
+                },
+            )
+        },
+        onSelect = onFavourites,
     )
 }
 

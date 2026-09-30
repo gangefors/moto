@@ -61,6 +61,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Avoid
+import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
@@ -193,15 +194,18 @@ private val SHEET_DRAG = 24.dp
 /**
  * The route between the two long-pressed points: its figures (or that it
  * is being found), Save, Share and the cross, and which of the routes to
- * choose from it is; at rest a line with the arrival, via points and
- * gravel; pulled up, the choices: via points, a time to arrive by, and
- * gravel. Any choice finds the routes again.
+ * choose from it is; at rest a line with the arrival, via points,
+ * gravel and avoided favourites; pulled up, the choices: via points, a
+ * time to arrive by, gravel, favourites and roads to avoid. Any choice
+ * finds the routes again.
  */
 @Composable
 fun RouteCard(
     summary: RouteSummary?,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    favourites: FavouritesMode,
+    onFavourites: (FavouritesMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
     onClose: () -> Unit,
@@ -252,13 +256,14 @@ fun RouteCard(
                     arrivalNote?.let { add(it) }
                     if (viaCount > 0) add(pluralStringResource(R.plurals.route_via_count, viaCount, viaCount))
                     add(gravelSummary(gravel))
+                    favouritesSummary(favourites)?.let { add(it) }
                 }
                 OptionChips(parts, allowedKinds(avoid)) { onExpandedChange(true) }
             }
         },
         details = {
             RouteCardDetails(
-                gravel, onGravel, avoid, onAvoid,
+                gravel, onGravel, favourites, onFavourites, avoid, onAvoid,
                 viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
             )
         },
@@ -266,11 +271,13 @@ fun RouteCard(
 }
 
 /** The route's choices, one labelled row each: waypoints, a time to
- * arrive by, and gravel. */
+ * arrive by, gravel, favourites and roads to avoid. */
 @Composable
 private fun RouteCardDetails(
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    favourites: FavouritesMode,
+    onFavourites: (FavouritesMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
     viaCount: Int,
@@ -344,6 +351,8 @@ private fun RouteCardDetails(
         }
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
+        OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
+        FavouritesChips(favourites, onFavourites)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
         AvoidChips(avoid, onAvoid)
         if (pickingTime) {
@@ -364,8 +373,8 @@ private fun RouteCardDetails(
  * Round trips from a start (PRD R7): the loop shown (or that loops are
  * being found, or why none were), Save, Share and the cross; which of the
  * set it is, with the previous and next ones, and Shuffle for another
- * set; at rest a line with the length, direction and gravel; pulled up,
- * those choices. Any choice finds the loops again. The other loops of
+ * set; at rest a line with the length, direction, gravel and avoided
+ * favourites; pulled up, those choices. Any choice finds the loops again. The other loops of
  * the set are drawn faint on the map; tapping one shows it.
  */
 @Composable
@@ -383,6 +392,8 @@ fun LoopCard(
     onChoice: (LoopChoice) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    favourites: FavouritesMode,
+    onFavourites: (FavouritesMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
     onClose: () -> Unit,
@@ -431,12 +442,15 @@ fun LoopCard(
                         LoopDirection.WEST -> R.string.loop_heading_west
                     },
                 )
-                OptionChips(listOf(loopLengthText(choice), heading, gravelSummary(gravel)), allowedKinds(avoid)) {
+                val parts = listOfNotNull(loopLengthText(choice), heading, gravelSummary(gravel), favouritesSummary(favourites))
+                OptionChips(parts, allowedKinds(avoid)) {
                     onExpandedChange(true)
                 }
             }
         },
-        details = { LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel, avoid, onAvoid) },
+        details = {
+            LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel, favourites, onFavourites, avoid, onAvoid)
+        },
     )
 }
 
@@ -510,8 +524,8 @@ private fun ChoiceSwitcher(
     }
 }
 
-/** The loop's choices, one labelled row each: length, direction and
- * gravel. */
+/** The loop's choices, one labelled row each: length, direction, gravel,
+ * favourites and roads to avoid. */
 @Composable
 private fun LoopCardDetails(
     direction: LoopDirection,
@@ -520,6 +534,8 @@ private fun LoopCardDetails(
     onChoice: (LoopChoice) -> Unit,
     gravel: Gravel,
     onGravel: (Gravel) -> Unit,
+    favourites: FavouritesMode,
+    onFavourites: (FavouritesMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
 ) {
@@ -544,6 +560,8 @@ private fun LoopCardDetails(
         )
         OptionHeading(stringResource(R.string.route_gravel_label), stringResource(R.string.routing_gravel_hint))
         GravelChips(gravel, onGravel)
+        OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
+        FavouritesChips(favourites, onFavourites)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
         AvoidChips(avoid, onAvoid)
     }
@@ -674,6 +692,12 @@ private fun OptionChips(labels: List<String>, allowed: List<AvoidKind>, onClick:
         }
     }
 }
+
+/** "Avoid favourites" while they are avoided; nothing while preferred
+ * (every route starts so). */
+@Composable
+private fun favouritesSummary(f: FavouritesMode): String? =
+    if (f == FavouritesMode.AVOID) stringResource(R.string.favourites_summary_avoid) else null
 
 /** "Avoid gravel", "Gravel allowed" or "Prefer gravel". */
 @Composable

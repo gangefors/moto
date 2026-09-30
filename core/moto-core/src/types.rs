@@ -55,6 +55,20 @@ pub enum Gravel {
     Prefer,
 }
 
+/// What a route does with the rider's favourite sections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FavouritesMode {
+    /// Seek them out: they pull the route as hard as the time budget
+    /// allows.
+    #[default]
+    Prefer,
+    /// Keep off them where possible (`avoid_favourite_penalty`), to find
+    /// new roads: they are worth nothing, curvy or not, and round trips
+    /// don't head for them. A favourite that is the only way is still
+    /// ridden.
+    Avoid,
+}
+
 /// How much time a route may take (PRD R6). The time over the fastest
 /// route is spent on favourites: the more there is, the harder they pull.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -88,6 +102,7 @@ pub struct RouteOptions {
     /// Whether curvy roads pull the route too (R5), besides favourites.
     pub curvy: bool,
     pub gravel: Gravel,
+    pub favourites: FavouritesMode,
 }
 
 impl Default for RouteOptions {
@@ -98,6 +113,7 @@ impl Default for RouteOptions {
             min_gain: crate::scoring::PARAMS.min_gain,
             curvy: true,
             gravel: Gravel::Avoid,
+            favourites: FavouritesMode::Prefer,
         }
     }
 }

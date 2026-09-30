@@ -14,7 +14,7 @@ use crate::net::Net;
 use crate::region::format::{COORD_SCALE, Edge, PointE7, RoadClass, Surface, edge_flags};
 use crate::scoring::PARAMS;
 use crate::section::Rating;
-use crate::{Avoid, CoreError, Gravel, LatLon, RoadPoint, Route, RouteOptions};
+use crate::{Avoid, CoreError, FavouritesMode, Gravel, LatLon, RoadPoint, Route, RouteOptions};
 
 const NONE: u32 = u32::MAX;
 
@@ -67,12 +67,12 @@ fn is_travel_road(e: &Edge) -> bool {
     RoadClass::from_u8(e.class) == Some(RoadClass::Motorway) || is_ferry(e) || is_toll(e)
 }
 
-/// The extra cost of edge `e` for being a kind of road to avoid: the
-/// largest factor that applies (`avoid_penalty`, or `toll_penalty` for a
-/// toll road; they never add up) less 1, times its travel time; else 0.
-/// It is added after the fun factor, so no pull makes an avoided road
-/// cheaper than that.
-fn avoid_extra(off: &Off, e: &Edge) -> f64 {
+/// The extra cost of edge `id` (`e`) for being a kind of road to avoid:
+/// the largest factor that applies (`avoid_penalty`, `toll_penalty` for a
+/// toll road, or `fun`'s for an avoided favourite; they never add up)
+/// less 1, times its travel time; else 0. It is added after the fun
+/// factor, so no pull makes an avoided road cheaper than that.
+fn avoid_extra(off: &Off, fun: &Fun, id: u32, e: &Edge) -> f64 {
     let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
     let mut factor: f64 = 1.0;
     if off.avoid.motorways && motorway
@@ -84,13 +84,15 @@ fn avoid_extra(off: &Off, e: &Edge) -> f64 {
     if off.avoid.tolls && is_toll(e) {
         factor = factor.max(PARAMS.toll_penalty);
     }
+    factor = factor.max(fun.shun_factor(id));
     time_s(e) * (factor - 1.0)
 }
 
 /// What makes a road worth riding (R5, R6): the rider's favourites
-/// (not on gravel while gravel is avoided), when `curvy` curvature (see
-/// `ScoringParams::curviness`), and when `gravel` (the rider prefers it)
-/// unpaved roads.
+/// (not on gravel while gravel is avoided, nor while they are avoided),
+/// when `curvy` curvature (see `ScoringParams::curviness`), and when
+/// `gravel` (the rider prefers it) unpaved roads. While favourites are
+/// avoided, nothing on them is worth riding.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Fun<'a> {
     region: &'a Net,
@@ -99,6 +101,9 @@ pub(crate) struct Fun<'a> {
     gravel: bool,
     /// Gravel is avoided: favourites on it count for nothing.
     no_gravel: bool,
+    /// Favourites are avoided (`FavouritesMode::Avoid`): they count for
+    /// nothing and cost more.
+    shun: bool,
     /// The kinds of road the rider avoids.
     avoid: crate::Avoid,
 }
@@ -111,6 +116,7 @@ impl<'a> Fun<'a> {
             curvy: opts.curvy,
             gravel: opts.gravel == Gravel::Prefer,
             no_gravel: opts.gravel == Gravel::Avoid,
+            shun: opts.favourites == FavouritesMode::Avoid,
             avoid: opts.avoid,
         }
     }
@@ -123,13 +129,30 @@ impl<'a> Fun<'a> {
 
     /// Whether no road is worth more than another: plain fastest routes.
     fn is_empty(&self) -> bool {
-        !self.curvy && !self.gravel && self.favourites.is_empty()
+        !self.curvy && !self.gravel && (self.shun || self.favourites.is_empty())
     }
 
-    /// Whether favourites on edge `e` count: not on gravel while gravel
-    /// is avoided (the map hides those sections then too).
+    /// Whether favourites on edge `e` count: not while they are avoided,
+    /// nor on gravel while gravel is avoided (the map hides those sections
+    /// then too).
     fn favourite_counts(&self, e: &Edge) -> bool {
-        !(self.no_gravel && is_unpaved(e))
+        !self.shun && !(self.no_gravel && is_unpaved(e))
+    }
+
+    /// Share of edge `id` that is worth nothing for lying on an avoided
+    /// favourite (either way): 0 unless favourites are avoided.
+    fn shunned(&self, id: u32) -> f64 {
+        if self.shun {
+            self.favourites.share(id)
+        } else {
+            0.0
+        }
+    }
+
+    /// Cost factor of edge `id` for lying on an avoided favourite (see
+    /// `avoid_favourite_penalty`): 1 unless favourites are avoided.
+    fn shun_factor(&self, id: u32) -> f64 {
+        1.0 + self.shunned(id) * (PARAMS.avoid_favourite_penalty - 1.0)
     }
 
     /// The favourite bonus of edge `id` as this search sees it.
@@ -234,8 +257,8 @@ impl<'a> Fun<'a> {
         } else {
             0.0
         };
-        let worth =
-            (self.favourite_bonus(id, e) / PARAMS.max_pull + curve + self.gravel_worth(e)).min(1.0);
+        let road = (curve + self.gravel_worth(e)) * (1.0 - self.shunned(id));
+        let worth = (self.favourite_bonus(id, e) / PARAMS.max_pull + road).min(1.0);
         let dullness = 1.0 + (penalty - 1.0) * (1.0 - curviness);
         (1.0 - pull * PARAMS.max_pull * worth) * (1.0 + pull * (dullness - 1.0))
     }
@@ -251,9 +274,10 @@ impl<'a> Fun<'a> {
         }
     }
 
-    /// What curvature and gravel add to edge `id`'s worth.
+    /// What curvature and gravel add to edge `id`'s worth (nothing on
+    /// avoided favourites).
     fn road_worth(&self, id: u32, e: &Edge) -> f64 {
-        self.curve_worth(id, e) + self.gravel_worth(e)
+        (self.curve_worth(id, e) + self.gravel_worth(e)) * (1.0 - self.shunned(id))
     }
 
     /// The most any edge can be worth.
@@ -264,7 +288,12 @@ impl<'a> Fun<'a> {
         } else {
             0.0
         };
-        (self.favourites.max_bonus() / PARAMS.max_pull + curve + gravel).min(1.0)
+        let favourite = if self.shun {
+            0.0
+        } else {
+            self.favourites.max_bonus()
+        };
+        (favourite / PARAMS.max_pull + curve + gravel).min(1.0)
     }
 }
 
@@ -290,16 +319,17 @@ impl Cost<'_> {
     fn edge(&self, id: u32, e: &Edge) -> f64 {
         match self {
             Cost::Favoured(off, fun, pull) => {
-                time_s(e) * fun.factor(id, e, *pull) + avoid_extra(off, e)
+                time_s(e) * fun.factor(id, e, *pull) + avoid_extra(off, fun, id, e)
             }
             Cost::Loop(off, fun, pull, used, once) => {
                 let factor = fun.factor(id, e, *pull);
                 if !used.contains(&e.geometry) {
-                    time_s(e) * factor + avoid_extra(off, e)
+                    time_s(e) * factor + avoid_extra(off, fun, id, e)
                 } else if *once {
-                    (time_s(e) * factor.max(1.0) + avoid_extra(off, e)) * PARAMS.reuse_penalty
+                    (time_s(e) * factor.max(1.0) + avoid_extra(off, fun, id, e))
+                        * PARAMS.reuse_penalty
                 } else {
-                    (time_s(e) * factor + avoid_extra(off, e)) * PARAMS.reuse_penalty
+                    (time_s(e) * factor + avoid_extra(off, fun, id, e)) * PARAMS.reuse_penalty
                 }
             }
             Cost::Shortest => f64::from(e.length_dm) / 10.0,
@@ -1715,7 +1745,12 @@ mod tests {
     fn avoided_kinds_cost_their_factor_once() {
         use crate::scoring::PARAMS;
         let all = off(true, true, true);
-        let factor = |o: &super::Off, e: &Edge| 1.0 + super::avoid_extra(o, e) / super::time_s(e);
+        let region = toll_or_detour(true);
+        let none = crate::Favourites::none();
+        let o = RouteOptions::default();
+        let fun = super::Fun::new(region.net(), &none, &o);
+        let factor =
+            |o: &super::Off, e: &Edge| 1.0 + super::avoid_extra(o, &fun, 0, e) / super::time_s(e);
         let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
         let (tertiary, motorway, ferry) =
             (RoadClass::Tertiary, RoadClass::Motorway, RoadClass::Ferry);

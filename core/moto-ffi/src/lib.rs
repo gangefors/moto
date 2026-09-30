@@ -61,6 +61,15 @@ pub enum Gravel {
     Prefer,
 }
 
+/// What a route does with the rider's favourite sections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum FavouritesMode {
+    /// Seek them out, within the time budget.
+    Prefer,
+    /// Keep off them where possible, to find new roads.
+    Avoid,
+}
+
 /// How much time a route may take; the time over the fastest route is
 /// spent on favourites.
 #[derive(Debug, Clone, Copy, PartialEq, uniffi::Enum)]
@@ -81,6 +90,7 @@ pub struct RouteOptions {
     /// Whether curvy roads pull the route too, besides favourites.
     pub curvy: bool,
     pub gravel: Gravel,
+    pub favourites: FavouritesMode,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
@@ -530,6 +540,24 @@ impl From<moto_core::Gravel> for Gravel {
     }
 }
 
+impl From<FavouritesMode> for moto_core::FavouritesMode {
+    fn from(f: FavouritesMode) -> Self {
+        match f {
+            FavouritesMode::Prefer => Self::Prefer,
+            FavouritesMode::Avoid => Self::Avoid,
+        }
+    }
+}
+
+impl From<moto_core::FavouritesMode> for FavouritesMode {
+    fn from(f: moto_core::FavouritesMode) -> Self {
+        match f {
+            moto_core::FavouritesMode::Prefer => Self::Prefer,
+            moto_core::FavouritesMode::Avoid => Self::Avoid,
+        }
+    }
+}
+
 impl From<RouteOptions> for moto_core::RouteOptions {
     fn from(o: RouteOptions) -> Self {
         Self {
@@ -541,6 +569,7 @@ impl From<RouteOptions> for moto_core::RouteOptions {
             min_gain: o.min_gain,
             curvy: o.curvy,
             gravel: o.gravel.into(),
+            favourites: o.favourites.into(),
         }
     }
 }
@@ -556,6 +585,7 @@ impl From<moto_core::RouteOptions> for RouteOptions {
             min_gain: o.min_gain,
             curvy: o.curvy,
             gravel: o.gravel.into(),
+            favourites: o.favourites.into(),
         }
     }
 }
@@ -1006,6 +1036,11 @@ mod tests {
             assert_eq!(Gravel::from(core), g);
         }
         assert_eq!(default_route_options().gravel, Gravel::Avoid);
+        for f in [FavouritesMode::Prefer, FavouritesMode::Avoid] {
+            let core: moto_core::FavouritesMode = f.into();
+            assert_eq!(FavouritesMode::from(core), f);
+        }
+        assert_eq!(default_route_options().favourites, FavouritesMode::Prefer);
     }
 
     #[test]

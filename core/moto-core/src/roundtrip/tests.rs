@@ -167,6 +167,51 @@ fn favourites_near_a_waypoint_are_ridden() {
 }
 
 #[test]
+fn loops_keep_off_avoided_favourites() {
+    // The epic section above, avoided: no loop heads for it, and every
+    // loop rides less of it than the one that does.
+    let e = engine(fixture::grid(13));
+    let d = e
+        .section_between(ll(55.790, 13.536), ll(55.790, 13.568))
+        .unwrap();
+    let s = Section {
+        id: 1,
+        rider_id: LOCAL_RIDER.into(),
+        name: String::new(),
+        rating: Rating::Epic,
+        direction: Direction::Both,
+        source: Source::Map,
+        status: Status::Ok,
+        created_at: 0,
+        updated_at: 0,
+        ways: d.ways,
+        geometry: d.geometry,
+    };
+    let fav = Favourites::build(&e, &[s]);
+    let prefer = round_trip(&e, CENTRE, km(20.0), &RouteOptions::default(), &fav).unwrap();
+    let avoid = RouteOptions {
+        favourites: FavouritesMode::Avoid,
+        ..RouteOptions::default()
+    };
+    let loops = round_trip(&e, CENTRE, km(20.0), &avoid, &fav).unwrap();
+    assert!(!loops.is_empty());
+    for l in &loops {
+        assert!(
+            l.favourite_share < prefer[0].favourite_share,
+            "{} against {}",
+            l.favourite_share,
+            prefer[0].favourite_share
+        );
+    }
+    // The same as without favourites where none lie on the way.
+    assert_eq!(
+        loops[0].favourite_share, 0.0,
+        "{:?}",
+        loops[0].favourite_share
+    );
+}
+
+#[test]
 fn bad_requests_are_typed_errors() {
     let e = engine(fixture::grid(13));
     let opts = RouteOptions::default();

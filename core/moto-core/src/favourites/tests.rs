@@ -95,6 +95,128 @@ fn an_epic_road_is_worth_a_detour() {
     assert!(north_of(&back), "{back:?}");
 }
 
+/// The fork's straight south road W–E (the fastest way).
+const SOUTH: i64 = 10;
+
+fn avoiding(ratio: f64, curvy: bool) -> RouteOptions {
+    RouteOptions {
+        budget: crate::TimeBudget::Extra(ratio),
+        curvy,
+        favourites: crate::FavouritesMode::Avoid,
+        ..RouteOptions::default()
+    }
+}
+
+#[test]
+fn avoided_favourites_are_ridden_round() {
+    let e = fork();
+    // An epic south road: preferred it is the route; avoided, the route
+    // goes round by the north (152 s against 100 s × 3), curvy roads or
+    // not, whatever the budget (avoiding is like avoiding motorways).
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(SOUTH, 0, 1)], Rating::Epic, Direction::Both)],
+    );
+    assert!(!north_of(
+        &e.route_with(FROM, TO, &detour(0.5), &fav).unwrap()
+    ));
+    for curvy in [false, true] {
+        for ratio in [0.0, 0.5] {
+            let r = e
+                .route_with(FROM, TO, &avoiding(ratio, curvy), &fav)
+                .unwrap();
+            assert!(north_of(&r), "{curvy} {ratio}: {r:?}");
+            assert_eq!(r.favourite_share, 0.0);
+        }
+    }
+    // A one-way section is avoided both ways.
+    let one_way = Favourites::build(
+        &e,
+        &[section(&[(SOUTH, 0, 1)], Rating::Epic, Direction::Forward)],
+    );
+    for (a, b) in [(FROM, TO), (TO, FROM)] {
+        let r = e.route_with(a, b, &avoiding(0.5, false), &one_way).unwrap();
+        assert!(north_of(&r), "{r:?}");
+    }
+    // Without favourites, avoiding changes nothing.
+    let none = Favourites::none();
+    assert_eq!(
+        e.route_with(FROM, TO, &avoiding(0.5, true), &none).unwrap(),
+        e.route_with(
+            FROM,
+            TO,
+            &RouteOptions {
+                budget: crate::TimeBudget::Extra(0.5),
+                ..RouteOptions::default()
+            },
+            &none
+        )
+        .unwrap()
+    );
+}
+
+#[test]
+fn avoided_favourites_pull_nothing() {
+    // An epic north loop pulls the route there (see above); avoided, the
+    // route stays on the fastest road, and the choices offer only that.
+    let e = fork();
+    let fav = Favourites::build(
+        &e,
+        &[section(&[(NORTH, 0, 3)], Rating::Epic, Direction::Both)],
+    );
+    let r = e.route_with(FROM, TO, &avoiding(1.0, false), &fav).unwrap();
+    assert!(!north_of(&r), "{r:?}");
+    assert_eq!(r, e.route(FROM, TO, &detour(1.0)).unwrap());
+    let choices = e
+        .route_choices(FROM, &[], TO, &avoiding(1.0, false), &fav)
+        .unwrap();
+    assert_eq!(choices.len(), 1, "{choices:?}");
+    assert!(!north_of(&choices[0]));
+}
+
+#[test]
+fn an_avoided_favourite_that_is_the_only_way_is_still_ridden() {
+    // Both roads between the stubs are favourites: the route rides the
+    // one that costs less avoided (the south road), and shows it.
+    let e = fork();
+    let fav = Favourites::build(
+        &e,
+        &[
+            section(&[(SOUTH, 0, 1)], Rating::Epic, Direction::Both),
+            section(&[(NORTH, 0, 3)], Rating::Good, Direction::Both),
+        ],
+    );
+    let r = e.route_with(FROM, TO, &avoiding(0.5, true), &fav).unwrap();
+    assert!(!north_of(&r), "{r:?}");
+    assert!(r.favourite_share > 0.5, "{r:?}");
+    assert_eq!(r.favourite_ratings, [Rating::Epic]);
+}
+
+#[test]
+fn section_shares_count_both_ways() {
+    let e = fork();
+    let region = e.region();
+    let south: Vec<u32> = (0..region.edge_count() as u32)
+        .filter(|&i| region.way_refs()[i as usize].way_id == SOUTH)
+        .collect();
+    assert_eq!(south.len(), 2, "both ways");
+    let one_way = Favourites::build(
+        &e,
+        &[section(&[(SOUTH, 0, 1)], Rating::Good, Direction::Forward)],
+    );
+    // The bonus only one way, the share both.
+    assert_eq!(south.iter().filter(|&&i| one_way.bonus(i) > 0.0).count(), 1);
+    for &i in &south {
+        assert_eq!(one_way.share(i), 1.0);
+    }
+    assert_eq!(Favourites::none().share(0), 0.0);
+    // Other edges lie on no section.
+    let north: Vec<u32> = (0..region.edge_count() as u32)
+        .filter(|&i| region.way_refs()[i as usize].way_id == NORTH)
+        .collect();
+    assert!(north.iter().all(|&i| one_way.share(i) == 0.0));
+}
+
 #[test]
 fn the_bonus_grows_with_the_rating_and_is_capped() {
     let e = fork();

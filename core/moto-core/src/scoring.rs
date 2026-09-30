@@ -28,6 +28,13 @@ pub struct ScoringParams {
     /// possible", not a ban: a farm on a gravel road must still be
     /// reachable.
     pub avoid_penalty: f64,
+    /// Cost factor on the rider's favourites when they are avoided
+    /// (`FavouritesMode::Avoid`, to find new roads). Milder than
+    /// `avoid_penalty`: a route goes up to twice a favourite's time round
+    /// it, but a favourite that is the only sensible link (a bridge, the
+    /// one road through a forest) is still ridden. A share of an edge on
+    /// a favourite pays that share of it.
+    pub avoid_favourite_penalty: f64,
     /// Cost factor on toll roads when tolls are avoided, in place of
     /// `avoid_penalty` (Stefan: they cost money on top of the detour).
     /// Measured on routes to Copenhagen (2026-09-30), with motorways and
@@ -168,6 +175,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     max_pull: 0.8,
     min_gain: 1.0,
     avoid_penalty: 10.0,
+    avoid_favourite_penalty: 3.0,
     toll_penalty: 15.0,
     paid_worth: 3.0,
     curve_bin_weight: [0.6, 1.0, 1.0, 0.8, 0.5, 0.2],
@@ -211,6 +219,7 @@ mod tests {
         const { assert!(PARAMS.favourite_weight[0] > 0.0 && PARAMS.favourite_weight[2] <= 1.0) };
         const { assert!(PARAMS.min_gain >= 0.0) };
         const { assert!(PARAMS.avoid_penalty >= 1.0) };
+        const { assert!(PARAMS.avoid_favourite_penalty >= 1.0) };
         const { assert!(PARAMS.toll_penalty >= 1.0) };
         const { assert!(PARAMS.paid_worth >= 0.0) };
         const { assert!(PARAMS.curve_full > 0.0 && PARAMS.curve_weight <= 1.0) };

@@ -26,6 +26,10 @@ pub struct Favourites {
     /// Bonus of every edge at full pull (see `ScoringParams::bonus`),
     /// indexed by edge id; empty when no edge is a favourite.
     bonus: Vec<f32>,
+    /// Share of every edge's length on a section, whichever way the
+    /// section may be ridden (what avoiding favourites keeps off),
+    /// indexed by edge id; empty when no edge is a favourite.
+    share: Vec<f32>,
     /// The stretch of each favourite edge that lies on a section, as
     /// fractions of its length in travel order, the section's rating
     /// weight (see `ScoringParams::favourite_weight`) and its rating.
@@ -117,6 +121,8 @@ impl Favourites {
 
         let region = engine.net();
         let mut bonus = vec![0.0f32; region.edge_count()];
+        let mut share = vec![0.0f32; region.edge_count()];
+        let mut any_share = false;
         let mut gravel: HashMap<usize, SectionGravel> = HashMap::new();
         for id in 0..region.edge_count() as u32 {
             let r = &region.way_ref(id);
@@ -130,10 +136,8 @@ impl Favourites {
             let along_way = r.to_idx > r.from_idx;
             // (bonus, stretch, weight, rating)
             let mut best = (0.0f64, (0.0f64, 0.0f64), 0.0f64, Rating::Good);
+            let mut on_any = 0.0f64;
             for s in spans {
-                if s.along_way.is_some_and(|a| a != along_way) {
-                    continue;
-                }
                 let (from, to) = (lo.max(s.lo), hi.min(s.hi));
                 if from >= to {
                     continue; // apart, or touching at one node
@@ -143,6 +147,10 @@ impl Favourites {
                 } else {
                     covered(engine, id, r, from, to)
                 };
+                on_any = on_any.max(stretch.1 - stretch.0);
+                if s.along_way.is_some_and(|a| a != along_way) {
+                    continue;
+                }
                 // Gravel is drawn once per road: from the edge along the
                 // geometry, or from the one direction a one-way section
                 // takes.
@@ -167,6 +175,10 @@ impl Favourites {
                     best = (b, stretch, s.bonus / PARAMS.max_pull, s.rating);
                 }
             }
+            if on_any > 0.0 {
+                share[id as usize] = on_any as f32;
+                any_share = true;
+            }
             if best.0 > 0.0 {
                 // Bonuses and fractions lie in 0–1, where an f32 is exact
                 // enough.
@@ -180,6 +192,9 @@ impl Favourites {
         }
         if !favourites.coverage.is_empty() {
             favourites.bonus = bonus;
+        }
+        if any_share {
+            favourites.share = share;
         }
         let mut gravel: Vec<SectionGravel> = gravel.into_values().collect();
         gravel.sort_by_key(|g| g.section_id);
@@ -205,6 +220,7 @@ impl Favourites {
         }
         if self.region_key != crate::rematch::region_key(engine)
             || (!self.bonus.is_empty() && self.bonus.len() != engine.net().edge_count())
+            || (!self.share.is_empty() && self.share.len() != engine.net().edge_count())
         {
             return Err(CoreError::InvalidArgument(
                 "favourites were built for another region; build them again".into(),
@@ -216,6 +232,12 @@ impl Favourites {
     /// The bonus of edge `id` (0.0 when it is no favourite).
     pub(crate) fn bonus(&self, id: u32) -> f64 {
         self.bonus.get(id as usize).map_or(0.0, |&b| f64::from(b))
+    }
+
+    /// Share of edge `id`'s length on a section, whichever way the
+    /// section may be ridden.
+    pub(crate) fn share(&self, id: u32) -> f64 {
+        self.share.get(id as usize).map_or(0.0, |&s| f64::from(s))
     }
 
     /// Share of edge `id`'s length on a favourite section.
