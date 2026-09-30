@@ -183,7 +183,7 @@ fn bad(msg: impl Into<String>) -> CoreError {
 pub fn from_geojson(json: &[u8]) -> Result<Vec<NewSection>, CoreError> {
     let json = json.strip_prefix(b"\xef\xbb\xbf").unwrap_or(json);
     let doc: CollectionIn = serde_json::from_slice(json)
-        .map_err(|e| bad(format!("not a GeoJSON file of sections: {e}")))?;
+        .map_err(|e| bad(format!("not a GeoJSON file of favourite sections: {e}")))?;
     if doc.kind != "FeatureCollection" {
         return Err(bad("expected a GeoJSON FeatureCollection"));
     }
@@ -196,7 +196,7 @@ pub fn from_geojson(json: &[u8]) -> Result<Vec<NewSection>, CoreError> {
     doc.features
         .into_iter()
         .enumerate()
-        .map(|(i, f)| feature(f).map_err(|e| bad(format!("section {}: {e}", i + 1))))
+        .map(|(i, f)| feature(f).map_err(|e| bad(format!("favourite section {}: {e}", i + 1))))
         .collect()
 }
 

@@ -211,6 +211,6 @@ class RecordingLogicTest {
     @Test
     fun namesSectionExports() {
         val stockholm = java.time.ZoneId.of("Europe/Stockholm")
-        assertEquals("moto-sections-2026-09-24.geojson.gz", sectionsFileName(1_790_227_800L, stockholm, "geojson.gz"))
+        assertEquals("moto-favourite-sections-2026-09-24.geojson.gz", sectionsFileName(1_790_227_800L, stockholm, "geojson.gz"))
     }
 }

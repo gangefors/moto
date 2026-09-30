@@ -77,7 +77,7 @@ pub(crate) fn from_path(region: &Net, parts: &[Partial]) -> Result<SectionDraft,
     }
     if draft.geometry.len() > MAX_SECTION_POINTS || draft.ways.len() > MAX_SECTION_WAYS {
         return Err(CoreError::InvalidArgument(
-            "that stretch is too long for one section".into(),
+            "that stretch is too long for one favourite section".into(),
         ));
     }
     Ok(draft)
