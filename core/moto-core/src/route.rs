@@ -280,20 +280,33 @@ impl<'a> Fun<'a> {
         (self.curve_worth(id, e) + self.gravel_worth(e)) * (1.0 - self.shunned(id))
     }
 
-    /// The most any edge can be worth.
-    fn max_worth(&self) -> f64 {
+    /// The least any metre of road can cost at `pull` (seconds), for the
+    /// search's estimate: an edge costs at least its travel time times
+    /// (1 - `pull` · `max_pull` · its worth), and no road is both worth the
+    /// most and fast. Paved roads are worth at most their curvature; only
+    /// preferred gravel, no faster than the fastest unpaved road, and
+    /// favourites, no faster than the fastest favourite edge, can be worth
+    /// more. `max_speed_kmh` bounds every edge's speed.
+    fn least_cost_per_m(&self, pull: f64, max_speed_kmh: f64) -> f64 {
+        let k = pull * PARAMS.max_pull;
+        let per_m = |worth: f64, kmh: f64| {
+            (1.0 - k * worth.min(1.0)) / (kmh.min(max_speed_kmh).max(1.0) / 3.6)
+        };
         let curve = if self.curvy { PARAMS.curve_weight } else { 0.0 };
         let gravel = if self.gravel {
             PARAMS.gravel_weight
         } else {
             0.0
         };
-        let favourite = if self.shun {
-            0.0
-        } else {
-            self.favourites.max_bonus()
-        };
-        (favourite / PARAMS.max_pull + curve + gravel).min(1.0)
+        let mut least = per_m(curve, max_speed_kmh);
+        if self.gravel && self.region.max_unpaved_kmh() > 0.0 {
+            least = least.min(per_m(curve + gravel, self.region.max_unpaved_kmh()));
+        }
+        if !self.shun && self.favourites.max_bonus() > 0.0 {
+            let worth = self.favourites.max_bonus() / PARAMS.max_pull + curve + gravel;
+            least = least.min(per_m(worth, self.favourites.max_speed_kmh()));
+        }
+        least
     }
 }
 
@@ -345,16 +358,17 @@ impl Cost<'_> {
         }
     }
 
-    /// Lower bound of the cost of `metres` in a straight line.
-    fn estimate(&self, metres: f64, max_mps: f64) -> f64 {
+    /// The least cost of a metre, so that a straight-line distance times
+    /// it is a lower bound of the cost to go (the A* estimate).
+    fn least_per_m(&self, max_speed_kmh: f64) -> f64 {
         match self {
             // `max_pull` is below 1, so the bound stays positive.
-            // The reuse and dullness penalties only add cost, so the bound
-            // still holds.
+            // The reuse and dullness penalties and avoided roads only add
+            // cost, so the bound still holds.
             Cost::Favoured(_, fun, pull) | Cost::Loop(_, fun, pull, _, _) => {
-                metres / max_mps * (1.0 - pull * PARAMS.max_pull * fun.max_worth())
+                fun.least_cost_per_m(*pull, max_speed_kmh)
             }
-            Cost::Shortest => metres,
+            Cost::Shortest => 1.0,
         }
     }
 }
@@ -1018,8 +1032,8 @@ pub(crate) fn path(
     let mut state = NodeState::new(region.node_count());
     let mut heap = BinaryHeap::new();
     let target = to.position;
-    let max_mps = max_speed_kmh.max(1.0) / 3.6;
-    let h = |v: u32| cost.estimate(haversine_m(latlon(region.node(v)), target), max_mps);
+    let per_m = cost.least_per_m(max_speed_kmh);
+    let h = |v: u32| haversine_m(latlon(region.node(v)), target) * per_m;
     // Keys are non-negative f64s, whose bit patterns sort like the values.
     let key = |cost: f64| cost.to_bits();
 
@@ -1924,5 +1938,75 @@ mod tests {
         // The last node of the partial last page.
         state.set(2 * 4096 + 9, 1.0, NONE);
         assert_eq!(state.get(2 * 4096 + 9), (1.0, NONE));
+    }
+
+    #[test]
+    fn the_estimate_never_exceeds_a_roads_cost() {
+        use crate::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
+        use crate::{Favourites, FavouritesMode};
+        // A slow gravel road, a fast motorway and roads joining them; with
+        // and without an epic favourite on the gravel road.
+        let e = engine(fixture::ladder(Surface::Gravel));
+        let d = e
+            .section_between(ll(55.7201, 13.401), ll(55.7201, 13.439))
+            .unwrap();
+        let s = Section {
+            id: 1,
+            rider_id: LOCAL_RIDER.into(),
+            name: String::new(),
+            rating: Rating::Epic,
+            direction: Direction::Both,
+            source: Source::Map,
+            status: Status::Ok,
+            created_at: 0,
+            updated_at: 0,
+            ways: d.ways,
+            geometry: d.geometry,
+        };
+        let fav = Favourites::build(&e, &[s]);
+        assert!(fav.max_speed_kmh() > 0.0 && fav.max_speed_kmh() < e.max_speed_kmh());
+        let none = Favourites::none();
+        let edges = e.net().regions()[0].edges().to_vec();
+        for favourites in [&none, &fav] {
+            for gravel in [Gravel::Avoid, Gravel::Allow, Gravel::Prefer] {
+                for (curvy, mode) in [
+                    (true, FavouritesMode::Prefer),
+                    (false, FavouritesMode::Prefer),
+                    (true, FavouritesMode::Avoid),
+                ] {
+                    let o = RouteOptions {
+                        gravel,
+                        curvy,
+                        favourites: mode,
+                        ..RouteOptions::default()
+                    };
+                    let fun = super::Fun::new(e.net(), favourites, &o);
+                    for pull in [0.0, 0.25, 0.5, 1.0] {
+                        let cost = super::Cost::Favoured(super::Off::of(&o), fun, pull);
+                        let per_m = cost.least_per_m(e.max_speed_kmh());
+                        for (i, road) in edges.iter().enumerate() {
+                            let length_m = f64::from(road.length_dm) / 10.0;
+                            let c = cost.edge(i as u32, road);
+                            assert!(
+                                c + 1e-9 >= length_m * per_m,
+                                "edge {i}, {gravel:?}, curvy {curvy}, {mode:?}, pull {pull}: {c} < {}",
+                                length_m * per_m
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // Preferred gravel no faster than the motorway's cars: the estimate
+        // is tighter than one assuming the most worth at the top speed.
+        let o = RouteOptions {
+            gravel: Gravel::Prefer,
+            ..RouteOptions::default()
+        };
+        let fun = super::Fun::new(e.net(), &none, &o);
+        let per_m =
+            super::Cost::Favoured(super::Off::of(&o), fun, 1.0).least_per_m(e.max_speed_kmh());
+        let loose = (1.0 - crate::scoring::PARAMS.max_pull) / (e.max_speed_kmh() / 3.6);
+        assert!(per_m > loose * 1.2, "{per_m} vs {loose}");
     }
 }

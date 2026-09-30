@@ -36,6 +36,10 @@ pub struct Favourites {
     coverage: HashMap<u32, (f32, f32, f32, Rating)>,
     /// The largest bonus of any edge.
     max_bonus: f64,
+    /// The highest speed of any favourite edge, km/h (0 with none): the
+    /// fastest a road worth that much can be ridden (see the route
+    /// search's estimate).
+    max_speed_kmh: f64,
     /// The middle of each matched section and its rating weight: places
     /// a round trip may go through (ADR-0007).
     anchors: Vec<(LatLon, f64)>,
@@ -188,6 +192,9 @@ impl Favourites {
                     (best.1.0 as f32, best.1.1 as f32, best.2 as f32, best.3),
                 );
                 favourites.max_bonus = favourites.max_bonus.max(best.0);
+                favourites.max_speed_kmh = favourites
+                    .max_speed_kmh
+                    .max(f64::from(engine.net().edge(id).speed_kmh));
             }
         }
         if !favourites.coverage.is_empty() {
@@ -287,6 +294,11 @@ impl Favourites {
     /// The largest bonus of any edge.
     pub(crate) fn max_bonus(&self) -> f64 {
         self.max_bonus
+    }
+
+    /// The highest speed of any favourite edge, km/h (0 with none).
+    pub(crate) fn max_speed_kmh(&self) -> f64 {
+        self.max_speed_kmh
     }
 }
 

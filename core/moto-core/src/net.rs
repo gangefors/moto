@@ -20,7 +20,8 @@ use std::ops::Range;
 
 use crate::CoreError;
 use crate::region::format::{
-    BBoxE7, CurvatureMetrics, Edge, GeometryName, NO_NAME, Place, PointE7, WayRef, border_flags,
+    BBoxE7, CurvatureMetrics, Edge, GeometryName, NO_NAME, Place, PointE7, Surface, WayRef,
+    border_flags,
 };
 use crate::region::{Region, coverage_contains, merge_coverage};
 
@@ -48,6 +49,10 @@ pub struct Net {
     /// for the few hundred border nodes (a hash lookup per edge made
     /// searches over linked regions several times slower).
     linked: Vec<u64>,
+    /// The highest speed of any edge, and of any unpaved edge, km/h: the
+    /// route search's estimate needs both to stay a lower bound.
+    max_speed_kmh: f64,
+    max_unpaved_kmh: f64,
     /// Several regions' coverage as one outline (offsets, points), so
     /// neighbours join at their border instead of overlapping.
     merged: Option<(Vec<u32>, Vec<PointE7>)>,
@@ -81,6 +86,7 @@ impl Net {
     /// One region: the net is the region itself, ids unchanged.
     pub fn single(region: Region) -> Net {
         let (n, m, g) = counts(&region);
+        let (max_speed_kmh, max_unpaved_kmh) = speed_bounds(std::slice::from_ref(&region));
         Net {
             parts: vec![region],
             node_base: vec![0, n],
@@ -90,6 +96,8 @@ impl Net {
             extra_out: HashMap::new(),
             extra_in: HashMap::new(),
             linked: Vec::new(),
+            max_speed_kmh,
+            max_unpaved_kmh,
             merged: None,
         }
     }
@@ -126,8 +134,11 @@ impl Net {
             extra_out: HashMap::new(),
             extra_in: HashMap::new(),
             linked: Vec::new(),
+            max_speed_kmh: 0.0,
+            max_unpaved_kmh: 0.0,
             merged: None,
         };
+        (net.max_speed_kmh, net.max_unpaved_kmh) = speed_bounds(&net.parts);
         net.link();
         net.merge_coverage();
         Ok(net)
@@ -208,6 +219,16 @@ impl Net {
     /// How many stubs are linked to a node in another region.
     pub fn link_count(&self) -> usize {
         self.canon.len()
+    }
+
+    /// The highest speed of any edge, km/h (at least 1).
+    pub fn max_speed_kmh(&self) -> f64 {
+        self.max_speed_kmh
+    }
+
+    /// The highest speed of any unpaved edge, km/h (0 with none).
+    pub fn max_unpaved_kmh(&self) -> f64 {
+        self.max_unpaved_kmh
     }
 
     pub fn node_count(&self) -> usize {
@@ -402,6 +423,19 @@ impl Net {
     pub(crate) fn bases(&self, r: usize) -> (u32, u32, u32) {
         (self.node_base[r], self.edge_base[r], self.geom_base[r])
     }
+}
+
+/// The highest speed of any edge and of any unpaved edge in `parts`,
+/// km/h (at least 1, and 0 when there is no unpaved edge).
+fn speed_bounds(parts: &[Region]) -> (f64, f64) {
+    let (mut all, mut unpaved) = (1u8, 0u8);
+    for e in parts.iter().flat_map(|r| r.edges().iter()) {
+        all = all.max(e.speed_kmh);
+        if !Surface::from_u8(e.surface).is_some_and(|s| s.is_paved()) {
+            unpaved = unpaved.max(e.speed_kmh);
+        }
+    }
+    (f64::from(all), f64::from(unpaved))
 }
 
 fn counts(r: &Region) -> (u32, u32, u32) {

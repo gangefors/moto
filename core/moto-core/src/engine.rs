@@ -70,12 +70,7 @@ impl Engine {
     }
 
     fn from_net(net: Net) -> Self {
-        let max_speed_kmh = net
-            .regions()
-            .iter()
-            .flat_map(|r| r.edges().iter())
-            .map(|e| f64::from(e.speed_kmh))
-            .fold(1.0, f64::max);
+        let max_speed_kmh = net.max_speed_kmh();
         Self { net, max_speed_kmh }
     }
 
