@@ -100,7 +100,7 @@ pub fn classify(tags: &[(&str, &str)], country: Country) -> Option<WayAttrs> {
     if roundabout {
         flags |= edge_flags::ROUNDABOUT;
     }
-    if tag("toll") == Some("yes") {
+    if motorcycle_toll(tags, class, country) == Some(true) {
         flags |= edge_flags::TOLL;
     }
 
@@ -148,6 +148,53 @@ pub fn classify(tags: &[(&str, &str)], country: Country) -> Option<WayAttrs> {
         flags,
         oneway,
     })
+}
+
+/// A toll booth (`barrier=toll_booth`); automatic gantries
+/// (`highway=toll_gantry`) never charge motorcycles in these countries.
+pub fn is_toll_booth(tags: &[(&str, &str)]) -> bool {
+    tags.contains(&("barrier", "toll_booth"))
+}
+
+/// Whether a motorcycle pays toll on a way of `class` with `tags` in
+/// `country` (`edge_flags::TOLL`): `Some(true)` or `Some(false)` when the
+/// tags settle it, `None` when a toll booth on the way would make it a
+/// toll road (see [`booth_makes_toll`]). Automatic road charges don't
+/// apply to motorcycles in Norway (AutoPASS, city toll rings) or Sweden
+/// (congestion tax, the Motala, Sundsvall and Skuru bridge charges), so
+/// there only private toll roads and the Öresund link count; in Denmark
+/// and Finland every toll does. A ferry is a ferry, whatever its fare.
+pub fn motorcycle_toll(tags: &[(&str, &str)], class: RoadClass, country: Country) -> Option<bool> {
+    let tag = |k: &str| tags.iter().find(|(key, _)| *key == k).map(|(_, v)| *v);
+    if class == RoadClass::Ferry {
+        return Some(false);
+    }
+    // Tags for motorcycles win.
+    match tag("toll:motorcycle") {
+        Some("yes") => return Some(true),
+        Some("no") => return Some(false),
+        _ => {}
+    }
+    if let Some(charge) = tag("charge:motorcycle") {
+        let free = !charge.chars().any(|c| c.is_ascii_digit() && c != '0');
+        return Some(!free);
+    }
+    let tolled = tag("toll") == Some("yes") || tag("toll:motor_vehicle") == Some("yes");
+    let main = matches!(
+        class,
+        RoadClass::Motorway | RoadClass::Trunk | RoadClass::Primary | RoadClass::Secondary
+    );
+    match country {
+        Country::Norway if main => Some(false),
+        // Private toll roads in Norway are often mapped by their booth alone.
+        Country::Norway if !tolled => None,
+        Country::Sweden if main => Some(
+            tolled
+                && tag("operator")
+                    .is_some_and(|o| o.contains("Øresundsbro") || o.contains("Öresundsbro")),
+        ),
+        _ => Some(tolled),
+    }
 }
 
 /// Longest name or road number kept, in characters; longer ones are cut.
@@ -363,7 +410,7 @@ mod tests {
         );
         let f = c(&[("route", "ferry"), ("motor_vehicle", "yes")]).unwrap();
         assert_eq!((f.class, f.flags), (RoadClass::Ferry, edge_flags::FERRY));
-        let t = c(&[("highway", "primary"), ("toll", "yes")]).unwrap();
+        let t = c(&[("highway", "unclassified"), ("toll", "yes")]).unwrap();
         assert_eq!(t.flags, edge_flags::TOLL);
     }
 
@@ -534,5 +581,81 @@ mod tests {
         assert_eq!(place(&[("place", "village")]), None);
         assert_eq!(place(&[("place", "island"), ("name", "Ven")]), None);
         assert_eq!(place(&[("place", "hamlet"), ("name", "\u{202E}")]), None);
+    }
+
+    #[test]
+    fn tolls_count_where_a_motorcycle_pays() {
+        use RoadClass::*;
+        let toll = |country: Country, class: RoadClass, tags: &[(&str, &str)]| {
+            motorcycle_toll(tags, class, country)
+        };
+        let yes = [("toll", "yes")];
+        // Norway: AutoPASS on main roads is free for motorcycles; private
+        // toll roads are not, and a booth decides an untagged small road.
+        assert_eq!(toll(Country::Norway, Trunk, &yes), Some(false));
+        assert_eq!(toll(Country::Norway, Secondary, &yes), Some(false));
+        assert_eq!(toll(Country::Norway, Unclassified, &yes), Some(true));
+        assert_eq!(toll(Country::Norway, Unclassified, &[]), None);
+        assert_eq!(toll(Country::Norway, Motorway, &[]), Some(false));
+        // Sweden: bridge charges and congestion tax are free; the Öresund
+        // link is not.
+        assert_eq!(toll(Country::Sweden, Motorway, &yes), Some(false));
+        let oresund = [("toll", "yes"), ("operator", "Øresundsbro Konsortiet I/S")];
+        assert_eq!(toll(Country::Sweden, Motorway, &oresund), Some(true));
+        assert_eq!(toll(Country::Sweden, Unclassified, &yes), Some(true));
+        assert_eq!(toll(Country::Sweden, Unclassified, &[]), Some(false));
+        // Denmark and Finland: every toll.
+        assert_eq!(toll(Country::Denmark, Motorway, &yes), Some(true));
+        assert_eq!(toll(Country::Finland, Tertiary, &yes), Some(true));
+        assert_eq!(
+            toll(Country::Denmark, Motorway, &[("toll", "snowmobile")]),
+            Some(false)
+        );
+        // Motorcycle tags win; a zero charge is free.
+        assert_eq!(
+            toll(Country::Norway, Trunk, &[("toll:motorcycle", "yes")]),
+            Some(true)
+        );
+        assert_eq!(
+            toll(
+                Country::Denmark,
+                Motorway,
+                &[("toll", "yes"), ("toll:motorcycle", "no")]
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            toll(Country::Norway, Trunk, &[("charge:motorcycle", "NOK 31")]),
+            Some(true)
+        );
+        assert_eq!(
+            toll(
+                Country::Denmark,
+                Motorway,
+                &[("toll", "yes"), ("charge:motorcycle", "0 DKK")]
+            ),
+            Some(false)
+        );
+        // A ferry is a ferry, whatever its fare.
+        assert_eq!(toll(Country::Denmark, Ferry, &yes), Some(false));
+        // Through classify: the flag on the edge.
+        let t = classify(
+            &[("highway", "motorway"), ("toll", "yes")],
+            Country::Denmark,
+        )
+        .unwrap();
+        assert_ne!(t.flags & edge_flags::TOLL, 0);
+        let f = classify(
+            &[
+                ("route", "ferry"),
+                ("motor_vehicle", "yes"),
+                ("toll", "yes"),
+            ],
+            Country::Denmark,
+        )
+        .unwrap();
+        assert_eq!(f.flags & edge_flags::TOLL, 0);
+        assert!(is_toll_booth(&[("barrier", "toll_booth")]));
+        assert!(!is_toll_booth(&[("highway", "toll_gantry")]));
     }
 }
