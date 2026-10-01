@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import se.gangefors.moto.OneLine
 import se.gangefors.moto.core.Favourites
+import se.gangefors.moto.core.RideMatchReport
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.Route
@@ -56,6 +57,14 @@ object DebugTools {
 
     /** Records that start step [name] happened. */
     fun mark(name: String) = mark(name, null)
+
+    /** Notes how many rides were just matched to the roads (ADR-0010). */
+    fun ridesMatched(report: RideMatchReport) =
+        mark("rides matched: ${report.matched} rides, ${report.ways} way spans")
+
+    /** Notes what the routing overlay holds once built. */
+    fun overlayBuilt(favourites: Favourites) =
+        mark("overlay: ${favourites.edgeCount()} favourite edges, ${favourites.riddenEdgeCount()} ridden edges")
 
     private fun mark(name: String, ms: Long?) {
         val line = startupLine(name, ms, sinceStart())
@@ -169,7 +178,7 @@ object DebugTools {
 private fun routeDetail(from: LatLon, via: List<LatLon>, to: LatLon, opts: RouteOptions, favourites: Favourites?): String {
     val points = listOf(from) + via + to
     val straight = points.zipWithNext { a, b -> metersApart(a.lat, a.lon, b.lat, b.lon) }.sum()
-    return "${km(straight)} straight line, ${via.size} waypoints, gravel ${opts.gravel}, " +
+    return "${km(straight)} straight line, ${via.size} waypoints, ${settings(opts)}, " +
         "${budget(opts)}, ${favouriteCount(favourites)}"
 }
 
@@ -179,7 +188,17 @@ private fun loopDetail(target: RoundTripTarget, opts: RouteOptions, favourites: 
         is RoundTripTarget.DurationS -> String.format(java.util.Locale.ROOT, "%.1f h", target.seconds / 3600)
     }
     val bearing = shape.bearing?.let { "heading ${it.toInt()}°" } ?: "any way"
-    return "$length, $bearing, seed ${shape.seed}, gravel ${opts.gravel}, ${favouriteCount(favourites)}"
+    return "$length, $bearing, seed ${shape.seed}, ${settings(opts)}, ${favouriteCount(favourites)}"
+}
+
+/** "gravel AVOID, favourites PREFER, unridden ANY, allowed none". */
+private fun settings(opts: RouteOptions): String {
+    val allowed = listOfNotNull(
+        "motorways".takeIf { !opts.avoid.motorways },
+        "ferries".takeIf { !opts.avoid.ferries },
+        "tolls".takeIf { !opts.avoid.tolls },
+    ).ifEmpty { listOf("none") }
+    return "gravel ${opts.gravel}, favourites ${opts.favourites}, unridden ${opts.unridden}, allowed ${allowed.joinToString("+")}"
 }
 
 private fun budget(opts: RouteOptions): String = when (val b = opts.budget) {
@@ -188,7 +207,7 @@ private fun budget(opts: RouteOptions): String = when (val b = opts.budget) {
 }
 
 private fun favouriteCount(favourites: Favourites?): String =
-    favourites?.let { "${it.edgeCount()} favourite edges" } ?: "no favourites"
+    favourites?.let { "${it.edgeCount()} favourite edges, ${it.riddenEdgeCount()} ridden edges" } ?: "no favourites"
 
 /**
  * Samples the native heap in use every few milliseconds while a query

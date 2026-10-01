@@ -48,7 +48,8 @@ import se.gangefors.moto.RegionState
 import se.gangefors.moto.Regions
 
 /**
- * Debug tools: phone and build, memory, battery use of recent rides,
+ * Debug tools: phone and build, settings in effect, the rider's data in
+ * numbers, memory, battery use of recent rides,
  * start steps, the region check, a
  * fixed benchmark and every route, loop and snap since the app started.
  * Copy report puts it all on the clipboard as text.
@@ -64,17 +65,24 @@ internal fun DebugDialog(onDismiss: () -> Unit) {
     var device by remember { mutableStateOf(emptyList<String>()) }
     var memory by remember { mutableStateOf(emptyList<String>()) }
     var check by remember { mutableStateOf(emptyList<String>()) }
+    var settings by remember { mutableStateOf(emptyList<String>()) }
+    var data by remember { mutableStateOf(emptyList<String>()) }
     var bench by remember { mutableStateOf(emptyList<BenchResult>()) }
     var working by remember { mutableStateOf<String?>(null) }
 
     suspend fun refresh() = withContext(Dispatchers.IO) {
         device = runCatching { deviceLines(context) }.getOrElse { listOf(it.toString()) }
         memory = runCatching { memoryLines() }.getOrElse { listOf(it.toString()) }
+        settings = runCatching { settingsLines(settingsInEffect(context)) }.getOrElse { listOf(it.toString()) }
+        data = runCatching { riderData(context)?.let(::riderDataLines) ?: listOf("store not open") }
+            .getOrElse { listOf(it.toString()) }
     }
     LaunchedEffect(Unit) { refresh() }
 
     val rides = remember { DebugTools.rideLines(context).asReversed() }
     fun sections() = listOf(
+        ReportSection("Settings", settings),
+        ReportSection("Rider data", data),
         ReportSection("Memory", memory),
         ReportSection("Rides: battery use (latest first)", rides),
         ReportSection("Start", startup),
