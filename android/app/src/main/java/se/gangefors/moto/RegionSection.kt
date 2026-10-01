@@ -224,6 +224,7 @@ private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone:
         is DownloadState.Installing -> download.offer.id == offer.id
         else -> false
     }
+    val action = offerAction(installed, offer.id, offer.osmTimestamp, offer.gzSha256)
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         // The action wraps under the text when there is no room.
         FlowRow(
@@ -238,7 +239,15 @@ private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone:
                         is DownloadState.Downloading if mine ->
                             stringResource(R.string.region_progress, mb(download.done), mb(total))
                         is DownloadState.Installing if mine -> stringResource(R.string.region_installing_short)
-                        else -> stringResource(R.string.region_offer, mb(total), osmDate(offer.osmTimestamp, zone))
+                        else -> stringResource(
+                            if (action == OfferAction.UPDATE && isRebuild(installed, offer.id, offer.osmTimestamp)) {
+                                R.string.region_offer_rebuilt
+                            } else {
+                                R.string.region_offer
+                            },
+                            mb(total),
+                            osmDate(offer.osmTimestamp, zone),
+                        )
                     },
                 )
             }
@@ -248,7 +257,7 @@ private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone:
                         Icon(painterResource(R.drawable.ic_close), stringResource(R.string.region_stop))
                     }
                 download is DownloadState.Installing && mine -> {}
-                else -> when (offerAction(installed, offer.id, offer.osmTimestamp)) {
+                else -> when (action) {
                     OfferAction.INSTALLED -> Text(
                         stringResource(R.string.region_installed_label),
                         style = MaterialTheme.typography.labelLarge,

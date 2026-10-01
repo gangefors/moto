@@ -142,6 +142,7 @@ object Regions {
                 osmTimestamp = p.getLong("ts.$id", 0),
                 bytes = f.length(),
                 enabled = !p.getBoolean("off.$id", false),
+                gzSha256 = p.getString("sha.$id", null),
             )
         }.sortedBy { it.name }
     }
@@ -187,7 +188,7 @@ object Regions {
     private fun drop(context: Context, id: String) {
         prefs(context).edit()
             .putStringSet(INSTALLED, installedIds(context) - id)
-            .remove("name.$id").remove("fp.$id").remove("ts.$id").remove("off.$id")
+            .remove("name.$id").remove("fp.$id").remove("ts.$id").remove("off.$id").remove("sha.$id")
             .apply()
         file(context, id).delete()
     }
@@ -242,6 +243,7 @@ object Regions {
                         .putString("name.${offer.id}", offer.name)
                         .putString("fp.${offer.id}", fp)
                         .putLong("ts.${offer.id}", offer.osmTimestamp)
+                        .putString("sha.${offer.id}", offer.gzSha256)
                         .remove("off.${offer.id}")
                         .apply()
                     reopen(app)

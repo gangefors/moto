@@ -42,6 +42,8 @@
     <string name="region_checking">Looking for regions…</string>
     <string name="region_no_offers">No regions to download for this app version.</string>
     <string name="region_offer">%1$.1f MB download · map data from %2$s</string>
+    <!-- An update with the same map data, built again by a newer builder. -->
+    <string name="region_offer_rebuilt">%1$.1f MB download · map data from %2$s, rebuilt</string>
     <string name="region_download">Download</string>
     <string name="region_update">Update</string>
     <string name="region_stop">Stop the download</string>

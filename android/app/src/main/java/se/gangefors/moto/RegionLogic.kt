@@ -49,25 +49,40 @@ fun resumeAction(code: Int, have: Long): ResumeAction = when {
 fun hasRoomFor(gzBytes: Long, have: Long, regionBytes: Long, free: Long): Boolean =
     free - REGION_SPACE_MARGIN >= (gzBytes - have).coerceAtLeast(0) + regionBytes
 
-/** Whether an offered region is newer data than the installed one. */
-fun isUpdate(installedOsmTimestamp: Long?, offeredOsmTimestamp: Long): Boolean =
-    installedOsmTimestamp != null && offeredOsmTimestamp > installedOsmTimestamp
+/**
+ * Whether an offered region replaces the installed one: newer map data,
+ * or the same map data built again (a new builder: other speeds, tolls,
+ * curvature) — a download whose SHA-256 differs from the one installed.
+ * A region installed before the app kept that ([installedGzSha256] null)
+ * is offered its same-day file once, as it can't tell.
+ */
+fun isUpdate(installedOsmTimestamp: Long?, offeredOsmTimestamp: Long, installedGzSha256: String?, offeredGzSha256: String): Boolean =
+    installedOsmTimestamp != null &&
+        (offeredOsmTimestamp > installedOsmTimestamp ||
+            (offeredOsmTimestamp == installedOsmTimestamp && installedGzSha256 != offeredGzSha256))
+
+/** Whether an update ([isUpdate]) is the same map data built again, so
+ * its row can say so (the date alone would look like nothing new). */
+fun isRebuild(installed: List<InstalledRegion>, offerId: String, offerOsmTimestamp: Long): Boolean =
+    installed.firstOrNull { it.id == offerId }?.osmTimestamp == offerOsmTimestamp
 
 /** What an offered region's row offers. */
 enum class OfferAction { DOWNLOAD, UPDATE, INSTALLED }
 
-/** [OfferAction] for an offer ([offerId], [offerOsmTimestamp]) with the
- * regions [installed] on the phone (ADR-0009: several side by side). */
-fun offerAction(installed: List<InstalledRegion>, offerId: String, offerOsmTimestamp: Long): OfferAction {
+/** [OfferAction] for an offer ([offerId], [offerOsmTimestamp],
+ * [offerGzSha256]) with the regions [installed] on the phone (ADR-0009:
+ * several side by side). */
+fun offerAction(installed: List<InstalledRegion>, offerId: String, offerOsmTimestamp: Long, offerGzSha256: String): OfferAction {
     val mine = installed.firstOrNull { it.id == offerId } ?: return OfferAction.DOWNLOAD
-    return if (isUpdate(mine.osmTimestamp, offerOsmTimestamp)) OfferAction.UPDATE else OfferAction.INSTALLED
+    return if (isUpdate(mine.osmTimestamp, offerOsmTimestamp, mine.gzSha256, offerGzSha256)) OfferAction.UPDATE else OfferAction.INSTALLED
 }
 
 /**
  * A region installed from a download (ADR-0008, ADR-0009): its id and
  * name from the manifest, the day its map data is from (0 while unknown),
- * its file size, and whether it is used (a disabled region stays on the
- * phone but isn't opened).
+ * its file size, whether it is used (a disabled region stays on the
+ * phone but isn't opened), and the SHA-256 of the download it came from
+ * (null for regions installed before the app kept it).
  */
 data class InstalledRegion(
     val id: String,
@@ -75,6 +90,7 @@ data class InstalledRegion(
     val osmTimestamp: Long,
     val bytes: Long,
     val enabled: Boolean,
+    val gzSha256: String? = null,
 )
 
 /** A region id the core accepts in a manifest: `[a-z0-9-]`, 1–32 long. It

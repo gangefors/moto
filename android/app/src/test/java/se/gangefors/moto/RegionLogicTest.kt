@@ -50,25 +50,34 @@ class RegionLogicTest {
     }
 
     @Test
-    fun anUpdateIsNewerDataForTheInstalledRegion() {
-        assertTrue(isUpdate(100, 200))
-        assertFalse(isUpdate(200, 200))
-        assertFalse(isUpdate(300, 200))
-        assertFalse(isUpdate(null, 200))
+    fun anUpdateIsNewerDataOrARebuiltFile() {
+        assertTrue(isUpdate(100, 200, "a", "a"))
+        assertFalse(isUpdate(200, 200, "a", "a"))
+        assertFalse(isUpdate(300, 200, "a", "b"))
+        assertFalse(isUpdate(null, 200, null, "a"))
+        // The same map data built again: another file.
+        assertTrue(isUpdate(200, 200, "a", "b"))
+        // Installed before the app kept the checksum: offered once.
+        assertTrue(isUpdate(200, 200, null, "a"))
         assertEquals(155.1, mb(155_056_303), 0.0)
         assertEquals("2026-09-27", osmDate(1_790_471_426, java.time.ZoneOffset.UTC))
     }
 
     @Test
     fun offerRowsOfferTheRightAction() {
-        val se = InstalledRegion("sweden", "Sweden", 200, 400_000_000, enabled = true)
-        val no = InstalledRegion("norway", "Norway", 100, 470_000_000, enabled = false)
-        assertEquals(OfferAction.DOWNLOAD, offerAction(emptyList(), "sweden", 200))
-        assertEquals(OfferAction.DOWNLOAD, offerAction(listOf(no), "sweden", 200))
-        assertEquals(OfferAction.INSTALLED, offerAction(listOf(no, se), "sweden", 200))
-        assertEquals(OfferAction.INSTALLED, offerAction(listOf(se), "sweden", 150))
+        val se = InstalledRegion("sweden", "Sweden", 200, 400_000_000, enabled = true, gzSha256 = "s1")
+        val no = InstalledRegion("norway", "Norway", 100, 470_000_000, enabled = false, gzSha256 = "n1")
+        assertEquals(OfferAction.DOWNLOAD, offerAction(emptyList(), "sweden", 200, "s1"))
+        assertEquals(OfferAction.DOWNLOAD, offerAction(listOf(no), "sweden", 200, "s1"))
+        assertEquals(OfferAction.INSTALLED, offerAction(listOf(no, se), "sweden", 200, "s1"))
+        assertEquals(OfferAction.INSTALLED, offerAction(listOf(se), "sweden", 150, "s0"))
         // A disabled region is still installed, and still offered updates.
-        assertEquals(OfferAction.UPDATE, offerAction(listOf(se, no), "norway", 300))
+        assertEquals(OfferAction.UPDATE, offerAction(listOf(se, no), "norway", 300, "n2"))
+        // Rebuilt: same day, another file; its row says so.
+        assertEquals(OfferAction.UPDATE, offerAction(listOf(se), "sweden", 200, "s2"))
+        assertTrue(isRebuild(listOf(se), "sweden", 200))
+        assertFalse(isRebuild(listOf(no), "norway", 300))
+        assertFalse(isRebuild(emptyList(), "sweden", 200))
     }
 
     @Test
