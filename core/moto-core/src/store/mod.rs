@@ -105,6 +105,17 @@ const MIGRATIONS: &[&str] = &[
     ) STRICT;",
     // 6: the rider's own name for a ride; none shows its start time.
     "ALTER TABLE tracks ADD COLUMN name TEXT;",
+    // 7: the OSM way spans each finished ride was matched to, and the
+    // region key it was matched against (ADR-0010).
+    "ALTER TABLE tracks ADD COLUMN ways_key TEXT;
+    CREATE TABLE track_ways (
+        track_id    INTEGER NOT NULL REFERENCES tracks (id) ON DELETE CASCADE,
+        seq         INTEGER NOT NULL,
+        way_id      INTEGER NOT NULL,
+        from_idx    INTEGER NOT NULL CHECK (from_idx BETWEEN 0 AND 4294967295),
+        to_idx      INTEGER NOT NULL CHECK (to_idx BETWEEN 0 AND 4294967295),
+        PRIMARY KEY (track_id, seq)
+    ) STRICT, WITHOUT ROWID;",
 ];
 
 /// The schema version this build writes.
@@ -535,6 +546,8 @@ fn decode_line(bytes: &[u8], max: usize) -> Option<Vec<LatLon>> {
 
 mod exchange;
 mod rematch;
+mod ride_ways;
+pub use ride_ways::MAX_RIDE_WAYS;
 mod routes;
 pub use routes::{MAX_ROUTE_POINTS, NewRoute, SavedRoute};
 mod tags;

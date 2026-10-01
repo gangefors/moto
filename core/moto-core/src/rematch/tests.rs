@@ -278,3 +278,62 @@ fn a_section_off_the_open_map_waits_for_its_region() {
     assert_eq!((back.checked, back.matched, back.off_map), (1, 1, 0));
     assert_eq!(store.get_section(id).unwrap().unwrap().status, Status::Ok);
 }
+
+/// A finished ride from A along A→B→D, a fix every 50 m.
+fn store_with_ride() -> (Store, i64) {
+    let mut store = Store::open_in_memory().unwrap();
+    let points: Vec<_> = (0..=40)
+        .map(|i| {
+            crate::track::tests::fix(
+                T0 * 1000 + i * 3000,
+                55.7001,
+                13.20 + 0.02 * i as f64 / 40.0,
+            )
+        })
+        .collect();
+    let id = store.import_track(&points).unwrap().id;
+    (store, id)
+}
+
+#[test]
+fn rides_are_matched_once_and_again_for_a_new_map() {
+    let (mut store, id) = store_with_ride();
+    let old = engine(fixture::region());
+    let first = match_rides(&mut store, &old).unwrap();
+    assert_eq!(first.matched, 1);
+    let ways = store.ride_ways(&region_key(&old)).unwrap();
+    assert_eq!(ways.len(), 1);
+    let ids: Vec<i64> = ways[0].iter().map(|w| w.way_id).collect();
+    assert!(ids.contains(&100) && ids.contains(&300), "{ids:?}");
+
+    // The same map: nothing to do.
+    assert_eq!(
+        match_rides(&mut store, &old).unwrap(),
+        RideMatchReport::default()
+    );
+
+    // A new extract with renumbered ways: matched again, to the new ids.
+    let new = engine(lund(0.0, 1000, false, false));
+    assert_eq!(match_rides(&mut store, &new).unwrap().matched, 1);
+    assert_eq!(store.ride_ways_key(id).unwrap(), Some(region_key(&new)));
+    let ids: Vec<i64> = store.ride_ways(&region_key(&new)).unwrap()[0]
+        .iter()
+        .map(|w| w.way_id)
+        .collect();
+    assert!(ids.contains(&1100) && ids.contains(&1300), "{ids:?}");
+}
+
+#[test]
+fn a_ride_off_the_map_is_stored_with_no_ways() {
+    let mut store = Store::open_in_memory().unwrap();
+    let points: Vec<_> = (0..10)
+        .map(|i| crate::track::tests::fix(T0 * 1000 + i * 1000, 59.0 + i as f64 * 1e-4, 18.0))
+        .collect();
+    let id = store.import_track(&points).unwrap().id;
+    let e = engine(fixture::region());
+    let r = match_rides(&mut store, &e).unwrap();
+    assert_eq!((r.matched, r.ways), (1, 0));
+    assert_eq!(store.ride_ways_key(id).unwrap(), Some(region_key(&e)));
+    assert!(store.ride_ways(&region_key(&e)).unwrap().is_empty());
+    assert!(store.rides_to_match(&region_key(&e)).unwrap().is_empty());
+}
