@@ -801,7 +801,8 @@ fun MapScreen() {
     // new one is always fitted, a recalculated one only when it needs to be.
     var fittedFor by remember { mutableStateOf<Any?>(null) }
     // Whether the route and loop cards show all their choices or only the
-    // figures (collapsed, to see more of the map); kept for new routes.
+    // figures (collapsed, to see more of the map). A new route or loop
+    // starts at rest; a moved end or a changed setting leaves it as it is.
     var cardExpanded by rememberSaveable { mutableStateOf(false) }
     // Planning a route or loop: the sheet shows at the bottom, and the tag
     // and map buttons step aside (nobody tags while planning).
@@ -856,7 +857,10 @@ fun MapScreen() {
     // A new start or new route ends: the sheet starts at rest, so the map
     // shows what was found.
     LaunchedEffect(loopStart) { if (loopStart != null) cardExpanded = false }
-    LaunchedEffect(routeEnds) { if (routeEnds != null) cardExpanded = false }
+    // A new route sheet starts at rest; moving the end of an open route
+    // leaves the sheet as it is, pulled up or not, as a setting's change
+    // does (Stefan): keyed on whether a route is open, not on its ends.
+    LaunchedEffect(routeEnds != null) { if (routeEnds != null) cardExpanded = false }
     // The map's own controls (compass, logo, attribution) stay clear of
     // the system bars, the buttons and the sheet.
     LaunchedEffect(map, insets, planning, sheetTop, mapSize) {
