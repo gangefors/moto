@@ -76,24 +76,30 @@ class RouteLookTest {
     }
 
     @Test
-    fun theRiddenDashesAreSetForEachZoom() {
-        // The width the map draws, between and beyond its stops.
+    fun dashedLinesAreSetForEachZoom() {
+        // The ridden roads' width as the map draws it, between and beyond
+        // its stops.
         assertEquals(1.8f, riddenWidth(5f), 1e-4f)
         assertEquals(2.1f, riddenWidth(10f), 1e-4f)
         assertEquals(2.8f, riddenWidth(14f), 1e-4f)
         assertEquals(3.2f, riddenWidth(18f), 1e-4f)
         // On screen, dash and gap grow a little with every zoom.
-        assertEquals(5.5f to 4.5f, riddenDashDp(8))
-        val screen = RIDDEN_DASH_ZOOMS.map(::riddenDashDp)
+        assertEquals(5.5f to 4.5f, dashDp(8))
+        val screen = DASH_ZOOMS.map(::dashDp)
         for ((a, b) in screen.zipWithNext()) {
             assertTrue(b.first > a.first && b.second > a.second)
         }
-        // The map gets them in line widths: times the width, the same dp.
-        for (z in RIDDEN_DASH_ZOOMS) {
-            val (dash, gap) = riddenDashDp(z)
-            val units = riddenDashes(z)
-            assertEquals(dash, units[0] * riddenWidth(z.toFloat()), 1e-4f)
-            assertEquals(gap, units[1] * riddenWidth(z.toFloat()), 1e-4f)
+        // The map gets them in line widths: times the width, the same dp,
+        // whatever the line's width (ridden roads, gravel).
+        for (z in DASH_ZOOMS) {
+            val (dash, gap) = dashDp(z)
+            for (width in listOf(riddenWidth(z.toFloat()), GRAVEL_DASH_WIDTH)) {
+                val units = dashArray(z, width)
+                assertEquals(dash, units[0] * width, 1e-4f)
+                assertEquals(gap, units[1] * width, 1e-4f)
+            }
+            assertTrue(riddenDashes(z).contentEquals(dashArray(z, riddenWidth(z.toFloat()))))
+            assertTrue(gravelDashes(z).contentEquals(dashArray(z, GRAVEL_DASH_WIDTH)))
         }
     }
 

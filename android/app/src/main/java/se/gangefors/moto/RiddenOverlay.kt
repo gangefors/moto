@@ -33,15 +33,7 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
             ),
         ),
         // Dashes in line widths, set afresh for each zoom (riddenDashes).
-        PropertyFactory.lineDasharray(
-            Expression.step(
-                Expression.zoom(),
-                Expression.literal(riddenDashes(RIDDEN_DASH_ZOOMS.first)),
-                *RIDDEN_DASH_ZOOMS.drop(1)
-                    .map { z -> Expression.stop(z.toFloat(), Expression.literal(riddenDashes(z))) }
-                    .toTypedArray(),
-            ),
-        ),
+        PropertyFactory.lineDasharray(dashesByZoom(::riddenDashes)),
         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
     ).also { l ->
@@ -64,3 +56,13 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
         const val ROUTE_ARROWS = "moto-route-arrows"
     }
 }
+
+/** A dash array that changes at each of [DASH_ZOOMS]: [dashes] of that
+ * zoom, from it up to the next one (the lowest also below it). */
+fun dashesByZoom(dashes: (Int) -> Array<Float>): Expression = Expression.step(
+    Expression.zoom(),
+    Expression.literal(dashes(DASH_ZOOMS.first)),
+    *DASH_ZOOMS.drop(1)
+        .map { z -> Expression.stop(z.toFloat(), Expression.literal(dashes(z))) }
+        .toTypedArray(),
+)
