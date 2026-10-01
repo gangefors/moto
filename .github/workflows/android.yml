@@ -298,7 +298,10 @@ jobs:
     # The debug signing key (DEBUG_KEYSTORE_BASE64) lives in the
     # debug-signing environment, limited to main: only main builds are
     # published as debug-latest. Other branches build with a one-off key.
-    environment: ${{ github.ref == 'refs/heads/main' && 'debug-signing' || '' }}
+    # Only its secret is used: no deployment is recorded.
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'debug-signing' || '' }}
+      deployment: false
     concurrency:
       group: android-${{ github.ref }}
       cancel-in-progress: true
