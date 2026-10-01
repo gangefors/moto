@@ -295,6 +295,23 @@ impl Favourites {
         u64::try_from(self.inner.ridden_edge_count()).unwrap_or(u64::MAX)
     }
 
+    /// The roads the rider's rides have been on, as lines to draw on the
+    /// map: each road once, less the stretches on the favourite sections
+    /// the map draws (all but `hidden_section_ids`). For `engine`'s
+    /// regions, as built. Call off the main thread.
+    pub fn ridden_lines(
+        &self,
+        engine: Arc<Engine>,
+        hidden_section_ids: Vec<i64>,
+    ) -> Result<Vec<Vec<LatLon>>, MotoError> {
+        Ok(self
+            .inner
+            .ridden_lines(&engine.inner, &hidden_section_ids)?
+            .into_iter()
+            .map(|l| l.into_iter().map(Into::into).collect())
+            .collect())
+    }
+
     /// The gravel stretches of the sections that run on any.
     pub fn gravel(&self) -> Vec<SectionGravel> {
         self.inner
@@ -707,6 +724,15 @@ mod tests {
         assert!(r.unridden_share < 0.2, "{r:?}");
         let r = engine.route(from, vec![], to, opts, None).unwrap();
         assert_eq!(r.unridden_share, 1.0);
+
+        // The ridden roads to draw: along the ride, once.
+        let fav = store.favourites(engine.clone()).unwrap();
+        let lines = fav.ridden_lines(engine.clone(), vec![]).unwrap();
+        assert!(!lines.is_empty());
+        assert!(
+            lines.iter().flatten().all(|p| (p.lat - 55.70).abs() < 0.02),
+            "{lines:?}"
+        );
         std::fs::remove_file(region).unwrap();
     }
 
