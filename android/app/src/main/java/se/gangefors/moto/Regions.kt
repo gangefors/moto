@@ -97,15 +97,28 @@ object Regions {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    // The engine of the network in use, released once another replaces it.
+    private var opened: Engine? = null
+
+    /** Makes [next] the network in use; the engine it replaces is released. */
+    private fun use(next: ActiveRegion) {
+        val previous = opened
+        opened = (next.state as? RegionState.Ready)?.engine
+        _active.value = next
+        if (previous != null && previous !== opened) NativeRelease.later(previous)
+    }
+
     /** Opens the enabled regions at app start. */
     suspend fun load(context: Context) = lock.withLock {
         if (_active.value.state !is RegionState.Loading) return@withLock
         DebugTools.mark("region load started")
-        _active.value = withContext(Dispatchers.IO) {
-            val app = context.applicationContext
-            migrate(app)
-            open(app)
-        }
+        use(
+            withContext(Dispatchers.IO) {
+                val app = context.applicationContext
+                migrate(app)
+                open(app)
+            },
+        )
         DebugTools.mark("region ready")
     }
 
@@ -199,7 +212,7 @@ object Regions {
 
     /** Opens the network again after a change, the app switching to it. */
     private fun reopen(context: Context) {
-        _active.value = open(context)
+        use(open(context))
     }
 
     /** Fetches the list of regions this app can read. */
