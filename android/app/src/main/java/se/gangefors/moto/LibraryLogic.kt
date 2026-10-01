@@ -49,3 +49,53 @@ fun filterLibrary(items: List<LibraryItem>, filter: LibraryFilter): List<Library
     LibraryFilter.ROUTES -> items.filterIsInstance<LibraryItem.Route>()
     LibraryFilter.RIDES -> items.filterIsInstance<LibraryItem.Ride>()
 }
+
+/** Most GPX files one import takes (several can be picked at once, Stefan
+ * 2026-10-01): a bound on the work a single pick can start. */
+const val MAX_GPX_FILES = 100
+
+/** What became of one file of a ride import: a ride of [Imported.distanceM]
+ * metres, or not imported, with the file's [Failed.name] and why. */
+sealed interface RideImport {
+    data class Imported(val distanceM: Double) : RideImport
+    data class Failed(val name: String, val reason: String) : RideImport
+}
+
+/** A ride import in numbers, for its message: [imported] rides of [files]
+ * files, [km] in all, the first [failed] files not imported and how many
+ * more ([moreFailed]). */
+data class RideImportSummary(
+    val imported: Int,
+    val files: Int,
+    val km: Double,
+    val failed: List<RideImport.Failed>,
+    val moreFailed: Int,
+)
+
+/** Sums up [results], one per file in the order picked, listing at most
+ * [listed] of the files not imported. */
+fun rideImportSummary(results: List<RideImport>, listed: Int = 3): RideImportSummary {
+    val imported = results.filterIsInstance<RideImport.Imported>()
+    val failed = results.filterIsInstance<RideImport.Failed>()
+    return RideImportSummary(
+        imported = imported.size,
+        files = results.size,
+        km = sectionKm(imported.sumOf { it.distanceM }),
+        failed = failed.take(listed),
+        moreFailed = (failed.size - listed).coerceAtLeast(0),
+    )
+}
+
+/** A picked file's name as it may be shown in a message: the name comes
+ * from another app, so control and formatting characters are dropped and
+ * it is cut to [MAX_SHOWN_NAME] characters; [fallback] when nothing is
+ * left. */
+fun shownFileName(name: String?, fallback: String): String {
+    val clean = name.orEmpty()
+        .filterNot { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() }
+        .trim()
+    if (clean.isEmpty()) return fallback
+    return if (clean.length <= MAX_SHOWN_NAME) clean else clean.take(MAX_SHOWN_NAME - 1).trimEnd() + "…"
+}
+
+private const val MAX_SHOWN_NAME = 40

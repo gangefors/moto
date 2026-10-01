@@ -49,4 +49,44 @@ class LibraryLogicTest {
         assertEquals(LibraryFilter.ALL, libraryFilterOf(null))
         assertEquals(LibraryFilter.ALL, libraryFilterOf("nonsense"))
     }
+
+    @Test
+    fun aRideImportOfManyFilesSumsUpAndListsWhatFailed() {
+        val one = rideImportSummary(listOf(RideImport.Imported(12_345.0)))
+        assertEquals(RideImportSummary(1, 1, 12.3, emptyList(), 0), one)
+
+        val results = listOf(
+            RideImport.Imported(10_000.0),
+            RideImport.Failed("a.gpx", "no track points"),
+            RideImport.Imported(5_060.0),
+            RideImport.Failed("b.gpx", "not GPX"),
+            RideImport.Failed("c.gpx", "too large"),
+            RideImport.Failed("d.gpx", "not GPX"),
+        )
+        val s = rideImportSummary(results)
+        assertEquals(2, s.imported)
+        assertEquals(6, s.files)
+        assertEquals(15.1, s.km, 1e-9)
+        // The first three not imported, in the order picked, and a count.
+        assertEquals(listOf("a.gpx", "b.gpx", "c.gpx"), s.failed.map { it.name })
+        assertEquals(1, s.moreFailed)
+
+        val none = rideImportSummary(listOf(RideImport.Failed("x", "bad")))
+        assertEquals(0, none.imported)
+        assertEquals(0.0, none.km, 0.0)
+        assertEquals(0, none.moreFailed)
+        assertEquals(100, MAX_GPX_FILES)
+    }
+
+    @Test
+    fun aPickedFilesNameIsMadeSafeToShow() {
+        assertEquals("Morning ride.gpx", shownFileName("  Morning ride.gpx ", "a file"))
+        // Control and bidi characters from another app are dropped.
+        assertEquals("evil.gpx", shownFileName("ev\u202Eil\n.gpx", "a file"))
+        assertEquals("a file", shownFileName(null, "a file"))
+        assertEquals("a file", shownFileName("\u0007 ", "a file"))
+        val long = shownFileName("x".repeat(100), "a file")
+        assertEquals(40, long.length)
+        assertEquals('…', long.last())
+    }
 }
