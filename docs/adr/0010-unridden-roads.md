@@ -80,8 +80,8 @@ A changes only what pulls, so routes stay sensible around home where every road 
 
 ## Action Items
 
-- [ ] Store: schema 7 (`track_ways`, `tracks.ways_key`), matching rides once and again after region changes; migration and corruption tests.
-- [ ] Core: ridden bits in the overlay; `unridden` route option and `ridden_worth`; `unridden_share` on routes and loops; unit tests.
-- [ ] Golden: a case with a made-up ride whose Prefer route keeps off it; before/after table for `ridden_worth`.
-- [ ] FFI and app: the option, the setting in Ride settings and on the sheets, the figure, the chip, the help key, `ic_unridden`; rebuild the overlay when rides change.
+- [x] Store: schema 7 (`track_ways`, `tracks.ways_key`), matching rides once and again after region changes; migration and corruption tests (ab574c5).
+- [x] Core: ridden bits in the overlay; `unridden` route option and `ridden_worth`; `unridden_share` on routes and loops; unit tests (e5657b8).
+- [x] Golden: rides in the runner, cases 48–50 (made-up rides), and a sweep of `ridden_worth` (d24d995): at 0.2 or less some routes fall back to dull roads, at 0.5 a ridden road is kept where another curvy way was as quick; 0.3 kept.
+- [x] FFI and app: the option, the setting in Ride settings and on the sheets, the figure, the chip, the help key, `ic_unridden`; rebuild the overlay when rides change (274fbf6).
 - [ ] Phone: plan in an area with several rides, Any against Prefer.
