@@ -111,7 +111,11 @@ pub struct ScoringParams {
     /// Measured on 175 town pairs (2026-09-27): at 1 a second fun route
     /// came for 19 of them; at 0.25 for 115 (a third for 56), 19.9 and
     /// 17.6 % curvy against 20.5 % for the first and 5.5 % for the
-    /// fastest.
+    /// fastest. Lowered to 1/16 (2026-10-01) where few fun roads are
+    /// near: over 14 town pairs in seven Swedish areas (favourite
+    /// sections on the first route), fun choices besides the fastest
+    /// went from 30 to 36 of 42 with favourites avoided and from 30 to 38
+    /// with them preferred; pairs that already had three kept the same.
     pub choice_gain: f64,
     /// Road length over straight-line length assumed when sizing a loop.
     pub loop_detour: f64,
@@ -196,7 +200,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     dull_worth: 0.25,
     detour_steps: 5,
     reuse_penalty: 4.0,
-    choice_gain: 0.25,
+    choice_gain: 0.0625,
     loop_detour: 1.3,
     loop_pull: 1.0,
     loop_speed_mps: 15.0,
