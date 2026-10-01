@@ -775,3 +775,36 @@ fn route_choices_go_different_ways() {
         }
     }
 }
+
+#[test]
+fn ridden_pieces_join_into_long_lines() {
+    let p = |i: u32| ll(55.0, 13.0 + f64::from(i) / 100.0);
+    // A road of four pieces, given out of order and some the other way.
+    let road = vec![
+        vec![p(2), p(3)],
+        vec![p(1), p(0)],
+        vec![p(4), p(3)],
+        vec![p(1), p(2)],
+    ];
+    assert_eq!(chain_lines(road), vec![vec![p(0), p(1), p(2), p(3), p(4)]]);
+
+    // A branch at 1: one line through it, the branch its own.
+    let q = ll(55.01, 13.01);
+    let lines = chain_lines(vec![vec![p(0), p(1)], vec![p(1), q], vec![p(1), p(2)]]);
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    let points: usize = lines.iter().map(Vec::len).sum();
+    assert_eq!(points, 5, "{lines:?}");
+
+    // A ring has no loose end: still one line, closed.
+    let r = ll(55.01, 13.0);
+    let ring = chain_lines(vec![vec![p(0), p(1)], vec![r, p(0)], vec![p(1), r]]);
+    assert_eq!(ring.len(), 1, "{ring:?}");
+    assert_eq!(ring[0].len(), 4);
+    assert_eq!(ring[0].first(), ring[0].last());
+
+    // Pieces apart stay apart; a piece too short to draw never comes in.
+    let far = vec![ll(56.0, 14.0), ll(56.0, 14.01)];
+    let apart = chain_lines(vec![vec![p(0), p(1)], far.clone()]);
+    assert_eq!(apart, vec![vec![p(0), p(1)], far]);
+    assert!(chain_lines(Vec::new()).is_empty());
+}
