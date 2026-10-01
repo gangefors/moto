@@ -91,6 +91,14 @@ fun rideImportSummary(results: List<RideImport>, listed: Int = 3): RideImportSum
     )
 }
 
+/** How near its start a ride must end to be named as a loop ("Loop from
+ * Lund via Höör") rather than from one place to another. */
+const val RIDE_LOOP_M = 2_000.0
+
+/** Whether a ride along [line] came back to where it began. */
+fun rideIsLoop(line: List<se.gangefors.moto.core.LatLon>): Boolean =
+    line.size >= 2 && approxDistanceM(line.first(), line.last()) <= RIDE_LOOP_M
+
 /** A picked file's name as it may be shown in a message: the name comes
  * from another app, so control and formatting characters are dropped and
  * it is cut to [MAX_SHOWN_NAME] characters; [fallback] when nothing is

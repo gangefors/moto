@@ -4,8 +4,11 @@
 package se.gangefors.moto
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.Track
 
@@ -80,6 +83,16 @@ class LibraryLogicTest {
         assertEquals(0.0, none.km, 0.0)
         assertEquals(0, none.moreFailed)
         assertEquals(100, MAX_GPX_FILES)
+    }
+
+    @Test
+    fun aRideBackWhereItBeganIsNamedAsALoop() {
+        val start = LatLon(55.70, 13.20)
+        val out = LatLon(55.80, 13.40)
+        assertTrue(rideIsLoop(listOf(start, out, LatLon(55.71, 13.20))))
+        assertFalse(rideIsLoop(listOf(start, out, LatLon(55.75, 13.20))))
+        assertFalse(rideIsLoop(listOf(start)))
+        assertEquals(2_000.0, RIDE_LOOP_M, 0.0)
     }
 
     @Test
