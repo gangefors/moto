@@ -14,8 +14,10 @@
 #   runs beside build, so the phone's APK doesn't wait for it.
 # - build: the Android app (Rust core via cargo-ndk, then Gradle), lint
 #   and unit tests. No APK carries a region; the rider downloads one.
-# - publish: on main, the debug APK becomes the rolling `debug-latest`
-#   pre-release for the phone, once core and build pass.
+# - publish: the debug APK becomes a rolling pre-release for the phone,
+#   once core and build pass: `debug-latest` from main, `debug-branch`
+#   from a Claude work branch (`ccr-*`, `claude/*`), so a fix can be
+#   tested about 6 minutes after a push while the benchmark still runs.
 #
 # Only the newest push is built: a newer push cancels core, bench and
 # build of the one before on the same branch (on main too). Publishing is never cancelled halfway,
@@ -296,12 +298,17 @@ jobs:
     needs: core
     runs-on: ubuntu-latest
     # The debug signing key (DEBUG_KEYSTORE_BASE64) lives in the
-    # debug-signing environment, limited to main: only main builds are
-    # published as debug-latest. Other branches build with a one-off key.
-    # Only its secret is used: no deployment is recorded.
+    # debug-signing environment, limited to main and the Claude work
+    # branches (`ccr-*`, `claude/*`): their builds are published (see
+    # publish) and install over each other. Other branches and pull
+    # requests build with a one-off key. Only its secret is used: no
+    # deployment is recorded.
     environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'debug-signing' || '' }}
+      name: ${{ (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ccr-') || startsWith(github.ref, 'refs/heads/claude/'))) && 'debug-signing' || '' }}
       deployment: false
+    outputs:
+      # Whether an APK signed with the debug key was kept for publish.
+      kept: ${{ steps.keep.outputs.kept }}
     concurrency:
       group: android-${{ github.ref }}
       cancel-in-progress: true
@@ -372,29 +379,35 @@ jobs:
             exit 1
           fi
 
+      # Only an APK signed with the debug key is published: one signed with
+      # a one-off key wouldn't install over the app on the phone.
       - name: Keep the APK for publishing
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        id: keep
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/ccr-') || startsWith(github.ref, 'refs/heads/claude/')) && env.DEBUG_KEY_SHA256 != ''
         run: |
           mkdir -p "$RUNNER_TEMP/apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/apk/app-debug.apk"
+          echo "kept=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: steps.keep.outputs.kept == 'true'
         with:
           path: ${{ runner.temp }}/apk
           key: debug-apk-${{ github.sha }}-${{ github.run_id }}
 
   publish:
-    name: Publish debug-latest
+    name: Publish test APK
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: needs.build.outputs.kept == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to publish the debug-latest release
+      contents: write # to publish the debug-latest or debug-branch release
+    env:
+      TAG: ${{ github.ref == 'refs/heads/main' && 'debug-latest' || 'debug-branch' }}
     # Never cancelled once started (a half-made release); a newer waiting
-    # publish replaces an older waiting one.
+    # publish of the same release replaces an older waiting one.
     concurrency:
-      group: android-publish
+      group: android-publish-${{ github.ref == 'refs/heads/main' && 'main' || 'branch' }}
       cancel-in-progress: false
     steps:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -403,16 +416,24 @@ jobs:
           key: debug-apk-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      - name: Publish debug-latest release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           apk="moto-debug-${GITHUB_SHA::7}.apk"
           cp "$RUNNER_TEMP/apk/app-debug.apk" "$apk"
-          gh release delete debug-latest --cleanup-tag --yes || true
-          gh release create debug-latest "$apk" \
+          if [ "$TAG" = debug-latest ]; then
+            title="Debug build (latest main)"
+            notes="Debug APK built from ${GITHUB_SHA::7} on main. Replaced on every push to main that touches android/ or core/."
+          else
+            title="Debug build (latest work branch)"
+            notes="Debug APK built from ${GITHUB_SHA::7} on the work branch $BRANCH, published once the app built and its tests passed, before the benchmark and before it reaches main. Signed like debug-latest: either installs over the other."
+          fi
+          gh release delete "$TAG" --cleanup-tag --yes || true
+          gh release create "$TAG" "$apk" \
             --prerelease \
             --target "$GITHUB_SHA" \
-            --title "Debug build (latest main)" \
-            --notes "Debug APK built from ${GITHUB_SHA::7} on main, with the M0 region file (Skåne and surroundings) built in. Replaced on every push that touches android/ or core/."
+            --title "$title" \
+            --notes "$notes"
