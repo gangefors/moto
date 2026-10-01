@@ -178,7 +178,6 @@
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
     <string name="route_unridden">%1$d %% on unridden roads</string>
-    <string name="route_unridden_all">All on unridden roads</string>
     <string name="route_gravel">%1$.1f km gravel</string>
     <string name="route_toll">%1$.1f km toll road</string>
     <string name="route_stat_minutes">+%1$d min</string>
@@ -270,7 +269,7 @@
     <string name="help_figure_curvy">Curvy</string>
     <string name="help_figure_curvy_what">the share of it on curvy roads</string>
     <string name="help_figure_unridden">Unridden roads</string>
-    <string name="help_figure_unridden_what">the share of it on roads none of your rides have been on, from 1 %; the icon alone when all of it is</string>
+    <string name="help_figure_unridden_what">the share of it on roads none of your rides have been on, when at least 1 %</string>
     <string name="help_figure_gravel">Gravel</string>
     <string name="help_figure_gravel_what">km on gravel roads, when it has any</string>
     <string name="help_figure_toll">Toll roads</string>

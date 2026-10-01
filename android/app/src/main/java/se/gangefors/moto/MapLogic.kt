@@ -95,9 +95,8 @@ data class RouteStat(val kind: RouteStatKind, val zero: Boolean = false)
  * The figures [s] shows on the sheet, in order: "Fastest" or the minutes
  * over the fastest (when there are any), the share on favourites and on
  * curvy roads (always, so the line is always there; dimmed at 0 %), the
- * share on unridden roads from 1 % (whatever the setting; the icon alone
- * at 100 %, see [showsUnriddenValue]), then gravel and toll roads only
- * when the route has them.
+ * share on unridden roads from 1 % (whatever the setting), then gravel
+ * and toll roads only when the route has them.
  */
 fun routeStats(s: RouteSummary): List<RouteStat> = buildList {
     if (s.fastest) {
@@ -111,10 +110,6 @@ fun routeStats(s: RouteSummary): List<RouteStat> = buildList {
     if (s.gravelKm > 0.0) add(RouteStat(RouteStatKind.GRAVEL))
     if (s.tollKm > 0.0) add(RouteStat(RouteStatKind.TOLL))
 }
-
-/** Whether the unridden figure shows its value: not at 100 %, where the
- * icon alone says the whole route is new (also before the first ride). */
-fun showsUnriddenValue(unriddenPercent: Int): Boolean = unriddenPercent < 100
 
 /** What the route or loop switcher's count shows: [position] of [count]
  * once found, none of none (-1 to 0) when nothing was found, and nothing

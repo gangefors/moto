@@ -724,12 +724,8 @@ private fun StatFigure(stat: RouteStat, s: RouteSummary) {
         )
         RouteStatKind.UNRIDDEN -> Triple(
             R.drawable.ic_unridden,
-            if (showsUnriddenValue(s.unriddenPercent)) stringResource(R.string.route_stat_percent, s.unriddenPercent) else "",
-            if (showsUnriddenValue(s.unriddenPercent)) {
-                stringResource(R.string.route_unridden, s.unriddenPercent)
-            } else {
-                stringResource(R.string.route_unridden_all)
-            },
+            stringResource(R.string.route_stat_percent, s.unriddenPercent),
+            stringResource(R.string.route_unridden, s.unriddenPercent),
         )
         RouteStatKind.GRAVEL -> Triple(
             R.drawable.ic_gravel,
@@ -757,9 +753,7 @@ private fun StatFigure(stat: RouteStat, s: RouteSummary) {
                 modifier = Modifier.size(16.dp),
             )
         }
-        if (text.isNotEmpty()) {
-            Text(noBreak(text), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
+        Text(noBreak(text), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
 
