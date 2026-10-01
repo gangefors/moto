@@ -1,0 +1,10 @@
+{
+  "name": "Osby to Olofström, three route choices",
+  "description": "A short trip with one good detour and few others nearby: the route sheet should still offer three fun choices besides the fastest. The third comes only when choices after the first may buy little fun per extra minute (choice_gain 1/16); at 1/4 the sheet offered two.",
+  "from": [56.380, 13.995],
+  "to": [56.277, 14.533],
+  "max_detour": 0.8,
+  "expect": {
+    "min_choices": 3
+  }
+}
