@@ -1694,6 +1694,20 @@ mod tests {
         let whole = length(&lines[0]);
         assert!(whole > 5_000.0, "{whole}");
 
+        // However many rides have been on it, either way or on part of it:
+        // still one line, no longer, so the dashes never double up.
+        let many = vec![
+            vec![span(21, 0, 160)],
+            vec![span(21, 160, 0)],
+            vec![span(21, 0, 160)],
+            vec![span(21, 30, 90)],
+        ];
+        let again = Favourites::build_with_rides(&e, &[], &many)
+            .ridden_lines(&e, &[])
+            .unwrap();
+        assert_eq!(again.len(), 1, "{again:?}");
+        assert!((length(&again[0]) - whole).abs() < 1e-6);
+
         // A favourite on the middle of it: the dashes stop there.
         let section = Section {
             id: 7,
