@@ -98,6 +98,53 @@ fn routing_errors_are_failures_not_panics() {
 }
 
 #[test]
+fn rides_are_matched_and_the_unridden_share_checked() {
+    let file = built_fixture("golden-rides");
+    let engine = Engine::open(file.path()).unwrap();
+    // No rides: all of it unridden.
+    let o = Case::parse(&case("", r#""min_unridden_share":1.0"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    assert_eq!(o.unridden_share, 1.0);
+    // A ride along the whole route: little of it unridden, whatever the
+    // choice, and a demand for more is reported.
+    let ride = r#","rides":[[[55.7043,13.1905],[55.7050,13.1920],[55.7057,13.1935]]]"#;
+    for mode in ["any", "prefer"] {
+        let extra = format!(r#"{ride},"unridden":"{mode}""#);
+        let o = Case::parse(&case(&extra, r#""max_unridden_share":0.5"#))
+            .unwrap()
+            .run(&engine);
+        assert!(o.failures.is_empty(), "{mode}: {o:?}");
+        assert!(o.unridden_share < 0.5, "{mode}: {o:?}");
+        let o = Case::parse(&case(&extra, r#""min_unridden_share":0.9"#))
+            .unwrap()
+            .run(&engine);
+        assert_eq!(o.failures.len(), 1, "{o:?}");
+        assert!(
+            o.failures[0].contains("unridden, expected at least 90 %"),
+            "{o:?}"
+        );
+    }
+}
+
+#[test]
+fn bad_rides_are_refused() {
+    let many: Vec<String> = (0..=MAX_RIDE_POINTS)
+        .map(|i| format!("[55.70,{}]", 13.19 + i as f64 * 1e-5))
+        .collect();
+    for bad in [
+        case(r#","rides":[[[55.7,13.19]]]"#, ""), // one point
+        case(r#","rides":[[[55.7,13.19],[95.0,13.2]]]"#, ""), // not a coordinate
+        case(&format!(r#","rides":[[{}]]"#, many.join(",")), ""), // too long
+        case(r#","unridden":"never""#, ""),
+        case("", r#""min_unridden_share":2"#),
+    ] {
+        assert!(Case::parse(&bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
 fn bad_case_files_are_refused() {
     for bad in [
         "",

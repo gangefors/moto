@@ -26,7 +26,7 @@ use moto_core::roundtrip::{MAX_LOOPS, MAX_REUSE, TOLERANCE, home_radius_m};
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
 use moto_core::{
     Engine, Favourites, FavouritesMode, Gravel, LatLon, LoopOptions, RoundTripTarget, Route,
-    RouteOptions, TimeBudget,
+    RouteOptions, TimeBudget, UnriddenMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,6 +84,15 @@ pub struct Case {
     pub tolls: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
+    /// Rides the rider has been on, each a line of [lat, lon] points
+    /// along the roads (made up, never a rider's own), matched to the
+    /// roads like the app's rides (ADR-0010).
+    #[serde(default)]
+    pub rides: Vec<Vec<[f64; 2]>>,
+    /// What the route does with roads the rides have been on: "any" (the
+    /// default) or "prefer" unridden ones, like the app's choice.
+    #[serde(default)]
+    pub unridden: UnriddenName,
     /// A loop from `from` through these points in order and back (as the
     /// app's "Loop through it" does with a section's ends), in place of
     /// `to` or `loop`: no length target; checked like a round trip.
@@ -170,6 +179,23 @@ pub enum FavouritesModeName {
     Avoid,
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UnriddenName {
+    #[default]
+    Any,
+    Prefer,
+}
+
+impl From<UnriddenName> for UnriddenMode {
+    fn from(u: UnriddenName) -> Self {
+        match u {
+            UnriddenName::Any => UnriddenMode::Any,
+            UnriddenName::Prefer => UnriddenMode::Prefer,
+        }
+    }
+}
+
 impl From<FavouritesModeName> for FavouritesMode {
     fn from(f: FavouritesModeName) -> Self {
         match f {
@@ -208,6 +234,10 @@ pub struct Expect {
     /// Share of the distance on curvy roads (see `Route::curvy_share`),
     /// at least.
     pub min_curvy_share: Option<f64>,
+    /// Share of the distance on roads the case's rides have not been on
+    /// (see `Route::unridden_share`), at least / at most.
+    pub min_unridden_share: Option<f64>,
+    pub max_unridden_share: Option<f64>,
     /// Kilometres on gravel and other unpaved roads, at least.
     pub min_unpaved_km: Option<f64>,
     /// Kilometres on roads posted 100 km/h or more, at most (every loop
@@ -256,6 +286,8 @@ pub struct Outcome {
     pub detour_ratio: f64,
     pub favourite_share: f64,
     pub curvy_share: f64,
+    /// Share on roads the case's rides have not been on (1 with none).
+    pub unridden_share: f64,
     /// Round trips: loops returned, and the most any of them rides twice
     /// (share of its length, outside the home zone).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -269,6 +301,26 @@ pub struct Outcome {
     /// Broken expectations; empty when the case passes.
     pub failures: Vec<String>,
 }
+
+/// Points along `line` no more than `step_m` apart, for the matcher.
+fn densify(line: &[LatLon], step_m: f64) -> Vec<LatLon> {
+    let mut out = Vec::new();
+    for w in line.windows(2) {
+        let n = (haversine_m(w[0], w[1]) / step_m).ceil().max(1.0) as usize;
+        for i in 0..n {
+            let t = i as f64 / n as f64;
+            out.push(LatLon {
+                lat: w[0].lat + (w[1].lat - w[0].lat) * t,
+                lon: w[0].lon + (w[1].lon - w[0].lon) * t,
+            });
+        }
+    }
+    out.extend(line.last());
+    out
+}
+
+/// Most points in one of a case's rides.
+const MAX_RIDE_POINTS: usize = 1_000;
 
 fn ll(p: [f64; 2]) -> Result<LatLon, String> {
     LatLon::new(p[0], p[1]).map_err(|e| e.to_string())
@@ -300,10 +352,19 @@ impl Case {
         if case.favourites.len() > MAX_ITEMS
             || e.pass.len() > MAX_ITEMS
             || e.avoid.len() > MAX_ITEMS
+            || case.rides.len() > MAX_ITEMS
         {
             return Err(format!(
-                "at most {MAX_ITEMS} favourites, pass and avoid points"
+                "at most {MAX_ITEMS} favourites, rides, pass and avoid points"
             ));
+        }
+        for ride in &case.rides {
+            if !(2..=MAX_RIDE_POINTS).contains(&ride.len()) {
+                return Err(format!("a ride has 2–{MAX_RIDE_POINTS} points"));
+            }
+            for p in ride {
+                ll(*p)?;
+            }
         }
         let names = [&e.road_ref, &e.road_name, &e.start_place, &e.end_place];
         if case.section {
@@ -383,6 +444,8 @@ impl Case {
         share(e.min_favourite_share, "min_favourite_share")?;
         share(e.max_favourite_share, "max_favourite_share")?;
         share(e.min_curvy_share, "min_curvy_share")?;
+        share(e.min_unridden_share, "min_unridden_share")?;
+        share(e.max_unridden_share, "max_unridden_share")?;
         for (name, v) in [
             ("min_unpaved_km", e.min_unpaved_km),
             ("max_fast_km", e.max_fast_km),
@@ -423,6 +486,7 @@ impl Case {
         opts.gravel = self.gravel.into();
         opts.curvy = self.curvy;
         opts.favourites = self.favourites_mode.into();
+        opts.unridden = self.unridden.into();
         opts.avoid.motorways = !self.motorways;
         opts.avoid.ferries = !self.ferries;
         opts.avoid.tolls = !self.tolls;
@@ -468,6 +532,28 @@ impl Case {
         }
     }
 
+    /// The case's favourites and rides on `engine`'s region, as the
+    /// router sees them.
+    fn overlay(&self, engine: &Engine) -> Result<Favourites, String> {
+        let rides = self
+            .rides
+            .iter()
+            .enumerate()
+            .map(|(i, ride)| {
+                let line = ride.iter().map(|p| ll(*p)).collect::<Result<Vec<_>, _>>()?;
+                let m = engine
+                    .match_track(&densify(&line, 25.0))
+                    .map_err(|e| format!("ride {}: {e}", i + 1))?;
+                Ok(m.pieces.into_iter().flat_map(|p| p.ways).collect())
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(Favourites::build_with_rides(
+            engine,
+            &self.favourites(engine)?,
+            &rides,
+        ))
+    }
+
     /// The case's favourites on `engine`'s region, marked like in the app.
     fn favourites(&self, engine: &Engine) -> Result<Vec<Section>, String> {
         self.favourites
@@ -509,6 +595,7 @@ impl Case {
             detour_ratio: 0.0,
             favourite_share: 0.0,
             curvy_share: 0.0,
+            unridden_share: 1.0,
             loops: None,
             reuse_share: None,
             choices: None,
@@ -530,7 +617,7 @@ impl Case {
             let to = self.to.ok_or("no end")?;
             let (from, to) = (ll(self.from)?, ll(to)?);
             let opts = self.options();
-            let fav = Favourites::build(engine, &self.favourites(engine)?);
+            let fav = self.overlay(engine)?;
             let fastest = engine.route(from, to, &opts).map_err(|e| e.to_string())?;
             let route = engine
                 .route_with(from, to, &opts, &fav)
@@ -554,6 +641,7 @@ impl Case {
         };
         out.favourite_share = route.favourite_share;
         out.curvy_share = route.curvy_share;
+        out.unridden_share = route.unridden_share;
 
         let e = &self.expect;
         let cap = e.max_detour_ratio.unwrap_or(match self.options().budget {
@@ -588,7 +676,7 @@ impl Case {
     fn check_choices(&self, engine: &Engine, min: usize, out: &mut Outcome) {
         let found = (|| -> Result<usize, String> {
             let (from, to) = (ll(self.from)?, ll(self.to.ok_or("no end")?)?);
-            let fav = Favourites::build(engine, &self.favourites(engine)?);
+            let fav = self.overlay(engine)?;
             let routes = engine
                 .route_choices(from, &[], to, &self.options(), &fav)
                 .map_err(|e| e.to_string())?;
@@ -615,7 +703,7 @@ impl Case {
     /// round trips (without a length target).
     fn run_through(&self, engine: &Engine, out: &mut Outcome) {
         let loops = (|| -> Result<Vec<Route>, String> {
-            let fav = Favourites::build(engine, &self.favourites(engine)?);
+            let fav = self.overlay(engine)?;
             let stops = self
                 .through
                 .iter()
@@ -652,7 +740,7 @@ impl Case {
     fn run_loop(&self, engine: &Engine, t: LoopTarget, out: &mut Outcome) {
         let loops = (|| -> Result<(RoundTripTarget, Vec<Route>), String> {
             let target = t.target()?;
-            let fav = Favourites::build(engine, &self.favourites(engine)?);
+            let fav = self.overlay(engine)?;
             let loops = engine
                 .round_trip_with(ll(self.from)?, target, &self.options(), &fav, &t.shape()?)
                 .map_err(|e| e.to_string())?;
@@ -749,6 +837,7 @@ impl Case {
         out.detour_ratio = 1.0;
         out.favourite_share = best.favourite_share;
         out.curvy_share = best.curvy_share;
+        out.unridden_share = best.unridden_share;
         self.check_route(best, out);
     }
 
@@ -809,6 +898,24 @@ impl Case {
                 "{:.0} % curvy, expected at least {:.0} %",
                 route.curvy_share * 100.0,
                 min * 100.0
+            ));
+        }
+        if let Some(min) = e.min_unridden_share
+            && route.unridden_share < min
+        {
+            out.failures.push(format!(
+                "{:.0} % unridden, expected at least {:.0} %",
+                route.unridden_share * 100.0,
+                min * 100.0
+            ));
+        }
+        if let Some(max) = e.max_unridden_share
+            && route.unridden_share > max
+        {
+            out.failures.push(format!(
+                "{:.0} % unridden, expected at most {:.0} %",
+                route.unridden_share * 100.0,
+                max * 100.0
             ));
         }
         if let Some(min) = e.min_unpaved_km
