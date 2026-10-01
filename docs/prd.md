@@ -110,47 +110,47 @@ Persona: **Solo rider (Stefan)** — plans rides at home, rides in southern Swed
 
 A section is an ordered sequence of OSM way segments (with direction-agnostic default), plus rating, created date and source (map/tag/track).
 
-- [ ] Sections snap to the road network; stored geometry survives app restarts.
-- [ ] Model includes a `rider_id` field (always the local user in v1) so community aggregation can be added later.
-- [ ] Sections that no longer match the map (OSM changes) are flagged, not silently dropped.
+- [x] Sections snap to the road network; stored geometry survives app restarts. Stored by the core in SQLite (ADR-0006).
+- [x] Model includes a `rider_id` field (always the local user in v1) so community aggregation can be added later.
+- [x] Sections that no longer match the map (OSM changes) are flagged, not silently dropped. They keep the status `needs_rematch` and show under "needs attention" on the Sections page.
 
 **R2. Mark section on map**
 
-- [ ] Given the map is open, when I tap a start and end point on roads, then the app proposes the connecting road stretch and I can save it.
-- [ ] I can adjust endpoints before saving.
+- [x] Given the map is open, when I tap a start and end point on roads, then the app proposes the connecting road stretch and I can save it.
+- [x] I can adjust endpoints before saving. A tap moves the nearer end.
 
 **R3. Quick-tag while riding**
 
-- [ ] One large on-screen button (usable with gloves) creates a tag at the current position/heading.
-- [ ] Works offline; tags are stored locally.
-- [ ] Post-ride, each tag becomes a suggested section (e.g. ±1–2 km along the road) that I confirm, trim or discard.
-- [ ] Hardware trigger (media/volume button or BT remote) is P1.
+- [x] One large on-screen button (usable with gloves) creates a tag at the current position/heading.
+- [x] Works offline; tags are stored locally.
+- [x] Post-ride, each tag becomes a suggested section (e.g. ±1–2 km along the road) that I confirm, trim or discard. Tag review, checked on the phone 2026-09-30.
+- ~~Hardware trigger (media/volume button or BT remote) is P1.~~ Dropped (Stefan): the on-screen button is enough.
 
 **R4. Ride recording + mark from track**
 
-- [ ] Background GPS recording with foreground service; survives screen off.
-- [ ] After the ride, I can select a stretch of the track and save it as a section (map-matched).
-- [ ] Battery use ≤ ~8 %/hour while recording (measure on Stefan's phone).
+- [x] Background GPS recording with foreground service; survives screen off.
+- [x] After the ride, I can select a stretch of the track and save it as a section (map-matched).
+- [ ] Battery use ≤ ~8 %/hour while recording (measure on Stefan's phone). The ride's battery use is shown; waits for a real ride.
 
 **R5. Curvature scoring**
 
-- [ ] Every routable road segment gets a curvature score computed from OSM geometry.
-- [ ] Scoring lives in the Rust core and is covered by golden-route regression tests.
+- [x] Every routable road segment gets a curvature score computed from OSM geometry.
+- [x] Scoring lives in the Rust core and is covered by golden-route regression tests. Golden routes run in CI on every build.
 
 **R6. Route generation — one-way**
 
-- [ ] Given A, B and a detour budget, the app returns a route maximising favourite + curvature score within the budget.
-- [ ] Avoid options: motorways, unpaved, ferries (toggleable).
-- [ ] Computed on-device by the Rust core; returns in < 10 s for ≤ 300 km on Stefan's phone, fully offline once the region file is installed.
+- [x] Given A, B and a detour budget, the app returns a route maximising favourite + curvature score within the budget.
+- [x] Avoid options: motorways, unpaved, ferries (toggleable). Also toll roads; gravel is its own setting (avoid, allow or prefer).
+- [x] Computed on-device by the Rust core; returns in < 10 s for ≤ 300 km on Stefan's phone, fully offline once the region file is installed. Measured 2026-09-28: Malmö to Stockholm 1.8 s, to Kiruna 2.8 s (ADR-0001).
 
 **R7. Route generation — round trip**
 
-- [ ] Given a start and a target distance or duration (±15 %), returns a loop that does not reuse the same road in both directions for > 10 % of its length.
-- [ ] Offers at least 2 alternative loops.
+- [x] Given a start and a target distance or duration (±15 %), returns a loop that does not reuse the same road in both directions for > 10 % of its length. The golden runner holds every loop to these limits (ADR-0007).
+- [x] Offers at least 2 alternative loops. Up to 3; the golden runner requires 2 unless a case says otherwise.
 
 **R8. Route summary**
 
-- [ ] Shows distance, estimated time, % favourite sections, % high-curvature, and delta vs fastest route.
+- [x] Shows distance, estimated time, % favourite sections, % high-curvature, and delta vs fastest route.
 
 **R9. Export / handoff**
 
@@ -159,20 +159,20 @@ A section is an ordered sequence of OSM way segments (with direction-agnostic de
 
 **R10. Local storage & backup**
 
-- [ ] All data stored on-device; manual export/import of sections (e.g. GeoJSON) so nothing is lost when changing phones.
+- [x] All data stored on-device; manual export/import of sections (e.g. GeoJSON) so nothing is lost when changing phones. Import and export in the Sections page's ⋮ menu.
 
 **R11. Map view (MapLibre)**
 
-- [ ] Shows OpenFreeMap vector basemap with correct attribution and current GPS position.
-- [ ] Tap on map returns coordinates to the Rust core for snapping; snapped point is shown within 500 ms.
-- [ ] Favourite sections and the suggested route are drawn as separate, distinguishable line layers; tapping a section opens it.
-- [ ] The same map view is used for picking, reviewing favourites and showing routes.
+- [x] Shows OpenFreeMap vector basemap with correct attribution and current GPS position.
+- [x] Tap on map returns coordinates to the Rust core for snapping; snapped point is shown within 500 ms.
+- [x] Favourite sections and the suggested route are drawn as separate, distinguishable line layers; tapping a section opens it.
+- [x] The same map view is used for picking, reviewing favourites and showing routes.
 
 **R12. Routing region data**
 
-- [ ] A Rust CLI builds the region file (graph + curvature) from an OSM extract; start with Skåne, then Sweden.
-- [ ] App can install/replace the region file (bundled or downloaded) and reports its OSM data date.
-- [ ] Sweden region file size and peak routing memory are measured and fit comfortably on Stefan's phone (targets set after first build).
+- [x] A Rust CLI builds the region file (graph + curvature) from an OSM extract; start with Skåne, then Sweden.
+- [x] App can install/replace the region file (bundled or downloaded) and reports its OSM data date. Signed downloads per country on the Map region page, with updates (ADR-0008, ADR-0009).
+- [x] Sweden region file size and peak routing memory are measured and fit comfortably on Stefan's phone (targets set after first build). Measured 2026-09-28 (ADR-0001).
 
 ### Nice-to-Have (P1)
 
