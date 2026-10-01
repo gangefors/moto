@@ -384,6 +384,9 @@ fun MapScreen() {
             runCatching { DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } } }
         }
             .onSuccess { (f, g) ->
+                // The set replaced is freed now, not when the garbage
+                // collector gets to it.
+                favourites?.let { NativeRelease.later(it) }
                 favourites = f
                 sectionGravel = g
             }
