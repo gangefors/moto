@@ -22,6 +22,12 @@ class RouteLookTest {
         // route hides the section it runs along.
         assertTrue(faded.lineOpacity > 0f && faded.arrowOpacity > 0f)
         assertTrue(faded.lineWidth < 5f)
+        // Less faded on the dark map, where half strength sank into it.
+        val dark = sectionLook(routeShown = true, darkMap = true)
+        assertEquals(0.5f, faded.lineOpacity, 0f)
+        assertEquals(0.8f, dark.lineOpacity, 0f)
+        assertEquals(dark.lineOpacity, dark.arrowOpacity, 0f)
+        assertTrue(dark.lineOpacity < normal.lineOpacity)
     }
 
     @Test
@@ -37,6 +43,9 @@ class RouteLookTest {
     @Test
     fun theShownSectionKeepsItsRatingColour() {
         for (r in RATINGS) assertEquals(ratingColor(r), shownSectionLook(r, fits = true).color)
+        for (r in RATINGS) {
+            assertEquals(ratingColor(r, darkMap = true), shownSectionLook(r, fits = true, darkMap = true).color)
+        }
         // One that no longer fits the map is grey, as in the list.
         assertEquals(UNMATCHED_SECTION_COLOR, shownSectionLook(Rating.EPIC, fits = false).color)
     }
@@ -64,6 +73,9 @@ class RouteLookTest {
         // and a stretch of one point is left out.
         val bare = favouriteGlowColors(listOf(a, listOf(LatLon(55.3, 13.0))), emptyList())
         assertEquals(listOf(a to ratingColor(Rating.EPIC)), bare)
+        // The dark map's lighter tints.
+        val dark = favouriteGlowColors(listOf(a), listOf(Rating.GREAT), darkMap = true)
+        assertEquals(listOf(a to ratingColor(Rating.GREAT, darkMap = true)), dark)
     }
 
     @Test

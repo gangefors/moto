@@ -112,7 +112,7 @@ private val SOLID = arrayOf(1f, 0f)
  * choices, the dull option, is grey instead of blue.
  * The map only draws; the route comes from the core.
  */
-class RouteOverlay(private val style: Style, private val density: Float, darkMap: Boolean = false) {
+class RouteOverlay(private val style: Style, private val density: Float, private val darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
 
     init {
@@ -272,7 +272,7 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
                 addBooleanProperty(DULL, dull)
                 addBooleanProperty(ARROWS, arrows)
             }
-            favouriteGlowColors(favourites, favouriteRatings).forEach { (points, color) ->
+            favouriteGlowColors(favourites, favouriteRatings, darkMap).forEach { (points, color) ->
                 features += feature(line(points), FAVOURITE).apply { addStringProperty(GLOW_COLOR, color) }
             }
             gravel.filter { it.size >= 2 }.forEach { features += feature(line(it), GRAVEL) }

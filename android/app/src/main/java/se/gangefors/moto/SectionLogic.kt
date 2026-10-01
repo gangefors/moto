@@ -128,11 +128,21 @@ fun autoSectionName(fromTag: Boolean, savedAtSec: Long, distanceM: Double, zone:
 fun sectionKm(distanceM: Double): Double = (distanceM / 100.0).roundToInt() / 10.0
 
 /** Line colour of a saved section on the map, by rating: a warm scale
- * with even steps (yellow, red-orange) up to purple. */
-fun ratingColor(rating: Rating): String = when (rating) {
-    Rating.GOOD -> "#fbc02d"
-    Rating.GREAT -> "#e64a19"
-    Rating.EPIC -> "#a142f4"
+ * with even steps (yellow, red-orange) up to purple. On the dark map
+ * ([darkMap]) lighter tints of the same, so they don't sink into it
+ * (2026-10-01). */
+fun ratingColor(rating: Rating, darkMap: Boolean = false): String = if (darkMap) {
+    when (rating) {
+        Rating.GOOD -> "#fdd663"
+        Rating.GREAT -> "#ff8a65"
+        Rating.EPIC -> "#c58af9"
+    }
+} else {
+    when (rating) {
+        Rating.GOOD -> "#fbc02d"
+        Rating.GREAT -> "#e64a19"
+        Rating.EPIC -> "#a142f4"
+    }
 }
 
 /** Line colour of a section that no longer fits the map's roads. */
