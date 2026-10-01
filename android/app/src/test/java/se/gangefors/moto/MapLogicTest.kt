@@ -284,7 +284,7 @@ class MapLogicTest {
     }
 
     @Test
-    fun theUnriddenShareShowsFromOnePercentAndAloneAtAll() {
+    fun theUnriddenShareShowsFromOnePercent() {
         val base = RouteSummary(64.2, 58, favouritePercent = 2, curvyPercent = 31, gravelKm = 4.2)
         // Under 1 % (all ridden), and on a summary without it: not shown.
         assertFalse(routeStats(base).any { it.kind == RouteStatKind.UNRIDDEN })
@@ -294,10 +294,8 @@ class MapLogicTest {
             listOf(RouteStatKind.FAVOURITES, RouteStatKind.CURVY, RouteStatKind.UNRIDDEN, RouteStatKind.GRAVEL),
             routeStats(base.copy(unriddenPercent = 1)).map { it.kind },
         )
-        assertTrue(showsUnriddenValue(1))
-        assertTrue(showsUnriddenValue(99))
-        // All of it (also before the first ride): the icon alone.
-        assertFalse(showsUnriddenValue(100))
+        // All of it (also before the first ride): shown, with its value.
+        assertTrue(routeStats(base.copy(unriddenPercent = 100)).any { it.kind == RouteStatKind.UNRIDDEN })
         assertEquals(64, summarize(1_000.0, 60.0, unriddenShare = 0.6449).unriddenPercent)
         assertEquals(0, summarize(1_000.0, 60.0, unriddenShare = 0.004).unriddenPercent)
         assertEquals(100, summarize(1_000.0, 60.0, unriddenShare = 1.0).unriddenPercent)
