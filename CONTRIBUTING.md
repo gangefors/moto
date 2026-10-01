@@ -2,11 +2,13 @@
 
 Thanks for your interest in moto.
 
-## Contributor License Agreement
+## No outside code
 
-All outside contributions require signing the [Contributor License Agreement](CLA.md) **before** they can be merged. You keep the copyright to your contribution; the CLA grants the owner a copyright license, including the right to relicense, and a patent license. This keeps the project able to publish official apps (including on the App Store) and offer commercial licenses. See [ADR-0004](docs/adr/0004-license-agpl-cla.md) for the reasoning.
+moto is a one-person project and doesn't accept code from others: pull requests from outside are closed unmerged. the owner writes all of it and holds its whole copyright, which keeps the project free to publish the official apps (including on the App Store) and to offer commercial licenses. See [ADR-0004](docs/adr/0004-license-agpl-cla.md).
 
-When you open a pull request, the CLA Assistant bot checks whether you have signed. If not, it posts a comment explaining how: reply on the pull request with the sentence it asks for. You only need to sign once.
+Bug reports and ideas are welcome as [issues](https://github.com/gangefors/moto/issues). Report security problems as described in [`SECURITY.md`](SECURITY.md), not as issues. Under the AGPL you are free to fork the code; a fork must use another name (see the README).
+
+The rest of this page is how the code is written, for anyone reading it.
 
 ## License headers
 
@@ -21,7 +23,7 @@ Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (directly or via `license.wo
 
 ## Third-party code
 
-- Don't copy in code from other projects under GPL or AGPL licenses; it can't be covered by the CLA and would limit relicensing.
+- Don't copy in code from other projects under GPL or AGPL licenses; it would end the sole copyright and limit relicensing.
 - New dependencies must have AGPL-compatible licenses (e.g. MIT, Apache-2.0, BSD, MPL-2.0).
 
 ## Tests, performance and security

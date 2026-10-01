@@ -33,7 +33,7 @@ Decided 2026-09-22. Full records are in [`docs/adr/`](adr/):
 - AD3 → [ADR-0001: Routing engine — custom Rust, on-device](adr/0001-routing-engine-custom-rust-on-device.md)
 - AD1 → [ADR-0002: Map widget — MapLibre Native Android](adr/0002-map-widget-maplibre-native.md)
 - AD2 → [ADR-0003: Map tiles — OpenFreeMap](adr/0003-map-tiles-openfreemap.md)
-- AD4 → [ADR-0004: License — AGPL-3.0-only + CLA + trademark](adr/0004-license-agpl-cla.md)
+- AD4 → [ADR-0004: License — AGPL-3.0-only + sole copyright + trademark](adr/0004-license-agpl-cla.md)
 
 Later decisions:
 
@@ -41,10 +41,10 @@ Later decisions:
 - [ADR-0006: Sections and tracks — stored by the Rust core in SQLite](adr/0006-section-and-track-storage.md) (2026-09-23)
 - [ADR-0007: Round trips — waypoint loops with a reuse penalty, scored by worth](adr/0007-round-trip-generation.md) (2026-09-24)
 
-**AD4. License: AGPL-3.0-only + CLA + trademark**
+**AD4. License: AGPL-3.0-only + sole copyright + trademark**
 
-- \+ Anyone shipping or hosting a modified version must share their source; the rider keeps sole relicensing rights (via CLA) for paid apps, App Store publishing and commercial licenses.
-- − The CLA adds contributor friction; some companies avoid AGPL.
+- \+ Anyone shipping or hosting a modified version must share their source; the rider keeps sole relicensing rights (no outside code) for paid apps, App Store publishing and commercial licenses.
+- − No outside contributions; some companies avoid AGPL.
 
 **AD1. Map widget: MapLibre Native Android**
 

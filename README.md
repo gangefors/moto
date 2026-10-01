@@ -22,4 +22,4 @@ The app name and logo are trademarks and are not covered by the code license. Fo
 
 Map data © OpenStreetMap contributors, available under the Open Database License (ODbL).
 
-Contributions require signing the Contributor License Agreement. See [CONTRIBUTING.md](CONTRIBUTING.md).
+moto doesn't accept code from others; bug reports and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
