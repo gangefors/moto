@@ -237,6 +237,7 @@ class MapLogicTest {
             true,
             se.gangefors.moto.core.Gravel.AVOID,
             se.gangefors.moto.core.FavouritesMode.AVOID,
+            se.gangefors.moto.core.UnriddenMode.ANY,
         )
         val o = routeOptions(base, 20)
         assertEquals(se.gangefors.moto.core.TimeBudget.Extra(0.2), o.budget)
@@ -280,6 +281,63 @@ class MapLogicTest {
         assertEquals(prefer, favouritesOf(null))
         assertEquals(prefer, favouritesOf("AVOID"))
         assertEquals(prefer, favouritesOf("../x"))
+    }
+
+    @Test
+    fun theUnriddenShareShowsFromOnePercentAndAloneAtAll() {
+        val base = RouteSummary(64.2, 58, favouritePercent = 2, curvyPercent = 31, gravelKm = 4.2)
+        // Under 1 % (all ridden), and on a summary without it: not shown.
+        assertFalse(routeStats(base).any { it.kind == RouteStatKind.UNRIDDEN })
+        assertFalse(routeStats(base.copy(unriddenPercent = 0)).any { it.kind == RouteStatKind.UNRIDDEN })
+        // From 1 %: after curvy, before gravel.
+        assertEquals(
+            listOf(RouteStatKind.FAVOURITES, RouteStatKind.CURVY, RouteStatKind.UNRIDDEN, RouteStatKind.GRAVEL),
+            routeStats(base.copy(unriddenPercent = 1)).map { it.kind },
+        )
+        assertTrue(showsUnriddenValue(1))
+        assertTrue(showsUnriddenValue(99))
+        // All of it (also before the first ride): the icon alone.
+        assertFalse(showsUnriddenValue(100))
+        assertEquals(64, summarize(1_000.0, 60.0, unriddenShare = 0.6449).unriddenPercent)
+        assertEquals(0, summarize(1_000.0, 60.0, unriddenShare = 0.004).unriddenPercent)
+        assertEquals(100, summarize(1_000.0, 60.0, unriddenShare = 1.0).unriddenPercent)
+        assertEquals(0, summarize(1_000.0, 60.0, unriddenShare = Double.NaN).unriddenPercent)
+        // Not given: not shown.
+        assertEquals(0, summarize(1_000.0, 60.0).unriddenPercent)
+    }
+
+    @Test
+    fun unriddenRoadsArePreferredOnlyWhenAsked() {
+        val any = se.gangefors.moto.core.UnriddenMode.ANY
+        val prefer = se.gangefors.moto.core.UnriddenMode.PREFER
+        assertEquals(listOf(any, prefer), UNRIDDEN_CHOICES)
+        for (u in UNRIDDEN_CHOICES) assertEquals(u, unriddenOf(unriddenKey(u)))
+        assertEquals("prefer", unriddenKey(prefer))
+        // Nothing or anything else stored: any.
+        assertEquals(any, unriddenOf(null))
+        assertEquals(any, unriddenOf("PREFER"))
+        assertEquals(any, unriddenOf("../x"))
+        val base = se.gangefors.moto.core.RouteOptions(
+            se.gangefors.moto.core.Avoid(motorways = true, ferries = false),
+            se.gangefors.moto.core.TimeBudget.Extra(0.4),
+            1.0,
+            true,
+            se.gangefors.moto.core.Gravel.AVOID,
+            se.gangefors.moto.core.FavouritesMode.PREFER,
+            any,
+        )
+        assertEquals(any, routeOptions(base, 40).unridden)
+        assertEquals(prefer, routeOptions(base, 40, unridden = prefer).unridden)
+        assertEquals(prefer, arriveByOptions(base, 0L, 3600L, se.gangefors.moto.core.Gravel.AVOID, unridden = prefer).unridden)
+        // The chip shows only while unridden roads are preferred.
+        val gravel = se.gangefors.moto.core.Gravel.AVOID
+        val favs = se.gangefors.moto.core.FavouritesMode.PREFER
+        assertEquals(emptyList<SummaryItem>(), routeSummaryItems(null, 0, gravel, favs, any))
+        assertEquals(listOf<SummaryItem>(SummaryItem.UnriddenPreferred), routeSummaryItems(null, 0, gravel, favs, prefer))
+        assertEquals(
+            listOf(SummaryItem.Length(LoopChoice.Km(100)), SummaryItem.UnriddenPreferred),
+            loopSummaryItems(LoopChoice.Km(100), LoopDirection.ANY, gravel, favs, prefer),
+        )
     }
 
     @Test
@@ -395,6 +453,7 @@ class MapLogicTest {
             true,
             se.gangefors.moto.core.Gravel.AVOID,
             se.gangefors.moto.core.FavouritesMode.AVOID,
+            se.gangefors.moto.core.UnriddenMode.ANY,
         )
         val o = arriveByOptions(base, 1_000, 1_000 + 3_600, se.gangefors.moto.core.Gravel.PREFER)
         assertEquals(se.gangefors.moto.core.TimeBudget.Total(3_240.0), o.budget)

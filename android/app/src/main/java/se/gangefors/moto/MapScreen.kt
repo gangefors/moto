@@ -148,6 +148,7 @@ import se.gangefors.moto.core.SectionUpdate
 import se.gangefors.moto.core.Tag
 import se.gangefors.moto.core.TagStatus
 import se.gangefors.moto.core.TrackPoint
+import se.gangefors.moto.core.UnriddenMode
 import se.gangefors.moto.core.defaultRouteOptions
 
 /**
@@ -386,12 +387,18 @@ fun MapScreen() {
     // change together at start, and a build can't be stopped once it runs,
     // so two ran side by side, each holding its own set.
     val favouritesBuild = remember { Mutex() }
-    LaunchedEffect(store, region, sections) {
+    // Rides finished, imported or deleted: their roads are matched (once
+    // per ride and map) and the set is built again (ADR-0010).
+    val ridesVersion by RideChanges.version.collectAsState()
+    LaunchedEffect(store, region, sections, ridesVersion) {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
         withContext(Dispatchers.IO) {
             favouritesBuild.withLock {
-                val built = runCatching { DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } } }
+                val built = runCatching {
+                    DebugTools.startup("rides matched") { s.matchRides(engine) }
+                    DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } }
+                }
                 // Superseded while it ran: nobody will use it.
                 if (!isActive) built.getOrNull()?.first?.destroy()
                 built
@@ -746,6 +753,13 @@ fun MapScreen() {
         favouritesMode = f
         RoutePrefs.setFavourites(context, f)
     }
+    // Roads the rider's rides have been on count like any, or unridden
+    // ones are preferred (ADR-0010).
+    var unriddenMode by remember { mutableStateOf(RoutePrefs.unridden(context)) }
+    fun changeUnridden(u: UnriddenMode) {
+        unriddenMode = u
+        RoutePrefs.setUnridden(context, u)
+    }
     // Motorways, ferries and toll roads: all avoided until allowed.
     var avoid by remember { mutableStateOf(RoutePrefs.avoid(context)) }
     fun changeAvoid(a: Avoid) {
@@ -809,7 +823,7 @@ fun MapScreen() {
         routeIndex = index
         // Going back to these routes shows the one picked last.
         lastFound?.takeIf { it.choices === set }?.let { lastFound = it.copy(index = index) }
-        routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM, r.tollM)
+        routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM, r.tollM, r.unriddenShare)
             .copy(fastest = index == fastest)
         shownRoute = r to opts
     }
@@ -1075,12 +1089,12 @@ fun MapScreen() {
         val routeShown = routeEnds != null || loopStart != null || shownSaved != null || shownSectionId != null
         overlays?.sections?.setLook(sectionLook(routeShown = routeShown, darkMap = darkMap))
     }
-    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, avoid, favouritesMode, favourites, overlays) {
+    LaunchedEffect(loopStart, loopChoice, loopSeed, loopDirection, gravel, avoid, favouritesMode, unriddenMode, favourites, overlays) {
         val start = loopStart ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
         val favs = favourites
-        val opts = routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid, favouritesMode)
+        val opts = routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid, favouritesMode, unriddenMode)
         val choice = loopChoice
         val shape = LoopOptions(seed = loopSeed, bearing = loopDirection.bearing)
         val request = LoopRequest(start, choice, opts, favs, shape)
@@ -1144,7 +1158,7 @@ fun MapScreen() {
             },
         )
     }
-    LaunchedEffect(routeEnds, vias, arriveBy, gravel, avoid, favouritesMode, favourites, overlays, routeThrough) {
+    LaunchedEffect(routeEnds, vias, arriveBy, gravel, avoid, favouritesMode, unriddenMode, favourites, overlays, routeThrough) {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
@@ -1168,9 +1182,9 @@ fun MapScreen() {
         val now = System.currentTimeMillis() / 1000
         val by = arriveBy
         val opts = if (by != null) {
-            arriveByOptions(defaultRouteOptions(), now, by, gravel, avoid, favouritesMode)
+            arriveByOptions(defaultRouteOptions(), now, by, gravel, avoid, favouritesMode, unriddenMode)
         } else {
-            routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid, favouritesMode)
+            routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid, favouritesMode, unriddenMode)
         }
         // A newer request cancels this one; its result is then dropped.
         val result = busy.run(R.string.busy_routes) {
@@ -1797,6 +1811,8 @@ fun MapScreen() {
                             },
                             favourites = favouritesMode,
                             onFavourites = { changeFavourites(it) },
+                            unridden = unriddenMode,
+                            onUnridden = { changeUnridden(it) },
                             avoid = avoid,
                             onAvoid = { changeAvoid(it) },
                             onClose = { closeRoute() },
@@ -1852,7 +1868,7 @@ fun MapScreen() {
                             onExpandedChange = { cardExpanded = it },
                             maxHeight = sheetMaxHeight,
                             summary = shown?.let { r ->
-                                summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM)
+                                summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM, r.unriddenShare)
                             },
                             problem = loopProblem,
                             position = loopIndex,
@@ -1878,6 +1894,8 @@ fun MapScreen() {
                             },
                             favourites = favouritesMode,
                             onFavourites = { changeFavourites(it) },
+                            unridden = unriddenMode,
+                            onUnridden = { changeUnridden(it) },
                             avoid = avoid,
                             onAvoid = { changeAvoid(it) },
                             onClose = { closeLoop() },
@@ -2197,13 +2215,14 @@ fun MapScreen() {
     }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(loopChoice, defaultDirection, gravel, favouritesMode, avoid, locateZooms, keepScreenOn),
+            settings = RideSettings(loopChoice, defaultDirection, gravel, favouritesMode, unriddenMode, avoid, locateZooms, keepScreenOn),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
                     RoutePrefs.setGravel(context, new.gravel)
                 }
                 if (new.favourites != favouritesMode) changeFavourites(new.favourites)
+                if (new.unridden != unriddenMode) changeUnridden(new.unridden)
                 if (new.avoid != avoid) changeAvoid(new.avoid)
                 loopLength.pick(new.loopLength)
                 if (new.loopDirection != defaultDirection) {

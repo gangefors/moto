@@ -186,7 +186,7 @@ fun RidesSheet(
                     runCatching {
                         when (item) {
                             is LibraryItem.Route -> store.deleteRoute(item.route.id)
-                            is LibraryItem.Ride -> store.deleteTrack(item.track.id)
+                            is LibraryItem.Ride -> store.deleteTrack(item.track.id).also { RideChanges.changed() }
                         }
                     }
                 }
@@ -238,6 +238,7 @@ fun RidesSheet(
             }
             busy = false
             reload()
+            if (result.isSuccess) RideChanges.changed()
             result.fold(
                 onSuccess = { t -> done(resources.getString(R.string.rides_imported, sectionKm(t.distanceM))) },
                 onFailure = { failed(resources.getString(R.string.rides_import_failed, it.message ?: it.toString())) },

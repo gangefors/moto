@@ -177,6 +177,8 @@
     <string name="route_extra">+%1$d min over the fastest</string>
     <string name="route_on_favourites">%1$d %% on favourites</string>
     <string name="route_curvy">%1$d %% curvy</string>
+    <string name="route_unridden">%1$d %% on unridden roads</string>
+    <string name="route_unridden_all">All on unridden roads</string>
     <string name="route_gravel">%1$.1f km gravel</string>
     <string name="route_toll">%1$.1f km toll road</string>
     <string name="route_stat_minutes">+%1$d min</string>
@@ -213,6 +215,7 @@
     <string name="say_pin">the pin</string>
     <string name="say_compass">the compass needle</string>
     <string name="say_star_off">the crossed-out star</string>
+    <string name="say_unridden">the road with a sparkle</string>
     <string name="say_settings">the settings button</string>
     <string name="say_bin">the bin</string>
     <string name="say_ride">the ride mark</string>
@@ -266,6 +269,8 @@
     <string name="help_figure_favourites_what">the share of it on your favourite sections</string>
     <string name="help_figure_curvy">Curvy</string>
     <string name="help_figure_curvy_what">the share of it on curvy roads</string>
+    <string name="help_figure_unridden">Unridden roads</string>
+    <string name="help_figure_unridden_what">the share of it on roads none of your rides have been on, from 1 %; the icon alone when all of it is</string>
     <string name="help_figure_gravel">Gravel</string>
     <string name="help_figure_gravel_what">km on gravel roads, when it has any</string>
     <string name="help_figure_toll">Toll roads</string>
@@ -281,6 +286,8 @@
     <string name="help_summary_gravel_what">allowed; with + preferred; nothing when avoided</string>
     <string name="help_summary_star_off">Favourites avoided</string>
     <string name="help_summary_star_off_what">keeps off your favourite sections; nothing when they are preferred</string>
+    <string name="help_summary_unridden">Unridden roads</string>
+    <string name="help_summary_unridden_what">seeks out roads none of your rides have been on; nothing when every road counts the same</string>
     <string name="help_summary_roads">Roads allowed</string>
     <string name="help_summary_roads_what">motorways, ferries or toll roads it may use, each by its icon; nothing when all are avoided</string>
     <string name="help_key_sections">Favourite sections</string>
@@ -306,6 +313,11 @@
     <string name="favourites_avoid">Avoid</string>
     <string name="favourites_summary_avoid">Avoid favourites</string>
     <string name="favourites_hint">**Prefer** seek out your favourites within a route’s extra time\n**Avoid** keep off them where possible, to find new roads; a favourite that is the only way is still used</string>
+    <string name="unridden_label">Unridden roads</string>
+    <string name="unridden_any">Any</string>
+    <string name="unridden_prefer">Prefer</string>
+    <string name="unridden_summary_prefer">Prefer unridden roads</string>
+    <string name="unridden_hint">**Any** curvy roads count the same, ridden or not\n**Prefer** seek out curvy roads none of your rides have been on; roads you have ridden still get you there, and your favourites count as before</string>
     <string name="route_share_title">Open the route in</string>
     <string name="route_share_failed">Could not share the route: %1$s</string>
     <string name="route_none">No route between these points</string>

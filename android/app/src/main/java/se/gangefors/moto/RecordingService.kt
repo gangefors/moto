@@ -189,6 +189,7 @@ class RecordingService : Service() {
                 return
             }
             val track = s.store.finishTrack(s.trackId)
+            RideChanges.changed()
             s.buffer.delete()
             val duration = SystemClock.elapsedRealtime() - s.startedElapsed
             Recording.set(

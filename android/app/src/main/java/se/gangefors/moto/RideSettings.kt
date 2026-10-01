@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.UnriddenMode
 
 /** The settings on the Ride settings page, as they are now. */
 data class RideSettings(
@@ -40,6 +41,7 @@ data class RideSettings(
     val loopDirection: LoopDirection,
     val gravel: Gravel,
     val favourites: FavouritesMode,
+    val unridden: UnriddenMode,
     val avoid: Avoid,
     val zooms: LocateZooms,
     val keepScreenOn: Boolean,
@@ -49,7 +51,7 @@ data class RideSettings(
  * Ride settings, one tap from the map (the gear at the top right), in
  * groups as Android's own settings are: routes and loops (in the loop
  * sheet's order: the length and the direction a new loop starts at,
- * gravel roads, favourites, roads to allow), the map (the location
+ * gravel roads, favourites, unridden roads, roads to allow), the map (the location
  * button's two zooms, as a range) and recording (keeping the screen on). Each change
  * applies at once ([onChange]); Back or the arrow closes the page.
  */
@@ -81,6 +83,10 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                 Heading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
             }
             FavouritesChips(settings.favourites) { onChange(settings.copy(favourites = it)) }
+            Box(Modifier.padding(top = 16.dp)) {
+                Heading(stringResource(R.string.unridden_label), stringResource(R.string.unridden_hint))
+            }
+            UnriddenChips(settings.unridden) { onChange(settings.copy(unridden = it)) }
             Box(Modifier.padding(top = 16.dp)) {
                 Heading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
             }

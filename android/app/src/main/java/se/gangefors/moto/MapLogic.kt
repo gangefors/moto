@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.FavouritesMode
+import se.gangefors.moto.core.UnriddenMode
 import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
@@ -66,8 +67,9 @@ fun classify(e: Throwable): CoreProblem = when (e) {
 /**
  * Route summary for the route card: distance in km (one decimal), whole
  * minutes, whole minutes over the fastest route (never negative), the
- * whole percent of the distance on favourite sections and on curvy roads,
- * and the km on gravel and on toll roads (one decimal).
+ * whole percent of the distance on favourite sections, on curvy roads and
+ * on roads no ride has been on, and the km on gravel and on toll roads
+ * (one decimal).
  */
 data class RouteSummary(
     val km: Double,
@@ -75,6 +77,8 @@ data class RouteSummary(
     val favouritePercent: Int = 0,
     val extraMinutes: Int = 0,
     val curvyPercent: Int = 0,
+    /** On roads none of the rider's rides has been on (ADR-0010). */
+    val unriddenPercent: Int = 0,
     val gravelKm: Double = 0.0,
     val tollKm: Double = 0.0,
     /** The fastest of several routes to choose from (the dull option). */
@@ -82,7 +86,7 @@ data class RouteSummary(
 )
 
 /** A figure on the route or loop sheet's line of figures. */
-enum class RouteStatKind { FASTEST, EXTRA, FAVOURITES, CURVY, GRAVEL, TOLL }
+enum class RouteStatKind { FASTEST, EXTRA, FAVOURITES, CURVY, UNRIDDEN, GRAVEL, TOLL }
 
 /** One figure: its [kind], and whether it is nothing ([zero], dimmed). */
 data class RouteStat(val kind: RouteStatKind, val zero: Boolean = false)
@@ -90,8 +94,10 @@ data class RouteStat(val kind: RouteStatKind, val zero: Boolean = false)
 /**
  * The figures [s] shows on the sheet, in order: "Fastest" or the minutes
  * over the fastest (when there are any), the share on favourites and on
- * curvy roads (always, so the line is always there; dimmed at 0 %), then
- * gravel and toll roads only when the route has them.
+ * curvy roads (always, so the line is always there; dimmed at 0 %), the
+ * share on unridden roads from 1 % (whatever the setting; the icon alone
+ * at 100 %, see [showsUnriddenValue]), then gravel and toll roads only
+ * when the route has them.
  */
 fun routeStats(s: RouteSummary): List<RouteStat> = buildList {
     if (s.fastest) {
@@ -101,9 +107,14 @@ fun routeStats(s: RouteSummary): List<RouteStat> = buildList {
     }
     add(RouteStat(RouteStatKind.FAVOURITES, zero = s.favouritePercent == 0))
     add(RouteStat(RouteStatKind.CURVY, zero = s.curvyPercent == 0))
+    if (s.unriddenPercent >= 1) add(RouteStat(RouteStatKind.UNRIDDEN))
     if (s.gravelKm > 0.0) add(RouteStat(RouteStatKind.GRAVEL))
     if (s.tollKm > 0.0) add(RouteStat(RouteStatKind.TOLL))
 }
+
+/** Whether the unridden figure shows its value: not at 100 %, where the
+ * icon alone says the whole route is new (also before the first ride). */
+fun showsUnriddenValue(unriddenPercent: Int): Boolean = unriddenPercent < 100
 
 /** What the route or loop switcher's count shows: [position] of [count]
  * once found, none of none (-1 to 0) when nothing was found, and nothing
@@ -176,6 +187,7 @@ fun summarize(
     curvyShare: Double = 0.0,
     unpavedM: Double = 0.0,
     tollM: Double = 0.0,
+    unriddenShare: Double = 0.0,
 ): RouteSummary =
     RouteSummary(
         km = Math.round(distanceM / 100.0) / 10.0,
@@ -183,6 +195,7 @@ fun summarize(
         favouritePercent = percent(favouriteShare),
         extraMinutes = Math.round(((durationS - fastestDurationS) / 60.0).coerceAtLeast(0.0)).toInt(),
         curvyPercent = percent(curvyShare),
+        unriddenPercent = percent(unriddenShare),
         gravelKm = tenthsOfKm(unpavedM, distanceM),
         tollKm = tenthsOfKm(tollM, distanceM),
     )
@@ -226,13 +239,25 @@ fun favouritesKey(f: FavouritesMode): String = f.name.lowercase()
 fun favouritesOf(stored: String?): FavouritesMode =
     FAVOURITES_CHOICES.firstOrNull { favouritesKey(it) == stored } ?: FavouritesMode.PREFER
 
+/** The unridden roads choices, in the order they are offered. */
+val UNRIDDEN_CHOICES: List<UnriddenMode> = listOf(UnriddenMode.ANY, UnriddenMode.PREFER)
+
+/** How an unridden roads choice is stored in preferences. */
+fun unriddenKey(u: UnriddenMode): String = u.name.lowercase()
+
+/** A stored unridden roads choice, or any. Preferences are read back as
+ * untrusted input: anything else counts as unset. */
+fun unriddenOf(stored: String?): UnriddenMode =
+    UNRIDDEN_CHOICES.firstOrNull { unriddenKey(it) == stored } ?: UnriddenMode.ANY
+
 /**
  * [base] (the core's defaults) with [percent] extra time allowed, and
  * gravel (unpaved) roads avoided, allowed or preferred. Avoided means
  * "where possible": the core counts them as much slower, it doesn't ban
  * them; preferred means they pull the route within the extra time. The
  * rider's favourites are preferred, or avoided (where possible) to find
- * new roads.
+ * new roads; roads the rider's rides have been on count like any, or pull
+ * less so that unridden curvy roads win.
  */
 fun routeOptions(
     base: RouteOptions,
@@ -240,12 +265,14 @@ fun routeOptions(
     gravel: Gravel = Gravel.AVOID,
     avoid: Avoid = AVOID_ALL,
     favourites: FavouritesMode = FavouritesMode.PREFER,
+    unridden: UnriddenMode = UnriddenMode.ANY,
 ): RouteOptions =
     base.copy(
         budget = TimeBudget.Extra(percent / 100.0),
         gravel = gravel,
         avoid = avoid,
         favourites = favourites,
+        unridden = unridden,
     )
 
 /** The kinds of road a rider can avoid or allow, in the order offered. */
@@ -371,6 +398,7 @@ fun arriveByOptions(
     gravel: Gravel,
     avoid: Avoid = AVOID_ALL,
     favourites: FavouritesMode = FavouritesMode.PREFER,
+    unridden: UnriddenMode = UnriddenMode.ANY,
 ): RouteOptions =
     base.copy(
         budget = TimeBudget.Total((arriveAtSec - nowSec).coerceAtLeast(0L) * (1.0 - ARRIVE_MARGIN)),
@@ -378,6 +406,7 @@ fun arriveByOptions(
         gravel = gravel,
         avoid = avoid,
         favourites = favourites,
+        unridden = unridden,
     )
 
 /** The next [hour]:[minute] after [nowSec] in [zone]: today, or tomorrow
@@ -445,7 +474,7 @@ fun segmentsFit(widestLabelPx: Int, count: Int, segmentPaddingPx: Int, available
 /**
  * One chip in a resting route or loop sheet's summary row (the rider: icons
  * over words). Settings at their usual value show nothing: gravel avoided,
- * favourites preferred, any direction.
+ * favourites preferred, any direction, unridden roads like any other.
  */
 sealed interface SummaryItem {
     /** When the route arrives, set to arrive [by] (epoch seconds). */
@@ -456,27 +485,41 @@ sealed interface SummaryItem {
     /** Gravel allowed or preferred. */
     data class GravelRoads(val gravel: Gravel) : SummaryItem
     data object FavouritesAvoided : SummaryItem
+    data object UnriddenPreferred : SummaryItem
 }
 
 /** A route sheet's summary row: arrival, waypoints, then its settings. */
-fun routeSummaryItems(arrival: SummaryItem.ArrivesAt?, viaCount: Int, gravel: Gravel, favourites: FavouritesMode): List<SummaryItem> =
+fun routeSummaryItems(
+    arrival: SummaryItem.ArrivesAt?,
+    viaCount: Int,
+    gravel: Gravel,
+    favourites: FavouritesMode,
+    unridden: UnriddenMode = UnriddenMode.ANY,
+): List<SummaryItem> =
     buildList {
         arrival?.let { add(it) }
         if (viaCount > 0) add(SummaryItem.Waypoints(viaCount))
-        addAll(settingItems(gravel, favourites))
+        addAll(settingItems(gravel, favourites, unridden))
     }
 
 /** A loop sheet's summary row: length, direction, then its settings. */
-fun loopSummaryItems(choice: LoopChoice, direction: LoopDirection, gravel: Gravel, favourites: FavouritesMode): List<SummaryItem> =
+fun loopSummaryItems(
+    choice: LoopChoice,
+    direction: LoopDirection,
+    gravel: Gravel,
+    favourites: FavouritesMode,
+    unridden: UnriddenMode = UnriddenMode.ANY,
+): List<SummaryItem> =
     buildList {
         add(SummaryItem.Length(choice))
         if (direction != LoopDirection.ANY) add(SummaryItem.Heading(direction))
-        addAll(settingItems(gravel, favourites))
+        addAll(settingItems(gravel, favourites, unridden))
     }
 
-private fun settingItems(gravel: Gravel, favourites: FavouritesMode): List<SummaryItem> = buildList {
+private fun settingItems(gravel: Gravel, favourites: FavouritesMode, unridden: UnriddenMode): List<SummaryItem> = buildList {
     if (gravel != Gravel.AVOID) add(SummaryItem.GravelRoads(gravel))
     if (favourites == FavouritesMode.AVOID) add(SummaryItem.FavouritesAvoided)
+    if (unridden == UnriddenMode.PREFER) add(SummaryItem.UnriddenPreferred)
 }
 
 /** Whether a memory trim of [level] (`ComponentCallbacks2`) makes the map
