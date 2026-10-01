@@ -952,46 +952,64 @@ const PAGE_MASK: u32 = (1 << PAGE_BITS) - 1;
 /// around its route. Filling one array per node of every open region
 /// before each search took longer than a short search itself: about
 /// 20 ms per search over the four linked Nordic regions (4.7 M nodes),
-/// and route choices run a dozen or more searches.
+/// and route choices run a dozen or more searches. Costs and edges are
+/// kept in separate arrays, 12 bytes a node: as pairs they took 16, 4 of
+/// them padding, and a long search reaches millions of nodes.
 struct NodeState {
     pages: Vec<Option<Page>>,
 }
 
 /// One page of [`NodeState`]: cost so far and edge arrived by per node.
-type Page = Box<[(f64, u32)]>;
+struct Page {
+    dist: Box<[f64]>,
+    parent: Box<[u32]>,
+}
 
 impl NodeState {
     fn new(nodes: usize) -> Self {
-        Self {
-            pages: vec![None; nodes.div_ceil(1 << PAGE_BITS)],
-        }
+        let mut pages = Vec::new();
+        pages.resize_with(nodes.div_ceil(1 << PAGE_BITS), || None);
+        Self { pages }
     }
 
     /// Cost so far and edge arrived by of `v`: infinite and `NONE` until
     /// set. Panics for a node out of range, like a slice.
-    #[inline]
+    #[cfg(test)]
     fn get(&self, v: u32) -> (f64, u32) {
         match &self.pages[(v >> PAGE_BITS) as usize] {
-            Some(page) => page[(v & PAGE_MASK) as usize],
+            Some(page) => {
+                let i = (v & PAGE_MASK) as usize;
+                (page.dist[i], page.parent[i])
+            }
             None => (f64::INFINITY, NONE),
         }
     }
 
     #[inline]
     fn dist(&self, v: u32) -> f64 {
-        self.get(v).0
+        match &self.pages[(v >> PAGE_BITS) as usize] {
+            Some(page) => page.dist[(v & PAGE_MASK) as usize],
+            None => f64::INFINITY,
+        }
     }
 
     #[inline]
     fn parent(&self, v: u32) -> u32 {
-        self.get(v).1
+        match &self.pages[(v >> PAGE_BITS) as usize] {
+            Some(page) => page.parent[(v & PAGE_MASK) as usize],
+            None => NONE,
+        }
     }
 
     #[inline]
     fn set(&mut self, v: u32, dist: f64, parent: u32) {
-        let page = self.pages[(v >> PAGE_BITS) as usize]
-            .get_or_insert_with(|| vec![(f64::INFINITY, NONE); 1 << PAGE_BITS].into_boxed_slice());
-        page[(v & PAGE_MASK) as usize] = (dist, parent);
+        let page = self.pages[(v >> PAGE_BITS) as usize].get_or_insert_with(|| Page {
+            dist: vec![f64::INFINITY; 1 << PAGE_BITS].into_boxed_slice(),
+            parent: vec![NONE; 1 << PAGE_BITS].into_boxed_slice(),
+        });
+        let i = (v & PAGE_MASK) as usize;
+        page.dist[i] = dist;
+        page.parent[i] = parent;
     }
 }
 
