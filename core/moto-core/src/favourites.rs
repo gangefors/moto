@@ -273,7 +273,8 @@ impl Favourites {
     /// map (ADR-0010): each road once (not each way), less the stretches
     /// on favourite sections the map draws, that is all but the sections
     /// in `hidden` (those the map leaves out, as mostly-gravel ones while
-    /// gravel is avoided). Pieces that meet are joined into one line.
+    /// gravel is avoided). Pieces that meet are joined into long lines
+    /// (`chain_lines`), so the dashes keep their rhythm.
     pub fn ridden_lines(
         &self,
         engine: &Engine,
@@ -282,7 +283,7 @@ impl Favourites {
         self.check(engine)?;
         let region = engine.net();
         let mut seen = std::collections::HashSet::new();
-        let mut lines: Vec<Vec<LatLon>> = Vec::new();
+        let mut pieces: Vec<Vec<LatLon>> = Vec::new();
         for (i, &word) in self.ridden.iter().enumerate() {
             let mut bits = word;
             while bits != 0 {
@@ -309,13 +310,16 @@ impl Favourites {
                 let mut from = 0.0f64;
                 for (a, b) in covered.into_iter().chain([(1.0, 1.0)]) {
                     if a > from + 1e-6 {
-                        join_piece(&mut lines, crate::geo::polyline_slice(&line, from, a));
+                        let piece = crate::geo::polyline_slice(&line, from, a);
+                        if piece.len() >= 2 {
+                            pieces.push(piece);
+                        }
                     }
                     from = from.max(b);
                 }
             }
         }
-        Ok(lines)
+        Ok(chain_lines(pieces))
     }
 
     /// How many edges the rider's rides have been on.
@@ -427,16 +431,79 @@ impl Favourites {
     }
 }
 
-/// Adds `piece` to `lines`, continuing the last line when the piece
-/// starts where it ends.
-fn join_piece(lines: &mut Vec<Vec<LatLon>>, piece: Vec<LatLon>) {
-    if piece.len() < 2 {
-        return;
+/// Joins `pieces` (each at least two points, in any order and direction)
+/// end to end into as few lines as it can, so a dashed line keeps its
+/// rhythm along a road instead of starting again at every junction.
+/// Pieces meet where an end point of one is exactly an end point of the
+/// other. Lines start at loose ends (a point only one piece reaches), so
+/// a road with no branches comes out as one line; what is left (rings)
+/// is walked from any piece, both ways. The same pieces always give the
+/// same lines.
+fn chain_lines(pieces: Vec<Vec<LatLon>>) -> Vec<Vec<LatLon>> {
+    type Key = (u64, u64);
+    let key = |p: &LatLon| (p.lat.to_bits(), p.lon.to_bits());
+    let ends = |l: &[LatLon]| -> Option<(Key, Key)> { Some((key(l.first()?), key(l.last()?))) };
+    let mut at: HashMap<Key, Vec<usize>> = HashMap::new();
+    for (i, piece) in pieces.iter().enumerate() {
+        if let Some((a, b)) = ends(piece) {
+            at.entry(a).or_default().push(i);
+            if b != a {
+                at.entry(b).or_default().push(i);
+            }
+        }
     }
-    match lines.last_mut() {
-        Some(last) if last.last() == piece.first() => last.extend(piece.into_iter().skip(1)),
-        _ => lines.push(piece),
+    let mut used = vec![false; pieces.len()];
+    // Takes an unused piece that meets `line`'s last point and adds it on.
+    let extend = |line: &mut Vec<LatLon>, used: &mut [bool]| {
+        while let Some(end) = line.last().map(key) {
+            let next = at
+                .get(&end)
+                .into_iter()
+                .flatten()
+                .copied()
+                .find(|&j| !used.get(j).copied().unwrap_or(true));
+            let Some(j) = next else { break };
+            used[j] = true;
+            let piece = &pieces[j];
+            if piece.first().map(key) == Some(end) {
+                line.extend(piece.iter().skip(1).copied());
+            } else {
+                line.extend(piece.iter().rev().skip(1).copied());
+            }
+        }
+    };
+    let mut lines = Vec::new();
+    // Loose ends first: each line runs from one as far as it goes.
+    for (i, piece) in pieces.iter().enumerate() {
+        let Some((a, b)) = ends(piece) else { continue };
+        if used[i] {
+            continue;
+        }
+        let loose = |k: &Key| at.get(k).is_some_and(|v| v.len() == 1);
+        let mut line = if loose(&a) {
+            piece.clone()
+        } else if loose(&b) {
+            piece.iter().rev().copied().collect()
+        } else {
+            continue;
+        };
+        used[i] = true;
+        extend(&mut line, &mut used);
+        lines.push(line);
     }
+    // The rest: from any piece, on from its end, then on from its start.
+    for (i, piece) in pieces.iter().enumerate() {
+        if used[i] {
+            continue;
+        }
+        used[i] = true;
+        let mut line = piece.clone();
+        extend(&mut line, &mut used);
+        line.reverse();
+        extend(&mut line, &mut used);
+        lines.push(line);
+    }
+    lines
 }
 
 /// The largest share of edge `id` (way nodes `lo` to `hi` of its way ref
