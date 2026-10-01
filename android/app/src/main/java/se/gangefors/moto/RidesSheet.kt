@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import se.gangefors.moto.debug.DebugTools
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -222,27 +223,38 @@ fun RidesSheet(
             )
         }
     }
-    // Rides: import a GPX file from another app or an earlier export.
-    val openRide = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    // Rides: import GPX files from another app or an earlier export, one
+    // ride per file; several can be picked at once.
+    val openRides = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        if (uris.size > MAX_GPX_FILES) {
+            failed(resources.getString(R.string.rides_import_too_many, MAX_GPX_FILES))
+            return@rememberLauncherForActivityResult
+        }
         busy = true
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val input = context.contentResolver.openInputStream(uri)
-                        ?: error(resources.getString(R.string.sections_cannot_read))
-                    val bytes = input.use { readCapped(it, MAX_GPX_FILE_BYTES) }
-                        ?: error(resources.getString(R.string.sections_file_too_large, MAX_GPX_FILE_BYTES shr 20))
-                    store.importTrackGpx(bytes)
+            val results = withContext(Dispatchers.IO) {
+                uris.map { uri ->
+                    runCatching {
+                        val input = context.contentResolver.openInputStream(uri)
+                            ?: error(resources.getString(R.string.sections_cannot_read))
+                        val bytes = input.use { readCapped(it, MAX_GPX_FILE_BYTES) }
+                            ?: error(resources.getString(R.string.sections_file_too_large, MAX_GPX_FILE_BYTES shr 20))
+                        RideImport.Imported(store.importTrackGpx(bytes).distanceM)
+                    }.getOrElse {
+                        RideImport.Failed(
+                            shownFileName(displayName(context.contentResolver, uri), resources.getString(R.string.rides_import_unnamed)),
+                            it.message ?: it.toString(),
+                        )
+                    }
                 }
             }
             busy = false
             reload()
-            if (result.isSuccess) RideChanges.changed()
-            result.fold(
-                onSuccess = { t -> done(resources.getString(R.string.rides_imported, sectionKm(t.distanceM))) },
-                onFailure = { failed(resources.getString(R.string.rides_import_failed, it.message ?: it.toString())) },
-            )
+            val summary = rideImportSummary(results)
+            if (summary.imported > 0) RideChanges.changed()
+            val (text, ok) = rideImportMessage(resources, summary, results)
+            if (ok) done(text) else failed(text)
         }
     }
     val openSections = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -291,7 +303,7 @@ fun RidesSheet(
                             leadingIcon = { Icon(painterResource(R.drawable.ic_import), contentDescription = null) },
                             onClick = {
                                 libraryMenu = false
-                                openRide.launch(arrayOf("*/*"))
+                                openRides.launch(arrayOf("*/*"))
                             },
                         )
                     }
@@ -438,6 +450,39 @@ private val EXPORT_FORMATS = listOf(
 )
 
 /** Short enough for a toast; sections that don't fit only when there are some. */
+/** The name the picker gives the file at [uri], if any (untrusted: shown
+ * only through [shownFileName]). */
+private fun displayName(resolver: android.content.ContentResolver, uri: Uri): String? = runCatching {
+    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst()) c.getString(0) else null
+    }
+}.getOrNull()
+
+/** The message after a ride import, and whether all went well: as before
+ * for one file; for several, the rides imported and their km, and the
+ * files not imported, each with why. */
+private fun rideImportMessage(
+    res: android.content.res.Resources,
+    s: RideImportSummary,
+    results: List<RideImport>,
+): Pair<String, Boolean> {
+    if (s.files == 1) {
+        return when (val only = results.single()) {
+            is RideImport.Imported -> res.getString(R.string.rides_imported, s.km) to true
+            is RideImport.Failed -> res.getString(R.string.rides_import_failed, only.reason) to false
+        }
+    }
+    if (s.failed.isEmpty()) return res.getQuantityString(R.plurals.rides_imported_many, s.imported, s.imported, s.km) to true
+    val listed = s.failed.joinToString("; ") { res.getString(R.string.rides_import_file_failed, it.name, it.reason) }
+    val failures = if (s.moreFailed > 0) res.getString(R.string.rides_import_more, listed, s.moreFailed) else listed
+    val text = if (s.imported == 0) {
+        res.getString(R.string.rides_import_none, failures)
+    } else {
+        res.getString(R.string.rides_imported_some, s.imported, s.files, s.km, failures)
+    }
+    return text to false
+}
+
 private fun importSummary(res: android.content.res.Resources, r: ImportReport): String {
     val text = res.getString(R.string.sections_imported, r.added.toLong(), r.skipped.toLong(), r.replaced.toLong())
     return if (r.unmatched > 0uL) res.getString(R.string.sections_imported_unmatched, text, r.unmatched.toLong()) else text
