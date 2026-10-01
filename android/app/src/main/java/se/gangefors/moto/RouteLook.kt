@@ -81,11 +81,34 @@ fun riddenColor(darkMap: Boolean): String = if (darkMap) "#e8eaed" else "#202124
 /** Width of the ridden roads' line by zoom (zoom to dp). */
 val RIDDEN_WIDTHS: List<Pair<Float, Float>> = listOf(8f to 1.8f, 12f to 2.4f, 16f to 3.2f)
 
-/** Dashes and gaps in line widths: shorter when zoomed out, so they stay
- * dashes instead of merging into a line, longer from [RIDDEN_LONG_DASH_ZOOM]. */
-val RIDDEN_SHORT_DASHES: Array<Float> = arrayOf(3f, 2.5f)
-val RIDDEN_LONG_DASHES: Array<Float> = arrayOf(4f, 3f)
-const val RIDDEN_LONG_DASH_ZOOM = 11f
+/** Zooms the ridden roads' dashes are set for, one by one: each zoom gets
+ * its own dash and gap, so they keep their look as the line width grows. */
+val RIDDEN_DASH_ZOOMS: IntRange = 8..16
+
+/** Width of the ridden roads' line at [zoom], dp, as the map draws it
+ * from [RIDDEN_WIDTHS]. */
+fun riddenWidth(zoom: Float): Float {
+    val (z0, w0) = RIDDEN_WIDTHS.first()
+    if (zoom <= z0) return w0
+    for ((a, b) in RIDDEN_WIDTHS.zipWithNext()) {
+        if (zoom <= b.first) return a.second + (b.second - a.second) * (zoom - a.first) / (b.first - a.first)
+    }
+    return RIDDEN_WIDTHS.last().second
+}
+
+/** The ridden roads' dash and gap on screen at [zoom], dp: short when
+ * zoomed out, so they stay dashes instead of merging into a line, and a
+ * little longer each zoom in (5.5 and 4.5 dp at zoom 8, 12.7 and 9.3 at
+ * zoom 16). */
+fun riddenDashDp(zoom: Int): Pair<Float, Float> = (5.5f + 0.9f * (zoom - 8)) to (4.5f + 0.6f * (zoom - 8))
+
+/** The map's dash array at [zoom]: [riddenDashDp] in line widths, which
+ * is how the map measures dashes. */
+fun riddenDashes(zoom: Int): Array<Float> {
+    val (dash, gap) = riddenDashDp(zoom)
+    val width = riddenWidth(zoom.toFloat())
+    return arrayOf(dash / width, gap / width)
+}
 
 /** Above this many metres across the screen the ridden roads are hidden
  * (the rider: 70 km). */

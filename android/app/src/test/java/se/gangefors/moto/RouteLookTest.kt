@@ -70,10 +70,31 @@ class RouteLookTest {
     fun riddenRoadsAreDarkOnTheLightMapAndLightOnTheDark() {
         assertEquals("#202124", riddenColor(darkMap = false))
         assertEquals("#e8eaed", riddenColor(darkMap = true))
-        // Thin, a little wider zoomed in; dashes longer from zoom 11.
+        // Thin, a little wider zoomed in.
         assertEquals(listOf(1.8f, 2.4f, 3.2f), RIDDEN_WIDTHS.map { it.second })
-        assertTrue(RIDDEN_LONG_DASHES[0] > RIDDEN_SHORT_DASHES[0])
         assertEquals(70_000.0, RIDDEN_MAX_SPAN_M, 0.0)
+    }
+
+    @Test
+    fun theRiddenDashesAreSetForEachZoom() {
+        // The width the map draws, between and beyond its stops.
+        assertEquals(1.8f, riddenWidth(5f), 1e-4f)
+        assertEquals(2.1f, riddenWidth(10f), 1e-4f)
+        assertEquals(2.8f, riddenWidth(14f), 1e-4f)
+        assertEquals(3.2f, riddenWidth(18f), 1e-4f)
+        // On screen, dash and gap grow a little with every zoom.
+        assertEquals(5.5f to 4.5f, riddenDashDp(8))
+        val screen = RIDDEN_DASH_ZOOMS.map(::riddenDashDp)
+        for ((a, b) in screen.zipWithNext()) {
+            assertTrue(b.first > a.first && b.second > a.second)
+        }
+        // The map gets them in line widths: times the width, the same dp.
+        for (z in RIDDEN_DASH_ZOOMS) {
+            val (dash, gap) = riddenDashDp(z)
+            val units = riddenDashes(z)
+            assertEquals(dash, units[0] * riddenWidth(z.toFloat()), 1e-4f)
+            assertEquals(gap, units[1] * riddenWidth(z.toFloat()), 1e-4f)
+        }
     }
 
     @Test
