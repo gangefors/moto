@@ -32,7 +32,7 @@ class HelpContentTest {
 
     @Test
     fun everyKeyHasAButtonIcon() {
-        for (key in HELP_TOPICS.flatMap { it.keys + it.figures }) assertTrue(key.icon, key.icon in BUTTON_ICONS)
+        for (key in HELP_TOPICS.flatMap { it.keys + it.figures + it.summary }) assertTrue(key.icon, key.icon in BUTTON_ICONS)
     }
 
     @Test
@@ -57,5 +57,12 @@ class HelpContentTest {
         // Fastest is a word, not an icon; every other figure is in the key.
         assertEquals(RouteStatKind.entries.size - 1, plan.figures.size)
         assertEquals(listOf("time", "sections", "curvy", "gravel", "toll"), plan.figures.map { it.icon })
+    }
+
+    @Test
+    fun theSummaryKeyHasEveryKindOfChip() {
+        val plan = HELP_TOPICS.first { it.id == HelpTopicId.PLAN }
+        // Every summary chip with an icon (the length is in words).
+        assertEquals(listOf("clock", "pin", "compass", "gravel", "star_off", "motorway"), plan.summary.map { it.icon })
     }
 }

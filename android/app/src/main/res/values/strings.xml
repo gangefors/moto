@@ -125,11 +125,12 @@
     <!-- The switcher's count while a new set of loops is being found. -->
     <string name="loop_count_finding">– / –</string>
     <string name="loop_heading_any">Any direction</string>
+    <!-- What a screen reader says for the compass chip in the loop sheet's summary row. -->
+    <string name="summary_heading">Direction: %1$s</string>
     <string name="loop_heading_north">North</string>
     <string name="loop_heading_east">East</string>
     <string name="loop_heading_south">South</string>
     <string name="loop_heading_west">West</string>
-    <string name="gravel_summary_avoid">Avoid gravel</string>
     <string name="gravel_summary_allow">Gravel allowed</string>
     <string name="gravel_summary_prefer">Prefer gravel</string>
     <plurals name="route_via_count">
@@ -207,6 +208,10 @@
     <string name="say_time">the stopwatch</string>
     <string name="say_curvy">the curvy road</string>
     <string name="say_gravel">the stones</string>
+    <string name="say_clock">the clock</string>
+    <string name="say_pin">the pin</string>
+    <string name="say_compass">the compass needle</string>
+    <string name="say_star_off">the crossed-out star</string>
     <string name="say_settings">the settings button</string>
     <string name="say_bin">the bin</string>
     <string name="say_ride">the ride mark</string>
@@ -264,6 +269,19 @@
     <string name="help_figure_gravel_what">km on gravel roads, when it has any</string>
     <string name="help_figure_toll">Toll roads</string>
     <string name="help_figure_toll_what">km on roads a motorcycle pays for, when it has any</string>
+    <string name="help_plan_summary">At rest, the row of chips under them shows the choices that differ from the usual; tap one to change them:</string>
+    <string name="help_summary_clock">Arrive by</string>
+    <string name="help_summary_clock_what">when the route arrives, with a time to arrive by set; red when it can’t make it</string>
+    <string name="help_summary_pin">Waypoints</string>
+    <string name="help_summary_pin_what">how many the route goes through</string>
+    <string name="help_summary_compass">Direction</string>
+    <string name="help_summary_compass_what">the way a loop heads (N, E, S or W); nothing for any direction</string>
+    <string name="help_summary_gravel">Gravel roads</string>
+    <string name="help_summary_gravel_what">allowed; with + preferred; nothing when avoided</string>
+    <string name="help_summary_star_off">Favourites avoided</string>
+    <string name="help_summary_star_off_what">keeps off your favourite sections; nothing when they are preferred</string>
+    <string name="help_summary_roads">Roads allowed</string>
+    <string name="help_summary_roads_what">motorways, ferries or toll roads it may use, each by its icon; nothing when all are avoided</string>
     <string name="help_key_sections">Favourite sections</string>
     <string name="help_key_sections_what">in the menu: all your favourite sections</string>
     <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>
