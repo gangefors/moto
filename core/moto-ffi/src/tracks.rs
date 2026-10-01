@@ -39,6 +39,14 @@ pub struct Track {
 
 /// What an append did: points stored now (older ones already stored are
 /// skipped) and the track's total.
+/// What a GPX import saved: the new rides, in file order, and how many
+/// of the file's rides were already saved and so left out.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct GpxImport {
+    pub rides: Vec<Track>,
+    pub already_saved: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
 pub struct TrackAppend {
     pub added: u64,
@@ -105,9 +113,12 @@ impl SectionStore {
     }
 
     /// Imports a GPX file (at most 64 MiB) from another app or an earlier
-    /// export as a finished ride: its track, or its route if it has no
-    /// track. The file is untrusted; see `moto_core::gpx::read_track`.
-    pub fn import_track_gpx(&self, gpx: Vec<u8>) -> Result<Track, MotoError> {
+    /// export as finished rides: one per track segment, or the file's
+    /// track or route as one when it has no segments. A ride already saved
+    /// (the same fixes, see `Store::same_track`) is left out and counted.
+    /// The file is untrusted; see `moto_core::gpx::read_tracks`. Nothing
+    /// is saved if the file can't be read.
+    pub fn import_tracks_gpx(&self, gpx: Vec<u8>) -> Result<GpxImport, MotoError> {
         if gpx.len() > moto_core::gpx::MAX_GPX_BYTES {
             return Err(moto_core::CoreError::InvalidArgument(format!(
                 "a GPX file may be at most {} MiB",
@@ -116,8 +127,20 @@ impl SectionStore {
             .into());
         }
         let text = String::from_utf8_lossy(&gpx);
-        let points = moto_core::gpx::read_track(&text, now().saturating_mul(1000))?;
-        Ok(self.store().import_track(&points)?.into())
+        let read = moto_core::gpx::read_tracks(&text, now().saturating_mul(1000))?;
+        let mut store = self.store();
+        let mut rides = Vec::new();
+        let mut already_saved = 0u32;
+        for points in &read {
+            match store.import_track_once(points)? {
+                Some(t) => rides.push(t.into()),
+                None => already_saved = already_saved.saturating_add(1),
+            }
+        }
+        Ok(GpxImport {
+            rides,
+            already_saved,
+        })
     }
 
     /// Names a ride; a blank `name` takes the name away again. `false` if
@@ -292,17 +315,26 @@ mod tests {
         assert_eq!(gpx.matches("<trkpt ").count(), 10);
         assert!(gpx.contains("<name>Test ride</name>"));
 
-        // The export imports back as a finished ride with the same fixes.
-        let back = store.import_track_gpx(gpx.into_bytes()).unwrap();
+        // While the ride is saved, its export is found and left out.
+        let again = store.import_tracks_gpx(gpx.clone().into_bytes()).unwrap();
+        assert_eq!((again.rides.len(), again.already_saved), (0, 1));
+        // Gone, the export imports back as a finished ride with the same
+        // fixes.
+        let kept = store.track_points(t.id).unwrap().unwrap();
+        assert!(store.delete_track(t.id).unwrap());
+        let back = store.import_tracks_gpx(gpx.into_bytes()).unwrap();
+        assert_eq!((back.rides.len(), back.already_saved), (1, 0));
+        let back = &back.rides[0];
         assert!(back.ended_at.is_some() && back.id != t.id);
         assert_eq!(back.point_count, 10);
         assert_eq!(store.track_points(back.id).unwrap().unwrap(), read);
+        assert_eq!(kept, read);
         assert!(matches!(
-            store.import_track_gpx(b"<gpx/>".to_vec()),
+            store.import_tracks_gpx(b"<gpx/>".to_vec()),
             Err(MotoError::InvalidInput { .. })
         ));
         assert!(matches!(
-            store.import_track_gpx(vec![b' '; moto_core::gpx::MAX_GPX_BYTES + 1]),
+            store.import_tracks_gpx(vec![b' '; moto_core::gpx::MAX_GPX_BYTES + 1]),
             Err(MotoError::InvalidInput { .. })
         ));
         assert!(
@@ -311,7 +343,7 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        assert!(store.delete_track(t.id).unwrap());
+        assert!(store.delete_track(back.id).unwrap());
         drop(store);
         for suffix in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));

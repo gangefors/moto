@@ -240,7 +240,8 @@ fun RidesSheet(
                             ?: error(resources.getString(R.string.sections_cannot_read))
                         val bytes = input.use { readCapped(it, MAX_GPX_FILE_BYTES) }
                             ?: error(resources.getString(R.string.sections_file_too_large, MAX_GPX_FILE_BYTES shr 20))
-                        RideImport.Imported(store.importTrackGpx(bytes).distanceM)
+                        val got = store.importTracksGpx(bytes)
+                        RideImport.Imported(got.rides.map { it.distanceM }, got.alreadySaved.toInt())
                     }.getOrElse {
                         RideImport.Failed(
                             shownFileName(displayName(context.contentResolver, uri), resources.getString(R.string.rides_import_unnamed)),
@@ -458,29 +459,32 @@ private fun displayName(resolver: android.content.ContentResolver, uri: Uri): St
     }
 }.getOrNull()
 
-/** The message after a ride import, and whether all went well: as before
- * for one file; for several, the rides imported and their km, and the
- * files not imported, each with why. */
+/** The message after a ride import, and whether all went well: the rides
+ * imported and their km, those left out as already saved, and the files
+ * not imported, each with why (one file: just why). */
 private fun rideImportMessage(
     res: android.content.res.Resources,
     s: RideImportSummary,
     results: List<RideImport>,
 ): Pair<String, Boolean> {
-    if (s.files == 1) {
-        return when (val only = results.single()) {
-            is RideImport.Imported -> res.getString(R.string.rides_imported, s.km) to true
-            is RideImport.Failed -> res.getString(R.string.rides_import_failed, only.reason) to false
-        }
+    val only = results.singleOrNull()
+    if (only is RideImport.Failed) return res.getString(R.string.rides_import_failed, only.reason) to false
+    val already = s.alreadySaved.takeIf { it > 0 }?.let {
+        res.getQuantityString(R.plurals.rides_import_already, it, it)
     }
-    if (s.failed.isEmpty()) return res.getQuantityString(R.plurals.rides_imported_many, s.imported, s.imported, s.km) to true
+    fun withAlready(text: String) = already?.let { res.getString(R.string.rides_import_and, text, it) } ?: text
+    if (s.failed.isEmpty()) {
+        if (s.imported == 0) return res.getQuantityString(R.plurals.rides_import_all_saved, s.alreadySaved, s.alreadySaved) to true
+        return withAlready(res.getQuantityString(R.plurals.rides_imported_many, s.imported, s.imported, s.km)) to true
+    }
     val listed = s.failed.joinToString("; ") { res.getString(R.string.rides_import_file_failed, it.name, it.reason) }
     val failures = if (s.moreFailed > 0) res.getString(R.string.rides_import_more, listed, s.moreFailed) else listed
     val text = if (s.imported == 0) {
         res.getString(R.string.rides_import_none, failures)
     } else {
-        res.getString(R.string.rides_imported_some, s.imported, s.files, s.km, failures)
+        res.getQuantityString(R.plurals.rides_imported_some, s.imported, s.imported, s.km, failures)
     }
-    return text to false
+    return withAlready(text) to false
 }
 
 private fun importSummary(res: android.content.res.Resources, r: ImportReport): String {

@@ -54,20 +54,24 @@ fun filterLibrary(items: List<LibraryItem>, filter: LibraryFilter): List<Library
  * 2026-10-01): a bound on the work a single pick can start. */
 const val MAX_GPX_FILES = 100
 
-/** What became of one file of a ride import: a ride of [Imported.distanceM]
- * metres, or not imported, with the file's [Failed.name] and why. */
+/** What became of one file of a ride import: rides of
+ * [Imported.distancesM] metres (one per track segment) and how many of
+ * its rides were already saved ([Imported.alreadySaved]), or nothing,
+ * with the file's [Failed.name] and why. */
 sealed interface RideImport {
-    data class Imported(val distanceM: Double) : RideImport
+    data class Imported(val distancesM: List<Double>, val alreadySaved: Int = 0) : RideImport
     data class Failed(val name: String, val reason: String) : RideImport
 }
 
-/** A ride import in numbers, for its message: [imported] rides of [files]
- * files, [km] in all, the first [failed] files not imported and how many
- * more ([moreFailed]). */
+/** A ride import in numbers, for its message: [imported] rides from
+ * [files] files, [km] in all, [alreadySaved] rides left out as already
+ * saved, the first [failed] files not imported and how many more
+ * ([moreFailed]). */
 data class RideImportSummary(
     val imported: Int,
     val files: Int,
     val km: Double,
+    val alreadySaved: Int,
     val failed: List<RideImport.Failed>,
     val moreFailed: Int,
 )
@@ -78,9 +82,10 @@ fun rideImportSummary(results: List<RideImport>, listed: Int = 3): RideImportSum
     val imported = results.filterIsInstance<RideImport.Imported>()
     val failed = results.filterIsInstance<RideImport.Failed>()
     return RideImportSummary(
-        imported = imported.size,
+        imported = imported.sumOf { it.distancesM.size },
         files = results.size,
-        km = sectionKm(imported.sumOf { it.distanceM }),
+        km = sectionKm(imported.sumOf { it.distancesM.sum() }),
+        alreadySaved = imported.sumOf { it.alreadySaved },
         failed = failed.take(listed),
         moreFailed = (failed.size - listed).coerceAtLeast(0),
     )
