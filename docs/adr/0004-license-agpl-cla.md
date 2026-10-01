@@ -13,6 +13,8 @@ The project should be open source, but nobody should be able to make money from 
 3. Treat the **app name and logo as trademarks**, not covered by the code license. Forks must rebrand.
 4. **No app-store exception** for now. The rider, as copyright holder with CLAs covering all outside code, publishes the official apps under his own terms. This can be revisited.
 
+**Update (2026-10-01): no outside contributions, no CLA.** moto takes no code from others; pull requests from outside are closed unmerged. With the rider writing all of it, he holds the whole copyright and point 2 has nothing to cover, so the CLA, `CLA.md` and the CLA Assistant workflow are dropped (the action was archived and ran with write access on every pull request). Points 1, 3 and 4 stand: point 4 now rests on sole copyright. Before any outside code is ever accepted, a CLA or copyright assignment must be in place first, or relicensing and App Store publishing of that code get complicated.
+
 ## Options Considered
 
 | Option | Assessment |
@@ -38,7 +40,7 @@ A license binds people who receive the code, not the copyright holder. With sole
 - **Harder:** a CLA adds friction for contributors, and every outside contribution must be CLA-covered **before** merging. Otherwise relicensing and App Store publishing of that code get complicated.
 - **Third-party code:** dependencies must be AGPL-compatible (MapLibre BSD-2, UniFFI MPL-2.0 and MIT/Apache crates are fine). Anything copied in under GPL-only/AGPL from others is **not** CLA-covered and would limit relicensing, so avoid it.
 - **OSM data** stays under ODbL regardless: attribution is required, and derived region files carry ODbL share-alike obligations.
-- Not legal advice: have a Swedish IP lawyer review the CLA and trademark before selling anything.
+- Not legal advice: have a Swedish IP lawyer review the trademark (and a CLA, if outside code is ever accepted) before selling anything.
 
 ## Action Items (for Claude Code / repo)
 
@@ -46,7 +48,7 @@ A license binds people who receive the code, not the copyright holder. With sole
 - [x] Add an SPDX header to source files: `// SPDX-License-Identifier: AGPL-3.0-only` and `// Copyright (C) 2026 Stefan Gangefors`.
 - [x] Set `license = "AGPL-3.0-only"` in `Cargo.toml` files.
 - [x] README "License" section (draft below).
-- [x] `CONTRIBUTING.md`: contributions require signing the CLA; set up the CLA Assistant GitHub app. Base the CLA on a standard template (e.g. Apache ICLA style or a Contributor Agreements .org template) with the right to relicense. Done in 22755ed (CLA Assistant Lite workflow, `CLA.md` pending legal review).
+- [x] `CONTRIBUTING.md`: contributions require signing the CLA; set up the CLA Assistant GitHub app. Base the CLA on a standard template (e.g. Apache ICLA style or a Contributor Agreements .org template) with the right to relicense. Done in 22755ed (CLA Assistant Lite workflow, `CLA.md` pending legal review). Superseded 2026-10-01: no outside contributions, CLA dropped (1239b7d); `CONTRIBUTING.md` says so.
 - [x] Add `cargo-deny` license check to CI with an allow-list of AGPL-compatible licenses. Done in 8d3a21e.
 - [x] Add an in-app "About / Licenses" screen: app license, OSM/ODbL attribution, OpenFreeMap attribution, third-party licenses. Done in 783f8fb: "About and licences" in the My data sheet; the notices are built at every build by `.github/scripts/third_party.py` from what ships (Rust crates, Android libraries), and a dependency without a licence text fails the build.
 - [ ] Later: register the app name as a trademark (Swedish PRV / EUIPO) once the name is settled.
@@ -68,5 +70,5 @@ The app name and logo are trademarks and are not covered by the code license. Fo
 
 Map data © OpenStreetMap contributors, available under the Open Database License (ODbL).
 
-Contributions require signing the Contributor License Agreement. See [CONTRIBUTING.md](CONTRIBUTING.md).
+moto doesn't accept code from others; bug reports and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ```
