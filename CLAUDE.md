@@ -18,7 +18,7 @@ Things that change often live in Notion, not in the repo (use the Notion tools; 
 - **Region file:** 4 KiB-aligned binary sections, memory-mapped and read zero-copy (`memmap2` + `bytemuck`); curvature stored as metrics and scored at query time; grid index for snapping; OSM way ids kept for saved sections ([ADR-0005](docs/adr/0005-region-file-format.md)).
 - **Rider data:** sections, tags and tracks are modelled and stored by the Rust core in SQLite (`rusqlite`, bundled), in app-private storage; sections are OSM way refs + own geometry, both directions by default (optionally one-way), rated good/great/epic ([ADR-0006](docs/adr/0006-section-and-track-storage.md)).
 - **Map:** MapLibre Native Android ([ADR-0002](docs/adr/0002-map-widget-maplibre-native.md)) with OpenFreeMap tiles, style URL in config, attribution visible ([ADR-0003](docs/adr/0003-map-tiles-openfreemap.md)). The map only picks, draws and hit-tests; it never routes or snaps.
-- **License:** AGPL-3.0-only with a CLA for outside contributions ([ADR-0004](docs/adr/0004-license-agpl-cla.md)); see the License rules below.
+- **License:** AGPL-3.0-only, no outside contributions, so the owner holds the whole copyright ([ADR-0004](docs/adr/0004-license-agpl-cla.md)); see the License rules below.
 
 Data flow: OSM extract (Geofabrik Sweden, Skåne cut out first) → `moto-regionbuild` (desktop/CI) → region file → loaded by the Rust core on the phone → `snap` / `route` / `round_trip` via UniFFI → GeoJSON → MapLibre line layers.
 
@@ -80,12 +80,12 @@ Security comes first: before performance, features and convenience. Never choose
 
 ## License
 
-AGPL-3.0-only with a CLA for outside contributions ([ADR-0004](docs/adr/0004-license-agpl-cla.md)).
+AGPL-3.0-only, with no outside contributions: the owner holds the whole copyright ([ADR-0004](docs/adr/0004-license-agpl-cla.md)). Pull requests from others are closed unmerged; a CLA or copyright assignment must be in place before any outside code is ever accepted.
 
 - Every new source file starts with the SPDX header, in the file's comment syntax:
   `SPDX-License-Identifier: AGPL-3.0-only` and `Copyright (C) 2026 Stefan Gangefors`.
 - Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (crates in `core/` use `license.workspace = true`).
-- Never copy in third-party GPL/AGPL code — it can't be CLA-covered and blocks relicensing.
+- Never copy in third-party GPL/AGPL code — it ends the sole copyright and blocks relicensing.
 - Dependencies must be AGPL-compatible (MIT, Apache-2.0, BSD, MPL-2.0, …). Check new ones before adding.
 
 ## Commands
