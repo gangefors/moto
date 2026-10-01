@@ -14,6 +14,9 @@
 #   runs beside build, so the phone's APK doesn't wait for it.
 # - build: the Android app (Rust core via cargo-ndk, then Gradle), lint
 #   and unit tests. No APK carries a region; the rider downloads one.
+# - skane-region: main's Skåne region becomes the `skane-region` release
+#   when it was built again, for Claude's sessions to download instead of
+#   building it from the 900 MB extract (CLAUDE.md, Commands).
 # - publish: the debug APK becomes a rolling pre-release for the phone,
 #   once core and build pass: `debug-latest` from main, `debug-branch`
 #   from a Claude work branch (`ccr-*`, `claude/*`), so a fix can be
@@ -112,11 +115,12 @@ jobs:
         working-directory: core
         run: cargo build --release -p moto-regionbuild
 
-      # The debug APK carries the M0 region file for testing (production will
-      # download regions; ADR-0005). It is built from the OSM Sweden
+      # The Skåne region (the M0 region: Skåne and surroundings) for the
+      # golden routes and the benchmark. It is built from the OSM Sweden
       # extract by this commit's moto-regionbuild, so it always matches the
       # core's format, and cached per ISO week and region/builder source to
-      # keep the ~800 MB download to about once a week.
+      # keep the ~900 MB download to about once a week. Main's copy is also
+      # published as the `skane-region` release (job skane-region).
       - name: Region cache key
         id: region-key
         env:
@@ -436,4 +440,63 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "$title" \
+            --notes "$notes"
+
+  # Main's Skåne region as a release, so a session can download it (about
+  # 40 MB gzipped) instead of fetching the 900 MB extract and building it
+  # (2026-10-01). Published only when main's region cache key (ISO
+  # week and region/builder source) differs from the published one, so at
+  # most about once a week. Never from a branch: only main's builder.
+  skane-region:
+    name: Publish Skåne region
+    needs: core
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to publish the skane-region release
+    concurrency:
+      group: skane-region
+      cancel-in-progress: false
+    env:
+      TAG: skane-region
+      KEY: ${{ needs.core.outputs.region-key }}
+    steps:
+      - name: Check the published region
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # The key the published region was built under, from its notes.
+          old=$(gh release view "$TAG" --json body --jq .body 2>/dev/null | sed -n 's/^Cache key: //p' || true)
+          if [ "$old" = "$KEY" ]; then
+            echo "Published region is current ($KEY)."
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.published.outputs.current != 'true'
+        with:
+          path: ${{ runner.temp }}/moto-region
+          key: ${{ env.KEY }}
+          fail-on-cache-miss: true
+
+      - name: Publish the release
+        if: steps.published.outputs.current != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gzip -n -9 -c "$RUNNER_TEMP/moto-region/m0.region" > skane.region.gz
+          sha256sum skane.region.gz > skane.region.gz.sha256
+          notes=$(printf '%s\n\n%s\n\n%s\n%s\n' \
+            "The Skåne region (Skåne and surroundings) as CI builds it from the OSM Sweden extract with main's moto-regionbuild ${GITHUB_SHA::7}, for the golden routes and the benchmark in Claude's sessions. Not for the app: the app downloads the signed country regions. Check the SHA-256, then run moto-regionbuild --check on it before use." \
+            "Map data © OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright)." \
+            "SHA-256: $(cut -d' ' -f1 skane.region.gz.sha256)" \
+            "Cache key: $KEY")
+          gh release delete "$TAG" --cleanup-tag --yes || true
+          gh release create "$TAG" skane.region.gz skane.region.gz.sha256 \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Skåne region (for Claude's sessions)" \
             --notes "$notes"
