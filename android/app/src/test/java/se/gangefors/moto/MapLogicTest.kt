@@ -104,6 +104,15 @@ class MapLogicTest {
     }
 
     @Test
+    fun theMapDropsItsCachesOnlyInTheBackground() {
+        // ComponentCallbacks2 levels: UI hidden 20, background 40, complete 80.
+        assertFalse(dropsMapCaches(20))
+        assertTrue(dropsMapCaches(40))
+        assertTrue(dropsMapCaches(80))
+        assertFalse(dropsMapCaches(15))
+    }
+
+    @Test
     fun aStartGivenByTheAppActsLikeALongPress() {
         // "Route here from my position": the long-pressed point becomes the
         // end, the rider's position the start, and further long-presses

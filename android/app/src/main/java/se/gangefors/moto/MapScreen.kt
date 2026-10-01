@@ -3,6 +3,8 @@
 
 package se.gangefors.moto
 
+import android.content.res.Configuration
+import android.content.ComponentCallbacks2
 import se.gangefors.moto.debug.DebugTools
 import android.Manifest
 import android.annotation.SuppressLint
@@ -2490,7 +2492,22 @@ private fun rememberMapViewWithLifecycle(): MapView {
             }
         }
         lifecycle.addObserver(observer)
+        // When the system needs memory back while the app is in the
+        // background (music and other apps in front), the map drops its
+        // tile cache; tiles load again on return.
+        val trim = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (dropsMapCaches(level)) mapView.onLowMemory()
+            }
+
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+            @Deprecated("Deprecated in Java")
+            override fun onLowMemory() = mapView.onLowMemory()
+        }
+        context.registerComponentCallbacks(trim)
         onDispose {
+            context.unregisterComponentCallbacks(trim)
             lifecycle.removeObserver(observer)
             mapView.onDestroy()
         }
