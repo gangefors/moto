@@ -228,7 +228,7 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                                 Expression.get(KIND),
                                 Expression.literal(START_COLOR),
                                 Expression.stop(END, END_COLOR),
-                                Expression.stop(VIA, ROUTE_COLOR),
+                                Expression.stop(VIA, routeBlue(darkMap)),
                             ),
                         ),
                         PropertyFactory.circleStrokeColor("#ffffff"),
@@ -303,7 +303,7 @@ class RouteOverlay(private val style: Style, private val density: Float, private
     private fun routeColor(): Expression = Expression.switchCase(
         Expression.toBool(Expression.get(DULL)),
         Expression.color(DULL_COLOR.toColorInt()),
-        Expression.color(ROUTE_COLOR.toColorInt()),
+        Expression.color(routeBlue(darkMap).toColorInt()),
     )
 
     /** The index of the other route drawn at [point] (within a finger's
@@ -342,7 +342,6 @@ class RouteOverlay(private val style: Style, private val density: Float, private
         const val START = "start"
         const val END = "end"
         const val VIA = "via"
-        const val ROUTE_COLOR = "#1a73e8"
         const val GLOW_COLOR = "glowColor"
         // The route's white outline, also its centre dashes on gravel.
         const val CASING_COLOR = "#ffffff"
