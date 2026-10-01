@@ -149,6 +149,20 @@ class SectionLogicTest {
     }
 
     @Test
+    fun theDarkMapGetsLighterTintsOfTheSameColours() {
+        fun rgb(c: String) = listOf(1, 3, 5).map { c.substring(it, it + 2).toInt(16) }
+        fun luminance(c: String) = rgb(c).zip(listOf(0.2126, 0.7152, 0.0722)).sumOf { (v, w) -> v * w }
+        val dark = RATINGS.map { ratingColor(it, darkMap = true) }
+        assertEquals(listOf("#fdd663", "#ff8a65", "#c58af9"), dark)
+        assertEquals(RATINGS.size, dark.toSet().size)
+        for (r in RATINGS) {
+            assertTrue("$r", luminance(ratingColor(r, darkMap = true)) > luminance(ratingColor(r)))
+        }
+        // The rest of the app (lists, chips) keeps the map's light colours.
+        assertEquals("#a142f4", ratingColor(Rating.EPIC))
+    }
+
+    @Test
     fun oneWayIsTheForwardDirection() {
         assertTrue(isOneWay(Direction.FORWARD))
         assertFalse(isOneWay(Direction.BOTH))

@@ -17,11 +17,14 @@ data class SectionLook(
 
 /** Full strength normally; thin, faded and without casing while a route or
  * loop is shown ([routeShown]), so the route is the one strong line and
- * the sections stay visible as context. A route drawn over a section
- * covers it completely (the route and its casing are wider). */
+ * the sections stay visible as context: half strength on the light map,
+ * 80 % on the dark one, where half sank into the map (Stefan,
+ * 2026-10-01). A route drawn over a section covers it completely (the
+ * route and its casing are wider). */
 fun sectionLook(routeShown: Boolean, darkMap: Boolean = false): SectionLook =
     if (routeShown) {
-        SectionLook(lineWidth = 3f, lineOpacity = 0.5f, casingOpacity = 0f, arrowOpacity = 0.5f)
+        val faded = if (darkMap) 0.8f else 0.5f
+        SectionLook(lineWidth = 3f, lineOpacity = faded, casingOpacity = 0f, arrowOpacity = faded)
     } else {
         SectionLook(lineWidth = 5f, lineOpacity = 1f, casingOpacity = 0.8f * outlineStrength(darkMap), arrowOpacity = 1f)
     }
@@ -52,7 +55,7 @@ data class ShownSectionLook(
  */
 fun shownSectionLook(rating: Rating, fits: Boolean, darkMap: Boolean = false): ShownSectionLook =
     ShownSectionLook(
-        color = if (fits) ratingColor(rating) else UNMATCHED_SECTION_COLOR,
+        color = if (fits) ratingColor(rating, darkMap) else UNMATCHED_SECTION_COLOR,
         lineWidth = 7f,
         edgeWidth = 10f,
         casingWidth = 13f,
@@ -68,9 +71,13 @@ const val SHOWN_SECTION_EDGE_COLOR = "#202124"
  * without a rating (a core that doesn't say) glows epic purple, as all did
  * before. Stretches of fewer than two points are left out.
  */
-fun favouriteGlowColors(parts: List<List<LatLon>>, ratings: List<Rating>): List<Pair<List<LatLon>, String>> =
+fun favouriteGlowColors(
+    parts: List<List<LatLon>>,
+    ratings: List<Rating>,
+    darkMap: Boolean = false,
+): List<Pair<List<LatLon>, String>> =
     parts.mapIndexedNotNull { i, part ->
-        if (part.size < 2) null else part to ratingColor(ratings.getOrNull(i) ?: Rating.EPIC)
+        if (part.size < 2) null else part to ratingColor(ratings.getOrNull(i) ?: Rating.EPIC, darkMap)
     }
 
 /** The ridden roads' dashes (ADR-0010): near-black on the light map,

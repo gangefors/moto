@@ -33,7 +33,7 @@ import se.gangefors.moto.core.Section
  * and finds the section under a tap. The map only draws
  * and hit-tests; the sections come from the core's store.
  */
-class SectionOverlay(private val style: Style, private val density: Float, darkMap: Boolean = false) {
+class SectionOverlay(private val style: Style, private val density: Float, private val darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
     private val gravelSource = style.getSourceAs(GRAVEL_SOURCE) ?: GeoJsonSource(GRAVEL_SOURCE).also(style::addSource)
     private val shownSource = style.getSourceAs(SHOWN_SOURCE) ?: GeoJsonSource(SHOWN_SOURCE).also(style::addSource)
@@ -182,7 +182,7 @@ class SectionOverlay(private val style: Style, private val density: Float, darkM
             Feature.fromGeometry(s.geometry.toLineString()).apply {
                 addNumberProperty(ID, s.id)
                 addNumberProperty(ORDER, i)
-                addStringProperty(COLOR, ratingColor(s.rating))
+                addStringProperty(COLOR, ratingColor(s.rating, darkMap))
                 addBooleanProperty(ONE_WAY, isOneWay(s.direction))
                 addBooleanProperty(FITS, fitsTheMap(s.status))
             }
