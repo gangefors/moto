@@ -3,6 +3,8 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.RegionOffer
+
 /**
  * Pure logic for downloading regions (ADR-0008), kept out of the Android
  * classes so it can be unit-tested. The checks that matter for security
@@ -76,6 +78,11 @@ fun offerAction(installed: List<InstalledRegion>, offerId: String, offerOsmTimes
     val mine = installed.firstOrNull { it.id == offerId } ?: return OfferAction.DOWNLOAD
     return if (isUpdate(mine.osmTimestamp, offerOsmTimestamp, mine.gzSha256, offerGzSha256)) OfferAction.UPDATE else OfferAction.INSTALLED
 }
+
+/** The offers that update a region on the phone ([OfferAction.UPDATE]),
+ * in the order offered: what "Update all" fetches. */
+fun offersToUpdate(installed: List<InstalledRegion>, offers: List<RegionOffer>): List<RegionOffer> =
+    offers.filter { offerAction(installed, it.id, it.osmTimestamp, it.gzSha256) == OfferAction.UPDATE }
 
 /**
  * A region installed from a download (ADR-0008, ADR-0009): its id and

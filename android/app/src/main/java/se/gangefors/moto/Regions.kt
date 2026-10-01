@@ -83,6 +83,10 @@ object Regions {
     private val _download = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val download: StateFlow<DownloadState> = _download.asStateFlow()
 
+    // The regions of an Update all still waiting their turn, by id.
+    private val _waiting = MutableStateFlow<Set<String>>(emptySet())
+    val waiting: StateFlow<Set<String>> = _waiting.asStateFlow()
+
     private fun dir(context: Context) = File(context.filesDir, DIR)
 
     /** Region [id]'s file; the id is checked, so it can only name a file here. */
@@ -215,48 +219,70 @@ object Regions {
     }
 
     /** Downloads and installs [offer] (enabled), then opens the network with it. */
-    fun start(context: Context, offer: RegionOffer) {
+    fun start(context: Context, offer: RegionOffer) = start(context, listOf(offer))
+
+    /**
+     * Downloads and installs [queue] one after another (Update all), each
+     * opened with the network as it is installed. A failure stops the rest;
+     * cancelling stops the one downloading and those still waiting.
+     */
+    fun start(context: Context, queue: List<RegionOffer>) {
         val app = context.applicationContext
         val bytes = manifest ?: return
         if (job?.isActive == true) return
-        if (!isRegionId(offer.id)) return
+        val list = queue.filter { isRegionId(it.id) }
+        if (list.isEmpty()) return
         val offers = (download.value as? DownloadState.Offers)?.offers
             ?: (download.value as? DownloadState.Failed)?.offers.orEmpty()
         job = scope.launch {
-            val part = partial(app, offer)
             try {
-                part.parentFile?.mkdirs()
-                val have = part.length()
-                val free = StatFs(app.filesDir.path).availableBytes
-                if (!hasRoomFor(offer.gzBytes.toLong(), have, offer.regionBytes.toLong(), free)) {
-                    val need = mb(offer.gzBytes.toLong() - have + offer.regionBytes.toLong())
-                    error(app.getString(R.string.region_no_room, need))
-                }
-                fetchFile(regionUrl(offer.fileName), part, offer)
-                _download.value = DownloadState.Installing(offer)
-                val target = file(app, offer.id).apply { parentFile?.mkdirs() }
-                lock.withLock {
-                    val fp = installRegion(bytes, offer.id, part.path, target.path)
-                    part.delete()
-                    prefs(app).edit()
-                        .putStringSet(INSTALLED, installedIds(app) + offer.id)
-                        .putString("name.${offer.id}", offer.name)
-                        .putString("fp.${offer.id}", fp)
-                        .putLong("ts.${offer.id}", offer.osmTimestamp)
-                        .putString("sha.${offer.id}", offer.gzSha256)
-                        .remove("off.${offer.id}")
-                        .apply()
-                    reopen(app)
+                list.forEachIndexed { i, offer ->
+                    _waiting.value = list.drop(i + 1).map { it.id }.toSet()
+                    if (!install(app, bytes, offer, offers)) return@launch
                 }
                 _download.value = DownloadState.Offers(offers)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                _download.value = DownloadState.Offers(offers)
-                throw e
-            } catch (e: Exception) {
-                // A file the core refused is useless to resume.
-                if (e is se.gangefors.moto.core.MotoException) part.delete()
-                _download.value = DownloadState.Failed(describe(app, e), offers)
+            } finally {
+                _waiting.value = emptySet()
             }
+        }
+    }
+
+    /** Downloads and installs [offer]; false (and the download failed) when it didn't. */
+    private suspend fun install(app: Context, bytes: ByteArray, offer: RegionOffer, offers: List<RegionOffer>): Boolean {
+        val part = partial(app, offer)
+        try {
+            part.parentFile?.mkdirs()
+            val have = part.length()
+            val free = StatFs(app.filesDir.path).availableBytes
+            if (!hasRoomFor(offer.gzBytes.toLong(), have, offer.regionBytes.toLong(), free)) {
+                val need = mb(offer.gzBytes.toLong() - have + offer.regionBytes.toLong())
+                error(app.getString(R.string.region_no_room, need))
+            }
+            fetchFile(regionUrl(offer.fileName), part, offer)
+            _download.value = DownloadState.Installing(offer)
+            val target = file(app, offer.id).apply { parentFile?.mkdirs() }
+            lock.withLock {
+                val fp = installRegion(bytes, offer.id, part.path, target.path)
+                part.delete()
+                prefs(app).edit()
+                    .putStringSet(INSTALLED, installedIds(app) + offer.id)
+                    .putString("name.${offer.id}", offer.name)
+                    .putString("fp.${offer.id}", fp)
+                    .putLong("ts.${offer.id}", offer.osmTimestamp)
+                    .putString("sha.${offer.id}", offer.gzSha256)
+                    .remove("off.${offer.id}")
+                    .apply()
+                reopen(app)
+            }
+            return true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            _download.value = DownloadState.Offers(offers)
+            throw e
+        } catch (e: Exception) {
+            // A file the core refused is useless to resume.
+            if (e is se.gangefors.moto.core.MotoException) part.delete()
+            _download.value = DownloadState.Failed(describe(app, e), offers)
+            return false
         }
     }
 

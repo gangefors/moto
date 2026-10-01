@@ -81,6 +81,28 @@ class RegionLogicTest {
     }
 
     @Test
+    fun updateAllTakesTheOffersThatUpdateARegionOnThePhone() {
+        fun offer(id: String, ts: Long, sha: String) = se.gangefors.moto.core.RegionOffer(
+            id = id, name = id, fileName = "$id.zst", gzBytes = 1uL, gzSha256 = sha, regionBytes = 2uL,
+            osmTimestamp = ts, southWest = se.gangefors.moto.core.LatLon(55.0, 10.0),
+            northEast = se.gangefors.moto.core.LatLon(56.0, 11.0),
+        )
+        val installed = listOf(
+            InstalledRegion("sweden", "Sweden", 200, 1, enabled = true, gzSha256 = "s1"),
+            InstalledRegion("norway", "Norway", 200, 1, enabled = false, gzSha256 = "n1"),
+            InstalledRegion("denmark", "Denmark", 200, 1, enabled = true, gzSha256 = "d1"),
+        )
+        val offers = listOf(
+            offer("sweden", 200, "s2"), // rebuilt
+            offer("norway", 300, "n2"), // newer data, switched off
+            offer("denmark", 200, "d1"), // the same file
+            offer("finland", 200, "f1"), // not on the phone: Download, not Update
+        )
+        assertEquals(listOf("sweden", "norway"), offersToUpdate(installed, offers).map { it.id })
+        assertEquals(emptyList<String>(), offersToUpdate(emptyList(), offers).map { it.id })
+    }
+
+    @Test
     fun downloadShareStaysInRange() {
         assertEquals(0.5f, downloadShare(50, 100))
         assertEquals(1f, downloadShare(150, 100))

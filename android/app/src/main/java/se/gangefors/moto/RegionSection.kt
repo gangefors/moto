@@ -54,7 +54,8 @@ fun osmDate(timestamp: Long, zone: ZoneId): String =
  * used for routing) and a bin to remove it; the regions in use are one
  * map, joined at their borders. Each offer is a row with Download or
  * Update, or "Installed"; a download shows its progress in its row, with
- * an X to stop it.
+ * an X to stop it. With updates for two or more regions, Update all
+ * fetches them one after another (Stefan); the X stops them all.
  */
 @Composable
 fun RegionSection() {
@@ -62,6 +63,7 @@ fun RegionSection() {
     val zone = remember { ZoneId.systemDefault() }
     val active by Regions.active.collectAsState()
     val download by Regions.download.collectAsState()
+    val waiting by Regions.waiting.collectAsState()
     var confirmRemove by remember { mutableStateOf<String?>(null) }
     val installed = active.installed
     val working = download is DownloadState.Downloading || download is DownloadState.Installing
@@ -134,7 +136,15 @@ fun RegionSection() {
     }
     when {
         shown != null && shown.isEmpty() -> Text(stringResource(R.string.region_no_offers), Modifier.padding(vertical = 8.dp))
-        shown != null -> shown.forEach { OfferRow(it, installed, zone, d, busy = working || changing) }
+        shown != null -> {
+            val updates = offersToUpdate(installed, shown)
+            if (updates.size > 1 && !working && !changing) {
+                Button(onClick = { Regions.start(context, updates) }, modifier = Modifier.padding(vertical = 4.dp)) {
+                    OneLine(stringResource(R.string.region_update_all, updates.size))
+                }
+            }
+            shown.forEach { OfferRow(it, installed, zone, d, busy = working || changing, waiting = it.id in waiting) }
+        }
         d is DownloadState.Checking || d is DownloadState.Idle ->
             Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -216,7 +226,7 @@ private fun Supporting(text: String) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone: ZoneId, download: DownloadState, busy: Boolean) {
+private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone: ZoneId, download: DownloadState, busy: Boolean, waiting: Boolean) {
     val context = LocalContext.current
     val total = offer.gzBytes.toLong()
     val mine = when (download) {
@@ -239,6 +249,7 @@ private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone:
                         is DownloadState.Downloading if mine ->
                             stringResource(R.string.region_progress, mb(download.done), mb(total))
                         is DownloadState.Installing if mine -> stringResource(R.string.region_installing_short)
+                        else if waiting -> stringResource(R.string.region_waiting)
                         else -> stringResource(
                             if (action == OfferAction.UPDATE && isRebuild(installed, offer.id, offer.osmTimestamp)) {
                                 R.string.region_offer_rebuilt
