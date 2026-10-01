@@ -466,3 +466,7 @@ private fun settingItems(gravel: Gravel, favourites: FavouritesMode): List<Summa
     if (favourites == FavouritesMode.AVOID) add(SummaryItem.FavouritesAvoided)
 }
 
+/** Whether a memory trim of [level] (`ComponentCallbacks2`) makes the map
+ * drop its tile cache: only once the app is in the background and the
+ * system wants memory back, never while the rider looks at the map. */
+fun dropsMapCaches(level: Int): Boolean = level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
