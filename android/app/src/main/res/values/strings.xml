@@ -46,6 +46,9 @@
     <string name="region_offer_rebuilt">%1$.1f MB download · map data from %2$s, rebuilt</string>
     <string name="region_download">Download</string>
     <string name="region_update">Update</string>
+    <!-- Updates every region with an update, one after another; %1$d of them. -->
+    <string name="region_update_all">Update all (%1$d)</string>
+    <string name="region_waiting">Waiting to update…</string>
     <string name="region_stop">Stop the download</string>
     <string name="region_failed_download">Download failed: %1$s</string>
     <string name="region_no_room">not enough free space (%1$.1f MB needed)</string>
