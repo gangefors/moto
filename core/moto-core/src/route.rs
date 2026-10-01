@@ -104,6 +104,10 @@ pub(crate) struct Fun<'a> {
     /// Favourites are avoided (`FavouritesMode::Avoid`): they count for
     /// nothing and cost more.
     shun: bool,
+    /// Unridden roads are preferred (`UnriddenMode::Prefer`): roads the
+    /// rider's rides have been on keep `ridden_worth` of their curvy
+    /// worth.
+    unridden: bool,
     /// The kinds of road the rider avoids.
     avoid: crate::Avoid,
 }
@@ -117,6 +121,7 @@ impl<'a> Fun<'a> {
             gravel: opts.gravel == Gravel::Prefer,
             no_gravel: opts.gravel == Gravel::Avoid,
             shun: opts.favourites == FavouritesMode::Avoid,
+            unridden: opts.unridden == crate::UnriddenMode::Prefer,
             avoid: opts.avoid,
         }
     }
@@ -188,10 +193,22 @@ impl<'a> Fun<'a> {
         )
     }
 
-    /// What curvature adds to edge `id`'s worth: nothing when it is off.
+    /// Share of its curvy worth edge `id` keeps: `ridden_worth` on a road
+    /// the rider's rides have been on while unridden roads are preferred,
+    /// else all of it (ADR-0010).
+    fn ridden_factor(&self, id: u32) -> f64 {
+        if self.unridden && self.favourites.is_ridden(id) {
+            PARAMS.ridden_worth
+        } else {
+            1.0
+        }
+    }
+
+    /// What curvature adds to edge `id`'s worth: nothing when it is off,
+    /// less on a road already ridden while unridden roads are preferred.
     fn curve_worth(&self, id: u32, e: &Edge) -> f64 {
         if self.curvy {
-            PARAMS.curve_weight * self.curviness(id, e)
+            PARAMS.curve_weight * self.curviness(id, e) * self.ridden_factor(id)
         } else {
             0.0
         }
@@ -253,7 +270,7 @@ impl<'a> Fun<'a> {
             0.0
         };
         let curve = if self.curvy {
-            PARAMS.curve_weight * curviness
+            PARAMS.curve_weight * curviness * self.ridden_factor(id)
         } else {
             0.0
         };
@@ -457,6 +474,8 @@ struct Builder {
     duration_s: f64,
     curvy_m: f64,
     favourite_m: f64,
+    /// Metres on roads none of the rider's rides has been on.
+    unridden_m: f64,
     /// What riding the route is worth: seconds on favourites weighted by
     /// rating (epic 1) plus seconds on curvy road weighted by curviness
     /// and `curve_weight`.
@@ -510,6 +529,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         duration_s: 0.0,
         favourite_share: 0.0,
         curvy_share: 0.0,
+        unridden_share: 1.0,
         fastest_duration_s: 0.0,
         favourite_parts: Vec::new(),
         favourite_ratings: Vec::new(),
@@ -518,7 +538,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         toll_m: 0.0,
         suggested: false,
     };
-    let (mut favourite_m, mut curvy_m) = (0.0, 0.0);
+    let (mut favourite_m, mut curvy_m, mut unridden_m) = (0.0, 0.0, 0.0);
     for leg in legs {
         let skip = usize::from(
             out.geometry.last().is_some() && out.geometry.last() == leg.geometry.first(),
@@ -531,6 +551,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
         out.toll_m += leg.toll_m;
         favourite_m += leg.favourite_share * leg.distance_m;
         curvy_m += leg.curvy_share * leg.distance_m;
+        unridden_m += leg.unridden_share * leg.distance_m;
         for (p, r) in leg.favourite_parts.into_iter().zip(leg.favourite_ratings) {
             push_rated(&mut out.favourite_parts, &mut out.favourite_ratings, p, r);
         }
@@ -541,6 +562,7 @@ pub(crate) fn join(legs: Vec<Route>) -> Route {
     if out.distance_m > 0.0 {
         out.favourite_share = (favourite_m / out.distance_m).clamp(0.0, 1.0);
         out.curvy_share = (curvy_m / out.distance_m).clamp(0.0, 1.0);
+        out.unridden_share = (unridden_m / out.distance_m).clamp(0.0, 1.0);
     }
     out
 }
@@ -557,6 +579,9 @@ impl Builder {
         // edge) and always measured; it adds to what the stretch is worth
         // only when it pulls. Worth caps at 1 per second, as in the cost.
         self.curvy_m += frac * length_m * fun.curviness(id, &e);
+        if !favourites.is_ridden(id) {
+            self.unridden_m += frac * length_m;
+        }
         self.favourite_m += length_m * favourites.covered_between(id, from, to);
         let favourite_value = if fun.favourite_counts(&e) {
             favourites.value_between(id, from, to)
@@ -608,6 +633,11 @@ impl Builder {
             paid_s: self.paid_s,
             route: Route {
                 curvy_share: share(self.curvy_m),
+                unridden_share: if self.distance_m > 0.0 {
+                    share(self.unridden_m)
+                } else {
+                    1.0
+                },
                 favourite_share: share(self.favourite_m),
                 geometry: self.geometry,
                 distance_m: self.distance_m,
@@ -1473,6 +1503,169 @@ mod tests {
         ))
     }
 
+    /// As [`twisty`], with the same winding road mirrored to the south
+    /// (way 24): two equally fun ways round.
+    fn twisty_twice() -> Engine {
+        use crate::fixture::{Road, build};
+        use crate::region::format::RoadClass;
+        let nodes = [
+            (55.70, 13.39),
+            (55.70, 13.40),
+            (55.70, 13.48),
+            (55.70, 13.49),
+        ];
+        let bends = |side: f64| -> Vec<(f64, f64)> {
+            (1..160)
+                .map(|i| {
+                    let t = f64::from(i) / 160.0;
+                    let lat = 55.70
+                        + side * 0.0055 * (std::f64::consts::PI * t).sin()
+                        + 0.00055 * (t * 40.0 * std::f64::consts::PI).sin();
+                    (lat, 13.40 + 0.08 * t)
+                })
+                .collect()
+        };
+        let north = Road {
+            via: bends(1.0),
+            ..Road::new(1, 2, RoadClass::Tertiary, 80, 21)
+        };
+        let south = Road {
+            via: bends(-1.0),
+            ..Road::new(1, 2, RoadClass::Tertiary, 80, 24)
+        };
+        engine(build(
+            &nodes,
+            &[
+                Road::new(0, 1, RoadClass::Primary, 90, 20),
+                Road::new(1, 2, RoadClass::Primary, 90, 22),
+                north,
+                south,
+                Road::new(2, 3, RoadClass::Primary, 90, 23),
+            ],
+            50_000,
+        ))
+    }
+
+    #[test]
+    fn unridden_curvy_roads_pull_harder_than_ridden_ones() {
+        use crate::favourites::Favourites;
+        use crate::section::WaySpan;
+        let e = twisty_twice();
+        let (from, to) = (ll(55.70, 13.395), ll(55.70, 13.485));
+        let opts = |unridden| RouteOptions {
+            budget: crate::TimeBudget::Extra(1.0),
+            min_gain: 0.5,
+            unridden,
+            ..RouteOptions::default()
+        };
+        let side = |r: &crate::Route| {
+            if r.geometry.iter().any(|p| p.lat > 55.703) {
+                21
+            } else if r.geometry.iter().any(|p| p.lat < 55.697) {
+                24
+            } else {
+                0
+            }
+        };
+        // No rides: one of the winding roads, all of it unridden.
+        let none = Favourites::none();
+        let any = e
+            .route_with(from, to, &opts(crate::UnriddenMode::Any), &none)
+            .unwrap();
+        let ridden_way = side(&any);
+        assert_ne!(ridden_way, 0, "{any:?}");
+        assert_eq!(any.unridden_share, 1.0);
+        // Preferring unridden roads with no rides changes nothing.
+        let prefer = e
+            .route_with(from, to, &opts(crate::UnriddenMode::Prefer), &none)
+            .unwrap();
+        assert_eq!(prefer, any);
+
+        // A ride along that winding road.
+        let rides = vec![vec![WaySpan {
+            way_id: ridden_way,
+            from_idx: 0,
+            to_idx: 160,
+        }]];
+        let fav = Favourites::build_with_rides(&e, &[], &rides);
+        assert_eq!(fav.ridden_edge_count(), 2, "one road, both ways");
+        // Any: the same route, now mostly ridden.
+        let again = e
+            .route_with(from, to, &opts(crate::UnriddenMode::Any), &fav)
+            .unwrap();
+        assert_eq!(again.geometry, any.geometry);
+        assert!(again.unridden_share < 0.3, "{again:?}");
+        // Prefer: the other winding road, all of it unridden.
+        let new = e
+            .route_with(from, to, &opts(crate::UnriddenMode::Prefer), &fav)
+            .unwrap();
+        assert_ne!(side(&new), ridden_way, "{new:?}");
+        assert_ne!(side(&new), 0, "{new:?}");
+        assert_eq!(new.unridden_share, 1.0);
+        assert!((new.curvy_share - any.curvy_share).abs() < 0.02, "{new:?}");
+    }
+
+    #[test]
+    fn a_road_counts_as_ridden_from_half_of_it() {
+        use crate::favourites::Favourites;
+        use crate::section::WaySpan;
+        let e = twisty_twice();
+        let ride = |to_idx| {
+            vec![vec![WaySpan {
+                way_id: 21,
+                from_idx: 0,
+                to_idx,
+            }]]
+        };
+        // Way 21 is one edge each way, nodes 0–160 along it.
+        assert_eq!(
+            Favourites::build_with_rides(&e, &[], &ride(60)).ridden_edge_count(),
+            0
+        );
+        assert_eq!(
+            Favourites::build_with_rides(&e, &[], &ride(100)).ridden_edge_count(),
+            2
+        );
+        // Ridden against the way: the same.
+        let back = vec![vec![WaySpan {
+            way_id: 21,
+            from_idx: 160,
+            to_idx: 20,
+        }]];
+        assert_eq!(
+            Favourites::build_with_rides(&e, &[], &back).ridden_edge_count(),
+            2
+        );
+        // Ways the region doesn't have, and empty spans, mark nothing.
+        let stray = vec![vec![
+            WaySpan {
+                way_id: 999,
+                from_idx: 0,
+                to_idx: 5,
+            },
+            WaySpan {
+                way_id: 21,
+                from_idx: 7,
+                to_idx: 7,
+            },
+        ]];
+        let none = Favourites::build_with_rides(&e, &[], &stray);
+        assert_eq!(none.ridden_edge_count(), 0);
+        assert!(none.is_empty());
+        // Ridden roads built for one region are refused on another.
+        let fav = Favourites::build_with_rides(&e, &[], &ride(160));
+        let other = twisty();
+        assert!(matches!(
+            other.route_with(
+                ll(55.70, 13.395),
+                ll(55.70, 13.485),
+                &RouteOptions::default(),
+                &fav
+            ),
+            Err(CoreError::InvalidArgument(_))
+        ));
+    }
+
     fn winds(r: &crate::Route) -> bool {
         r.geometry.iter().any(|p| p.lat > 55.703)
     }
@@ -1710,6 +1903,7 @@ mod tests {
             duration_s: 60.0,
             favourite_share: share,
             curvy_share: share,
+            unridden_share: share,
             fastest_duration_s: 50.0,
             favourite_ratings: vec![crate::section::Rating::Great; parts.len()],
             favourite_parts: parts.clone(),

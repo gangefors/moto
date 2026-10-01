@@ -570,6 +570,8 @@ impl From<RouteOptions> for moto_core::RouteOptions {
             curvy: o.curvy,
             gravel: o.gravel.into(),
             favourites: o.favourites.into(),
+            // Not offered to the app yet.
+            unridden: moto_core::UnriddenMode::Any,
         }
     }
 }

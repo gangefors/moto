@@ -69,6 +69,11 @@ pub struct ScoringParams {
     /// What a fully curvy road is worth next to an epic favourite (1).
     /// Favourite and curvature add up, capped at 1.
     pub curve_weight: f64,
+    /// Share of its curvy worth a road the rider's rides have been on
+    /// keeps when unridden roads are preferred (ADR-0010). Starting
+    /// point, 2026-10-01 (the rider): tuned with the golden before/after
+    /// table. Ridden roads cost no more time; they only pull less.
+    pub ridden_worth: f64,
     /// What a gravel road is worth when the rider prefers gravel, next
     /// to an epic favourite (1). Adds to favourites and curvature, capped
     /// at 1.
@@ -189,6 +194,7 @@ pub const PARAMS: ScoringParams = ScoringParams {
     curve_class_weight: [0.0, 0.5, 1.0, 1.0, 1.0, 0.6, 0.2, 0.0, 0.0, 0.0, 0.0],
     street_kmh: 40,
     curve_weight: 0.8,
+    ridden_worth: 0.3,
     gravel_weight: 0.8,
     fast_kmh: 100,
     fast_penalty: 3.0,
@@ -227,6 +233,7 @@ mod tests {
         const { assert!(PARAMS.toll_penalty >= 1.0) };
         const { assert!(PARAMS.paid_worth >= 0.0) };
         const { assert!(PARAMS.curve_full > 0.0 && PARAMS.curve_weight <= 1.0) };
+        const { assert!(PARAMS.ridden_worth >= 0.0 && PARAMS.ridden_worth <= 1.0) };
     }
 
     #[test]
