@@ -146,5 +146,48 @@ pub fn rematch_store(store: &mut Store, engine: &Engine) -> Result<RematchReport
     Ok(report)
 }
 
+/// What [`match_rides`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RideMatchReport {
+    /// Rides matched (0 when none waited).
+    pub matched: u64,
+    /// Way spans stored for them.
+    pub ways: u64,
+}
+
+/// Matches every finished ride not yet matched against `engine`'s open
+/// regions to their roads and stores its way spans (ADR-0010). Each ride
+/// is saved on its own, so a run cut short goes on where it stopped on the
+/// next start. A ride off the open map gets no spans; it is matched again
+/// when the regions change.
+pub fn match_rides(store: &mut Store, engine: &Engine) -> Result<RideMatchReport, CoreError> {
+    let key = region_key(engine);
+    let mut report = RideMatchReport::default();
+    for id in store.rides_to_match(&key)? {
+        let Some(points) = store.track_points(id)? else {
+            continue; // deleted meanwhile
+        };
+        let line: Vec<LatLon> = points.iter().map(|p| p.position).collect();
+        // A ride the matcher refuses (more points than it takes) is stored
+        // with no spans rather than tried again on every start; spans past
+        // the cap are left out.
+        let ways: Vec<WaySpan> = engine
+            .match_track(&line)
+            .map(|m| {
+                m.pieces
+                    .into_iter()
+                    .flat_map(|p| p.ways)
+                    .take(crate::store::MAX_RIDE_WAYS)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if store.save_ride_ways(id, &key, &ways)? {
+            report.matched += 1;
+            report.ways += ways.len() as u64;
+        }
+    }
+    Ok(report)
+}
+
 #[cfg(test)]
 mod tests;
