@@ -103,6 +103,14 @@ class RegionLogicTest {
     }
 
     @Test
+    fun theDebugReportTellsHowARegionOpened() {
+        assertEquals(OpenCheck.CHECKSUM, openCheck("abc", "abc"))
+        assertEquals(OpenCheck.FULL_NO_CHECKSUM, openCheck(null, "abc"))
+        assertEquals(OpenCheck.FULL_CHECKSUM_DIFFERED, openCheck("abc", "def"))
+        assertEquals(OpenCheck.FULL_CHECKSUM_DIFFERED, openCheck("abc", null))
+    }
+
+    @Test
     fun downloadShareStaysInRange() {
         assertEquals(0.5f, downloadShare(50, 100))
         assertEquals(1f, downloadShare(150, 100))
