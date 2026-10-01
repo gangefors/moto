@@ -29,6 +29,38 @@ fun sectionLook(routeShown: Boolean, darkMap: Boolean = false): SectionLook =
         SectionLook(lineWidth = 5f, lineOpacity = 1f, casingOpacity = 0.8f * outlineStrength(darkMap), arrowOpacity = 1f)
     }
 
+/** How much of its width ([SectionLook.lineWidth]) a favourite section is
+ * drawn at, by zoom (zoom to share): half when zoomed far out, where full
+ * width made them look heavy (Stefan, 2026-10-01), full from zoom 12; never
+ * under [SECTION_MIN_WIDTH]. */
+val SECTION_WIDTH_SCALE: List<Pair<Float, Float>> = listOf(8f to 0.5f, 12f to 1f)
+
+/** The thinnest a favourite section is drawn, dp: room for a gravel dash
+ * of 1 dp with 1 dp of its colour on each side (Stefan, 2026-10-01). */
+const val SECTION_MIN_WIDTH = 3f
+
+/** A favourite section's width at [zoom], dp, for [width] at full scale,
+ * as the map draws it from [SECTION_WIDTH_SCALE]. */
+fun sectionWidthAt(width: Float, zoom: Float): Float {
+    val (z0, s0) = SECTION_WIDTH_SCALE.first()
+    val (z1, s1) = SECTION_WIDTH_SCALE.last()
+    fun at(share: Float) = maxOf(SECTION_MIN_WIDTH, width * share)
+    return when {
+        zoom <= z0 -> at(s0)
+        zoom >= z1 -> at(s1)
+        else -> at(s0) + (at(s1) - at(s0)) * (zoom - z0) / (z1 - z0)
+    }
+}
+
+/** Width of the white gravel dashes on a favourite [lineWidth] dp wide:
+ * two fifths of it, and always at least 1 dp of the line's colour on each
+ * side. */
+fun sectionGravelWidth(lineWidth: Float): Float = minOf(lineWidth * 0.4f, lineWidth - 2f)
+
+/** How much wider than its line a favourite's white outline is, dp, at
+ * full scale. */
+const val SECTION_CASING_EXTRA = 3f
+
 /**
  * How strong the white outline of routes and sections is drawn (its
  * opacity, as a share): full on the light map, where it lifts the lines
