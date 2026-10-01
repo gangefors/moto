@@ -246,6 +246,7 @@ fun RouteCard(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     kept: Int,
+    problem: String?,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
@@ -260,6 +261,8 @@ fun RouteCard(
             SheetTop(
                 summary = summary,
                 computing = stringResource(R.string.route_computing),
+                problem = problem,
+                problemTitle = stringResource(R.string.route_none_title),
                 found = summary != null,
                 onSave = onSave,
                 onShare = onShare,
@@ -269,7 +272,7 @@ fun RouteCard(
             )
             ChoiceSwitcher(
                 found = summary != null,
-                failed = false,
+                failed = problem != null,
                 position = position,
                 count = count,
                 onPrevious = onPrevious,
@@ -437,6 +440,7 @@ fun LoopCard(
                 summary = summary,
                 computing = stringResource(R.string.loop_computing),
                 problem = problem,
+                problemTitle = stringResource(R.string.loop_none_title),
                 found = found,
                 onSave = onSave,
                 onShare = onShare,
@@ -585,6 +589,7 @@ private fun SheetTop(
     closeDescription: String,
     kept: Int,
     problem: String? = null,
+    problemTitle: String = "",
 ) {
     val shown = summary
     val finding = shown == null && problem == null
@@ -593,7 +598,7 @@ private fun SheetTop(
         // sizes that fits; when not even the smallest does (very large
         // fonts), the time goes below the distance as a whole.
         val texts = when {
-            problem != null -> listOf(stringResource(R.string.loop_none_title))
+            problem != null -> listOf(problemTitle)
             shown == null -> listOf(computing)
             else -> listOf(noBreak(stringResource(R.string.route_km, shown.km)), noBreak(durationText(shown.minutes)))
         }

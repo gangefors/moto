@@ -133,11 +133,24 @@ fun keptChoices(kept: Int, count: Int): Int = if (count > 0) count else kept
  * measured) keeps it fixed. */
 fun fixesTop(headerPx: Int, roomPx: Float): Boolean = headerPx <= roomPx / 2
 
-/** Whether a route search that failed for [failed] ends goes back to the
- * last routes found ([last] ends, null for none): only when the end moved
- * (new ends, same sheet). A new route that fails has nothing to go back
- * to, and a search for the same ends failing again must not loop. */
-fun <P> goesBack(last: Pair<P, P>?, failed: Pair<P, P>): Boolean = last != null && last != failed
+/** What the route sheet does when a search fails. */
+enum class FailedSearch {
+    /** The end moved where no route reaches: back to the last routes. */
+    GO_BACK,
+    /** Same ends, something else changed: the sheet stays and says why. */
+    STAY,
+    /** A new route that found nothing: the sheet closes, with a notice. */
+    CLOSE,
+}
+
+/** What the route sheet does when the search for [failed] ends fails,
+ * given the ends of the last routes found ([last], null for none). A
+ * search for the same ends never goes back, so it can't loop. */
+fun <P> failedSearch(last: Pair<P, P>?, failed: Pair<P, P>): FailedSearch = when {
+    last == null -> FailedSearch.CLOSE
+    last != failed -> FailedSearch.GO_BACK
+    else -> FailedSearch.STAY
+}
 
 /** [vias] without the one at [index] (all of them when there is none). */
 fun <P> removeVia(vias: List<P>, index: Int): List<P> = vias.filterIndexed { i, _ -> i != index }

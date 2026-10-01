@@ -148,6 +148,7 @@
     <string name="card_expand">Show more</string>
     <string name="loop_none">No loop of that length from here. Try Shuffle, another length or direction.</string>
     <string name="loop_none_title">No loop found</string>
+    <string name="route_none_title">No route found</string>
     <string name="route_computing">Finding a route…</string>
     <string name="route_arrive_title">Arrive by</string>
     <string name="route_arrive_set">Set</string>
