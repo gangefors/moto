@@ -32,12 +32,14 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
                 *RIDDEN_WIDTHS.map { (z, w) -> Expression.stop(z, w) }.toTypedArray(),
             ),
         ),
-        // Dashes in line widths, a step longer from RIDDEN_LONG_DASH_ZOOM.
+        // Dashes in line widths, set afresh for each zoom (riddenDashes).
         PropertyFactory.lineDasharray(
             Expression.step(
                 Expression.zoom(),
-                Expression.literal(RIDDEN_SHORT_DASHES),
-                Expression.stop(RIDDEN_LONG_DASH_ZOOM, Expression.literal(RIDDEN_LONG_DASHES)),
+                Expression.literal(riddenDashes(RIDDEN_DASH_ZOOMS.first)),
+                *RIDDEN_DASH_ZOOMS.drop(1)
+                    .map { z -> Expression.stop(z.toFloat(), Expression.literal(riddenDashes(z))) }
+                    .toTypedArray(),
             ),
         ),
         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
