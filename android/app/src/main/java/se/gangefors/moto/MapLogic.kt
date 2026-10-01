@@ -428,3 +428,41 @@ fun firstFitting(widths: List<Int>, availablePx: Int): Int? =
  * (segmented buttons share the width equally). */
 fun segmentsFit(widestLabelPx: Int, count: Int, segmentPaddingPx: Int, availablePx: Int): Boolean =
     count > 0 && count * (widestLabelPx + segmentPaddingPx) <= availablePx
+
+/**
+ * One chip in a resting route or loop sheet's summary row (Stefan: icons
+ * over words). Settings at their usual value show nothing: gravel avoided,
+ * favourites preferred, any direction.
+ */
+sealed interface SummaryItem {
+    /** When the route arrives, set to arrive [by] (epoch seconds). */
+    data class ArrivesAt(val arrival: Arrival, val by: Long) : SummaryItem
+    data class Waypoints(val count: Int) : SummaryItem
+    data class Length(val choice: LoopChoice) : SummaryItem
+    data class Heading(val direction: LoopDirection) : SummaryItem
+    /** Gravel allowed or preferred. */
+    data class GravelRoads(val gravel: Gravel) : SummaryItem
+    data object FavouritesAvoided : SummaryItem
+}
+
+/** A route sheet's summary row: arrival, waypoints, then its settings. */
+fun routeSummaryItems(arrival: SummaryItem.ArrivesAt?, viaCount: Int, gravel: Gravel, favourites: FavouritesMode): List<SummaryItem> =
+    buildList {
+        arrival?.let { add(it) }
+        if (viaCount > 0) add(SummaryItem.Waypoints(viaCount))
+        addAll(settingItems(gravel, favourites))
+    }
+
+/** A loop sheet's summary row: length, direction, then its settings. */
+fun loopSummaryItems(choice: LoopChoice, direction: LoopDirection, gravel: Gravel, favourites: FavouritesMode): List<SummaryItem> =
+    buildList {
+        add(SummaryItem.Length(choice))
+        if (direction != LoopDirection.ANY) add(SummaryItem.Heading(direction))
+        addAll(settingItems(gravel, favourites))
+    }
+
+private fun settingItems(gravel: Gravel, favourites: FavouritesMode): List<SummaryItem> = buildList {
+    if (gravel != Gravel.AVOID) add(SummaryItem.GravelRoads(gravel))
+    if (favourites == FavouritesMode.AVOID) add(SummaryItem.FavouritesAvoided)
+}
+

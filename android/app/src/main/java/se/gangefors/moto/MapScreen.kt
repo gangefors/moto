@@ -1792,6 +1792,9 @@ fun MapScreen() {
                                     }
                                 }
                             },
+                            arrival = arriveBy?.let { by ->
+                                shownRoute?.let { (r, _) -> SummaryItem.ArrivesAt(arrival(routeFoundAt, r.durationS, by), by) }
+                            },
                             onArriveBy = { arriveBy = it },
                             position = routeIndex,
                             count = routeChoices.size,

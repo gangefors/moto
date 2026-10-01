@@ -46,6 +46,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -237,6 +239,7 @@ fun RouteCard(
     onClearVia: () -> Unit,
     arriveBy: Long?,
     arrivalNote: String?,
+    arrival: SummaryItem.ArrivesAt?,
     onArriveBy: (Long?) -> Unit,
     position: Int,
     count: Int,
@@ -276,13 +279,7 @@ fun RouteCard(
                 kept = kept,
             )
             if (!expanded) {
-                val parts = buildList {
-                    arrivalNote?.let { add(it) }
-                    if (viaCount > 0) add(pluralStringResource(R.plurals.route_via_count, viaCount, viaCount))
-                    add(gravelSummary(gravel))
-                    favouritesSummary(favourites)?.let { add(it) }
-                }
-                OptionChips(parts, allowedKinds(avoid)) { onExpandedChange(true) }
+                OptionChips(routeSummaryItems(arrival, viaCount, gravel, favourites), allowedKinds(avoid)) { onExpandedChange(true) }
             }
         },
         details = {
@@ -460,17 +457,7 @@ fun LoopCard(
                 onShuffle = onShuffle,
             )
             if (!expanded) {
-                val heading = stringResource(
-                    when (direction) {
-                        LoopDirection.ANY -> R.string.loop_heading_any
-                        LoopDirection.NORTH -> R.string.loop_heading_north
-                        LoopDirection.EAST -> R.string.loop_heading_east
-                        LoopDirection.SOUTH -> R.string.loop_heading_south
-                        LoopDirection.WEST -> R.string.loop_heading_west
-                    },
-                )
-                val parts = listOfNotNull(loopLengthText(choice), heading, gravelSummary(gravel), favouritesSummary(favourites))
-                OptionChips(parts, allowedKinds(avoid)) {
+                OptionChips(loopSummaryItems(choice, direction, gravel, favourites), allowedKinds(avoid)) {
                     onExpandedChange(true)
                 }
             }
@@ -747,23 +734,20 @@ private fun StatFigure(stat: RouteStat, s: RouteSummary) {
     }
 }
 
-/** The choices as chips, the kinds of road [allowed] as their icons
- * alone (none while all are avoided, the default), then an arrow;
- * tapping any pulls the sheet up to change them. */
+/** The choices as chips ([items]: icons, with a figure where one is
+ * needed), the kinds of road [allowed] as their icons alone (none while
+ * all are avoided, the default), then an arrow; tapping any pulls the
+ * sheet up to change them. A screen reader says each in words. */
 @Composable
-private fun OptionChips(labels: List<String>, allowed: List<AvoidKind>, onClick: () -> Unit) {
+private fun OptionChips(items: List<SummaryItem>, allowed: List<AvoidKind>, onClick: () -> Unit) {
     FlowRow(
         modifier = Modifier.padding(top = 4.dp, end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        labels.forEach { SuggestionChip(onClick = onClick, label = { OneLine(it) }) }
+        items.forEach { SummaryChip(it, onClick) }
         allowed.forEach { kind ->
-            val said = stringResource(R.string.avoid_allowed, avoidLabel(kind))
-            SuggestionChip(
-                onClick = onClick,
-                label = { Icon(painterResource(avoidIcon(kind)), contentDescription = said, modifier = Modifier.size(18.dp)) },
-            )
+            IconChip(avoidIcon(kind), null, stringResource(R.string.avoid_allowed, avoidLabel(kind)), onClick = onClick)
         }
         IconButton(onClick = onClick) {
             Icon(painterResource(R.drawable.ic_expand_less), contentDescription = stringResource(R.string.card_expand))
@@ -771,21 +755,92 @@ private fun OptionChips(labels: List<String>, allowed: List<AvoidKind>, onClick:
     }
 }
 
-/** "Avoid favourites" while they are avoided; nothing while preferred
- * (the usual choice). */
+/** One [SummaryItem] as a chip: the length in words; a compass needle
+ * turned the way a loop heads, with its letter; the gravel icon, with +
+ * when preferred; the crossed-out star; a pin with the waypoints' count;
+ * a clock with the arrival time, in the error colour when it misses the
+ * time set. */
 @Composable
-private fun favouritesSummary(f: FavouritesMode): String? =
-    if (f == FavouritesMode.AVOID) stringResource(R.string.favourites_summary_avoid) else null
+private fun SummaryChip(item: SummaryItem, onClick: () -> Unit) {
+    when (item) {
+        is SummaryItem.Length -> SuggestionChip(onClick = onClick, label = { OneLine(loopLengthText(item.choice)) })
+        is SummaryItem.Heading -> {
+            val (letter, said) = when (item.direction) {
+                LoopDirection.NORTH -> R.string.loop_direction_north to R.string.loop_heading_north
+                LoopDirection.EAST -> R.string.loop_direction_east to R.string.loop_heading_east
+                LoopDirection.SOUTH -> R.string.loop_direction_south to R.string.loop_heading_south
+                LoopDirection.WEST -> R.string.loop_direction_west to R.string.loop_heading_west
+                LoopDirection.ANY -> R.string.loop_direction_any to R.string.loop_heading_any
+            }
+            IconChip(
+                R.drawable.ic_compass,
+                stringResource(letter),
+                stringResource(R.string.summary_heading, stringResource(said)),
+                rotation = (item.direction.bearing ?: 0.0).toFloat(),
+                onClick = onClick,
+            )
+        }
+        is SummaryItem.GravelRoads -> IconChip(
+            R.drawable.ic_gravel,
+            if (item.gravel == Gravel.PREFER) "+" else null,
+            stringResource(if (item.gravel == Gravel.PREFER) R.string.gravel_summary_prefer else R.string.gravel_summary_allow),
+            onClick = onClick,
+        )
+        SummaryItem.FavouritesAvoided ->
+            IconChip(R.drawable.ic_star_off, null, stringResource(R.string.favourites_summary_avoid), onClick = onClick)
+        is SummaryItem.Waypoints -> IconChip(
+            R.drawable.ic_pin,
+            item.count.toString(),
+            pluralStringResource(R.plurals.route_via_count, item.count, item.count),
+            onClick = onClick,
+        )
+        is SummaryItem.ArrivesAt -> {
+            val zone = remember { ZoneId.systemDefault() }
+            val at = clockTime(item.arrival.atSec, zone)
+            IconChip(
+                R.drawable.ic_clock,
+                at,
+                if (item.arrival.late) {
+                    stringResource(R.string.route_arrives_late, clockTime(item.by, zone), at)
+                } else {
+                    stringResource(R.string.route_arrives, at)
+                },
+                late = item.arrival.late,
+                onClick = onClick,
+            )
+        }
+    }
+}
 
-/** "Avoid gravel", "Gravel allowed" or "Prefer gravel". */
+/** A summary chip with [icon] (turned by [rotation] degrees) after which
+ * [text] comes, or the icon alone; a screen reader says [said] instead. */
 @Composable
-private fun gravelSummary(g: Gravel): String = stringResource(
-    when (g) {
-        Gravel.AVOID -> R.string.gravel_summary_avoid
-        Gravel.ALLOW -> R.string.gravel_summary_allow
-        Gravel.PREFER -> R.string.gravel_summary_prefer
-    },
-)
+private fun IconChip(icon: Int, text: String?, said: String, rotation: Float = 0f, late: Boolean = false, onClick: () -> Unit) {
+    val colors = if (late) {
+        SuggestionChipDefaults.suggestionChipColors(
+            labelColor = MaterialTheme.colorScheme.error,
+            iconContentColor = MaterialTheme.colorScheme.error,
+        )
+    } else {
+        SuggestionChipDefaults.suggestionChipColors()
+    }
+    val image = @Composable {
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp).rotate(rotation))
+    }
+    SuggestionChip(
+        onClick = onClick,
+        modifier = Modifier.semantics { contentDescription = said },
+        colors = colors,
+        icon = if (text != null) image else null,
+        label = {
+            if (text != null) {
+                Text(text, maxLines = 1, softWrap = false, modifier = Modifier.clearAndSetSemantics {})
+            } else {
+                image()
+            }
+        },
+    )
+}
 
 /** Picks the time to arrive by: the next time the clock shows it. */
 @OptIn(ExperimentalMaterial3Api::class)

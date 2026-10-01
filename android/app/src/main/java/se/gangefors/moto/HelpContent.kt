@@ -24,7 +24,8 @@ data class HelpGroup(val title: Int, val settings: List<HelpSetting>)
 /**
  * A topic: its heading (with the icon after it, if any), its text, then
  * its key of buttons or its groups of settings, and after them, with
- * [figuresText] as their lead, a key of the icons on its [figures].
+ * [figuresText] as their lead, a key of the icons on its [figures], and
+ * with [summaryText] as theirs, of the summary row's chips ([summary]).
  */
 data class HelpTopic(
     val id: HelpTopicId,
@@ -35,6 +36,8 @@ data class HelpTopic(
     val titleIcon: String? = null,
     val figuresText: Int? = null,
     val figures: List<HelpKey> = emptyList(),
+    val summaryText: Int? = null,
+    val summary: List<HelpKey> = emptyList(),
 )
 
 /**
@@ -72,6 +75,15 @@ val HELP_TOPICS = listOf(
             HelpKey("curvy", R.string.help_figure_curvy, R.string.help_figure_curvy_what),
             HelpKey("gravel", R.string.help_figure_gravel, R.string.help_figure_gravel_what),
             HelpKey("toll", R.string.help_figure_toll, R.string.help_figure_toll_what),
+        ),
+        summaryText = R.string.help_plan_summary,
+        summary = listOf(
+            HelpKey("clock", R.string.help_summary_clock, R.string.help_summary_clock_what),
+            HelpKey("pin", R.string.help_summary_pin, R.string.help_summary_pin_what),
+            HelpKey("compass", R.string.help_summary_compass, R.string.help_summary_compass_what),
+            HelpKey("gravel", R.string.help_summary_gravel, R.string.help_summary_gravel_what),
+            HelpKey("star_off", R.string.help_summary_star_off, R.string.help_summary_star_off_what),
+            HelpKey("motorway", R.string.help_summary_roads, R.string.help_summary_roads_what),
         ),
     ),
     HelpTopic(

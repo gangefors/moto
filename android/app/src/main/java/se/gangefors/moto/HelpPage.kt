@@ -91,6 +91,12 @@ fun HelpPage(onDismiss: () -> Unit) {
                         for (key in topic.figures) KeyRow(key, null) {}
                     }
                 }
+                if (topic.summary.isNotEmpty()) {
+                    topic.summaryText?.let { Text(stringResource(it), Modifier.padding(top = 12.dp)) }
+                    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (key in topic.summary) KeyRow(key, null) {}
+                    }
+                }
             }
         }
     }

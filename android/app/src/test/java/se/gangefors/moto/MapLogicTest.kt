@@ -82,6 +82,28 @@ class MapLogicTest {
     }
 
     @Test
+    fun theSummaryRowShowsOnlyWhatDiffersFromTheUsual() {
+        val usual = loopSummaryItems(LoopChoice.Minutes(120), LoopDirection.ANY, se.gangefors.moto.core.Gravel.AVOID, se.gangefors.moto.core.FavouritesMode.PREFER)
+        assertEquals(listOf<SummaryItem>(SummaryItem.Length(LoopChoice.Minutes(120))), usual)
+        val loop = loopSummaryItems(LoopChoice.Km(100), LoopDirection.EAST, se.gangefors.moto.core.Gravel.PREFER, se.gangefors.moto.core.FavouritesMode.AVOID)
+        assertEquals(
+            listOf(
+                SummaryItem.Length(LoopChoice.Km(100)),
+                SummaryItem.Heading(LoopDirection.EAST),
+                SummaryItem.GravelRoads(se.gangefors.moto.core.Gravel.PREFER),
+                SummaryItem.FavouritesAvoided,
+            ),
+            loop,
+        )
+        assertEquals(emptyList<SummaryItem>(), routeSummaryItems(null, 0, se.gangefors.moto.core.Gravel.AVOID, se.gangefors.moto.core.FavouritesMode.PREFER))
+        val at = SummaryItem.ArrivesAt(Arrival(1_000, late = true), by = 900)
+        assertEquals(
+            listOf(at, SummaryItem.Waypoints(2), SummaryItem.GravelRoads(se.gangefors.moto.core.Gravel.ALLOW)),
+            routeSummaryItems(at, 2, se.gangefors.moto.core.Gravel.ALLOW, se.gangefors.moto.core.FavouritesMode.PREFER),
+        )
+    }
+
+    @Test
     fun aStartGivenByTheAppActsLikeALongPress() {
         // "Route here from my position": the long-pressed point becomes the
         // end, the rider's position the start, and further long-presses
