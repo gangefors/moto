@@ -58,6 +58,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                             Text(stringResource(R.string.about_version, appVersion(context)), Modifier.padding(top = 8.dp))
                             Text(stringResource(R.string.about_licence), Modifier.padding(top = 12.dp))
                             Text(stringResource(R.string.about_source), Modifier.padding(top = 12.dp))
+                            Text(stringResource(R.string.about_privacy), Modifier.padding(top = 12.dp))
                             Text(
                                 stringResource(R.string.about_map_attribution),
                                 Modifier.padding(top = 12.dp),

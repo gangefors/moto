@@ -265,6 +265,7 @@
     <string name="help_key_sections_what">in the menu: all your favourite sections</string>
     <string name="about_licence">moto is free software under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). It comes with no warranty.</string>
     <string name="about_source">Source code: https://github.com/gangefors/moto</string>
+    <string name="about_privacy">Privacy policy: https://github.com/gangefors/moto/blob/main/PRIVACY.md</string>
     <string name="about_map_attribution">Map data © OpenStreetMap contributors, available under the Open Database License (ODbL). Map tiles by OpenFreeMap, © OpenMapTiles.</string>
     <string name="about_notices_title">Open-source licences</string>
     <string name="about_notices_intro">moto is built on the open-source software listed below, with the licence texts it comes with.</string>
