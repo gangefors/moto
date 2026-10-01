@@ -429,7 +429,7 @@ jobs:
             notes="Debug APK built from ${GITHUB_SHA::7} on main. Replaced on every push to main that touches android/ or core/."
           else
             title="Debug build (latest work branch)"
-            notes="Debug APK built from ${GITHUB_SHA::7} on the work branch $BRANCH, published once the app built and its tests passed, before the benchmark and before it reaches main. Signed like debug-latest: either installs over the other."
+            notes="Debug APK built from ${GITHUB_SHA::7} on the branch $BRANCH. Signed like debug-latest: either installs over the other."
           fi
           gh release delete "$TAG" --cleanup-tag --yes || true
           gh release create "$TAG" "$apk" \
