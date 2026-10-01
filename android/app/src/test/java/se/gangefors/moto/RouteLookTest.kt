@@ -79,6 +79,24 @@ class RouteLookTest {
     }
 
     @Test
+    fun theRouteIsLighterOnTheLightMapSoTheInkDashesShow() {
+        fun lum(c: String): Double {
+            val ch = listOf(1, 3, 5).map { c.substring(it, it + 2).toInt(16) / 255.0 }
+                .map { if (it <= 0.03928) it / 12.92 else Math.pow((it + 0.055) / 1.055, 2.4) }
+            return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+        }
+        fun contrast(a: String, b: String): Double {
+            val (x, y) = listOf(lum(a), lum(b)).sortedDescending()
+            return (x + 0.05) / (y + 0.05)
+        }
+        assertEquals("#669df6", routeBlue(darkMap = false))
+        assertEquals("#1a73e8", routeBlue(darkMap = true))
+        // Near-black dashes on the route: well over the 3:1 a line needs.
+        assertTrue(contrast(routeBlue(false), riddenColor(false)) > 5.0)
+        assertTrue(contrast(routeBlue(true), riddenColor(true)) > 3.0)
+    }
+
+    @Test
     fun riddenRoadsAreDarkOnTheLightMapAndLightOnTheDark() {
         assertEquals("#202124", riddenColor(darkMap = false))
         assertEquals("#e8eaed", riddenColor(darkMap = true))

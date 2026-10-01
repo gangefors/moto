@@ -80,6 +80,12 @@ fun favouriteGlowColors(
         if (part.size < 2) null else part to ratingColor(ratings.getOrNull(i) ?: Rating.EPIC, darkMap)
     }
 
+/** The route's blue: lighter on the light map, so the ridden roads'
+ * near-black dashes stand out on it (Stefan, 2026-10-01); the white
+ * casing keeps it apart from the map. The dark map keeps the deeper
+ * blue, where the off-white dashes already do. */
+fun routeBlue(darkMap: Boolean): String = if (darkMap) "#1a73e8" else "#669df6"
+
 /** The ridden roads' dashes (ADR-0010): near-black on the light map,
  * off-white on the dark one; no single colour stands out against both
  * the route blue and both maps. */
