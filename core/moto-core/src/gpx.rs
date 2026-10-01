@@ -11,7 +11,7 @@ use crate::LatLon;
 use crate::track::TrackPoint;
 
 mod read;
-pub use read::{MAX_GPX_BYTES, read_track};
+pub use read::{MAX_GPX_BYTES, MAX_GPX_RIDES, read_track, read_tracks};
 
 const HEADER: &str = concat!(
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",

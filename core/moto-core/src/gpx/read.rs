@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Stefan Gangefors
 
 //! GPX import: the track points of a file from another app or an earlier
-//! export, as a ride. The file is untrusted: it is scanned for points
+//! export, as rides (one per track segment). The file is untrusted: it is scanned for points
 //! without an XML parser (no entities, no DTDs, nothing fetched), sizes
 //! and counts are capped, and anything malformed is skipped.
 
@@ -12,29 +12,98 @@ use crate::{CoreError, LatLon};
 /// Largest GPX file read: 200 000 fixes at about 300 bytes each.
 pub const MAX_GPX_BYTES: usize = 64 * 1024 * 1024;
 
+/// Most rides one GPX file may hold (track segments): a bound on the
+/// work one file can make, far above what a day's riding gives.
+pub const MAX_GPX_RIDES: usize = 1000;
+
 /// The points of a GPX file's track (`<trkpt>`), or of its route
-/// (`<rtept>`) if it has no track, in file order, as a ride. Times come
+/// (`<rtept>`) if it has no track, in file order, as one ride. Times come
 /// from `<time>` when every point has a valid one; later points never go
 /// back in time (a repeated time is nudged 1 ms on). Without times, the
 /// points are 1 s apart from the first valid time, or from `now_ms`.
 /// Accuracy, speed and bearing come from the app's own `moto` extension
 /// when present and valid. Fewer than two points is an error.
 pub fn read_track(text: &str, now_ms: i64) -> Result<Vec<TrackPoint>, CoreError> {
+    check_size(text)?;
+    let mut raw = points(text, "trkpt")?;
+    if raw.is_empty() {
+        raw = points(text, "rtept")?;
+    }
+    if raw.len() < 2 {
+        return Err(no_track());
+    }
+    timed(raw, now_ms)
+}
+
+/// The rides of a GPX file: each track segment (`<trkseg>`), of every
+/// track, is one ride, read as [`read_track`] reads a whole file (a file
+/// from another app may hold a day's rides as segments). Segments of
+/// fewer than two points are left out (none left is an error). A file
+/// without segments is read whole, as [`read_track`] does. At most [`MAX_GPX_RIDES`] rides.
+pub fn read_tracks(text: &str, now_ms: i64) -> Result<Vec<Vec<TrackPoint>>, CoreError> {
+    check_size(text)?;
+    let mut rides = Vec::new();
+    let segments = segments(text);
+    if segments.is_empty() {
+        return Ok(vec![read_track(text, now_ms)?]);
+    }
+    for body in segments {
+        let raw = points(body, "trkpt")?;
+        if raw.len() < 2 {
+            continue;
+        }
+        if rides.len() == MAX_GPX_RIDES {
+            return Err(CoreError::InvalidArgument(format!(
+                "a GPX file may hold at most {MAX_GPX_RIDES} rides"
+            )));
+        }
+        rides.push(timed(raw, now_ms)?);
+    }
+    if rides.is_empty() {
+        return Err(no_track());
+    }
+    Ok(rides)
+}
+
+fn check_size(text: &str) -> Result<(), CoreError> {
     if text.len() > MAX_GPX_BYTES {
         return Err(CoreError::InvalidArgument(format!(
             "a GPX file may be at most {} MiB",
             MAX_GPX_BYTES >> 20
         )));
     }
-    let mut raw = points(text, "trkpt")?;
-    if raw.is_empty() {
-        raw = points(text, "rtept")?;
+    Ok(())
+}
+
+fn no_track() -> CoreError {
+    CoreError::InvalidArgument("the GPX file has no track with at least two points".into())
+}
+
+/// The bodies of the `<trkseg>` elements, in file order: each runs to its
+/// closing tag, or to the next segment or the end when that is missing,
+/// so a file of unclosed segments is still read in linear time.
+fn segments(text: &str) -> Vec<&str> {
+    const OPEN: &str = "<trkseg";
+    const CLOSE: &str = "</trkseg";
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find(OPEN) {
+        rest = &rest[start + OPEN.len()..];
+        // The element name must end here: "<trkseg>", not "<trksegx>".
+        if !rest.starts_with(|c: char| c == '>' || c == '/' || c.is_whitespace()) {
+            continue;
+        }
+        let next = rest.find(OPEN).unwrap_or(rest.len());
+        let end = rest[..next].find(CLOSE).unwrap_or(next);
+        out.push(&rest[..end]);
+        rest = &rest[end..];
     }
-    if raw.len() < 2 {
-        return Err(CoreError::InvalidArgument(
-            "the GPX file has no track with at least two points".into(),
-        ));
-    }
+    out
+}
+
+/// [`Raw`] points (at least two) as a ride's fixes, with times as
+/// [`read_track`] describes.
+fn timed(raw: Vec<Raw>, now_ms: i64) -> Result<Vec<TrackPoint>, CoreError> {
     let timed = raw.iter().all(|p| p.time_ms.is_some());
     let start = raw.iter().find_map(|p| p.time_ms).unwrap_or(now_ms);
     let mut last = i64::MIN;

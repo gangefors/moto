@@ -172,6 +172,110 @@ fn random_bytes_never_panic() {
 }
 
 #[test]
+fn random_segments_never_panic() {
+    let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+    let alphabet = b"<trkseg></trkseg><trkpt lat=lon\"'>0123456789.-/ \n<time>TZ:</time>";
+    for _ in 0..2000 {
+        let len = (x % 400) as usize;
+        let text: String = (0..len)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                alphabet[(x % alphabet.len() as u64) as usize] as char
+            })
+            .collect();
+        if let Ok(rides) = read_tracks(&text, NOW) {
+            assert!(!rides.is_empty() && rides.iter().all(|r| r.len() >= 2));
+        }
+    }
+}
+
+/// A made-up GPX document: one `<trk>` per entry of `tracks`, each with a
+/// `<trkseg>` per ride, points on a line heading east from 56 N 14 E.
+fn segmented(tracks: &[&[usize]]) -> String {
+    let mut out = String::from("<gpx>");
+    let mut t = 0;
+    for segs in tracks {
+        out.push_str("<trk><name>day</name>");
+        for &n in *segs {
+            out.push_str("<trkseg>");
+            for i in 0..n {
+                t += 1;
+                out.push_str(&format!(
+                    "<trkpt lat=\"56.0\" lon=\"{:.4}\"><time>{}</time></trkpt>",
+                    14.0 + i as f64 * 1e-3,
+                    iso_time(NOW + t * 1000)
+                ));
+            }
+            out.push_str("</trkseg>");
+        }
+        out.push_str("</trk>");
+    }
+    out.push_str("</gpx>");
+    out
+}
+
+#[test]
+fn every_track_segment_is_a_ride() {
+    // One track of three segments (a day's riding with breaks).
+    let rides = read_tracks(&segmented(&[&[5, 40, 12]]), NOW).unwrap();
+    assert_eq!(rides.iter().map(Vec::len).collect::<Vec<_>>(), [5, 40, 12]);
+    // Each keeps its own times, in order, after the one before.
+    assert!(
+        rides
+            .windows(2)
+            .all(|w| w[1][0].time_ms > w[0].last().unwrap().time_ms)
+    );
+    // Two tracks: their segments, in file order.
+    let two = read_tracks(&segmented(&[&[3], &[4, 6]]), NOW).unwrap();
+    assert_eq!(two.iter().map(Vec::len).collect::<Vec<_>>(), [3, 4, 6]);
+    // A segment of fewer than two points is left out.
+    let short = read_tracks(&segmented(&[&[1, 3, 0]]), NOW).unwrap();
+    assert_eq!(short.iter().map(Vec::len).collect::<Vec<_>>(), [3]);
+    // None long enough: the same error as for a file without a track.
+    assert!(matches!(
+        read_tracks(&segmented(&[&[1, 1]]), NOW),
+        Err(CoreError::InvalidArgument(_))
+    ));
+    // The whole file as one, for the reader of one ride.
+    assert_eq!(
+        read_track(&segmented(&[&[5, 40, 12]]), NOW).unwrap().len(),
+        57
+    );
+}
+
+#[test]
+fn a_file_without_segments_is_one_ride() {
+    let route =
+        "<gpx><rte><rtept lat=\"56\" lon=\"14\"/><rtept lat=\"56.1\" lon=\"14\"/></rte></gpx>";
+    assert_eq!(read_tracks(route, NOW).unwrap().len(), 1);
+    let ride = vec![
+        fix(NOW, 55.7, 13.2),
+        fix(NOW + 1000, 55.7001, 13.2002),
+        fix(NOW + 2000, 55.7002, 13.2004),
+    ];
+    // The app's own export: one segment, one ride, read back as written.
+    assert_eq!(
+        read_tracks(&track_gpx("r", &ride), NOW).unwrap(),
+        vec![ride]
+    );
+}
+
+#[test]
+fn unclosed_segments_are_read_in_linear_time_and_capped() {
+    let one = r#"<trkseg><trkpt lat="55" lon="13"/><trkpt lat="55.1" lon="13"/>"#;
+    let text = one.repeat(MAX_GPX_RIDES);
+    let t = std::time::Instant::now();
+    assert_eq!(read_tracks(&text, NOW).unwrap().len(), MAX_GPX_RIDES);
+    assert!(t.elapsed().as_secs() < 5, "{:?}", t.elapsed());
+    assert!(matches!(
+        read_tracks(&one.repeat(MAX_GPX_RIDES + 1), NOW),
+        Err(CoreError::InvalidArgument(_))
+    ));
+}
+
+#[test]
 fn unclosed_points_are_read_in_linear_time() {
     let text = r#"<trkpt lat="55" lon="13"><time>x"#.repeat(MAX_TRACK_POINTS);
     let t = std::time::Instant::now();
