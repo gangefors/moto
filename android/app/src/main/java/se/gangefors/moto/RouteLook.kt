@@ -72,3 +72,28 @@ fun favouriteGlowColors(parts: List<List<LatLon>>, ratings: List<Rating>): List<
     parts.mapIndexedNotNull { i, part ->
         if (part.size < 2) null else part to ratingColor(ratings.getOrNull(i) ?: Rating.EPIC)
     }
+
+/** The ridden roads' dashes (ADR-0010): near-black on the light map,
+ * off-white on the dark one; no single colour stands out against both
+ * the route blue and both maps. */
+fun riddenColor(darkMap: Boolean): String = if (darkMap) "#e8eaed" else "#202124"
+
+/** Width of the ridden roads' line by zoom (zoom to dp). */
+val RIDDEN_WIDTHS: List<Pair<Float, Float>> = listOf(8f to 1.8f, 12f to 2.4f, 16f to 3.2f)
+
+/** Dashes and gaps in line widths: shorter when zoomed out, so they stay
+ * dashes instead of merging into a line, longer from [RIDDEN_LONG_DASH_ZOOM]. */
+val RIDDEN_SHORT_DASHES: Array<Float> = arrayOf(3f, 2.5f)
+val RIDDEN_LONG_DASHES: Array<Float> = arrayOf(4f, 3f)
+const val RIDDEN_LONG_DASH_ZOOM = 11f
+
+/** Above this many metres across the screen the ridden roads are hidden
+ * (the rider: 70 km). */
+const val RIDDEN_MAX_SPAN_M = 70_000.0
+
+/** The sections the map leaves out of [all]: those not in [shown]. The
+ * ridden roads run on under them. */
+fun hiddenSectionIds(all: List<Long>, shown: List<Long>): List<Long> {
+    val drawn = shown.toSet()
+    return all.filterNot { it in drawn }
+}

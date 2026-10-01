@@ -59,6 +59,8 @@ val HELP_TOPICS = listOf(
             HelpKey("record", R.string.help_key_record, R.string.help_key_record_map, HelpTopicId.RIDE),
             HelpKey("location", R.string.help_key_location, R.string.help_key_location_what),
         ),
+        figuresText = R.string.help_map_lines,
+        figures = listOf(HelpKey("ridden", R.string.help_line_ridden, R.string.help_line_ridden_what)),
     ),
     HelpTopic(
         HelpTopicId.PLAN, R.string.help_plan_title, R.string.help_plan,

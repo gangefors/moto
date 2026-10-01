@@ -152,6 +152,11 @@ fun readableSpan(metres: Double): Span {
 /** The latitude the settings page shows map widths for (Skåne). */
 const val SETTINGS_LATITUDE = 56.0
 
+/** The zoom at which a map [widthDp] wide shows [metres] across at
+ * [latitude]: the inverse of [spanAtZoom]. */
+fun zoomForSpan(metres: Double, widthDp: Double, latitude: Double): Double =
+    kotlin.math.log2(METRES_PER_PX_AT_ZOOM_0 * kotlin.math.cos(Math.toRadians(latitude)) * widthDp / metres)
+
 /** How many metres across a map [widthDp] wide shows at [zoom] and [latitude]. */
 fun spanAtZoom(zoom: Double, widthDp: Double, latitude: Double): Double =
     METRES_PER_PX_AT_ZOOM_0 * kotlin.math.cos(Math.toRadians(latitude)) * widthDp / Math.pow(2.0, zoom)

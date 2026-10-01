@@ -45,6 +45,7 @@ data class RideSettings(
     val avoid: Avoid,
     val zooms: LocateZooms,
     val keepScreenOn: Boolean,
+    val showRidden: Boolean = false,
 )
 
 /**
@@ -95,26 +96,38 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
             SettingsGroup(stringResource(R.string.settings_group_map))
             Heading(stringResource(R.string.locate_zooms), stringResource(R.string.locate_zooms_hint))
             ZoomRange(settings.zooms) { onChange(settings.copy(zooms = it)) }
+            SwitchRow(
+                settings.showRidden,
+                stringResource(R.string.settings_show_ridden),
+                stringResource(R.string.settings_show_ridden_hint),
+                Modifier.padding(top = 16.dp),
+            ) { onChange(settings.copy(showRidden = it)) }
 
             SettingsGroup(stringResource(R.string.settings_group_recording))
-            // The whole row toggles, not just the switch: easier with gloves.
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = settings.keepScreenOn,
-                        role = Role.Switch,
-                        onValueChange = { onChange(settings.copy(keepScreenOn = it)) },
-                    )
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.weight(1f).padding(end = 16.dp)) {
-                    Heading(stringResource(R.string.settings_keep_screen_on), stringResource(R.string.settings_keep_screen_on_hint))
-                }
-                Switch(checked = settings.keepScreenOn, onCheckedChange = null)
-            }
+            SwitchRow(
+                settings.keepScreenOn,
+                stringResource(R.string.settings_keep_screen_on),
+                stringResource(R.string.settings_keep_screen_on_hint),
+            ) { onChange(settings.copy(keepScreenOn = it)) }
         }
+    }
+}
+
+/** A setting that is on or off: its name and (i), then a switch. The
+ * whole row toggles, not just the switch: easier with gloves. */
+@Composable
+private fun SwitchRow(on: Boolean, title: String, info: String, modifier: Modifier = Modifier, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .toggleable(value = on, role = Role.Switch, onValueChange = onChange)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f).padding(end = 16.dp)) {
+            Heading(title, info)
+        }
+        Switch(checked = on, onCheckedChange = null)
     }
 }
 

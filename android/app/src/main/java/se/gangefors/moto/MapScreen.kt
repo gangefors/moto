@@ -80,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
@@ -453,6 +454,8 @@ fun MapScreen() {
         }
     }
     var keepScreenOn by remember { mutableStateOf(RoutePrefs.keepScreenOn(context)) }
+    // The roads the rides have been on, drawn as dashes (ADR-0010).
+    var showRidden by remember { mutableStateOf(RoutePrefs.showRidden(context)) }
     // Sections that no longer fit the map are hidden unless the rider asks.
     // Quick-tags waiting for review, and the review in progress (it runs in
     // "mark section" mode, starting from each tag's suggested section).
@@ -469,6 +472,7 @@ fun MapScreen() {
                 RideOverlay(s),
                 SectionDraftOverlay(s),
                 RouteOverlay(s, density.density, darkMap),
+                RiddenOverlay(s, darkMap),
                 SnapMarker(s),
             )
         }
@@ -773,6 +777,24 @@ fun MapScreen() {
         val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
         overlays?.sections?.show(shown)
         overlays?.sections?.showGravel(gravelParts(sectionGravel, shown))
+    }
+    // The ridden roads, when shown: from the routing overlay, less the
+    // favourites drawn (those hidden for gravel don't cut the dashes),
+    // and not when the map shows more than 70 km across.
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp.toDouble()
+    LaunchedEffect(overlays, favourites, sections, sectionGravel, gravel, showRidden) {
+        val o = overlays ?: return@LaunchedEffect
+        val engine = (region as? RegionState.Ready)?.engine
+        val f = favourites
+        if (!showRidden || engine == null || f == null) {
+            o.ridden.show(emptyList(), 0f)
+            return@LaunchedEffect
+        }
+        val hidden = hiddenForGravel(sectionGravel, gravel)
+        val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
+        val hiddenIds = hiddenSectionIds(sections.map { it.id }, shown.map { it.id })
+        val lines = withContext(Dispatchers.Default) { runCatching { f.riddenLines(engine, hiddenIds) }.getOrDefault(emptyList()) }
+        o.ridden.show(lines, zoomForSpan(RIDDEN_MAX_SPAN_M, screenWidthDp, SETTINGS_LATITUDE).toFloat())
     }
     // A start picked and waiting for an end, or for "Loop from here".
     var startPicked by remember { mutableStateOf<LatLng?>(null) }
@@ -2220,7 +2242,7 @@ fun MapScreen() {
     }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(loopChoice, defaultDirection, gravel, favouritesMode, unriddenMode, avoid, locateZooms, keepScreenOn),
+            settings = RideSettings(loopChoice, defaultDirection, gravel, favouritesMode, unriddenMode, avoid, locateZooms, keepScreenOn, showRidden),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
@@ -2241,6 +2263,10 @@ fun MapScreen() {
                 if (new.keepScreenOn != keepScreenOn) {
                     keepScreenOn = new.keepScreenOn
                     RoutePrefs.setKeepScreenOn(context, new.keepScreenOn)
+                }
+                if (new.showRidden != showRidden) {
+                    showRidden = new.showRidden
+                    RoutePrefs.setShowRidden(context, new.showRidden)
                 }
             },
             onDismiss = { showSettings = false },
@@ -2358,6 +2384,7 @@ private class Overlays(
     val ride: RideOverlay,
     val draft: SectionDraftOverlay,
     val route: RouteOverlay,
+    val ridden: RiddenOverlay,
     val snap: SnapMarker,
 )
 

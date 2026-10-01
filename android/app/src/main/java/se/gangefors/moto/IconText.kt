@@ -70,6 +70,7 @@ internal val BUTTON_ICONS = mapOf(
     "compass" to ButtonIcon(R.drawable.ic_compass, R.string.say_compass),
     "star_off" to ButtonIcon(R.drawable.ic_star_off, R.string.say_star_off),
     "unridden" to ButtonIcon(R.drawable.ic_unridden, R.string.say_unridden),
+    "ridden" to ButtonIcon(R.drawable.ic_ridden, R.string.say_ridden),
 )
 
 /**
