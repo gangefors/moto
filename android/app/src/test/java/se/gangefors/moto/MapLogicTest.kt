@@ -72,6 +72,16 @@ class MapLogicTest {
     }
 
     @Test
+    fun aFailedSearchGoesBackOnlyWhenTheEndMoved() {
+        // The end moved where no route reaches: back to the last routes.
+        assertTrue(goesBack("a" to "b", "a" to "c"))
+        // A new route has nothing to go back to.
+        assertFalse(goesBack(null, "a" to "c"))
+        // The same ends failing (a setting changed): no going back, no loop.
+        assertFalse(goesBack("a" to "b", "a" to "b"))
+    }
+
+    @Test
     fun aStartGivenByTheAppActsLikeALongPress() {
         // "Route here from my position": the long-pressed point becomes the
         // end, the rider's position the start, and further long-presses

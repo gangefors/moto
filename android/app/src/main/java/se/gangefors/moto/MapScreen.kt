@@ -707,6 +707,13 @@ fun MapScreen() {
     var shownRoute by remember { mutableStateOf<Pair<Route, RouteOptions>?>(null) }
     // The routes to choose from (the fastest last) and which is shown.
     var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
+    // The last routes found, kept while new ones are found for a moved end:
+    // when no route reaches the new end, they come back at once with the
+    // end they had (Stefan), instead of the sheet closing.
+    var lastFound by remember { mutableStateOf<FoundRoutes?>(null) }
+    // Set when going back to [lastFound]: the route search shows it again
+    // instead of searching.
+    var restoring by remember { mutableStateOf<FoundRoutes?>(null) }
     var routeIndex by remember { mutableIntStateOf(0) }
     // How many route choices the sheet had before the search now running
     // (0 for a new sheet): its rows stay, dimmed, while a setting's
@@ -780,6 +787,8 @@ fun MapScreen() {
             others = others, dull = index == dull, dullOther = dull, favouriteRatings = r.favouriteRatings,
         )
         routeIndex = index
+        // Going back to these routes shows the one picked last.
+        lastFound?.takeIf { it.choices === set }?.let { lastFound = it.copy(index = index) }
         routeSummary = summarize(r.distanceM, r.durationS, r.favouriteShare, r.fastestDurationS, r.curvyShare, r.unpavedM, r.tollM)
             .copy(fastest = index == fastest)
         shownRoute = r to opts
@@ -995,6 +1004,8 @@ fun MapScreen() {
         routeChoices = emptyList()
         routeIndex = 0
         routeKept = 0
+        lastFound = null
+        restoring = null
     }
 
     fun closeRoute() {
@@ -1116,6 +1127,16 @@ fun MapScreen() {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
+        restoring?.takeIf { it.ends == (start to end) }?.let { back ->
+            restoring = null
+            routeChoices = back.choices
+            routeFoundAt = back.at
+            showRouteChoice(start, end, back.choices, back.index, back.opts)
+            showOnMap(back.choices.map { it.geometry }, always = fittedFor != (start to end))
+            fittedFor = start to end
+            return@LaunchedEffect
+        }
+        restoring = null
         routeKept = keptChoices(routeKept, routeChoices.size)
         routeSummary = null
         shownRoute = null
@@ -1150,6 +1171,7 @@ fun MapScreen() {
                 if (found.isEmpty()) return@fold
                 routeChoices = found
                 routeFoundAt = now
+                lastFound = FoundRoutes(start to end, found, 0, opts, now)
                 viasBefore = null
                 showRouteChoice(start, end, found, 0, opts)
                 // All the choices, so switching doesn't move the map.
@@ -1163,7 +1185,15 @@ fun MapScreen() {
                     viasBefore = null
                     vias = before
                 } else {
-                    routeEnds = null
+                    val back = lastFound
+                    if (back != null && goesBack(back.ends, start to end)) {
+                        // The end moved somewhere no route reaches: back to
+                        // where it was, with its routes, the sheet as it is.
+                        restoring = back
+                        routeEnds = back.ends
+                    } else {
+                        routeEnds = null
+                    }
                 }
                 notify(coreErrorMessage(resources, it), long = true)
             },
@@ -1275,6 +1305,14 @@ fun MapScreen() {
                     }
                 }
                 is RoutePicker.Step.Complete -> {
+                    // An end with no road near it changes nothing: the route,
+                    // the sheet and its choices stay, and the rider picks
+                    // another end (Stefan).
+                    val problem = runCatching { DebugTools.query("snap") { ready.engine.snap(point.toLatLon()) } }.exceptionOrNull()
+                    if (problem != null) {
+                        notify(coreErrorMessage(resources, problem), long = true)
+                        return@OnMapLongClickListener true
+                    }
                     startPicked = null
                     // A new end: a route again, not a loop.
                     routeThrough = null
@@ -2539,3 +2577,13 @@ private const val EDIT_FIT_SETTLE_MS = 250L
 /** OpenFreeMap's light or dark map style (config.xml). */
 private fun mapStyleUrl(resources: android.content.res.Resources, dark: Boolean): String =
     resources.getString(if (dark) R.string.map_style_url_dark else R.string.map_style_url)
+
+/** Routes found between [ends]: the [choices], the one shown ([index]),
+ * the options they were found with and when ([at], epoch seconds). */
+private data class FoundRoutes(
+    val ends: Pair<LatLng, LatLng>,
+    val choices: List<Route>,
+    val index: Int,
+    val opts: RouteOptions,
+    val at: Long,
+)
