@@ -55,6 +55,11 @@ pub struct Favourites {
     /// half of it, either way (ADR-0010); empty when no ride has been on
     /// any road of the region.
     ridden: Vec<u64>,
+    /// Of each edge on a section, whichever way the section may be
+    /// ridden: the section's id and the stretch it covers, as fractions in
+    /// travel order. Where the map draws a favourite, it draws no ridden
+    /// road ([`Self::ridden_lines`]).
+    drawn: HashMap<u32, Vec<(i64, f32, f32)>>,
 }
 
 /// Where a favourite section runs on gravel or other unpaved road, for
@@ -187,6 +192,13 @@ impl Favourites {
                     covered(engine, id, r, from, to)
                 };
                 on_any = on_any.max(stretch.1 - stretch.0);
+                if stretch.1 > stretch.0 {
+                    favourites.drawn.entry(id).or_default().push((
+                        sections[s.section].id,
+                        stretch.0 as f32,
+                        stretch.1 as f32,
+                    ));
+                }
                 if s.along_way.is_some_and(|a| a != along_way) {
                     continue;
                 }
@@ -255,6 +267,55 @@ impl Favourites {
         self.ridden
             .get((id >> 6) as usize)
             .is_some_and(|word| word >> (id & 63) & 1 == 1)
+    }
+
+    /// The roads the rider's rides have been on, as lines to draw on the
+    /// map (ADR-0010): each road once (not each way), less the stretches
+    /// on favourite sections the map draws, that is all but the sections
+    /// in `hidden` (those the map leaves out, as mostly-gravel ones while
+    /// gravel is avoided). Pieces that meet are joined into one line.
+    pub fn ridden_lines(
+        &self,
+        engine: &Engine,
+        hidden: &[i64],
+    ) -> Result<Vec<Vec<LatLon>>, CoreError> {
+        self.check(engine)?;
+        let region = engine.net();
+        let mut seen = std::collections::HashSet::new();
+        let mut lines: Vec<Vec<LatLon>> = Vec::new();
+        for (i, &word) in self.ridden.iter().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let id = (i * 64) as u32 + bits.trailing_zeros();
+                bits &= bits - 1;
+                let Some(e) = region.get_edge(id) else {
+                    continue;
+                };
+                let r = region.way_ref(id);
+                let (lo, hi) = (r.from_idx.min(r.to_idx), r.from_idx.max(r.to_idx));
+                if !seen.insert((r.way_id, lo, hi)) {
+                    continue; // the same road the other way
+                }
+                let mut covered: Vec<(f64, f64)> = self
+                    .drawn
+                    .get(&id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(section, _, _)| !hidden.contains(section))
+                    .map(|&(_, a, b)| (f64::from(a), f64::from(b)))
+                    .collect();
+                covered.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let line = edge_line(region, &e);
+                let mut from = 0.0f64;
+                for (a, b) in covered.into_iter().chain([(1.0, 1.0)]) {
+                    if a > from + 1e-6 {
+                        join_piece(&mut lines, crate::geo::polyline_slice(&line, from, a));
+                    }
+                    from = from.max(b);
+                }
+            }
+        }
+        Ok(lines)
     }
 
     /// How many edges the rider's rides have been on.
@@ -363,6 +424,18 @@ impl Favourites {
     /// The highest speed of any favourite edge, km/h (0 with none).
     pub(crate) fn max_speed_kmh(&self) -> f64 {
         self.max_speed_kmh
+    }
+}
+
+/// Adds `piece` to `lines`, continuing the last line when the piece
+/// starts where it ends.
+fn join_piece(lines: &mut Vec<Vec<LatLon>>, piece: Vec<LatLon>) {
+    if piece.len() < 2 {
+        return;
+    }
+    match lines.last_mut() {
+        Some(last) if last.last() == piece.first() => last.extend(piece.into_iter().skip(1)),
+        _ => lines.push(piece),
     }
 }
 

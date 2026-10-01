@@ -1666,6 +1666,73 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn ridden_roads_are_drawn_once_and_not_under_favourites() {
+        use crate::favourites::Favourites;
+        use crate::section::{Direction, Rating, Section, Source, Status, WaySpan};
+        let e = twisty_twice();
+        let span = |way_id, from_idx, to_idx| WaySpan {
+            way_id,
+            from_idx,
+            to_idx,
+        };
+        let rides = vec![vec![span(21, 0, 160)]];
+        let length = |l: &[LatLon]| crate::geo::polyline_length_m(l);
+
+        // No rides: nothing to draw.
+        assert!(
+            Favourites::build(&e, &[])
+                .ridden_lines(&e, &[])
+                .unwrap()
+                .is_empty()
+        );
+
+        // One road, ridden: one line along it, drawn once (not each way).
+        let plain = Favourites::build_with_rides(&e, &[], &rides);
+        let lines = plain.ridden_lines(&e, &[]).unwrap();
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        let whole = length(&lines[0]);
+        assert!(whole > 5_000.0, "{whole}");
+
+        // A favourite on the middle of it: the dashes stop there.
+        let section = Section {
+            id: 7,
+            rider_id: crate::section::LOCAL_RIDER.into(),
+            name: String::new(),
+            rating: Rating::Good,
+            direction: Direction::Forward,
+            source: Source::Map,
+            status: Status::Ok,
+            created_at: 0,
+            updated_at: 0,
+            ways: vec![span(21, 40, 120)],
+            geometry: vec![ll(55.70, 13.42), ll(55.70, 13.46)],
+        };
+        let fav = Favourites::build_with_rides(&e, std::slice::from_ref(&section), &rides);
+        let cut = fav.ridden_lines(&e, &[]).unwrap();
+        assert_eq!(cut.len(), 2, "{cut:?}");
+        let left: f64 = cut.iter().map(|l| length(l)).sum();
+        assert!((left / whole - 0.5).abs() < 0.1, "{left} of {whole}");
+        // None of it on the favourite's stretch (nodes 40-120: the middle
+        // of the road, 13.42-13.46 east).
+        assert!(
+            cut.iter()
+                .flatten()
+                .all(|p| p.lon < 13.421 || p.lon > 13.459),
+            "{cut:?}"
+        );
+        // The map hides the section (gravel avoided): the dashes run on.
+        let hidden = fav.ridden_lines(&e, &[7]).unwrap();
+        assert_eq!(hidden.len(), 1);
+        assert!((length(&hidden[0]) - whole).abs() < 1.0);
+
+        // Built for another region: refused.
+        assert!(matches!(
+            plain.ridden_lines(&twisty(), &[]),
+            Err(CoreError::InvalidArgument(_))
+        ));
+    }
+
     fn winds(r: &crate::Route) -> bool {
         r.geometry.iter().any(|p| p.lat > 55.703)
     }
