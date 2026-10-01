@@ -506,6 +506,13 @@ fun MapScreen() {
                 Toasts.show(resources.getString(R.string.recording_saved))
                 val minutes = (((r.track.endedAt ?: r.track.startedAt) - r.track.startedAt) / 60).toInt()
                 DebugTools.rideEnded(context, sectionKm(r.track.distanceM), minutes, r.batteryPerHour)
+                // Named from where it went, as an imported ride is.
+                val s = (store as? StoreState.Ready)?.store
+                val engine = (region as? RegionState.Ready)?.engine
+                if (s != null && engine != null && r.track.name == null) {
+                    withContext(Dispatchers.IO) { s.nameRide(resources, engine, r.track) }
+                    RideChanges.changed()
+                }
             }
             is Recording.State.Failed -> notify(resources.getString(R.string.recording_failed, r.message), long = true)
             else -> Unit

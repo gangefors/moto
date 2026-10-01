@@ -6,7 +6,10 @@ package se.gangefors.moto
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import se.gangefors.moto.core.Description
+import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.SectionStore
+import se.gangefors.moto.core.Track
 
 /*
  * Sections, routes and rides in words the rider recognises, from the
@@ -126,4 +129,18 @@ fun planNameText(res: android.content.res.Resources, name: PlanName): String = w
             name.road.name,
         ).joinToString(" · "),
     )
+}
+
+/** Names [ride] from where it went ("Lund → Höör", "Loop from Lund via
+ * Höör"), as a saved route or loop is named: an imported ride, or a
+ * recorded one when it is finished. Left as it is when it already has a
+ * name, the map has no names there, or anything fails. */
+fun SectionStore.nameRide(res: android.content.res.Resources, engine: Engine, ride: Track) {
+    runCatching {
+        if (getTrack(ride.id)?.name != null) return
+        val line = trackPoints(ride.id)?.map { it.position } ?: return
+        val far = if (rideIsLoop(line)) farthestPoint(line)?.let { engine.describe(listOf(it, it)) } else null
+        val name = planName(rideIsLoop(line), engine.describe(line), far) ?: return
+        renameTrack(ride.id, planNameText(res, name))
+    }
 }

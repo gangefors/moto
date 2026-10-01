@@ -490,18 +490,6 @@ private fun rideImportMessage(
     return withAlready(text) to false
 }
 
-/** Names [ride] from where it went ("Lund → Höör", "Loop from Lund via
- * Höör"), as a saved route or loop is named; left unnamed when the map
- * has no names there or anything fails. */
-private fun SectionStore.nameRide(res: android.content.res.Resources, engine: Engine, ride: Track) {
-    runCatching {
-        val line = trackPoints(ride.id)?.map { it.position } ?: return
-        val far = if (rideIsLoop(line)) farthestPoint(line)?.let { engine.describe(listOf(it, it)) } else null
-        val name = planName(rideIsLoop(line), engine.describe(line), far) ?: return
-        renameTrack(ride.id, planNameText(res, name))
-    }
-}
-
 private fun importSummary(res: android.content.res.Resources, r: ImportReport): String {
     val text = res.getString(R.string.sections_imported, r.added.toLong(), r.skipped.toLong(), r.replaced.toLong())
     return if (r.unmatched > 0uL) res.getString(R.string.sections_imported_unmatched, text, r.unmatched.toLong()) else text
