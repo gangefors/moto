@@ -80,9 +80,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
@@ -781,7 +781,7 @@ fun MapScreen() {
     // The ridden roads, when shown: from the routing overlay, less the
     // favourites drawn (those hidden for gravel don't cut the dashes),
     // and not when the map shows more than 70 km across.
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp.toDouble()
+    val screenWidthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toDouble() }
     LaunchedEffect(overlays, favourites, sections, sectionGravel, gravel, showRidden) {
         val o = overlays ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine
