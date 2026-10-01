@@ -21,7 +21,7 @@ v1 solves this for a single rider (the rider): capture favourite road sections e
 ## Non-Goals
 
 - **Community ratings / accounts / sync** — v1 is single-user. The whole point of the project needs it eventually, but it adds backend, auth, moderation and privacy (GDPR) work before the core loop is proven.
-- **Built-in turn-by-turn navigation** — OsmAnd/Google Maps/etc. already do this well; building voice guidance and rerouting would dwarf everything else.
+- **Built-in turn-by-turn navigation** — Kurviger, Google Maps and other nav apps already do this well; building voice guidance and rerouting would dwarf everything else.
 - **iOS app** — deferred per decision log; keep logic in Rust so the port is cheap later.
 - **Social features** (sharing rides, groups, feeds) — no users to share with yet.
 - **Hazard/traffic/weather data** — nice context, not core to "find fun roads".
@@ -154,8 +154,8 @@ A section is an ordered sequence of OSM way segments (with direction-agnostic de
 
 **R9. Export / handoff**
 
-- [ ] Export as GPX (track + route points) via Android share sheet.
-- [ ] Verified to import correctly into at least OsmAnd and one other nav app.
+- [x] Export as GPX (track + route points) via Android share sheet.
+- [x] Verified to import correctly into Kurviger, the nav app the rider uses (2026-10-01: 97 % waypoint match, 99 % after Kurviger's "Optimize waypoints").
 
 **R10. Local storage & backup**
 
