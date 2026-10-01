@@ -1136,6 +1136,9 @@ fun MapScreen() {
                     noLoop(resources.getString(R.string.loop_none))
                 } else {
                     loops = found
+                    // A new set starts at its first loop, also when Shuffle
+                    // had it ready and the old set was on another one.
+                    loopIndex = 0
                     loopOpts = opts
                     showLoop(start, found, 0)
                     // All the loops of the set, so Next doesn't move the map.
