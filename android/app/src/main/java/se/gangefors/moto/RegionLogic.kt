@@ -138,3 +138,24 @@ fun olderNeighbours(installed: List<InstalledRegion>): List<InstalledRegion> {
     val newest = used.maxOfOrNull { it.osmTimestamp } ?: return emptyList()
     return used.filter { newest - it.osmTimestamp > REGION_STALE_S }
 }
+
+/** How the core proved a region file sound when it opened. */
+enum class OpenCheck {
+    /** Its checksum matched the one recorded: no full check. */
+    CHECKSUM,
+    /** No checksum was recorded, so it was checked in full. */
+    FULL_NO_CHECKSUM,
+    /** The recorded checksum differed, so it was checked in full. */
+    FULL_CHECKSUM_DIFFERED,
+}
+
+/** How a region opened, from the checksum recorded before ([recorded])
+ * and the one the core handed back ([returned]): the core returns the
+ * file's own checksum, so they match exactly when it skipped the full
+ * check (ADR-0005). */
+fun openCheck(recorded: String?, returned: String?): OpenCheck = when {
+    recorded == null -> OpenCheck.FULL_NO_CHECKSUM
+    recorded == returned -> OpenCheck.CHECKSUM
+    else -> OpenCheck.FULL_CHECKSUM_DIFFERED
+}
+

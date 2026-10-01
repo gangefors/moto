@@ -182,6 +182,9 @@ object Regions {
             val infos = opened.engine.regionInfos()
             val edit = p.edit()
             enabled.forEachIndexed { i, r ->
+                // For the debug report: by checksum or checked in full.
+                val how = openCheck(p.getString("fp.${r.id}", null), opened.fingerprints.getOrNull(i))
+                DebugTools.mark("  ${r.id} ${r.bytes / 1_000_000} MB: ${how.name.lowercase().replace('_', ' ')}")
                 opened.fingerprints.getOrNull(i)?.let { edit.putString("fp.${r.id}", it) }
                 infos.getOrNull(i)?.let { edit.putLong("ts.${r.id}", it.osmTimestamp) }
             }
