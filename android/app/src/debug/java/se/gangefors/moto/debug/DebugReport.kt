@@ -117,12 +117,58 @@ data class BenchPoint(val name: String, val lat: Double, val lon: Double)
 sealed interface BenchCase {
     val label: String
 
-    data class Route(val from: BenchPoint, val to: BenchPoint, val gravel: String) : BenchCase {
-        override val label = "route ${from.name} → ${to.name}, gravel $gravel"
+    /** Route choices, as the route sheet asks for them; [arriveMinutes]
+     * makes it an arrive-by route with that much time in all. With
+     * [yourData] the rider's own favourites and rides are used, so these
+     * cases compare runs on one phone, not builds on two. */
+    data class Route(
+        val from: BenchPoint,
+        val to: BenchPoint,
+        val gravel: String,
+        val favourites: String = "PREFER",
+        val unridden: String = "ANY",
+        val arriveMinutes: Int? = null,
+        val yourData: Boolean = false,
+    ) : BenchCase {
+        override val label = buildString {
+            append("route ${from.name} → ${to.name}, gravel $gravel")
+            arriveMinutes?.let { append(", arrive by +$it min") }
+            if (yourData) append(", your data, favourites $favourites, unridden $unridden")
+        }
     }
 
-    data class Loop(val start: BenchPoint, val km: Int, val gravel: String) : BenchCase {
-        override val label = "loop $km km from ${start.name}, gravel $gravel"
+    /** A loop set; [seed] as Shuffle gives, [bearing] as a picked direction. */
+    data class Loop(
+        val start: BenchPoint,
+        val km: Int,
+        val gravel: String,
+        val seed: Int = 0,
+        val bearing: Double? = null,
+        val unridden: String = "ANY",
+        val yourData: Boolean = false,
+    ) : BenchCase {
+        override val label = buildString {
+            append("loop $km km from ${start.name}, gravel $gravel")
+            if (seed != 0) append(", shuffle $seed")
+            bearing?.let { append(", heading ${it.toInt()}°") }
+            if (yourData) append(", your data, unridden $unridden")
+        }
+    }
+
+    /** [count] taps on the map around [around], each snapped to a road. */
+    data class Snaps(val around: BenchPoint, val count: Int) : BenchCase {
+        override val label = "$count snaps around ${around.name}"
+    }
+
+    /** The rider's routing overlay built from the store: favourites and
+     * ridden roads (ADR-0010). */
+    data object Overlay : BenchCase {
+        override val label = "overlay build, your data"
+    }
+
+    /** The rider's longest saved ride matched to the roads. */
+    data object MatchLongestRide : BenchCase {
+        override val label = "match the longest ride, your data"
     }
 }
 
@@ -135,7 +181,9 @@ private val OSTERSUND = BenchPoint("Östersund", 63.1792, 14.6357)
 
 /**
  * The same requests on every build and phone, without favourites, so
- * numbers compare. Cases outside the installed region fail and say so.
+ * numbers compare; then cases on the rider's own data (favourites and
+ * rides), which compare runs on one phone. Cases outside the installed
+ * region fail and say so.
  */
 val BENCH_CASES: List<BenchCase> = listOf(
     BenchCase.Route(MALMO, LUND, "AVOID"),
@@ -143,12 +191,26 @@ val BENCH_CASES: List<BenchCase> = listOf(
     BenchCase.Route(MALMO, STOCKHOLM, "AVOID"),
     BenchCase.Route(MALMO, KIRUNA, "AVOID"),
     BenchCase.Route(MALMO, KIRUNA, "PREFER"),
+    BenchCase.Route(MALMO, GOTEBORG, "AVOID", arriveMinutes = 240),
     BenchCase.Loop(LUND, 100, "AVOID"),
     BenchCase.Loop(LUND, 200, "AVOID"),
+    BenchCase.Loop(LUND, 200, "AVOID", seed = 1),
+    BenchCase.Loop(LUND, 200, "AVOID", bearing = 0.0),
     BenchCase.Loop(LUND, 400, "AVOID"),
     BenchCase.Loop(LUND, 400, "PREFER"),
     BenchCase.Loop(OSTERSUND, 400, "AVOID"),
+    BenchCase.Snaps(LUND, 50),
+    BenchCase.Overlay,
+    BenchCase.MatchLongestRide,
+    BenchCase.Route(MALMO, GOTEBORG, "AVOID", yourData = true),
+    BenchCase.Route(MALMO, GOTEBORG, "AVOID", favourites = "AVOID", yourData = true),
+    BenchCase.Route(MALMO, GOTEBORG, "AVOID", unridden = "PREFER", yourData = true),
+    BenchCase.Loop(LUND, 200, "AVOID", yourData = true),
+    BenchCase.Loop(LUND, 200, "AVOID", unridden = "PREFER", yourData = true),
 )
+
+/** "Benchmark 3 of 21: route Malmö → Stockholm, gravel AVOID". */
+fun benchProgress(index: Int, total: Int, label: String): String = "Benchmark ${index + 1} of $total: $label"
 
 /** A benchmark case's result: each run's time (first cold, then warm), or why it failed. */
 data class BenchResult(val label: String, val runsMs: List<Double>, val result: String, val ok: Boolean)

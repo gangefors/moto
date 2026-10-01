@@ -142,4 +142,18 @@ class DebugReportTest {
         assertEquals("curvy 41/30/100 %", sharesLine("curvy", listOf(0.414, 0.2951, 1.2)))
         assertEquals("unridden 0 %", sharesLine("unridden", listOf(Double.NaN)))
     }
+
+    @Test
+    fun benchLabelsSayWhatEachCaseDoes() {
+        assertTrue(BENCH_CASES.any { it.label == "route Malmö → Göteborg, gravel AVOID, arrive by +240 min" })
+        assertTrue(BENCH_CASES.any { it.label == "loop 200 km from Lund, gravel AVOID, shuffle 1" })
+        assertTrue(BENCH_CASES.any { it.label == "loop 200 km from Lund, gravel AVOID, heading 0°" })
+        assertTrue(BENCH_CASES.any { it.label == "50 snaps around Lund" })
+        assertTrue(BENCH_CASES.any { it.label == "route Malmö → Göteborg, gravel AVOID, your data, favourites PREFER, unridden PREFER" })
+        assertTrue(BENCH_CASES.contains(BenchCase.Overlay) && BENCH_CASES.contains(BenchCase.MatchLongestRide))
+        // The cases on the rider's data come last, after those that compare builds.
+        val firstYours = BENCH_CASES.indexOfFirst { it.label.contains("your data") }
+        assertTrue(BENCH_CASES.drop(firstYours).all { it.label.contains("your data") })
+        assertEquals("Benchmark 3 of 21: x", benchProgress(2, 21, "x"))
+    }
 }
