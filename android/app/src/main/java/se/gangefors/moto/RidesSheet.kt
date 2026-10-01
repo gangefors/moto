@@ -241,6 +241,9 @@ fun RidesSheet(
                         val bytes = input.use { readCapped(it, MAX_GPX_FILE_BYTES) }
                             ?: error(resources.getString(R.string.sections_file_too_large, MAX_GPX_FILE_BYTES shr 20))
                         val got = store.importTracksGpx(bytes)
+                        // Each new ride named from where it went, as routes
+                        // and loops are, when the map has names there.
+                        if (engine != null) got.rides.forEach { store.nameRide(resources, engine, it) }
                         RideImport.Imported(got.rides.map { it.distanceM }, got.alreadySaved.toInt())
                     }.getOrElse {
                         RideImport.Failed(
@@ -485,6 +488,18 @@ private fun rideImportMessage(
         res.getQuantityString(R.plurals.rides_imported_some, s.imported, s.imported, s.km, failures)
     }
     return withAlready(text) to false
+}
+
+/** Names [ride] from where it went ("Lund → Höör", "Loop from Lund via
+ * Höör"), as a saved route or loop is named; left unnamed when the map
+ * has no names there or anything fails. */
+private fun SectionStore.nameRide(res: android.content.res.Resources, engine: Engine, ride: Track) {
+    runCatching {
+        val line = trackPoints(ride.id)?.map { it.position } ?: return
+        val far = if (rideIsLoop(line)) farthestPoint(line)?.let { engine.describe(listOf(it, it)) } else null
+        val name = planName(rideIsLoop(line), engine.describe(line), far) ?: return
+        renameTrack(ride.id, planNameText(res, name))
+    }
 }
 
 private fun importSummary(res: android.content.res.Resources, r: ImportReport): String {
