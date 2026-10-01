@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.UnriddenMode
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -229,6 +230,8 @@ fun RouteCard(
     onGravel: (Gravel) -> Unit,
     favourites: FavouritesMode,
     onFavourites: (FavouritesMode) -> Unit,
+    unridden: UnriddenMode,
+    onUnridden: (UnriddenMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
     onClose: () -> Unit,
@@ -282,12 +285,12 @@ fun RouteCard(
                 kept = kept,
             )
             if (!expanded) {
-                OptionChips(routeSummaryItems(arrival, viaCount, gravel, favourites), allowedKinds(avoid)) { onExpandedChange(true) }
+                OptionChips(routeSummaryItems(arrival, viaCount, gravel, favourites, unridden), allowedKinds(avoid)) { onExpandedChange(true) }
             }
         },
         details = {
             RouteCardDetails(
-                gravel, onGravel, favourites, onFavourites, avoid, onAvoid,
+                gravel, onGravel, favourites, onFavourites, unridden, onUnridden, avoid, onAvoid,
                 viaCount, onAddVia, onClearVia, arriveBy, arrivalNote, onArriveBy,
             )
         },
@@ -302,6 +305,8 @@ private fun RouteCardDetails(
     onGravel: (Gravel) -> Unit,
     favourites: FavouritesMode,
     onFavourites: (FavouritesMode) -> Unit,
+    unridden: UnriddenMode,
+    onUnridden: (UnriddenMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
     viaCount: Int,
@@ -377,6 +382,8 @@ private fun RouteCardDetails(
         GravelChips(gravel, onGravel)
         OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
         FavouritesChips(favourites, onFavourites)
+        OptionHeading(stringResource(R.string.unridden_label), stringResource(R.string.unridden_hint))
+        UnriddenChips(unridden, onUnridden)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
         AllowChips(avoid, onAvoid)
         if (pickingTime) {
@@ -419,6 +426,8 @@ fun LoopCard(
     onGravel: (Gravel) -> Unit,
     favourites: FavouritesMode,
     onFavourites: (FavouritesMode) -> Unit,
+    unridden: UnriddenMode,
+    onUnridden: (UnriddenMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
     onClose: () -> Unit,
@@ -461,13 +470,13 @@ fun LoopCard(
                 onShuffle = onShuffle,
             )
             if (!expanded) {
-                OptionChips(loopSummaryItems(choice, direction, gravel, favourites), allowedKinds(avoid)) {
+                OptionChips(loopSummaryItems(choice, direction, gravel, favourites, unridden), allowedKinds(avoid)) {
                     onExpandedChange(true)
                 }
             }
         },
         details = {
-            LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel, favourites, onFavourites, avoid, onAvoid)
+            LoopCardDetails(direction, onDirection, choice, onChoice, gravel, onGravel, favourites, onFavourites, unridden, onUnridden, avoid, onAvoid)
         },
     )
 }
@@ -552,6 +561,8 @@ private fun LoopCardDetails(
     onGravel: (Gravel) -> Unit,
     favourites: FavouritesMode,
     onFavourites: (FavouritesMode) -> Unit,
+    unridden: UnriddenMode,
+    onUnridden: (UnriddenMode) -> Unit,
     avoid: Avoid,
     onAvoid: (Avoid) -> Unit,
 ) {
@@ -563,6 +574,8 @@ private fun LoopCardDetails(
         GravelChips(gravel, onGravel)
         OptionHeading(stringResource(R.string.favourites_label), stringResource(R.string.favourites_hint))
         FavouritesChips(favourites, onFavourites)
+        OptionHeading(stringResource(R.string.unridden_label), stringResource(R.string.unridden_hint))
+        UnriddenChips(unridden, onUnridden)
         OptionHeading(stringResource(R.string.avoid_heading), stringResource(R.string.avoid_hint))
         AllowChips(avoid, onAvoid)
     }
@@ -709,6 +722,15 @@ private fun StatFigure(stat: RouteStat, s: RouteSummary) {
             stringResource(R.string.route_stat_percent, s.curvyPercent),
             stringResource(R.string.route_curvy, s.curvyPercent),
         )
+        RouteStatKind.UNRIDDEN -> Triple(
+            R.drawable.ic_unridden,
+            if (showsUnriddenValue(s.unriddenPercent)) stringResource(R.string.route_stat_percent, s.unriddenPercent) else "",
+            if (showsUnriddenValue(s.unriddenPercent)) {
+                stringResource(R.string.route_unridden, s.unriddenPercent)
+            } else {
+                stringResource(R.string.route_unridden_all)
+            },
+        )
         RouteStatKind.GRAVEL -> Triple(
             R.drawable.ic_gravel,
             stringResource(R.string.route_km, s.gravelKm),
@@ -735,7 +757,9 @@ private fun StatFigure(stat: RouteStat, s: RouteSummary) {
                 modifier = Modifier.size(16.dp),
             )
         }
-        Text(noBreak(text), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        if (text.isNotEmpty()) {
+            Text(noBreak(text), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
     }
 }
 
@@ -793,6 +817,8 @@ private fun SummaryChip(item: SummaryItem, onClick: () -> Unit) {
         )
         SummaryItem.FavouritesAvoided ->
             IconChip(R.drawable.ic_star_off, null, stringResource(R.string.favourites_summary_avoid), onClick = onClick)
+        SummaryItem.UnriddenPreferred ->
+            IconChip(R.drawable.ic_unridden, null, stringResource(R.string.unridden_summary_prefer), onClick = onClick)
         is SummaryItem.Waypoints -> IconChip(
             R.drawable.ic_pin,
             item.count.toString(),

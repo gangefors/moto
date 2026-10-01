@@ -70,6 +70,16 @@ pub enum FavouritesMode {
     Avoid,
 }
 
+/// What a route does with roads the rider's rides have been on
+/// (ADR-0010).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum UnriddenMode {
+    /// Ridden or not, every road counts the same.
+    Any,
+    /// Seek out curvy roads no ride has been on.
+    Prefer,
+}
+
 /// How much time a route may take; the time over the fastest route is
 /// spent on favourites.
 #[derive(Debug, Clone, Copy, PartialEq, uniffi::Enum)]
@@ -91,6 +101,7 @@ pub struct RouteOptions {
     pub curvy: bool,
     pub gravel: Gravel,
     pub favourites: FavouritesMode,
+    pub unridden: UnriddenMode,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
@@ -125,6 +136,10 @@ pub struct Route {
     pub duration_s: f64,
     pub favourite_share: f64,
     pub curvy_share: f64,
+    /// Share of the distance on roads none of the rider's rides has been
+    /// on (1.0 with no rides).
+    #[uniffi(default = 1.0)]
+    pub unridden_share: f64,
     /// Time of the fastest route between the same points.
     pub fastest_duration_s: f64,
     /// The stretches of `geometry` on favourite sections, for highlighting.
@@ -558,6 +573,24 @@ impl From<moto_core::FavouritesMode> for FavouritesMode {
     }
 }
 
+impl From<UnriddenMode> for moto_core::UnriddenMode {
+    fn from(u: UnriddenMode) -> Self {
+        match u {
+            UnriddenMode::Any => Self::Any,
+            UnriddenMode::Prefer => Self::Prefer,
+        }
+    }
+}
+
+impl From<moto_core::UnriddenMode> for UnriddenMode {
+    fn from(u: moto_core::UnriddenMode) -> Self {
+        match u {
+            moto_core::UnriddenMode::Any => Self::Any,
+            moto_core::UnriddenMode::Prefer => Self::Prefer,
+        }
+    }
+}
+
 impl From<RouteOptions> for moto_core::RouteOptions {
     fn from(o: RouteOptions) -> Self {
         Self {
@@ -570,8 +603,7 @@ impl From<RouteOptions> for moto_core::RouteOptions {
             curvy: o.curvy,
             gravel: o.gravel.into(),
             favourites: o.favourites.into(),
-            // Not offered to the app yet.
-            unridden: moto_core::UnriddenMode::Any,
+            unridden: o.unridden.into(),
         }
     }
 }
@@ -588,6 +620,7 @@ impl From<moto_core::RouteOptions> for RouteOptions {
             curvy: o.curvy,
             gravel: o.gravel.into(),
             favourites: o.favourites.into(),
+            unridden: o.unridden.into(),
         }
     }
 }
@@ -609,6 +642,7 @@ impl From<moto_core::Route> for Route {
             duration_s: r.duration_s,
             favourite_share: r.favourite_share,
             curvy_share: r.curvy_share,
+            unridden_share: r.unridden_share,
             fastest_duration_s: r.fastest_duration_s,
             favourite_parts: r
                 .favourite_parts

@@ -77,6 +77,7 @@ object Recording {
             store.listTracks()
                 .filter { it.endedAt == null && it.id != active }
                 .forEach { store.finishTrack(it.id) }
+            RideChanges.changed()
         } catch (e: Exception) {
             Log.w(TAG, "could not finish interrupted tracks: ${e.message}")
         }

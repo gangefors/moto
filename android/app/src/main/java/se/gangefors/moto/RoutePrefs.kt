@@ -8,6 +8,7 @@ import androidx.core.content.edit
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.UnriddenMode
 
 /**
  * The route settings the rider last chose, in app-private preferences
@@ -19,6 +20,7 @@ object RoutePrefs {
     private const val ALLOW_GRAVEL = "allow_gravel"
     private const val GRAVEL = "gravel"
     private const val FAVOURITES = "favourites"
+    private const val UNRIDDEN = "unridden"
     /** The kinds of road allowed (motorways, ferries, tolls); unset: all
      * avoided. */
     private const val ALLOWED_ROADS = "allowed_roads"
@@ -60,6 +62,16 @@ object RoutePrefs {
 
     fun setFavourites(context: Context, favourites: FavouritesMode) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(FAVOURITES, favouritesKey(favourites)) }
+    }
+
+    /** Whether routes prefer roads none of the rider's rides has been on;
+     * any road by default (ADR-0010). */
+    fun unridden(context: Context): UnriddenMode = unriddenOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(UNRIDDEN, null) }.getOrNull(),
+    )
+
+    fun setUnridden(context: Context, unridden: UnriddenMode) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(UNRIDDEN, unriddenKey(unridden)) }
     }
 
     /** The roads routes avoid; everything avoided until the rider allows

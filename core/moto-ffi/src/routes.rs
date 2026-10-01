@@ -126,6 +126,7 @@ mod tests {
             duration_s: 90.0,
             favourite_share: 0.0,
             curvy_share: 0.0,
+            unridden_share: 1.0,
             fastest_duration_s: 90.0,
             favourite_parts: vec![],
             favourite_ratings: vec![],

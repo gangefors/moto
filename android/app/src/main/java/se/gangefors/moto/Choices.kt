@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
+import se.gangefors.moto.core.UnriddenMode
 
 /**
  * The heading of an option on a sheet or page ("Waypoints", "Gravel
@@ -201,6 +202,24 @@ fun FavouritesChips(favourites: FavouritesMode, onFavourites: (FavouritesMode) -
             )
         },
         onSelect = onFavourites,
+    )
+}
+
+/** Any / Prefer unridden roads, one of them selected. */
+@Composable
+fun UnriddenChips(unridden: UnriddenMode, onUnridden: (UnriddenMode) -> Unit) {
+    SingleChoice(
+        options = UNRIDDEN_CHOICES,
+        selected = unridden,
+        label = {
+            stringResource(
+                when (it) {
+                    UnriddenMode.ANY -> R.string.unridden_any
+                    UnriddenMode.PREFER -> R.string.unridden_prefer
+                },
+            )
+        },
+        onSelect = onUnridden,
     )
 }
 

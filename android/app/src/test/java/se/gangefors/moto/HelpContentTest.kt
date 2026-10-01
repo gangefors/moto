@@ -45,6 +45,7 @@ class HelpContentTest {
                 R.string.settings_loop_direction,
                 R.string.routing_gravel,
                 R.string.favourites_label,
+                R.string.unridden_label,
                 R.string.avoid_heading,
             ),
             routing.settings.map { it.name },
@@ -56,13 +57,13 @@ class HelpContentTest {
         val plan = HELP_TOPICS.first { it.id == HelpTopicId.PLAN }
         // Fastest is a word, not an icon; every other figure is in the key.
         assertEquals(RouteStatKind.entries.size - 1, plan.figures.size)
-        assertEquals(listOf("time", "sections", "curvy", "gravel", "toll"), plan.figures.map { it.icon })
+        assertEquals(listOf("time", "sections", "curvy", "unridden", "gravel", "toll"), plan.figures.map { it.icon })
     }
 
     @Test
     fun theSummaryKeyHasEveryKindOfChip() {
         val plan = HELP_TOPICS.first { it.id == HelpTopicId.PLAN }
         // Every summary chip with an icon (the length is in words).
-        assertEquals(listOf("clock", "pin", "compass", "gravel", "star_off", "motorway"), plan.summary.map { it.icon })
+        assertEquals(listOf("clock", "pin", "compass", "gravel", "star_off", "unridden", "motorway"), plan.summary.map { it.icon })
     }
 }

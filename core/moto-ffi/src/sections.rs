@@ -289,6 +289,12 @@ impl Favourites {
         u64::try_from(self.inner.edge_count()).unwrap_or(u64::MAX)
     }
 
+    /// How many road stretches (edges, each direction counted) the
+    /// rider's rides have been on.
+    pub fn ridden_edge_count(&self) -> u64 {
+        u64::try_from(self.inner.ridden_edge_count()).unwrap_or(u64::MAX)
+    }
+
     /// The gravel stretches of the sections that run on any.
     pub fn gravel(&self) -> Vec<SectionGravel> {
         self.inner
@@ -310,14 +316,37 @@ impl Favourites {
 
 #[uniffi::export]
 impl SectionStore {
-    /// The saved sections that fit `engine`'s region, for routing there.
-    /// Call off the main thread.
+    /// The saved sections that fit `engine`'s region, and the roads the
+    /// rides matched to it have been on (see [`Self::match_rides`]), for
+    /// routing there. Call off the main thread.
     pub fn favourites(&self, engine: Arc<Engine>) -> Result<Arc<Favourites>, MotoError> {
-        let sections = self.store().list_sections(None)?;
+        let store = self.store();
+        let sections = store.list_sections(None)?;
+        let rides = store.ride_ways(&moto_core::rematch::region_key(&engine.inner))?;
         Ok(Arc::new(Favourites {
-            inner: moto_core::Favourites::build(&engine.inner, &sections),
+            inner: moto_core::Favourites::build_with_rides(&engine.inner, &sections, &rides),
         }))
     }
+
+    /// Matches the finished rides not yet matched to `engine`'s regions
+    /// to their roads and stores them (ADR-0010): once per ride and map,
+    /// so it is quick when nothing changed. Call off the main thread
+    /// before [`Self::favourites`].
+    pub fn match_rides(&self, engine: Arc<Engine>) -> Result<RideMatchReport, MotoError> {
+        let r = moto_core::rematch::match_rides(&mut self.store(), &engine.inner)?;
+        Ok(RideMatchReport {
+            matched: r.matched,
+            ways: r.ways,
+        })
+    }
+}
+
+/// What matching the rides did: rides matched (0 when none waited) and
+/// the way spans stored for them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct RideMatchReport {
+    pub matched: u64,
+    pub ways: u64,
 }
 
 /// What a re-match did: sections looked at (0 if the region hadn't
@@ -616,6 +645,69 @@ mod tests {
         let same = engine.section_between(p, p).unwrap_err();
         std::fs::remove_file(region).unwrap();
         assert!(matches!(same, MotoError::InvalidInput { .. }), "{same:?}");
+    }
+
+    #[test]
+    fn rides_are_matched_once_and_mark_ridden_roads() {
+        let (engine, region) = engine("rides");
+        let db = TempDb::new("rides");
+        let store = SectionStore::open(db.path()).unwrap();
+        // A ride along A→B→D (made up), a fix every 50 m.
+        let points: String = (0..=40)
+            .map(|i| {
+                format!(
+                    r#"<trkpt lat="55.7001" lon="{:.6}"><time>2026-09-01T10:{:02}:{:02}Z</time></trkpt>"#,
+                    13.20 + 0.02 * f64::from(i) / 40.0,
+                    i * 3 / 60,
+                    i * 3 % 60
+                )
+            })
+            .collect();
+        let gpx = format!(r#"<gpx version="1.1"><trk><trkseg>{points}</trkseg></trk></gpx>"#);
+        store.import_track_gpx(gpx.into_bytes()).unwrap();
+
+        // Before matching, the overlay knows no ridden road.
+        assert_eq!(
+            store
+                .favourites(engine.clone())
+                .unwrap()
+                .ridden_edge_count(),
+            0
+        );
+        let first = store.match_rides(engine.clone()).unwrap();
+        assert_eq!(first.matched, 1);
+        assert!(first.ways >= 2, "{first:?}");
+        assert!(
+            store
+                .favourites(engine.clone())
+                .unwrap()
+                .ridden_edge_count()
+                >= 2
+        );
+        // Once per ride and map.
+        assert_eq!(
+            store.match_rides(engine.clone()).unwrap(),
+            RideMatchReport {
+                matched: 0,
+                ways: 0
+            }
+        );
+
+        // A route along the ride is mostly ridden; with no rides, all of it
+        // is unridden.
+        let fav = store.favourites(engine.clone()).unwrap();
+        let opts = crate::RouteOptions {
+            unridden: crate::UnriddenMode::Prefer,
+            ..crate::default_route_options()
+        };
+        let (from, to) = (ll(55.7001, 13.202), ll(55.7001, 13.218));
+        let r = engine
+            .route(from, vec![], to, opts.clone(), Some(fav))
+            .unwrap();
+        assert!(r.unridden_share < 0.2, "{r:?}");
+        let r = engine.route(from, vec![], to, opts, None).unwrap();
+        assert_eq!(r.unridden_share, 1.0);
+        std::fs::remove_file(region).unwrap();
     }
 
     #[test]
