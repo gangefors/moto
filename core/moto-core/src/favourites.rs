@@ -14,7 +14,7 @@ use crate::region::format::WayRef;
 use crate::region::format::edge_flags::REVERSED;
 use crate::route::{edge_line, is_unpaved};
 use crate::scoring::PARAMS;
-use crate::section::{Direction, Rating, Section, Status};
+use crate::section::{Direction, Rating, Section, Status, WaySpan};
 use crate::{CoreError, Engine, LatLon};
 
 /// Favourite edges of one region.
@@ -51,6 +51,10 @@ pub struct Favourites {
     anchors: Vec<(LatLon, f64)>,
     /// The gravel stretches of each matched section that has any.
     gravel: Vec<SectionGravel>,
+    /// One bit per edge, set where the rider's rides have been on at least
+    /// half of it, either way (ADR-0010); empty when no ride has been on
+    /// any road of the region.
+    ridden: Vec<u64>,
 }
 
 /// Where a favourite section runs on gravel or other unpaved road, for
@@ -90,6 +94,20 @@ impl Favourites {
     /// gives its bonus in its direction; where sections overlap, the best
     /// bonus wins.
     pub fn build(engine: &Engine, sections: &[Section]) -> Self {
+        Self::build_with_rides(engine, sections, &[])
+    }
+
+    /// As [`Self::build`], with the roads the rider's `rides` were matched
+    /// to (each ride's way spans, see `Store::ride_ways`) marked as ridden
+    /// (ADR-0010).
+    pub fn build_with_rides(engine: &Engine, sections: &[Section], rides: &[Vec<WaySpan>]) -> Self {
+        let mut ridden_by_way: HashMap<i64, Vec<(u32, u32)>> = HashMap::new();
+        for w in rides.iter().flatten() {
+            let (lo, hi) = (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx));
+            if lo < hi {
+                ridden_by_way.entry(w.way_id).or_default().push((lo, hi));
+            }
+        }
         let mut by_way: HashMap<i64, Vec<Span>> = HashMap::new();
         let mut anchors = Vec::new();
         for (i, s) in sections
@@ -125,22 +143,35 @@ impl Favourites {
             anchors,
             ..Self::default()
         };
-        if by_way.is_empty() {
+        if by_way.is_empty() && ridden_by_way.is_empty() {
             return favourites;
         }
 
         let region = engine.net();
         let mut weights: HashMap<u32, (f32, f32)> = HashMap::new();
         let mut gravel: HashMap<usize, SectionGravel> = HashMap::new();
+        let mut ridden = vec![0u64; region.edge_count().div_ceil(64)];
+        let mut any_ridden = false;
         for id in 0..region.edge_count() as u32 {
             let r = &region.way_ref(id);
-            let Some(spans) = by_way.get(&r.way_id) else {
+            let rides = ridden_by_way.get(&r.way_id);
+            let spans = by_way.get(&r.way_id);
+            if rides.is_none() && spans.is_none() {
                 continue;
-            };
+            }
             let (lo, hi) = (r.from_idx.min(r.to_idx), r.from_idx.max(r.to_idx));
             if lo == hi {
                 continue;
             }
+            if let Some(rides) = rides
+                && ridden_share(engine, id, r, lo, hi, rides) >= 0.5
+            {
+                ridden[(id >> 6) as usize] |= 1 << (id & 63);
+                any_ridden = true;
+            }
+            let Some(spans) = spans else {
+                continue;
+            };
             let along_way = r.to_idx > r.from_idx;
             // (bonus, stretch, weight, rating)
             let mut best = (0.0f64, (0.0f64, 0.0f64), 0.0f64, Rating::Good);
@@ -212,7 +243,23 @@ impl Favourites {
         let mut gravel: Vec<SectionGravel> = gravel.into_values().collect();
         gravel.sort_by_key(|g| g.section_id);
         favourites.gravel = gravel;
+        if any_ridden {
+            favourites.ridden = ridden;
+        }
         favourites
+    }
+
+    /// Whether the rider's rides have been on edge `id` (ADR-0010).
+    #[inline]
+    pub(crate) fn is_ridden(&self, id: u32) -> bool {
+        self.ridden
+            .get((id >> 6) as usize)
+            .is_some_and(|word| word >> (id & 63) & 1 == 1)
+    }
+
+    /// How many edges the rider's rides have been on.
+    pub fn ridden_edge_count(&self) -> usize {
+        self.ridden.iter().map(|w| w.count_ones() as usize).sum()
     }
 
     /// Whether no edge is a favourite.
@@ -228,11 +275,13 @@ impl Favourites {
     /// Refuses favourites built for another region: their edge ids would
     /// point at the wrong roads.
     pub(crate) fn check(&self, engine: &Engine) -> Result<(), CoreError> {
-        if self.region_key.is_empty() && self.is_empty() {
+        if self.region_key.is_empty() && self.is_empty() && self.ridden.is_empty() {
             return Ok(());
         }
+        let edges = engine.net().edge_count();
         if self.region_key != crate::rematch::region_key(engine)
-            || (!self.weights.is_empty() && self.edge_count != engine.net().edge_count())
+            || (!self.weights.is_empty() && self.edge_count != edges)
+            || (!self.ridden.is_empty() && self.ridden.len() != edges.div_ceil(64))
         {
             return Err(CoreError::InvalidArgument(
                 "favourites were built for another region; build them again".into(),
@@ -315,6 +364,31 @@ impl Favourites {
     pub(crate) fn max_speed_kmh(&self) -> f64 {
         self.max_speed_kmh
     }
+}
+
+/// The largest share of edge `id` (way nodes `lo` to `hi` of its way ref
+/// `r`) that one of `rides`' spans of the same way covers.
+fn ridden_share(
+    engine: &Engine,
+    id: u32,
+    r: &WayRef,
+    lo: u32,
+    hi: u32,
+    rides: &[(u32, u32)],
+) -> f64 {
+    let mut best = 0.0f64;
+    for &(a, b) in rides {
+        let (from, to) = (lo.max(a), hi.min(b));
+        if from >= to {
+            continue;
+        }
+        if from == lo && to == hi {
+            return 1.0;
+        }
+        let (start, end) = covered(engine, id, r, from, to);
+        best = best.max(end - start);
+    }
+    best
 }
 
 /// The stretch of edge `id` between way nodes `from` and `to` (`from <

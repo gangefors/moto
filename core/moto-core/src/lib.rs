@@ -52,5 +52,5 @@ pub use route::MAX_CHOICES;
 pub use suggest::TAG_REACH_M;
 pub use types::{
     Avoid, FavouritesMode, Gravel, LoopOptions, RoadPoint, RoundTripTarget, Route, RouteOptions,
-    TimeBudget,
+    TimeBudget, UnriddenMode,
 };

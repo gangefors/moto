@@ -69,6 +69,19 @@ pub enum FavouritesMode {
     Avoid,
 }
 
+/// What a route does with roads the rider's rides have been on
+/// (ADR-0010).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UnriddenMode {
+    /// Ridden or not, every road counts the same.
+    #[default]
+    Any,
+    /// Seek out curvy roads no ride has been on: a ridden road keeps only
+    /// `ScoringParams::ridden_worth` of its curvy worth. It costs no more
+    /// time, so it still gets the rider places.
+    Prefer,
+}
+
 /// How much time a route may take (PRD R6). The time over the fastest
 /// route is spent on favourites: the more there is, the harder they pull.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -103,6 +116,7 @@ pub struct RouteOptions {
     pub curvy: bool,
     pub gravel: Gravel,
     pub favourites: FavouritesMode,
+    pub unridden: UnriddenMode,
 }
 
 impl Default for RouteOptions {
@@ -114,6 +128,7 @@ impl Default for RouteOptions {
             curvy: true,
             gravel: Gravel::Avoid,
             favourites: FavouritesMode::Prefer,
+            unridden: UnriddenMode::Any,
         }
     }
 }
@@ -195,6 +210,9 @@ pub struct Route {
     /// Share of the distance on curvy roads, 0.0–1.0: each metre counts by
     /// how curvy it is (see `ScoringParams::curviness`).
     pub curvy_share: f64,
+    /// Share of the distance on roads none of the rider's rides has been
+    /// on, 0.0–1.0 (1.0 with no rides; ADR-0010).
+    pub unridden_share: f64,
     /// Time of the fastest route between the same points, to show what
     /// the favourites cost (equal to `duration_s` for the fastest route).
     pub fastest_duration_s: f64,
