@@ -100,4 +100,46 @@ class DebugReportTest {
         val text = reportText("head", listOf(ReportSection("A", listOf("a1")), ReportSection("B", emptyList())))
         assertEquals("head\n\n== A ==\na1\n", text)
     }
+
+    @Test
+    fun riderDataSaysWhatIsSaved() {
+        val lines = riderDataLines(
+            RiderData(
+                sections = 42, good = 10, great = 20, epic = 12, oneWay = 5, sectionKm = 186.4,
+                unmatched = 1, waiting = 2, ridden = 30,
+                rides = 12, ridesKm = 1240.2, longestRideKm = 310.4, unfinished = 0,
+                routes = 3, loops = 2, tagsPending = 4,
+            ),
+        )
+        assertEquals(
+            listOf(
+                "Favourite sections: 42 (good 10, great 20, epic 12), 186 km, 5 one-way",
+                "Needing a look: 1 no longer fit the map, 2 waiting for a match",
+                "Ridden: 30 of 42 sections at least once",
+                "Rides: 12 finished, 1240 km, longest 310 km; 0 not finished",
+                "Saved: 3 routes, 2 loops; tags waiting for review: 4",
+            ),
+            lines,
+        )
+    }
+
+    @Test
+    fun settingsSayWhatRoutesUse() {
+        val s = SettingsInEffect("AVOID", "PREFER", "PREFER", emptyList(), "2 h", "ANY", 15, 10, keepScreenOn = true)
+        assertEquals(
+            listOf(
+                "Routes and loops: gravel AVOID, favourites PREFER, unridden roads PREFER, allowed none",
+                "Loops: length 2 h, direction default ANY",
+                "Map: locate zooms close 15, area 10; screen kept on while recording: yes",
+            ),
+            settingsLines(s),
+        )
+        assertTrue(settingsLines(s.copy(allowed = listOf("motorways", "ferries")))[0].endsWith("allowed motorways, ferries"))
+    }
+
+    @Test
+    fun sharesAreWholePercentsInOrder() {
+        assertEquals("curvy 41/30/100 %", sharesLine("curvy", listOf(0.414, 0.2951, 1.2)))
+        assertEquals("unridden 0 %", sharesLine("unridden", listOf(Double.NaN)))
+    }
 }

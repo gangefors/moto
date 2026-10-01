@@ -6,6 +6,7 @@ package se.gangefors.moto.debug
 import android.content.Context
 import androidx.compose.runtime.Composable
 import se.gangefors.moto.core.Favourites
+import se.gangefors.moto.core.RideMatchReport
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.RoundTripTarget
@@ -21,6 +22,10 @@ object DebugTools {
     fun <T> startup(name: String, block: () -> T): T = block()
 
     fun mark(name: String) = Unit
+
+    fun ridesMatched(report: RideMatchReport) = Unit
+
+    fun overlayBuilt(favourites: Favourites) = Unit
 
     fun routes(
         from: LatLon,

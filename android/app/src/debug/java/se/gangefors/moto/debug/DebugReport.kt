@@ -172,3 +172,68 @@ fun reportText(header: String, sections: List<ReportSection>): String = buildStr
         s.lines.forEach { appendLine(it) }
     }
 }
+
+/** The rider's data in numbers (Rider data block). */
+data class RiderData(
+    val sections: Int,
+    val good: Int,
+    val great: Int,
+    val epic: Int,
+    val oneWay: Int,
+    val sectionKm: Double,
+    /** Sections that no longer fit the map. */
+    val unmatched: Int,
+    /** Sections waiting for a match: their region is off or a match is due. */
+    val waiting: Int,
+    /** Sections ridden at least once on the saved rides. */
+    val ridden: Int,
+    val rides: Int,
+    val ridesKm: Double,
+    val longestRideKm: Double,
+    /** Rides not finished: being recorded, or cut short. */
+    val unfinished: Int,
+    val routes: Int,
+    val loops: Int,
+    val tagsPending: Int,
+)
+
+fun riderDataLines(d: RiderData): List<String> = listOf(
+    String.format(
+        Locale.ROOT,
+        "Favourite sections: %d (good %d, great %d, epic %d), %.0f km, %d one-way",
+        d.sections, d.good, d.great, d.epic, d.sectionKm, d.oneWay,
+    ),
+    "Needing a look: ${d.unmatched} no longer fit the map, ${d.waiting} waiting for a match",
+    "Ridden: ${d.ridden} of ${d.sections} sections at least once",
+    String.format(
+        Locale.ROOT,
+        "Rides: %d finished, %.0f km, longest %.0f km; %d not finished",
+        d.rides, d.ridesKm, d.longestRideKm, d.unfinished,
+    ),
+    "Saved: ${d.routes} routes, ${d.loops} loops; tags waiting for review: ${d.tagsPending}",
+)
+
+/** The route and loop settings in effect (Settings block). */
+data class SettingsInEffect(
+    val gravel: String,
+    val favourites: String,
+    val unridden: String,
+    /** Kinds of road allowed: none means motorways, ferries and tolls are avoided. */
+    val allowed: List<String>,
+    val loopLength: String,
+    val loopDirection: String,
+    val zoomClose: Int,
+    val zoomArea: Int,
+    val keepScreenOn: Boolean,
+)
+
+fun settingsLines(s: SettingsInEffect): List<String> = listOf(
+    "Routes and loops: gravel ${s.gravel}, favourites ${s.favourites}, unridden roads ${s.unridden}, " +
+        "allowed ${s.allowed.ifEmpty { listOf("none") }.joinToString(", ")}",
+    "Loops: length ${s.loopLength}, direction default ${s.loopDirection}",
+    "Map: locate zooms close ${s.zoomClose}, area ${s.zoomArea}; screen kept on while recording: ${if (s.keepScreenOn) "yes" else "no"}",
+)
+
+/** "curvy 41/30/25 %": one whole percent per route, in the order found. */
+fun sharesLine(name: String, shares: List<Double>): String =
+    "$name ${shares.joinToString("/") { Math.round(it.coerceIn(0.0, 1.0) * 100).toString() }} %"

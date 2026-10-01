@@ -22,6 +22,13 @@ import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.Route
 import se.gangefors.moto.core.RoundTripTarget
 import se.gangefors.moto.core.defaultRouteOptions
+import se.gangefors.moto.core.Direction
+import se.gangefors.moto.core.Rating
+import se.gangefors.moto.core.SectionStatus
+import se.gangefors.moto.core.TagStatus
+import se.gangefors.moto.RoutePrefs
+import se.gangefors.moto.SavedSections
+import se.gangefors.moto.StoreState
 import se.gangefors.moto.core.profileRegionOpen
 import se.gangefors.moto.ROUTE_EXTRA_PERCENT
 import se.gangefors.moto.routeOptions
@@ -129,10 +136,67 @@ private fun runCase(engine: Engine, case: BenchCase): List<Route> = when (case) 
 
 private fun BenchPoint.latLon() = LatLon(lat, lon)
 
-/** "3 routes, 412–488 km". */
+/** "3 routes, 412–488 km; curvy 41/30/25 %, favourites 22/0/5 %,
+ * unridden 64/80/100 %", the shares route by route in the order found. */
 fun describe(routes: List<Route>): String {
     if (routes.isEmpty()) return "none found"
     val d = routes.map { it.distanceM }
     val span = if (d.size == 1) km(d[0]) else "${km(d.min()).removeSuffix(" km")}–${km(d.max())}"
-    return "${routes.size} ${if (routes.size == 1) "route" else "routes"}, $span"
+    return "${routes.size} ${if (routes.size == 1) "route" else "routes"}, $span; " +
+        listOf(
+            sharesLine("curvy", routes.map { it.curvyShare }),
+            sharesLine("favourites", routes.map { it.favouriteShare }),
+            sharesLine("unridden", routes.map { it.unriddenShare }),
+        ).joinToString(", ")
+}
+
+/** The rider's data in numbers, from the store. Call off the main thread. */
+fun riderData(context: Context): RiderData? {
+    val store = (SavedSections.open(context) as? StoreState.Ready)?.store ?: return null
+    val sections = store.list(null)
+    val ridden = runCatching { store.ridden() }.getOrDefault(emptyList())
+    val tracks = store.listTracks()
+    val finished = tracks.filter { it.endedAt != null }
+    val routes = store.listRoutes()
+    fun lengthKm(line: List<LatLon>) =
+        line.zipWithNext { a, b -> metersApart(a.lat, a.lon, b.lat, b.lon) }.sum() / 1000.0
+    return RiderData(
+        sections = sections.size,
+        good = sections.count { it.rating == Rating.GOOD },
+        great = sections.count { it.rating == Rating.GREAT },
+        epic = sections.count { it.rating == Rating.EPIC },
+        oneWay = sections.count { it.direction == Direction.FORWARD },
+        sectionKm = sections.sumOf { lengthKm(it.geometry) },
+        unmatched = sections.count { it.status == SectionStatus.UNMATCHED },
+        waiting = sections.count { it.status == SectionStatus.NEEDS_REMATCH },
+        ridden = ridden.count { it.times > 0u },
+        rides = finished.size,
+        ridesKm = finished.sumOf { it.distanceM } / 1000.0,
+        longestRideKm = (finished.maxOfOrNull { it.distanceM } ?: 0.0) / 1000.0,
+        unfinished = tracks.size - finished.size,
+        routes = routes.count { !it.isLoop },
+        loops = routes.count { it.isLoop },
+        tagsPending = store.listTags(TagStatus.PENDING).size,
+    )
+}
+
+/** The route and loop settings in effect. */
+fun settingsInEffect(context: Context): SettingsInEffect {
+    val avoid = RoutePrefs.avoid(context)
+    val zooms = RoutePrefs.locateZooms(context)
+    return SettingsInEffect(
+        gravel = RoutePrefs.gravel(context).name,
+        favourites = RoutePrefs.favourites(context).name,
+        unridden = RoutePrefs.unridden(context).name,
+        allowed = listOfNotNull(
+            "motorways".takeIf { !avoid.motorways },
+            "ferries".takeIf { !avoid.ferries },
+            "tolls".takeIf { !avoid.tolls },
+        ),
+        loopLength = RoutePrefs.loopChoice(context).key,
+        loopDirection = RoutePrefs.loopDirection(context).name,
+        zoomClose = zooms.close,
+        zoomArea = zooms.area,
+        keepScreenOn = RoutePrefs.keepScreenOn(context),
+    )
 }

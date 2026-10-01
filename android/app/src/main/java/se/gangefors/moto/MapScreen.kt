@@ -396,8 +396,10 @@ fun MapScreen() {
         withContext(Dispatchers.IO) {
             favouritesBuild.withLock {
                 val built = runCatching {
-                    DebugTools.startup("rides matched") { s.matchRides(engine) }
-                    DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } }
+                    DebugTools.ridesMatched(DebugTools.startup("rides matched") { s.matchRides(engine) })
+                    DebugTools.startup("favourites") { s.favourites(engine) }
+                        .also { DebugTools.overlayBuilt(it) }
+                        .let { it to it.gravel() }
                 }
                 // Superseded while it ran: nobody will use it.
                 if (!isActive) built.getOrNull()?.first?.destroy()
