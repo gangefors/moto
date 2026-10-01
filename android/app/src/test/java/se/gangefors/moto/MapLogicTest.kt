@@ -40,6 +40,38 @@ class MapLogicTest {
     }
 
     @Test
+    fun theSwitcherRowStaysWhileANewSetIsFound() {
+        // Routes: a row for several choices, kept while finding where the
+        // set before had one, none for a single route or a new sheet.
+        assertTrue(showsSwitcher(0 to 4, failed = false, kept = 0, shuffle = false))
+        assertFalse(showsSwitcher(0 to 1, failed = false, kept = 4, shuffle = false))
+        assertTrue(showsSwitcher(null, failed = false, kept = 4, shuffle = false))
+        assertFalse(showsSwitcher(null, failed = false, kept = 1, shuffle = false))
+        assertFalse(showsSwitcher(null, failed = false, kept = 0, shuffle = false))
+        assertTrue(showsSwitcher(-1 to 0, failed = true, kept = 0, shuffle = false))
+        // Loops (Shuffle): always.
+        assertTrue(showsSwitcher(null, failed = false, kept = 0, shuffle = true))
+    }
+
+    @Test
+    fun keptChoicesFollowTheLastSetShown() {
+        assertEquals(4, keptChoices(kept = 0, count = 4))
+        // A search right after another: the set before both still counts.
+        assertEquals(4, keptChoices(kept = 4, count = 0))
+        assertEquals(2, keptChoices(kept = 4, count = 2))
+        assertEquals(0, keptChoices(kept = 0, count = 0))
+    }
+
+    @Test
+    fun aPulledUpSheetKeepsItsTopUnlessItTakesHalf() {
+        assertTrue(fixesTop(headerPx = 0, roomPx = 1000f))
+        assertTrue(fixesTop(headerPx = 400, roomPx = 1000f))
+        assertTrue(fixesTop(headerPx = 500, roomPx = 1000f))
+        // Very large fonts: the whole sheet scrolls instead.
+        assertFalse(fixesTop(headerPx = 501, roomPx = 1000f))
+    }
+
+    @Test
     fun aStartGivenByTheAppActsLikeALongPress() {
         // "Route here from my position": the long-pressed point becomes the
         // end, the rider's position the start, and further long-presses

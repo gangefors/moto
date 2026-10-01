@@ -65,6 +65,8 @@ import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material3.Slider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
@@ -90,11 +92,14 @@ import androidx.compose.ui.unit.Velocity
  * map shows what it plans above it). At rest it shows [header] only: the
  * figures, the actions and a line that sums up the choices. Pulled up
  * (drag the handle or the header up, or tap the handle or the summary
- * line), it shows [details] too, the choices themselves. In both states
- * everything below the handle scrolls when it doesn't fit in [maxHeight]
- * (large fonts); a drag the content can't scroll any further moves the
- * sheet instead, like Android's own sheets: up opens it, down from the
- * top puts it to rest. The handle always drags it; Back puts it to rest.
+ * line), it shows [details] too, the choices themselves, below a line;
+ * the header stays fixed above it and only the choices scroll, unless the
+ * header alone takes more than half the sheet (very large fonts). At rest,
+ * or in that case, everything below the handle scrolls when it doesn't
+ * fit in [maxHeight]. A drag the content can't scroll any further moves
+ * the sheet instead, like Android's own sheets: up opens it, down from
+ * the top puts it to rest. The handle and a fixed header always drag it;
+ * Back puts it to rest.
  */
 @Composable
 fun PlanSheet(
@@ -164,6 +169,22 @@ fun PlanSheet(
             }
             val scroll = rememberScrollState()
             LaunchedEffect(expanded) { if (!expanded) scroll.scrollTo(0) }
+            // Pulled up, everything down to the line stays put and only the
+            // choices below it scroll (the rider); unless the top alone would
+            // take more than half the sheet (very large fonts), when it all
+            // scrolls as one, as at rest, so the choices keep room.
+            var headerPx by remember { mutableIntStateOf(0) }
+            val roomPx = with(LocalDensity.current) { (maxHeight - SHEET_HANDLE_HEIGHT).toPx() }
+            val fixedTop = expanded && fixesTop(headerPx, roomPx)
+            val measured = Modifier.onSizeChanged { headerPx = it.height }
+            val divider = @Composable { HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp)) }
+            if (fixedTop) {
+                // The fixed top drags the sheet as the handle does.
+                Column(handleDrag) {
+                    Column(measured) { header() }
+                    divider()
+                }
+            }
             Column(
                 Modifier
                     .weight(1f, fill = false)
@@ -171,11 +192,11 @@ fun PlanSheet(
                     .nestedScroll(overscroll)
                     .verticalScroll(scroll),
             ) {
-                header()
-                if (expanded) {
-                    HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp))
-                    details()
+                if (!fixedTop) {
+                    Column(measured) { header() }
+                    if (expanded) divider()
                 }
+                if (expanded) details()
             }
         }
     }
@@ -221,6 +242,7 @@ fun RouteCard(
     count: Int,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    kept: Int,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
@@ -240,6 +262,7 @@ fun RouteCard(
                 onShare = onShare,
                 onClose = onClose,
                 closeDescription = stringResource(R.string.route_close),
+                kept = kept,
             )
             ChoiceSwitcher(
                 found = summary != null,
@@ -250,6 +273,7 @@ fun RouteCard(
                 onNext = onNext,
                 previousDescription = stringResource(R.string.route_previous),
                 nextDescription = stringResource(R.string.route_next),
+                kept = kept,
             )
             if (!expanded) {
                 val parts = buildList {
@@ -386,6 +410,7 @@ fun LoopCard(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onShuffle: () -> Unit,
+    kept: Int,
     direction: LoopDirection,
     onDirection: (LoopDirection) -> Unit,
     choice: LoopChoice,
@@ -420,6 +445,7 @@ fun LoopCard(
                 onShare = onShare,
                 onClose = onClose,
                 closeDescription = stringResource(R.string.loop_close),
+                kept = kept,
             )
             ChoiceSwitcher(
                 found = found,
@@ -430,6 +456,7 @@ fun LoopCard(
                 onNext = onNext,
                 previousDescription = stringResource(R.string.loop_previous),
                 nextDescription = stringResource(R.string.loop_next),
+                kept = kept,
                 onShuffle = onShuffle,
             )
             if (!expanded) {
@@ -458,10 +485,11 @@ fun LoopCard(
  * Which of the routes or loops to choose from is shown, with the previous
  * and next ones, and for loops Shuffle ([onShuffle]) for another set.
  * While they are being found the old count is gone (a new set is on its
- * way, the rider): loops show "– / –" with the buttons off, routes no row;
- * when none were found ([failed]) Shuffle still works. With Shuffle the
- * count always shows, 1 / 1 too, so the button never moves. Nothing to
- * choose from and no Shuffle: no row.
+ * way, the rider): "– / –", dimmed, with the buttons off, where the set
+ * before ([kept] choices) had the row, so nothing moves; when none were
+ * found ([failed]) Shuffle still works. With Shuffle the count always
+ * shows, 1 / 1 too, so the button never moves. Nothing to choose from
+ * and no Shuffle: no row.
  */
 @Composable
 private fun ChoiceSwitcher(
@@ -473,19 +501,20 @@ private fun ChoiceSwitcher(
     onNext: () -> Unit,
     previousDescription: String,
     nextDescription: String,
+    kept: Int,
     onShuffle: (() -> Unit)? = null,
 ) {
     // None found: 0 / 0, its buttons off; finding: no count.
     val shown = choiceCount(found, failed, position, count)
+    if (!showsSwitcher(shown, failed, kept, onShuffle != null)) return
     val shownCount = shown?.second ?: 0
-    if (shownCount <= 1 && !failed && onShuffle == null) return
     FlowRow(
         modifier = Modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        if (shownCount > 1 || failed || onShuffle != null) {
+        run {
             val switchable = found && shownCount > 1
             Row(
                 Modifier
@@ -553,8 +582,10 @@ private fun LoopCardDetails(
  * [problem]: why nothing was), then Save, Share (both only once something
  * is found) and the cross, as icons in every state of the sheet; below,
  * across the whole width, what the route is worth (or the problem). While
- * a new route or loop is being found, [computing] shows and the old
- * figures are gone, so it is clear they no longer apply (the rider).
+ * a new route or loop is being found, [computing] shows, dimmed, and
+ * the old figures are gone, so it is clear they no longer apply; when
+ * [kept] (a setting or the end changed, so the sheet had results) the figures line
+ * stays with dashes, so nothing moves (the rider).
  */
 @Composable
 private fun SheetTop(
@@ -565,9 +596,11 @@ private fun SheetTop(
     onShare: () -> Unit,
     onClose: () -> Unit,
     closeDescription: String,
+    kept: Int,
     problem: String? = null,
 ) {
     val shown = summary
+    val finding = shown == null && problem == null
     Row(verticalAlignment = Alignment.CenterVertically) {
         // The distance and the time on one line, in the largest of a few
         // sizes that fits; when not even the smallest does (very large
@@ -585,7 +618,7 @@ private fun SheetTop(
         val measurer = rememberTextMeasurer()
         val gap = 12.dp
         val gapPx = with(LocalDensity.current) { gap.roundToPx() }
-        BoxWithConstraints(Modifier.weight(1f)) {
+        BoxWithConstraints(Modifier.weight(1f).alpha(if (finding) 0.5f else 1f)) {
             val widths = styles.map { st ->
                 texts.sumOf { measurer.measure(it, st, softWrap = false, maxLines = 1).size.width } + gapPx * (texts.size - 1)
             }
@@ -613,7 +646,10 @@ private fun SheetTop(
         )
         return
     }
-    if (shown == null) return
+    if (shown == null) {
+        if (kept > 0) FindingFigures()
+        return
+    }
     // What the route is worth, as icons and figures on one quiet line.
     // At rest the sheet grows from the bottom, so should the line ever
     // wrap (large fonts) it pushes the figures up, never the switcher down.
@@ -624,6 +660,39 @@ private fun SheetTop(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         routeStats(shown).forEach { StatFigure(it, shown) }
+    }
+}
+
+/** The figures line while new routes or loops are found after a setting
+ * changed: the figures that are always there, with a dash, dimmed, so
+ * the line keeps its place. A screen reader skips it (the title says
+ * what is happening). */
+@Composable
+private fun FindingFigures() {
+    Row(
+        Modifier
+            .padding(top = 6.dp, end = 8.dp)
+            .alpha(0.5f)
+            .clearAndSetSemantics {},
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(R.drawable.ic_star, R.drawable.ic_curvy).forEach { icon ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(
+                    painterResource(icon),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    noBreak(stringResource(R.string.route_stat_percent_none)),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
