@@ -52,21 +52,25 @@ class LibraryLogicTest {
 
     @Test
     fun aRideImportOfManyFilesSumsUpAndListsWhatFailed() {
-        val one = rideImportSummary(listOf(RideImport.Imported(12_345.0)))
-        assertEquals(RideImportSummary(1, 1, 12.3, emptyList(), 0), one)
+        val one = rideImportSummary(listOf(RideImport.Imported(listOf(12_345.0))))
+        assertEquals(RideImportSummary(1, 1, 12.3, 0, emptyList(), 0), one)
 
         val results = listOf(
-            RideImport.Imported(10_000.0),
+            // A file with three rides (track segments), one already saved.
+            RideImport.Imported(listOf(10_000.0, 2_000.0), alreadySaved = 1),
             RideImport.Failed("a.gpx", "no track points"),
-            RideImport.Imported(5_060.0),
+            RideImport.Imported(listOf(5_060.0)),
             RideImport.Failed("b.gpx", "not GPX"),
             RideImport.Failed("c.gpx", "too large"),
             RideImport.Failed("d.gpx", "not GPX"),
+            // Everything in it already saved.
+            RideImport.Imported(emptyList(), alreadySaved = 2),
         )
         val s = rideImportSummary(results)
-        assertEquals(2, s.imported)
-        assertEquals(6, s.files)
-        assertEquals(15.1, s.km, 1e-9)
+        assertEquals(3, s.imported)
+        assertEquals(7, s.files)
+        assertEquals(17.1, s.km, 1e-9)
+        assertEquals(3, s.alreadySaved)
         // The first three not imported, in the order picked, and a count.
         assertEquals(listOf("a.gpx", "b.gpx", "c.gpx"), s.failed.map { it.name })
         assertEquals(1, s.moreFailed)

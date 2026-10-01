@@ -681,7 +681,7 @@ mod tests {
             })
             .collect();
         let gpx = format!(r#"<gpx version="1.1"><trk><trkseg>{points}</trkseg></trk></gpx>"#);
-        store.import_track_gpx(gpx.into_bytes()).unwrap();
+        store.import_tracks_gpx(gpx.into_bytes()).unwrap();
 
         // Before matching, the overlay knows no ridden road.
         assert_eq!(
