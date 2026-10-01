@@ -708,6 +708,10 @@ fun MapScreen() {
     // The routes to choose from (the fastest last) and which is shown.
     var routeChoices by remember { mutableStateOf<List<Route>>(emptyList()) }
     var routeIndex by remember { mutableIntStateOf(0) }
+    // How many route choices the sheet had before the search now running
+    // (0 for a new sheet): its rows stay, dimmed, while a setting's
+    // change finds new routes, so nothing moves.
+    var routeKept by remember { mutableIntStateOf(0) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
     // Favourites preferred, or avoided to find new roads.
     var favouritesMode by remember { mutableStateOf(RoutePrefs.favourites(context)) }
@@ -735,6 +739,10 @@ fun MapScreen() {
     // setting or the favourites change.
     var loopStart by remember { mutableStateOf<LatLng?>(null) }
     var loops by remember { mutableStateOf<List<Route>>(emptyList()) }
+    // How many loops the sheet had before the search now running (0 for
+    // a new sheet or after none were found): its rows stay, dimmed, while
+    // a setting's change finds new loops, so nothing moves.
+    var loopKept by remember { mutableIntStateOf(0) }
     var loopIndex by remember { mutableIntStateOf(0) }
     var loopOpts by remember { mutableStateOf<RouteOptions?>(null) }
     // The last loop length picked (loop sheet or Ride settings); new
@@ -800,11 +808,13 @@ fun MapScreen() {
     val planning = routeEnds != null || loopStart != null
 
     /** Forgets the last loops, so a new loop sheet starts empty (finding
-     * loops) instead of showing the old ones' count and figures. */
+     * loops) instead of keeping their rows, dimmed, as a setting's change
+     * does. */
     fun clearLoops() {
         loops = emptyList()
         loopIndex = 0
         loopProblem = null
+        loopKept = 0
     }
 
     /** Loops from [start], heading the default way: the standard set
@@ -973,13 +983,14 @@ fun MapScreen() {
     }
 
     /** Forgets the last route choices, so a new route sheet starts empty
-     * (finding routes) instead of showing the old ones' figures. Every
-     * recalculation forgets them too. */
+     * (finding a route) instead of keeping their rows, dimmed, as a moved
+     * end or a setting's change does. */
     fun clearRoutes() {
         routeSummary = null
         shownRoute = null
         routeChoices = emptyList()
         routeIndex = 0
+        routeKept = 0
     }
 
     fun closeRoute() {
@@ -1044,6 +1055,7 @@ fun MapScreen() {
         // sheet says it is finding them. Loops Shuffle already has replace
         // the old ones straight away, without "finding" in between.
         if (ahead?.isCompleted != true) {
+            loopKept = keptChoices(loopKept, loops.size)
             loops = emptyList()
             loopIndex = 0
             o.route.show(start, null, null)
@@ -1055,6 +1067,7 @@ fun MapScreen() {
             loopsAhead.clear()
             nextSeed = shuffleSeed()
             loopProblem = why
+            loopKept = 0
             cardExpanded = true
             o.route.show(start, null, null)
         }
@@ -1099,6 +1112,7 @@ fun MapScreen() {
         val (start, end) = routeEnds ?: return@LaunchedEffect
         val o = overlays ?: return@LaunchedEffect
         val ready = region as? RegionState.Ready ?: return@LaunchedEffect
+        routeKept = keptChoices(routeKept, routeChoices.size)
         routeSummary = null
         shownRoute = null
         routeChoices = emptyList()
@@ -1268,6 +1282,8 @@ fun MapScreen() {
                         vias = emptyList()
                         arriveBy = null
                     }
+                    // A new route starts its sheet empty; when the end moves
+                    // the rows stay, dimmed, as for a setting (Stefan).
                     if (routeEnds == null) clearRoutes()
                     routeEnds = step.start to step.end
                 }
@@ -1749,6 +1765,7 @@ fun MapScreen() {
                                     showRouteChoice(it.first, it.second, routeChoices, nextLoop(routeIndex, routeChoices.size), opts)
                                 }
                             },
+                            kept = routeKept,
                         )
                     }
                     loopStart?.let {
@@ -1764,6 +1781,7 @@ fun MapScreen() {
                             position = loopIndex,
                             count = loops.size,
                             onShuffle = { loopSeed = nextSeed },
+                            kept = loopKept,
                             direction = loopDirection,
                             onDirection = { loopDirection = it },
                             onPrevious = {

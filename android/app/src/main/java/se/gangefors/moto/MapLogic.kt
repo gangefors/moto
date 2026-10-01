@@ -114,6 +114,25 @@ fun choiceCount(found: Boolean, failed: Boolean, position: Int, count: Int): Pai
     else -> null
 }
 
+/** Whether the route or loop switcher shows a row: with Shuffle (loops)
+ * always; otherwise for more than one choice, for none found, and while
+ * a new set is found ([shown] null) where the set before had more than
+ * one ([kept]), so the row stays put (Stefan). */
+fun showsSwitcher(shown: Pair<Int, Int>?, failed: Boolean, kept: Int, shuffle: Boolean): Boolean =
+    shuffle || failed || (shown?.second ?: kept) > 1
+
+/** How many choices the sheet had before the search now running: the
+ * set on show ([count]), or, while searches follow one another, the
+ * last one shown ([kept]). 0 for a sheet that starts empty. */
+fun keptChoices(kept: Int, count: Int): Int = if (count > 0) count else kept
+
+/** Whether a pulled-up planning sheet keeps its top (figures, actions,
+ * switcher; [headerPx] tall) fixed above the scrolling choices: only
+ * while it takes at most half the room under the handle ([roomPx]), so
+ * with very large fonts the whole sheet scrolls instead. 0 (not yet
+ * measured) keeps it fixed. */
+fun fixesTop(headerPx: Int, roomPx: Float): Boolean = headerPx <= roomPx / 2
+
 /** [vias] without the one at [index] (all of them when there is none). */
 fun <P> removeVia(vias: List<P>, index: Int): List<P> = vias.filterIndexed { i, _ -> i != index }
 
