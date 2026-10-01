@@ -47,8 +47,11 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write # to publish the regions release
-    # Holds REGIONS_SIGNING_KEY (ADR-0008); limited to main.
-    environment: regions
+    # Holds REGIONS_SIGNING_KEY (ADR-0008); limited to main. Only its
+    # secret is used: no deployment is recorded.
+    environment:
+      name: regions
+      deployment: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
