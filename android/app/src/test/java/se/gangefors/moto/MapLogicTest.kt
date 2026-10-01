@@ -72,13 +72,14 @@ class MapLogicTest {
     }
 
     @Test
-    fun aFailedSearchGoesBackOnlyWhenTheEndMoved() {
+    fun aFailedSearchGoesBackStaysOrCloses() {
         // The end moved where no route reaches: back to the last routes.
-        assertTrue(goesBack("a" to "b", "a" to "c"))
-        // A new route has nothing to go back to.
-        assertFalse(goesBack(null, "a" to "c"))
-        // The same ends failing (a setting changed): no going back, no loop.
-        assertFalse(goesBack("a" to "b", "a" to "b"))
+        assertEquals(FailedSearch.GO_BACK, failedSearch("a" to "b", "a" to "c"))
+        // A new route has nothing to go back to: the sheet closes.
+        assertEquals(FailedSearch.CLOSE, failedSearch(null, "a" to "c"))
+        // The same ends failing (a setting changed): the sheet stays and
+        // says why; no going back, so no loop.
+        assertEquals(FailedSearch.STAY, failedSearch("a" to "b", "a" to "b"))
     }
 
     @Test

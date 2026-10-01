@@ -736,6 +736,9 @@ fun MapScreen() {
     // (0 for a new sheet): its rows stay, dimmed, while a setting's
     // change finds new routes, so nothing moves.
     var routeKept by remember { mutableIntStateOf(0) }
+    // Why the last search after a change to an open route found nothing:
+    // the sheet stays, saying so, instead of closing (Stefan).
+    var routeProblem by remember { mutableStateOf<String?>(null) }
     var gravel by remember { mutableStateOf(RoutePrefs.gravel(context)) }
     // Favourites preferred, or avoided to find new roads.
     var favouritesMode by remember { mutableStateOf(RoutePrefs.favourites(context)) }
@@ -1021,6 +1024,7 @@ fun MapScreen() {
         routeChoices = emptyList()
         routeIndex = 0
         routeKept = 0
+        routeProblem = null
         lastFound = null
         restoring = null
     }
@@ -1154,6 +1158,7 @@ fun MapScreen() {
             return@LaunchedEffect
         }
         restoring = null
+        routeProblem = null
         routeKept = keptChoices(routeKept, routeChoices.size)
         routeSummary = null
         shownRoute = null
@@ -1203,13 +1208,22 @@ fun MapScreen() {
                     vias = before
                 } else {
                     val back = lastFound
-                    if (back != null && goesBack(back.ends, start to end)) {
-                        // The end moved somewhere no route reaches: back to
-                        // where it was, with its routes, the sheet as it is.
-                        restoring = back
-                        routeEnds = back.ends
-                    } else {
-                        routeEnds = null
+                    when (failedSearch(back?.ends, start to end)) {
+                        FailedSearch.GO_BACK -> {
+                            // The end moved somewhere no route reaches: back to
+                            // where it was, with its routes, the sheet as it is.
+                            restoring = back
+                            routeEnds = checkNotNull(back).ends
+                        }
+                        FailedSearch.STAY -> {
+                            // Same ends, something else changed: the sheet
+                            // stays and says why, for the rider to change it
+                            // again or close it.
+                            routeProblem = coreErrorMessage(resources, it)
+                            o.route.show(start, end, null)
+                            return@fold
+                        }
+                        FailedSearch.CLOSE -> routeEnds = null
                     }
                 }
                 notify(coreErrorMessage(resources, it), long = true)
@@ -1828,6 +1842,7 @@ fun MapScreen() {
                                 }
                             },
                             kept = routeKept,
+                            problem = routeProblem,
                         )
                     }
                     loopStart?.let {
