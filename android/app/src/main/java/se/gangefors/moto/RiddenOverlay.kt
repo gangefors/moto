@@ -17,9 +17,9 @@ import se.gangefors.moto.core.LatLon
 
 /**
  * The roads the rider's rides have been on (ADR-0010): a thin dashed line,
- * near-black on the light map and off-white on the dark one, on top of the
- * route but below its pins. The core leaves out the stretches under
- * favourite sections. Nothing on it reacts to taps.
+ * near-black on the light map and off-white on the dark one, under the
+ * routes, which hide it where they run. The core leaves out the stretches
+ * under favourite sections. Nothing on it reacts to taps.
  */
 class RiddenOverlay(style: Style, darkMap: Boolean) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
@@ -37,8 +37,9 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
     ).also { l ->
-        // Over the route's lines, under its arrows and pins.
-        if (style.getLayer(ROUTE_ARROWS) != null) style.addLayerBelow(l, ROUTE_ARROWS) else style.addLayer(l)
+        // Under every route line (the other routes' casing is the lowest),
+        // so a route hides the dashes along it (2026-10-01).
+        if (style.getLayer(ROUTE_BOTTOM) != null) style.addLayerBelow(l, ROUTE_BOTTOM) else style.addLayer(l)
     }
 
     /** Shows [lines] (none hides the layer's content); not below [minZoom]. */
@@ -53,7 +54,7 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
     private companion object {
         const val SOURCE = "moto-ridden"
         const val LAYER = "moto-ridden-line"
-        const val ROUTE_ARROWS = "moto-route-arrows"
+        const val ROUTE_BOTTOM = "moto-route-other-casing"
     }
 }
 
