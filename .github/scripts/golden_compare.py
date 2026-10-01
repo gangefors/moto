@@ -77,6 +77,9 @@ def compare(baseline, current):
             loops, was = count(o, "loops"), count(b, "loops")
             if loops is not None and was is not None and loops != was:
                 notes.append(f"{'⚠️ ' if loops < was else ''}loops {loops - was:+d}")
+            choices, had = count(o, "choices"), count(b, "choices")
+            if choices is not None and had is not None and choices != had:
+                notes.append(f"{'⚠️ ' if choices < had else ''}choices {choices - had:+d}")
             dr = num(o, "reuse_share") - num(b, "reuse_share")
             if loops is not None and abs(dr) > TOLERANCE:
                 notes.append(f"{'⚠️ ' if dr > 0 else ''}reuse {dr * 100:+.0f} pp")
@@ -87,8 +90,11 @@ def compare(baseline, current):
         result = "❌ " + "; ".join(cell(f) for f in failures) if failures else "ok"
         # A round trip has no detour; its loops and reuse show instead.
         loops = count(o, "loops")
+        choices = count(o, "choices")
         if loops is None:
             detour = f"{num(o, 'detour_ratio'):.2f}×"
+            if choices is not None:
+                detour += f", {choices} choices"
         else:
             detour = f"{loops} loops, {num(o, 'reuse_share') * 100:.0f} % reuse"
         lines.append(
