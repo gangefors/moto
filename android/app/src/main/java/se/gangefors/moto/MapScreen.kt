@@ -473,7 +473,7 @@ fun MapScreen() {
         style?.let { s ->
             Overlays(
                 SectionOverlay(s, density.density, darkMap),
-                RideOverlay(s),
+                RideOverlay(s, darkMap),
                 SectionDraftOverlay(s),
                 RouteOverlay(s, density.density, darkMap),
                 RiddenOverlay(s, darkMap),

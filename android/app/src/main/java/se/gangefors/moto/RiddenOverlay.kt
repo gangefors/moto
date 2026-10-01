@@ -58,6 +58,15 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
     }
 }
 
+/** A line width that follows the zoom as the favourites' does: [of] the
+ * width at each of [SECTION_WIDTH_SCALE]'s zooms of a line [width] dp at
+ * full scale (see [sectionWidthAt]). */
+fun widthByZoom(width: Float, of: (Float) -> Float = { it }): Expression = Expression.interpolate(
+    Expression.linear(),
+    Expression.zoom(),
+    *SECTION_WIDTH_SCALE.map { (z, _) -> Expression.stop(z, of(sectionWidthAt(width, z))) }.toTypedArray(),
+)
+
 /** A dash array that changes at each of [DASH_ZOOMS]: [dashes] of that
  * zoom, from it up to the next one (the lowest also below it). */
 fun dashesByZoom(dashes: (Int) -> Array<Float>): Expression = Expression.step(
