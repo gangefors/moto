@@ -22,6 +22,12 @@ import se.gangefors.moto.core.LoopOptions
 import se.gangefors.moto.core.Route
 import se.gangefors.moto.core.RoundTripTarget
 import se.gangefors.moto.core.defaultRouteOptions
+import se.gangefors.moto.arriveByOptions
+import se.gangefors.moto.AVOID_ALL
+import se.gangefors.moto.core.UnriddenMode
+import se.gangefors.moto.core.SectionStore
+import se.gangefors.moto.core.FavouritesMode
+import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.Direction
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.SectionStatus
@@ -102,36 +108,100 @@ fun regionCheckLines(context: Context): List<String> {
 }
 
 /**
- * Runs [BENCH_CASES] on [engine], each twice (cold, then warm), without
- * favourites; [progress] gets each result as it comes. Call off the main
- * thread.
+ * Runs [BENCH_CASES] on [engine], each twice (cold, then warm); the cases
+ * on the rider's data use [store] (skipped without it). [starting] hears
+ * which case runs next, [progress] gets each result as it comes. Call off
+ * the main thread.
  */
-fun runBenchmark(engine: Engine, progress: (BenchResult) -> Unit) {
-    for (case in BENCH_CASES) {
-        val runs = mutableListOf<Double>()
-        var last = ""
-        var ok = true
-        repeat(2) {
-            if (!ok) return@repeat
-            val (record, _) = DebugTools.measured(case.label, "", ::describe) { runCase(engine, case) }
-            runs += record.ms
-            last = record.result + String.format(java.util.Locale.ROOT, ", native +%.1f MB", record.nativePeakMb)
-            ok = record.ok
+fun runBenchmark(
+    engine: Engine,
+    store: SectionStore?,
+    starting: (index: Int, case: BenchCase) -> Unit,
+    progress: (BenchResult) -> Unit,
+) {
+    // The rider's overlay for the cases on their data: built once, before
+    // the first of them is timed, and freed at the end.
+    var overlay: Favourites? = null
+    try {
+        for ((i, case) in BENCH_CASES.withIndex()) {
+            starting(i, case)
+            val yours = (case as? BenchCase.Route)?.yourData == true || (case as? BenchCase.Loop)?.yourData == true
+            if (yours && overlay == null) overlay = runCatching { store?.favourites(engine) }.getOrNull()
+            val runs = mutableListOf<Double>()
+            var last = ""
+            var ok = true
+            repeat(2) {
+                if (!ok) return@repeat
+                val (record, _) = DebugTools.measured(case.label, "", { it: String -> it }) {
+                    runCase(engine, store, case) { overlay }
+                }
+                runs += record.ms
+                last = record.result + String.format(java.util.Locale.ROOT, ", native +%.1f MB", record.nativePeakMb)
+                ok = record.ok
+            }
+            progress(BenchResult(case.label, runs, last, ok))
         }
-        progress(BenchResult(case.label, runs, last, ok))
+    } finally {
+        overlay?.destroy()
     }
 }
 
-private fun runCase(engine: Engine, case: BenchCase): List<Route> = when (case) {
-    is BenchCase.Route -> engine.routeChoices(
-        case.from.latLon(), emptyList(), case.to.latLon(),
-        routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, Gravel.valueOf(case.gravel)), null,
-    )
-    is BenchCase.Loop -> engine.roundTrip(
-        case.start.latLon(), RoundTripTarget.DistanceM(case.km * 1000.0),
-        routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, Gravel.valueOf(case.gravel)), null,
-        LoopOptions(seed = 0u, bearing = null),
-    )
+/** Runs one case; what it found, in a few words. */
+private fun runCase(engine: Engine, store: SectionStore?, case: BenchCase, overlay: () -> Favourites?): String = when (case) {
+    is BenchCase.Route -> {
+        val base = defaultRouteOptions()
+        val gravel = Gravel.valueOf(case.gravel)
+        val favourites = FavouritesMode.valueOf(case.favourites)
+        val unridden = UnriddenMode.valueOf(case.unridden)
+        val opts = case.arriveMinutes?.let {
+            arriveByOptions(base, 0L, it * 60L, gravel, AVOID_ALL, favourites, unridden)
+        } ?: routeOptions(base, ROUTE_EXTRA_PERCENT, gravel, AVOID_ALL, favourites, unridden)
+        val fav = if (case.yourData) overlay() ?: error("no store") else null
+        describe(engine.routeChoices(case.from.latLon(), emptyList(), case.to.latLon(), opts, fav))
+    }
+    is BenchCase.Loop -> {
+        val opts = routeOptions(
+            defaultRouteOptions(), ROUTE_EXTRA_PERCENT, Gravel.valueOf(case.gravel), AVOID_ALL,
+            FavouritesMode.PREFER, UnriddenMode.valueOf(case.unridden),
+        )
+        val fav = if (case.yourData) overlay() ?: error("no store") else null
+        describe(
+            engine.roundTrip(
+                case.start.latLon(), RoundTripTarget.DistanceM(case.km * 1000.0), opts, fav,
+                LoopOptions(seed = case.seed.toUInt(), bearing = case.bearing),
+            ),
+        )
+    }
+    is BenchCase.Snaps -> {
+        // The same points every run: a ring of taps about 1–10 km out.
+        var snapped = 0
+        for (k in 0 until case.count) {
+            val angle = k * 2.399963 // golden angle: spread evenly
+            val r = 0.01 + 0.08 * k / case.count
+            val p = LatLon(case.around.lat + r * kotlin.math.cos(angle), case.around.lon + 1.8 * r * kotlin.math.sin(angle))
+            if (runCatching { engine.snap(p) }.isSuccess) snapped++
+        }
+        "$snapped of ${case.count} on a road"
+    }
+    BenchCase.Overlay -> {
+        val built = (store ?: error("no store")).favourites(engine)
+        try {
+            "${built.edgeCount()} favourite edges, ${built.riddenEdgeCount()} ridden edges"
+        } finally {
+            built.destroy()
+        }
+    }
+    BenchCase.MatchLongestRide -> {
+        val s = store ?: error("no store")
+        val ride = s.listTracks().filter { it.endedAt != null }.maxByOrNull { it.distanceM } ?: error("no rides")
+        val points = s.trackPoints(ride.id)?.map { it.position } ?: error("ride gone")
+        val m = engine.matchTrack(points)
+        String.format(
+            java.util.Locale.ROOT,
+            "%d fixes, %.0f km, %.0f km matched in %d pieces",
+            points.size, ride.distanceM / 1000, m.pieces.sumOf { it.distanceM } / 1000, m.pieces.size,
+        )
+    }
 }
 
 private fun BenchPoint.latLon() = LatLon(lat, lon)

@@ -46,6 +46,9 @@ import se.gangefors.moto.OneLine
 import se.gangefors.moto.R
 import se.gangefors.moto.RegionState
 import se.gangefors.moto.Regions
+import se.gangefors.moto.SavedSections
+import se.gangefors.moto.StoreState
+import androidx.compose.material3.LinearProgressIndicator
 
 /**
  * Debug tools: phone and build, settings in effect, the rider's data in
@@ -68,6 +71,8 @@ internal fun DebugDialog(onDismiss: () -> Unit) {
     var settings by remember { mutableStateOf(emptyList<String>()) }
     var data by remember { mutableStateOf(emptyList<String>()) }
     var bench by remember { mutableStateOf(emptyList<BenchResult>()) }
+    // The case the benchmark runs now, and how far it is (0–1).
+    var benchAt by remember { mutableStateOf<Pair<String, Float>?>(null) }
     var working by remember { mutableStateOf<String?>(null) }
 
     suspend fun refresh() = withContext(Dispatchers.IO) {
@@ -87,7 +92,7 @@ internal fun DebugDialog(onDismiss: () -> Unit) {
         ReportSection("Rides: battery use (latest first)", rides),
         ReportSection("Start", startup),
         ReportSection("Region check", check),
-        ReportSection("Benchmark (no favourites; cold / warm)", bench.map(::benchLine)),
+        ReportSection("Benchmark (cold / warm; \"your data\" uses your favourites and rides)", bench.map(::benchLine)),
         ReportSection("Queries: summary", queryStats(queries).map(::statsLine)),
         ReportSection("Queries: latest first", queries.asReversed().take(REPORT_QUERIES).map(::queryLine)),
     )
@@ -134,8 +139,20 @@ internal fun DebugDialog(onDismiss: () -> Unit) {
                                     val engine = (active.state as? RegionState.Ready)?.engine ?: return@OutlinedButton
                                     busyWith("Running the benchmark…") {
                                         bench = emptyList()
-                                        withContext(Dispatchers.Default) {
-                                            runBenchmark(engine) { r -> bench = bench + r }
+                                        try {
+                                            withContext(Dispatchers.Default) {
+                                                val store = (SavedSections.open(context) as? StoreState.Ready)?.store
+                                                runBenchmark(
+                                                    engine,
+                                                    store,
+                                                    starting = { i, case ->
+                                                        benchAt = benchProgress(i, BENCH_CASES.size, case.label) to i.toFloat() / BENCH_CASES.size
+                                                    },
+                                                    progress = { r -> bench = bench + r },
+                                                )
+                                            }
+                                        } finally {
+                                            benchAt = null
                                         }
                                         refresh()
                                     }
@@ -157,6 +174,10 @@ internal fun DebugDialog(onDismiss: () -> Unit) {
                             }
                         }
                         working?.let { Text(it, Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.primary) }
+                        benchAt?.let { (text, done) ->
+                            LinearProgressIndicator(progress = { done }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                            Text(text, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     item {
                         SelectionContainer {
