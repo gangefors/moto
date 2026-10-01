@@ -69,6 +69,7 @@ val HELP_TOPICS = listOf(
             HelpKey("loop", R.string.help_key_loop_here, R.string.help_key_loop_here_what),
             HelpKey("share", R.string.help_key_share, R.string.help_key_share_what),
             HelpKey("save", R.string.help_key_save, R.string.help_key_save_what),
+            HelpKey("ridden_button", R.string.help_key_ridden_button, R.string.help_key_ridden_button_what),
         ),
         figuresText = R.string.help_plan_figures,
         figures = listOf(
