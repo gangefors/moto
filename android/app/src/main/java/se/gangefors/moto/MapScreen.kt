@@ -40,6 +40,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
@@ -70,6 +73,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -782,6 +786,23 @@ fun MapScreen() {
     // favourites drawn (those hidden for gravel don't cut the dashes),
     // and not when the map shows more than 70 km across.
     val screenWidthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toDouble() }
+    val riddenMinZoom = zoomForSpan(RIDDEN_MAX_SPAN_M, screenWidthDp, SETTINGS_LATITUDE).toFloat()
+    // Whether any ride has been on this map's roads: the ridden roads
+    // button shows only then.
+    var hasRidden by remember { mutableStateOf(false) }
+    // The map's zoom once it comes to rest, for what shows only near enough.
+    var mapZoom by remember { mutableFloatStateOf(0f) }
+    DisposableEffect(map) {
+        val m = map ?: return@DisposableEffect onDispose {}
+        val idle = MapLibreMap.OnCameraIdleListener { mapZoom = m.cameraPosition.zoom.toFloat() }
+        m.addOnCameraIdleListener(idle)
+        mapZoom = m.cameraPosition.zoom.toFloat()
+        onDispose { m.removeOnCameraIdleListener(idle) }
+    }
+    LaunchedEffect(favourites) {
+        val f = favourites
+        hasRidden = f != null && withContext(Dispatchers.Default) { runCatching { f.riddenEdgeCount() > 0u }.getOrDefault(false) }
+    }
     LaunchedEffect(overlays, favourites, sections, sectionGravel, gravel, showRidden) {
         val o = overlays ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine
@@ -794,7 +815,7 @@ fun MapScreen() {
         val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
         val hiddenIds = hiddenSectionIds(sections.map { it.id }, shown.map { it.id })
         val lines = withContext(Dispatchers.Default) { runCatching { f.riddenLines(engine, hiddenIds) }.getOrDefault(emptyList()) }
-        o.ridden.show(lines, zoomForSpan(RIDDEN_MAX_SPAN_M, screenWidthDp, SETTINGS_LATITUDE).toFloat())
+        o.ridden.show(lines, riddenMinZoom)
     }
     // A start picked and waiting for an end, or for "Loop from here".
     var startPicked by remember { mutableStateOf<LatLng?>(null) }
@@ -930,17 +951,20 @@ fun MapScreen() {
     LaunchedEffect(routeEnds != null) { if (routeEnds != null) cardExpanded = false }
     // The map's own controls (compass, logo, attribution) stay clear of
     // the system bars, the buttons and the sheet.
-    LaunchedEffect(map, insets, planning, sheetTop, mapSize) {
+    val riddenButton = riddenButtonShown(planning, cardExpanded, hasRidden, mapZoom, riddenMinZoom)
+    LaunchedEffect(map, insets, planning, sheetTop, mapSize, riddenButton) {
         val m = map ?: return@LaunchedEffect
         val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
+        // Above the ridden roads button when it shows.
+        val planningCompass = if (riddenButton) FAB_PADDING + TOP_BUTTON_SIZE + COMPASS_GAP else CONTROL_MARGIN
         with(density) {
             applyControlMargins(
                 m,
                 insets.copy(bottom = max(insets.bottom, sheet)),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
-                compassRight = if (planning) CONTROL_MARGIN.roundToPx() else (FAB_PADDING + FAB_SIZE + COMPASS_GAP).roundToPx(),
-                compassBottom = if (planning) CONTROL_MARGIN.roundToPx() else (FAB_PADDING + (FAB_SIZE - COMPASS_SIZE) / 2).roundToPx(),
+                compassRight = if (planning) (if (riddenButton) FAB_PADDING else CONTROL_MARGIN).roundToPx() else (FAB_PADDING + FAB_SIZE + COMPASS_GAP).roundToPx(),
+                compassBottom = if (planning) planningCompass.roundToPx() else (FAB_PADDING + (FAB_SIZE - COMPASS_SIZE) / 2).roundToPx(),
             )
         }
     }
@@ -1628,6 +1652,25 @@ fun MapScreen() {
         val taskCard = message != null || marking || offerLoop || via != null
         // The buttons at the bottom step aside for them, as for planning.
         val cardsShown = taskCard || shownRide != null || shownSaved != null || shownSection != null || roadInfo != null
+        // The ridden roads button, above the sheet on the right: switches
+        // the layer, and Ride settings' switch with it. Cards above the
+        // sheet take its place.
+        if (riddenButton && !cardsShown) {
+            val aboveSheet = with(density) {
+                if (sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
+            }
+            RiddenButton(
+                on = showRidden,
+                onChange = {
+                    showRidden = it
+                    RoutePrefs.setShowRidden(context, it)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(end = FAB_PADDING, bottom = aboveSheet + FAB_PADDING),
+            )
+        }
         if (cardsShown) {
             DisposableEffect(Unit) { onDispose { cardsTop = Int.MAX_VALUE } }
             val aboveSheet = with(density) {
@@ -2370,6 +2413,33 @@ private fun TopMapButton(icon: Int, description: String, onClick: () -> Unit, mo
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(painterResource(icon), contentDescription = null)
+        }
+    }
+}
+
+/**
+ * Shows or hides the ridden roads (ADR-0010) while planning: the size of
+ * the top buttons, in the accent colour when on (as the other map
+ * buttons), the plain surface when off. A screen reader says "Show ridden
+ * roads" with the switch's state.
+ */
+@Composable
+private fun RiddenButton(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.settings_show_ridden)
+    Surface(
+        checked = on,
+        onCheckedChange = onChange,
+        modifier = modifier
+            .size(TOP_BUTTON_SIZE)
+            .semantics { contentDescription = description },
+        shape = CircleShape,
+        color = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_ridden), contentDescription = null)
         }
     }
 }

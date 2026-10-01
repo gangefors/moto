@@ -237,6 +237,17 @@ fun favouritesOf(stored: String?): FavouritesMode =
 /** The unridden roads choices, in the order they are offered. */
 val UNRIDDEN_CHOICES: List<UnriddenMode> = listOf(UnriddenMode.ANY, UnriddenMode.PREFER)
 
+/**
+ * Whether the ridden roads button shows above the planning sheet (Stefan,
+ * 2026-10-01, mockup Ridden roads toggle, spot A): while a route or loop
+ * is planned ([planning]) with the sheet not pulled up ([sheetExpanded]),
+ * when the rider's rides have been on roads of this map ([hasRidden]),
+ * and the map is near enough for the layer to show ([zoom] from
+ * [minZoom]). On or off, so it can switch the layer either way.
+ */
+fun riddenButtonShown(planning: Boolean, sheetExpanded: Boolean, hasRidden: Boolean, zoom: Float, minZoom: Float): Boolean =
+    planning && !sheetExpanded && hasRidden && zoom >= minZoom
+
 /** How an unridden roads choice is stored in preferences. */
 fun unriddenKey(u: UnriddenMode): String = u.name.lowercase()
 
