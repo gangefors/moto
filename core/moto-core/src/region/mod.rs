@@ -116,6 +116,76 @@ fn map_open(file: &File, path: &Path) -> Result<Mmap, CoreError> {
 const FINGERPRINT_TAG: &[u8] = b"moto-region-fingerprint-v3";
 /// The file is hashed in this many parts at once.
 const FINGERPRINT_PARTS: u64 = 4;
+
+/// What identifies an open file's contents without reading them: its
+/// device and inode, size, and modification and change times. Writing
+/// to the file changes its times (the change time can't be set back
+/// from user space), and replacing it gives a new inode. The app never
+/// writes to an installed region file: an update is a new file renamed
+/// into place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileId {
+    dev: u64,
+    ino: u64,
+    len: u64,
+    mtime: (i64, i64),
+    ctime: (i64, i64),
+}
+
+impl FileId {
+    #[cfg(unix)]
+    fn of(file: &File) -> Option<Self> {
+        use std::os::unix::fs::MetadataExt;
+        let m = file.metadata().ok()?;
+        Some(Self {
+            dev: m.dev(),
+            ino: m.ino(),
+            len: m.size(),
+            mtime: (m.mtime(), m.mtime_nsec()),
+            ctime: (m.ctime(), m.ctime_nsec()),
+        })
+    }
+
+    /// Elsewhere every open hashes the file again.
+    #[cfg(not(unix))]
+    fn of(_file: &File) -> Option<Self> {
+        None
+    }
+}
+
+/// Files proven by their fingerprint since the process started, by
+/// identity: opening one again unchanged needs no second read of the
+/// whole file (1.35 GB for the four Nordic regions, read again on every
+/// reopen: an update, a region switched on or off). The first open in a
+/// process always hashes the file. It holds as much trust as the
+/// recorded fingerprint does (ADR-0005): whoever could change a file
+/// without changing its identity could replace the fingerprint too.
+static PROVEN: std::sync::Mutex<Vec<(FileId, [u8; 32])>> = std::sync::Mutex::new(Vec::new());
+
+/// Remembered files at most; the oldest goes first.
+const PROVEN_MAX: usize = 32;
+
+/// Whether `file` was proven to have fingerprint `fp` in this process
+/// and is unchanged since.
+fn proven(id: Option<FileId>, fp: &[u8; 32]) -> bool {
+    let Some(id) = id else { return false };
+    PROVEN
+        .lock()
+        .map(|p| p.iter().any(|(i, f)| *i == id && f == fp))
+        .unwrap_or(false)
+}
+
+/// Remembers that the file `id` has fingerprint `fp`.
+fn remember_proven(id: Option<FileId>, fp: [u8; 32]) {
+    let Some(id) = id else { return };
+    if let Ok(mut p) = PROVEN.lock() {
+        p.retain(|(i, _)| *i != id);
+        if p.len() >= PROVEN_MAX {
+            p.remove(0);
+        }
+        p.push((id, fp));
+    }
+}
 const FINGERPRINT_CHUNK: usize = 1 << 20;
 
 /// SHA-256 fingerprint of a region file (ADR-0005): the file length and
@@ -215,11 +285,18 @@ impl Region {
     ) -> Result<Self, CoreError> {
         let path = path.as_ref();
         let file = open_file(path)?;
-        let (actual, len) = fingerprint_open(&file, path)?;
+        // The identity of the open file itself, so what was checked is
+        // what gets mapped.
+        let id = FileId::of(&file);
+        let (actual, len) = match id {
+            Some(i) if proven(id, expected) => (*expected, i.len),
+            _ => fingerprint_open(&file, path)?,
+        };
         let map = map_open(&file, path)?;
         if actual != *expected || map.len() as u64 != len {
             return Err(err("region file does not match its fingerprint"));
         }
+        remember_proven(id, actual);
         let bytes = Backing::Mmap(map);
         let (info, sections) = validate_marked(bytes.as_bytes(), Checks::Located, &mut |_| {})?;
         Ok(Self {
