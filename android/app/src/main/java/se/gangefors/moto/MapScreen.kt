@@ -111,6 +111,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -377,11 +380,20 @@ fun MapScreen() {
     // Where the favourites run on gravel: drawn dashed, and mostly-gravel
     // sections hidden while gravel is avoided.
     var sectionGravel by remember { mutableStateOf<List<SectionGravel>>(emptyList()) }
+    // One favourites build at a time: the region and the sections often
+    // change together at start, and a build can't be stopped once it runs,
+    // so two ran side by side, each holding its own set.
+    val favouritesBuild = remember { Mutex() }
     LaunchedEffect(store, region, sections) {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
         withContext(Dispatchers.IO) {
-            runCatching { DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } } }
+            favouritesBuild.withLock {
+                val built = runCatching { DebugTools.startup("favourites") { s.favourites(engine).let { it to it.gravel() } } }
+                // Superseded while it ran: nobody will use it.
+                if (!isActive) built.getOrNull()?.first?.destroy()
+                built
+            }
         }
             .onSuccess { (f, g) ->
                 // The set replaced is freed now, not when the garbage
