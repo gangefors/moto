@@ -159,34 +159,27 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
         // long on screen as the routes' at every zoom (dashArray).
         val width = look.lineWidth
         style.getLayer(CASING_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(byZoom(width) { it + SECTION_CASING_EXTRA }),
+            PropertyFactory.lineWidth(widthByZoom(width) { it + SECTION_CASING_EXTRA }),
             PropertyFactory.lineOpacity(look.casingOpacity),
         )
         style.getLayer(LINE_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(byZoom(width) { it }),
+            PropertyFactory.lineWidth(widthByZoom(width)),
             PropertyFactory.lineOpacity(look.lineOpacity),
         )
         style.getLayer(UNMATCHED_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(byZoom(width) { it }),
+            PropertyFactory.lineWidth(widthByZoom(width)),
             PropertyFactory.lineOpacity(look.lineOpacity),
         )
         style.getLayer(ARROW_LAYER)?.setProperties(PropertyFactory.iconOpacity(look.arrowOpacity))
         style.getLayer(GRAVEL_LAYER)?.setProperties(
             PropertyFactory.lineOpacity(look.lineOpacity),
-            PropertyFactory.lineWidth(byZoom(width, ::sectionGravelWidth)),
+            PropertyFactory.lineWidth(widthByZoom(width, ::sectionGravelWidth)),
             PropertyFactory.lineDasharray(
                 dashesByZoom { z -> dashArray(z, sectionGravelWidth(sectionWidthAt(width, z.toFloat()))) },
             ),
         )
     }
 
-    /** A width that follows the zoom: [of] the section's line at each of
-     * [SECTION_WIDTH_SCALE]'s zooms, for a line [width] dp at full scale. */
-    private fun byZoom(width: Float, of: (Float) -> Float): Expression = Expression.interpolate(
-        Expression.linear(),
-        Expression.zoom(),
-        *SECTION_WIDTH_SCALE.map { (z, _) -> Expression.stop(z, of(sectionWidthAt(width, z))) }.toTypedArray(),
-    )
 
     /** Draws the gravel stretches of the shown sections (see [gravelParts]). */
     fun showGravel(parts: List<List<LatLon>>) {

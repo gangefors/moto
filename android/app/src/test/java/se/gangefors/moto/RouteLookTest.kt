@@ -56,6 +56,15 @@ class RouteLookTest {
     }
 
     @Test
+    fun aShownRideIsInkAndNarrowsWithTheZoom() {
+        // Not red: a great favourite's colour was too near.
+        assertEquals("#202124", riddenColor(darkMap = false))
+        assertEquals(3f, sectionWidthAt(RIDE_WIDTH, 8f), 1e-4f)
+        assertEquals(4f, sectionWidthAt(RIDE_WIDTH, 12f), 1e-4f)
+        assertEquals(4f, sectionWidthAt(RIDE_WIDTH, 16f), 1e-4f)
+    }
+
+    @Test
     fun theOutlineIsFainterOnTheDarkMap() {
         assertEquals(1f, outlineStrength(darkMap = false), 0f)
         assertTrue(outlineStrength(darkMap = true) in 0.3f..0.6f)

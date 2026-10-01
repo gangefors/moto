@@ -356,18 +356,21 @@ private const val VEIL_SOURCE = "region-veil"
 private const val VEIL_LAYER = "region-veil"
 
 /**
- * Draws the ride being recorded as it grows. The line comes from the
- * recording service; the map only draws it.
+ * Draws a ride: the one being recorded as it grows (the line comes from
+ * the recording service; the map only draws it), or one shown from the
+ * list. A solid line in the ridden roads' ink (near-black on the light
+ * map, off-white on the dark), apart from every favourite's colour, and
+ * as wide as [RIDE_WIDTH] scaled with the zoom like the favourites.
  */
-class RideOverlay(style: Style) {
+class RideOverlay(style: Style, darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
 
     init {
         if (style.getLayer(LAYER) == null) {
             style.addLayer(
                 LineLayer(LAYER, SOURCE).withProperties(
-                    PropertyFactory.lineColor(COLOR),
-                    PropertyFactory.lineWidth(4f),
+                    PropertyFactory.lineColor(riddenColor(darkMap)),
+                    PropertyFactory.lineWidth(widthByZoom(RIDE_WIDTH)),
                     PropertyFactory.lineOpacity(0.85f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -389,6 +392,5 @@ class RideOverlay(style: Style) {
     private companion object {
         const val SOURCE = "moto-ride"
         const val LAYER = "moto-ride-line"
-        const val COLOR = "#e52b50"
     }
 }

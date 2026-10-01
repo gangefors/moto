@@ -112,6 +112,10 @@ fun favouriteGlowColors(
         if (part.size < 2) null else part to ratingColor(ratings.getOrNull(i) ?: Rating.EPIC, darkMap)
     }
 
+/** A shown or recorded ride's line width at full scale, dp: thinner far
+ * out ([sectionWidthAt]), never under [SECTION_MIN_WIDTH]. */
+const val RIDE_WIDTH = 4f
+
 /** The route's blue: lighter on the light map, so the ridden roads'
  * near-black dashes stand out on it (Stefan, 2026-10-01); the white
  * casing keeps it apart from the map. The dark map keeps the deeper
