@@ -464,6 +464,39 @@ fn fingerprint_is_stable_and_sees_every_byte() {
     std::fs::remove_file(&path).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn a_file_proven_in_this_process_opens_without_a_second_read() {
+    let b = bytes();
+    let path = temp_region("proven", &b);
+    let fp = fingerprint(&path).unwrap();
+    let id = || FileId::of(&open_file(&path).unwrap());
+    // Not proven until it has been opened by its fingerprint.
+    assert!(!proven(id(), &fp));
+    Region::open_fingerprinted(&path, &fp).unwrap();
+    assert!(proven(id(), &fp));
+    // Only for that fingerprint.
+    assert!(!proven(id(), &[0; 32]));
+    // Timestamps are coarse (a few ms): let them move on before a change.
+    let tick = || std::thread::sleep(std::time::Duration::from_millis(30));
+    // Written to: its identity changes, so it is read and refused again.
+    tick();
+    let mut c = b.clone();
+    let last = c.len() - 1;
+    c[last] ^= 1;
+    std::fs::write(&path, &c).unwrap();
+    assert!(!proven(id(), &fp));
+    assert!(Region::open_fingerprinted(&path, &fp).is_err());
+    // Replaced by another file with the same bytes: a new inode, read again.
+    std::fs::remove_file(&path).unwrap();
+    tick();
+    std::fs::write(&path, &b).unwrap();
+    assert!(!proven(id(), &fp));
+    Region::open_fingerprinted(&path, &fp).unwrap();
+    assert!(proven(id(), &fp));
+    std::fs::remove_file(&path).unwrap();
+}
+
 #[test]
 fn fingerprints_tiny_and_empty_files() {
     let path = temp_region("tiny", b"");
