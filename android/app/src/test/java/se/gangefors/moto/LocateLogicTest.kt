@@ -52,6 +52,10 @@ class LocateLogicTest {
         // Zoom 11 on a 400 dp map in Skåne: about 8.6 km across.
         assertEquals(8_615.0, spanAtZoom(11.0, 400.0, 55.7), 10.0)
         assertEquals(spanAtZoom(11.0, 400.0, 55.7) / 2, spanAtZoom(12.0, 400.0, 55.7), 1e-6)
+        // The inverse: the zoom that shows a span.
+        assertEquals(11.0, zoomForSpan(spanAtZoom(11.0, 400.0, 55.7), 400.0, 55.7), 1e-9)
+        // 70 km across a 360 dp phone in southern Sweden: about zoom 7.8.
+        assertEquals(7.8, zoomForSpan(70_000.0, 360.0, 56.0), 0.05)
     }
 
     @Test

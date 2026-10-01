@@ -29,6 +29,7 @@ object RoutePrefs {
     private const val AREA_ZOOM = "locate_area_zoom"
     private const val CLOSE_ZOOM = "locate_close_zoom"
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
+    private const val SHOW_RIDDEN = "show_ridden_roads"
     private const val MAP_HINTS = "map_hints_shown"
     private const val SECTIONS_SORT = "sections_sort"
     private const val LIBRARY_FILTER = "library_filter"
@@ -118,6 +119,15 @@ object RoutePrefs {
 
     fun setKeepScreenOn(context: Context, on: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(KEEP_SCREEN_ON, on) }
+    }
+
+    /** Whether the map draws the roads the rides have been on (ADR-0010);
+     * off by default. */
+    fun showRidden(context: Context): Boolean =
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(SHOW_RIDDEN, false) }.getOrDefault(false)
+
+    fun setShowRidden(context: Context, on: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(SHOW_RIDDEN, on) }
     }
 
     /** The location button's zoom levels, as last set (defaults 10 and 14). */

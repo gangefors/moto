@@ -65,4 +65,20 @@ class RouteLookTest {
         val bare = favouriteGlowColors(listOf(a, listOf(LatLon(55.3, 13.0))), emptyList())
         assertEquals(listOf(a to ratingColor(Rating.EPIC)), bare)
     }
+
+    @Test
+    fun riddenRoadsAreDarkOnTheLightMapAndLightOnTheDark() {
+        assertEquals("#202124", riddenColor(darkMap = false))
+        assertEquals("#e8eaed", riddenColor(darkMap = true))
+        // Thin, a little wider zoomed in; dashes longer from zoom 11.
+        assertEquals(listOf(1.8f, 2.4f, 3.2f), RIDDEN_WIDTHS.map { it.second })
+        assertTrue(RIDDEN_LONG_DASHES[0] > RIDDEN_SHORT_DASHES[0])
+        assertEquals(70_000.0, RIDDEN_MAX_SPAN_M, 0.0)
+    }
+
+    @Test
+    fun theRiddenRoadsRunOnUnderSectionsTheMapLeavesOut() {
+        assertEquals(listOf(2L, 4L), hiddenSectionIds(listOf(1L, 2L, 3L, 4L), listOf(1L, 3L)))
+        assertEquals(emptyList<Long>(), hiddenSectionIds(listOf(1L), listOf(1L)))
+    }
 }
