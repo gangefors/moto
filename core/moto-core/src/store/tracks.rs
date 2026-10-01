@@ -14,6 +14,15 @@ use crate::track::{
 };
 use crate::{CoreError, LatLon};
 
+/// How far apart in time two fixes may be and still count as the same
+/// fix when rides are compared: GPX files often keep whole seconds.
+pub const SAME_FIX_MS: i64 = 1000;
+
+/// How far apart two fixes may be, in 1e-7 degrees (about a metre), and
+/// still count as the same fix when rides are compared: other apps round
+/// positions.
+pub const SAME_FIX_E7: u32 = 100;
+
 const TRACK_COLUMNS: &str = "id, rider_id, name, started_at, ended_at, point_count, distance_m";
 
 type TrackRow = (i64, String, Option<String>, i64, Option<i64>, i64, f64);
@@ -207,6 +216,60 @@ impl Store {
         insert_points(&tx, id, 0, points.iter())?;
         tx.commit().map_err(db_err)?;
         self.get_track(id)?.ok_or_else(|| unknown(id))
+    }
+
+    /// The finished ride with the same fixes as `points`, if there is one:
+    /// as many fixes, and each within [`SAME_FIX_MS`] and [`SAME_FIX_E7`]
+    /// of its twin, so a file imported twice, or a ride exported and
+    /// imported again (times and positions rounded), is found. Only rides
+    /// with as many fixes and the same last time are read (a recorded
+    /// ride starts when Record is pressed, before its first fix).
+    pub fn same_track(&self, points: &[TrackPoint]) -> Result<Option<i64>, CoreError> {
+        let Some(last) = points.last() else {
+            return Ok(None);
+        };
+        let count = i64::try_from(points.len()).unwrap_or(i64::MAX);
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id FROM tracks
+                 WHERE ended_at IS NOT NULL AND point_count = ?1
+                   AND last_time_ms BETWEEN ?2 - ?3 AND ?2 + ?3
+                 ORDER BY id",
+            )
+            .map_err(db_err)?;
+        let ids = stmt
+            .query_map(params![count, last.time_ms, SAME_FIX_MS], |r| {
+                r.get::<_, i64>(0)
+            })
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        for id in ids {
+            let Some(theirs) = self.track_points(id)? else {
+                continue;
+            };
+            let same = theirs.len() == points.len()
+                && theirs.iter().zip(points).all(|(a, b)| {
+                    let ((alat, alon), (blat, blon)) = (e7(a.position), e7(b.position));
+                    a.time_ms.abs_diff(b.time_ms) <= SAME_FIX_MS.unsigned_abs()
+                        && alat.abs_diff(blat) <= SAME_FIX_E7
+                        && alon.abs_diff(blon) <= SAME_FIX_E7
+                });
+            if same {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
+    }
+
+    /// As [`Self::import_track`], unless the same ride is already saved
+    /// ([`Self::same_track`]): then `None`, and nothing is added.
+    pub fn import_track_once(&mut self, points: &[TrackPoint]) -> Result<Option<Track>, CoreError> {
+        if self.same_track(points)?.is_some() {
+            return Ok(None);
+        }
+        self.import_track(points).map(Some)
     }
 
     /// Ends a track and counts its length. Finishing a finished track

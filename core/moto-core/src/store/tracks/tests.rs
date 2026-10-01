@@ -372,3 +372,58 @@ fn counts_the_rides_along_each_section() {
     );
     assert_eq!((of(off.id).times, of(off.id).last_at), (0, None));
 }
+
+#[test]
+fn a_ride_already_saved_is_not_imported_again() {
+    let mut s = store();
+    let points = ride(MS0 + 250, 30);
+    let first = s.import_track_once(&points).unwrap().unwrap();
+    // The same file again: found, nothing added.
+    assert_eq!(s.same_track(&points).unwrap(), Some(first.id));
+    assert!(s.import_track_once(&points).unwrap().is_none());
+    assert_eq!(s.list_tracks().unwrap().len(), 1);
+
+    // Exported and read back by an app that keeps whole seconds and
+    // rounds positions: still the same ride.
+    let rounded: Vec<TrackPoint> = points
+        .iter()
+        .map(|p| TrackPoint {
+            time_ms: p.time_ms.div_euclid(1000) * 1000,
+            position: LatLon {
+                lat: (p.position.lat * 1e5).round() / 1e5,
+                lon: (p.position.lon * 1e5).round() / 1e5 + 4e-6,
+            },
+            ..*p
+        })
+        .collect();
+    assert!(s.import_track_once(&rounded).unwrap().is_none());
+
+    // Another ride: one fix 10 m off, a fix more or less, or later.
+    let mut moved = points.clone();
+    moved[12].position.lon += 1.5e-4;
+    let longer = ride(MS0 + 250, 31);
+    let later = ride(MS0 + 60_000, 30);
+    for other in [&moved, &longer, &later] {
+        assert!(s.same_track(other).unwrap().is_none());
+    }
+    assert!(s.import_track_once(&moved).unwrap().is_some());
+    assert!(s.import_track_once(&longer).unwrap().is_some());
+    assert!(s.import_track_once(&later).unwrap().is_some());
+    assert_eq!(s.list_tracks().unwrap().len(), 4);
+    assert!(s.same_track(&[]).unwrap().is_none());
+}
+
+#[test]
+fn a_recorded_ride_is_found_when_its_export_comes_back() {
+    let mut s = store();
+    // Recording starts before the first fix comes in.
+    let t = s.start_track(T0 - 45).unwrap();
+    let points = ride(MS0, 40);
+    s.append_track_points(t.id, &points).unwrap();
+    // Not while it is still recorded.
+    assert!(s.same_track(&points).unwrap().is_none());
+    // Finished minutes after its last fix: found by its fixes.
+    s.finish_track(t.id, T0 + 600).unwrap();
+    assert_eq!(s.same_track(&points).unwrap(), Some(t.id));
+    assert!(s.import_track_once(&points).unwrap().is_none());
+}
