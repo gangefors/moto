@@ -218,6 +218,29 @@ fn section_shares_count_both_ways() {
 }
 
 #[test]
+fn only_edges_on_a_section_are_kept() {
+    let e = fork();
+    let n = e.region().edge_count();
+    let f = Favourites::build(
+        &e,
+        &[section(&[(SOUTH, 0, 1)], Rating::Good, Direction::Forward)],
+    );
+    // A bit per edge, and values for the two directions of the south road
+    // alone: nothing per road of the region.
+    assert_eq!(f.marked.len(), n.div_ceil(64));
+    assert_eq!(f.weights.len(), 2);
+    assert_eq!(f.edge_count, n);
+    // Ids past the region read as no favourite, as before.
+    for id in [n as u32, u32::MAX] {
+        assert_eq!(f.bonus(id), 0.0);
+        assert_eq!(f.share(id), 0.0);
+    }
+    // No sections: nothing at all.
+    let none = Favourites::build(&e, &[]);
+    assert!(none.marked.is_empty() && none.weights.is_empty());
+}
+
+#[test]
 fn the_bonus_grows_with_the_rating_and_is_capped() {
     let e = fork();
     let with = |rating| {
