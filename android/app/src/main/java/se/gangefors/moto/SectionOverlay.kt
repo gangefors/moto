@@ -79,8 +79,7 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
                 LineLayer(GRAVEL_LAYER, GRAVEL_SOURCE)
                     .withProperties(
                         PropertyFactory.lineColor("#ffffff"),
-                        PropertyFactory.lineWidth(GRAVEL_DASH_WIDTH),
-                        PropertyFactory.lineDasharray(dashesByZoom(::gravelDashes)),
+                        PropertyFactory.lineWidth(2f),
                         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),
@@ -155,21 +154,39 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
     /** Draws the sections as [look] says: full strength, or faded while a
      * route is shown (see [sectionLook]). */
     fun setLook(look: SectionLook) {
-        style.getLayer(CASING_LAYER)?.setProperties(PropertyFactory.lineOpacity(look.casingOpacity))
+        // Widths shrink with the zoom (sectionWidthAt); the gravel dashes
+        // keep 1 dp of colour beside them (sectionGravelWidth) and dashes as
+        // long on screen as the routes' at every zoom (dashArray).
+        val width = look.lineWidth
+        style.getLayer(CASING_LAYER)?.setProperties(
+            PropertyFactory.lineWidth(byZoom(width) { it + SECTION_CASING_EXTRA }),
+            PropertyFactory.lineOpacity(look.casingOpacity),
+        )
         style.getLayer(LINE_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(look.lineWidth),
+            PropertyFactory.lineWidth(byZoom(width) { it }),
             PropertyFactory.lineOpacity(look.lineOpacity),
         )
         style.getLayer(UNMATCHED_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(look.lineWidth),
+            PropertyFactory.lineWidth(byZoom(width) { it }),
             PropertyFactory.lineOpacity(look.lineOpacity),
         )
         style.getLayer(ARROW_LAYER)?.setProperties(PropertyFactory.iconOpacity(look.arrowOpacity))
         style.getLayer(GRAVEL_LAYER)?.setProperties(
             PropertyFactory.lineOpacity(look.lineOpacity),
-            PropertyFactory.lineWidth(look.lineWidth * GRAVEL_WIDTH_SHARE),
+            PropertyFactory.lineWidth(byZoom(width, ::sectionGravelWidth)),
+            PropertyFactory.lineDasharray(
+                dashesByZoom { z -> dashArray(z, sectionGravelWidth(sectionWidthAt(width, z.toFloat()))) },
+            ),
         )
     }
+
+    /** A width that follows the zoom: [of] the section's line at each of
+     * [SECTION_WIDTH_SCALE]'s zooms, for a line [width] dp at full scale. */
+    private fun byZoom(width: Float, of: (Float) -> Float): Expression = Expression.interpolate(
+        Expression.linear(),
+        Expression.zoom(),
+        *SECTION_WIDTH_SCALE.map { (z, _) -> Expression.stop(z, of(sectionWidthAt(width, z))) }.toTypedArray(),
+    )
 
     /** Draws the gravel stretches of the shown sections (see [gravelParts]). */
     fun showGravel(parts: List<List<LatLon>>) {
@@ -215,7 +232,6 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
         const val SHOWN_LINE_LAYER = "moto-section-shown-line"
         const val SHOWN_ARROW_LAYER = "moto-section-shown-arrows"
         // The dashes' width as a share of the section line's (2 of 5 px).
-        const val GRAVEL_WIDTH_SHARE = 0.4f
         const val ARROW_IMAGE = "moto-section-arrow"
         const val ID = "id"
         const val ORDER = "order"

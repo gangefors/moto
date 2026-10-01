@@ -31,6 +31,31 @@ class RouteLookTest {
     }
 
     @Test
+    fun favouritesAreThinnerZoomedOutButNeverTooThinForGravel() {
+        // Full from zoom 12; thinner far out, but never under 3 dp.
+        assertEquals(3f, SECTION_MIN_WIDTH, 0f)
+        assertEquals(3f, sectionWidthAt(5f, 6f), 1e-4f)
+        assertEquals(3f, sectionWidthAt(5f, 8f), 1e-4f)
+        assertEquals(4f, sectionWidthAt(5f, 10f), 1e-4f)
+        assertEquals(5f, sectionWidthAt(5f, 12f), 1e-4f)
+        assertEquals(5f, sectionWidthAt(5f, 17f), 1e-4f)
+        // While planning (3 dp) they stay as they are.
+        val planning = sectionLook(routeShown = true).lineWidth
+        for (z in listOf(6f, 8f, 10f, 12f)) assertEquals(3f, sectionWidthAt(planning, z), 1e-4f)
+        // A gravel dash keeps at least 1 dp of colour on each side, and is
+        // at least 1 dp itself, at every width a section is drawn at.
+        assertEquals(2f, sectionGravelWidth(5f), 1e-4f)
+        assertEquals(1f, sectionGravelWidth(3f), 1e-4f)
+        for (z in DASH_ZOOMS) {
+            for (full in listOf(5f, planning)) {
+                val line = sectionWidthAt(full, z.toFloat())
+                val gravel = sectionGravelWidth(line)
+                assertTrue("$full at $z", gravel >= 1f - 1e-4f && (line - gravel) / 2 >= 1f - 1e-4f)
+            }
+        }
+    }
+
+    @Test
     fun theOutlineIsFainterOnTheDarkMap() {
         assertEquals(1f, outlineStrength(darkMap = false), 0f)
         assertTrue(outlineStrength(darkMap = true) in 0.3f..0.6f)
