@@ -66,6 +66,20 @@ class CompareTest(unittest.TestCase):
         lines, _ = gc.compare([loop(True, "x")], [loop("3", None)])
         self.assertTrue(any("1.10×" in l or "1.00×" in l for l in lines))
 
+    def test_route_choices_show_and_fewer_are_flagged(self):
+        def route(n):
+            return dict(outcome("r", detour=1.4), choices=n)
+
+        lines, failed = gc.compare([route(3)], [route(2)])
+        self.assertEqual(failed, [])
+        row = next(l for l in lines if l.startswith("| r "))
+        self.assertIn("1.40×, 2 choices", row)
+        self.assertIn("⚠️ choices -1", row)
+        lines, _ = gc.compare([route(1)], [route(3)])
+        row = next(l for l in lines if l.startswith("| r "))
+        self.assertIn("choices +2", row)
+        self.assertNotIn("⚠️", row)
+
     def test_no_baseline(self):
         lines, failed = gc.compare(None, [outcome("a")])
         self.assertEqual(failed, [])

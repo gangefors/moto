@@ -227,6 +227,9 @@ pub struct Expect {
     pub avoid: Vec<[f64; 2]>,
     /// Round trips: the fewest loops returned (default 2, as the PRD asks).
     pub min_loops: Option<usize>,
+    /// Routes: the fewest fun route choices offered besides the fastest
+    /// (as the app's route sheet asks for them, see [`Case::run`]).
+    pub min_choices: Option<usize>,
     /// Round trips: the most side loops in any loop (see [`side_loops`]).
     pub max_side_loops: Option<usize>,
     /// Round trips: the largest share of any loop ridden twice outside
@@ -259,6 +262,10 @@ pub struct Outcome {
     pub loops: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reuse_share: Option<f64>,
+    /// Routes with `min_choices`: the fun choices offered besides the
+    /// fastest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub choices: Option<usize>,
     /// Broken expectations; empty when the case passes.
     pub failures: Vec<String>,
 }
@@ -282,6 +289,14 @@ impl Case {
             return Err("name must be 1–200 bytes".into());
         }
         let e = &case.expect;
+        if e.min_choices.is_some()
+            && (case.to.is_none()
+                || case.round_trip.is_some()
+                || case.section
+                || !case.through.is_empty())
+        {
+            return Err("min_choices is for routes from one point to another".into());
+        }
         if case.favourites.len() > MAX_ITEMS
             || e.pass.len() > MAX_ITEMS
             || e.avoid.len() > MAX_ITEMS
@@ -332,6 +347,11 @@ impl Case {
                     return Err(
                         "min_loops, max_side_loops and max_reuse are for round trips".into(),
                     );
+                }
+                if e.min_choices
+                    .is_some_and(|n| !(1..=moto_core::MAX_CHOICES).contains(&n))
+                {
+                    return Err(format!("min_choices must be 1–{}", moto_core::MAX_CHOICES));
                 }
             }
             (None, Some(t)) => {
@@ -491,6 +511,7 @@ impl Case {
             curvy_share: 0.0,
             loops: None,
             reuse_share: None,
+            choices: None,
             failures: Vec::new(),
         };
         if let Some(t) = self.round_trip {
@@ -554,7 +575,38 @@ impl Case {
         }
         self.check_speeds(engine, "", &route, 0.0, &mut out);
         self.check_route(&route, &mut out);
+        if let Some(min) = e.min_choices {
+            self.check_choices(engine, min, &mut out);
+        }
         out
+    }
+
+    /// Route choices as the route sheet asks for them (the case's options,
+    /// no waypoints): at least `min` fun ones besides the fastest. A fun
+    /// choice is a suggested route slower than the fastest; the fastest's
+    /// own road offered as the suggestion doesn't count.
+    fn check_choices(&self, engine: &Engine, min: usize, out: &mut Outcome) {
+        let found = (|| -> Result<usize, String> {
+            let (from, to) = (ll(self.from)?, ll(self.to.ok_or("no end")?)?);
+            let fav = Favourites::build(engine, &self.favourites(engine)?);
+            let routes = engine
+                .route_choices(from, &[], to, &self.options(), &fav)
+                .map_err(|e| e.to_string())?;
+            Ok(routes
+                .iter()
+                .filter(|r| r.suggested && r.duration_s > r.fastest_duration_s + 1.0)
+                .count())
+        })();
+        match found {
+            Ok(n) => {
+                out.choices = Some(n);
+                if n < min {
+                    out.failures
+                        .push(format!("{n} route choice(s), expected at least {min}"));
+                }
+            }
+            Err(e) => out.failures.push(e),
+        }
     }
 
     /// Round trips: every loop's length, closure and reuse, then the best

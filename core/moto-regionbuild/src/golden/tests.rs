@@ -64,6 +64,26 @@ fn favourites_count_and_broken_expectations_are_reported() {
 }
 
 #[test]
+fn route_choices_are_counted_when_asked_for() {
+    let file = built_fixture("golden-choices");
+    let engine = Engine::open(file.path()).unwrap();
+    // Nothing worth a detour across the fixture: no fun choice.
+    let o = Case::parse(&case("", r#""min_choices":1"#))
+        .unwrap()
+        .run(&engine);
+    assert_eq!(o.choices, Some(0), "{o:?}");
+    assert_eq!(
+        o.failures,
+        ["0 route choice(s), expected at least 1"],
+        "{o:?}"
+    );
+    // Not asked for: not counted, and not written.
+    let o = Case::parse(&case("", "")).unwrap().run(&engine);
+    assert_eq!(o.choices, None);
+    assert!(!serde_json::to_string(&o).unwrap().contains("choices"));
+}
+
+#[test]
 fn routing_errors_are_failures_not_panics() {
     let file = built_fixture("golden-err");
     let engine = Engine::open(file.path()).unwrap();
@@ -315,7 +335,10 @@ fn bad_round_trip_cases_are_refused() {
         loop_case(r#""km":20"#, r#""max_detour_ratio":1.2"#), // no detour on loops
         loop_case(r#""km":20},"max_detour":0.3,"x":{"#, "").replace(",\"x\":{}", ""),
         loop_case(r#""km":20},"to":[55.75,13.5],"x":{"#, "").replace(",\"x\":{}", ""),
-        case("", r#""min_loops":2"#), // min_loops on a one-way route
+        case("", r#""min_loops":2"#),   // min_loops on a one-way route
+        case("", r#""min_choices":0"#), // too few
+        case("", r#""min_choices":4"#), // more than are offered
+        loop_case(r#""km":20"#, r#""min_choices":1"#), // choices on a loop
     ] {
         assert!(Case::parse(&bad).is_err(), "{bad}");
     }
