@@ -79,8 +79,8 @@ class SectionOverlay(private val style: Style, private val density: Float, darkM
                 LineLayer(GRAVEL_LAYER, GRAVEL_SOURCE)
                     .withProperties(
                         PropertyFactory.lineColor("#ffffff"),
-                        PropertyFactory.lineWidth(2f),
-                        PropertyFactory.lineDasharray(arrayOf(3f, 2f)),
+                        PropertyFactory.lineWidth(GRAVEL_DASH_WIDTH),
+                        PropertyFactory.lineDasharray(dashesByZoom(::gravelDashes)),
                         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),

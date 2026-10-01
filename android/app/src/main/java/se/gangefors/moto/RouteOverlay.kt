@@ -177,15 +177,15 @@ class RouteOverlay(private val style: Style, private val density: Float, darkMap
             )
             // Gravel: white dashes along the middle of the route, like the
             // centre line of a road. The line and its casing stay whole, so
-            // the route keeps its width. Dashes are in line widths: 6 px of
-            // dash, 4 px of gap.
+            // the route keeps its width. Dashes as long as the ridden roads'
+            // at every zoom (dashArray).
             style.addLayer(
                 LineLayer(GRAVEL_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), GRAVEL))
                     .withProperties(
                         PropertyFactory.lineColor(CASING_COLOR),
-                        PropertyFactory.lineWidth(2f),
-                        PropertyFactory.lineDasharray(arrayOf(3f, 2f)),
+                        PropertyFactory.lineWidth(GRAVEL_DASH_WIDTH),
+                        PropertyFactory.lineDasharray(dashesByZoom(::gravelDashes)),
                         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),
