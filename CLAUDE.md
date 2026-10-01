@@ -72,8 +72,8 @@ Security comes first: before performance, features and convenience. Never choose
 
 - **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
 - CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints.
-- **When CI builds, and how long it takes.** CI (`android.yml`) runs only for pushes that change code in `android/` or `core/`, or `.github/scripts/third_party.py` (the app build runs it), and never for Markdown alone: a commit that only touches docs, ADRs, `CLAUDE.md` or other files in `.github/` gets no CI run and no `debug-latest`, so there is nothing to wait for. The CI scripts' tests run in their own workflow (`scripts.yml`, seconds) whenever a script changes, without building anything. To test a change to `android.yml` before the next code change, start it by hand (workflow_dispatch) on the branch. Push each fix as soon as the local checks pass, never holding it for a CI run still going: Stefan tests several fixes at once and wants fast turnaround. A newer push cancels the run still going; the newer run covers both commits, so check CI on the newest one. Medians from push (25 green runs, 2026-09-29): Core 2 min, Android app and `debug-latest` 6 min (at most 9), Benchmark 14 min (at most 16); golden routes run in the Core job, and the M0 and border regions are rebuilt about once a week (cache miss: a few minutes more). Check the app about 6 minutes after a push (`debug-branch` on the work branch, `debug-latest` on main), the benchmark about 15.
-- **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the M0 region: region open and verify, snapping, routing) with this build's binary and with the last `main` build's binary, alternately on the same machine, and compares them. The job summary shows the table. It runs in its own job beside the app build, so `debug-latest` doesn't wait for it (faster phone tests); a failed benchmark still turns CI red and is fixed next, and a release build is never made from a commit whose benchmark hasn't passed.
+- **When CI builds, and how long it takes.** CI (`android.yml`) runs only for pushes that change code in `android/` or `core/`, or `.github/scripts/third_party.py` (the app build runs it), and never for Markdown alone: a commit that only touches docs, ADRs, `CLAUDE.md` or other files in `.github/` gets no CI run and no `debug-latest`, so there is nothing to wait for. The CI scripts' tests run in their own workflow (`scripts.yml`, seconds) whenever a script changes, without building anything. To test a change to `android.yml` before the next code change, start it by hand (workflow_dispatch) on the branch. Push each fix as soon as the local checks pass, never holding it for a CI run still going: Stefan tests several fixes at once and wants fast turnaround. A newer push cancels the run still going; the newer run covers both commits, so check CI on the newest one. Medians from push (25 green runs, 2026-09-29): Core 2 min, Android app and `debug-latest` 6 min (at most 9), Benchmark 14 min (at most 16); golden routes run in the Core job, and the Skåne (M0) and border regions are rebuilt about once a week (cache miss: a few minutes more). Check the app about 6 minutes after a push (`debug-branch` on the work branch, `debug-latest` on main), the benchmark about 15.
+- **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the Skåne region: region open and verify, snapping, routing) with this build's binary and with the last `main` build's binary, alternately on the same machine, and compares them. The job summary shows the table. It runs in its own job beside the app build, so `debug-latest` doesn't wait for it (faster phone tests); a failed benchmark still turns CI red and is fixed next, and a release build is never made from a commit whose benchmark hasn't passed.
 - **Route quality is measured on every build.** CI runs the golden routes (`core/moto-core/tests/golden/`) with this build and the last `main` build and shows a before/after table; a route that breaks its expectations fails CI. Change scoring weights only with a stated hypothesis and that before/after table, and add a golden case for every bad route found on a real ride instead of tuning weights to one route.
 - A significant regression fails CI: more than 25 % slower for snapping and routing, or more than 50 % and 5 ms slower for the short, memory- and disk-bound region verify and open timings (each binary runs twice; each metric keeps its faster result). Re-evaluate the implementation and try to recover the loss first. Accept a regression only when it buys something worth it (correctness, security, a feature), with a `Perf-Accepted: <reason>` trailer in the commit message and an entry in the decisions log. Improvements of more than 10 % are reported too; note them in the commit message.
 - Security beats performance: never accept an insecure change to win back speed.
@@ -98,20 +98,29 @@ cargo fmt --all
 cargo deny --locked check   # advisories, licences, sources (deny.toml; cargo-deny 0.20.2)
 
 # Region file and benchmark (CI compares --json output between builds).
-# The extract: download.geofabrik.de refuses Claude's sessions (never try
-# it); use the same data from the openstreetmap.fr mirror:
+# The Skåne region (the M0 region) for golden routes and the benchmark:
+# download main's build from the skane-region release (CI publishes it
+# when it is built again, about weekly), check it, then use it.
+R=https://github.com/gangefors/moto/releases/download/skane-region
+curl -fsSL --proto '=https' -O "$R/skane.region.gz" -O "$R/skane.region.gz.sha256"
+sha256sum -c skane.region.gz.sha256 && gunzip skane.region.gz
+cargo run --release -p moto-regionbuild -- --check skane.region
+# Build it yourself only when your change touches the builder or the
+# region format. The extract: download.geofabrik.de refuses Claude's
+# sessions (never try it); use the same data from the openstreetmap.fr
+# mirror:
 # https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf
-cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf m0.region
+cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf skane.region
 # Derive curvature and built-up areas afresh for an existing region file,
 # without the extract
-cargo run --release -p moto-regionbuild -- --refresh m0.region m0-new.region
-cargo run --release -p moto-regionbuild -- --check m0.region --json bench.json
+cargo run --release -p moto-regionbuild -- --refresh skane.region skane-new.region
+cargo run --release -p moto-regionbuild -- --check skane.region --json bench.json
 python3 ../.github/scripts/bench_compare.py old.json bench.json
 # Golden routes: route-quality regression set (run before and after every
 # scoring change; see moto-core/tests/golden/README.md)
-cargo run --release -p moto-regionbuild -- --golden m0.region moto-core/tests/golden --json golden.json
+cargo run --release -p moto-regionbuild -- --golden skane.region moto-core/tests/golden --json golden.json
 # Map matching on a real ride exported from the app (Rides → Export)
-cargo run --release -p moto-regionbuild -- --match m0.region ride.gpx --geojson ride.geojson
+cargo run --release -p moto-regionbuild -- --match skane.region ride.gpx --geojson ride.geojson
 python3 -m unittest discover -s ../.github/scripts -p 'test_*.py'
 cargo llvm-cov --workspace --summary-only   # coverage (needs cargo-llvm-cov)
 
