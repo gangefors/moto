@@ -21,6 +21,10 @@ pub struct RegionOffer {
     pub file_name: String,
     /// Size of the download.
     pub gz_bytes: u64,
+    /// SHA-256 of the download, lowercase hex: tells a rebuilt file (new
+    /// builder, same map data) from the one installed. Installing checks
+    /// it against the signed manifest again, never against this copy.
+    pub gz_sha256: String,
     /// Size once installed.
     pub region_bytes: u64,
     /// Timestamp of the OSM data, seconds since the Unix epoch.
@@ -36,6 +40,7 @@ impl From<core::RegionOffer> for RegionOffer {
             id: o.id,
             name: o.name,
             gz_bytes: o.gz_bytes,
+            gz_sha256: o.gz_sha256.iter().map(|b| format!("{b:02x}")).collect(),
             region_bytes: o.region_bytes,
             osm_timestamp: o.osm_timestamp,
             south_west: o.south_west.into(),
@@ -139,11 +144,12 @@ mod tests {
                 "gz_bytes": 10, "gz_sha256": "{}", "region_bytes": 20,
                 "osm_timestamp": 1, "south_west": [55.0, 10.5], "north_east": [69.2, 24.3]}}]}}"#,
             moto_core::region::format::VERSION_MAJOR,
-            "00".repeat(32)
+            "0a".repeat(32)
         );
         let (manifest, keys) = signed(&json);
         let found = offers(&manifest, &keys).unwrap();
         assert_eq!(found[0].id, "sweden");
+        assert_eq!(found[0].gz_sha256, "0a".repeat(32));
         assert!(found[0].file_name.starts_with("sweden-v"));
         assert!(region_manifest_file_name().starts_with("regions-v"));
         assert!(region_manifest_file_name().ends_with(".manifest"));
