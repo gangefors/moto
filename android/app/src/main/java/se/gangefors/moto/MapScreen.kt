@@ -1263,6 +1263,7 @@ fun MapScreen() {
         if (routeEnds != null) closeRoute()
         if (loopStart != null) closeLoop()
         shownSaved = null
+        shownRide = null
         overlays?.route?.show(null, null, null)
         startPicked = null
         if (recording is Recording.State.Active) {
@@ -1270,6 +1271,37 @@ fun MapScreen() {
         } else {
             pendingRide = route
             recordPermissions.launch(recordingPermissions())
+        }
+    }
+
+    /** Rides recorded ride [r] again (2026-10-02): its line, a
+     * loop when it ended where it started, its favourites as they are
+     * now, in the time it took. The new recording gets the usual name. */
+    fun rideAgain(r: ShownRide) {
+        val line = rideAgainLine(r.segments)
+        if (line == null) {
+            notify(resources.getString(R.string.ride_again_too_short))
+            return
+        }
+        val s = (store as? StoreState.Ready)?.store
+        scope.launch {
+            val found = s?.let {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        DebugTools.query("favourites on ride", { "${it.parts.size} parts" }) { s.favouritePartsAlong(line) }
+                    }.getOrNull()
+                }
+            }
+            beginRide(
+                RideRoute(
+                    rideName(r.track.name, r.track.startedAt, ZoneId.systemDefault()),
+                    rideAgainIsLoop(line),
+                    rideAgainDurationS(r.track.startedAt, r.track.endedAt),
+                    line,
+                    found?.parts ?: emptyList(),
+                    found?.ratings ?: emptyList(),
+                ),
+            )
         }
     }
 
@@ -2080,6 +2112,7 @@ fun MapScreen() {
                         onShare = { shareRide(it.track) },
                         onDelete = { deleteShownRide(it.track) },
                         modifier = Modifier.fillMaxWidth(),
+                        onRide = if (it.track.endedAt != null) ({ rideAgain(it) }) else null,
                     )
                 }
                 shownSaved?.let { s ->

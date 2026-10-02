@@ -150,3 +150,27 @@ fun countdownS(stopsAtMs: Long?, nowMs: Long): Int? =
 
 /** Distances on the card and in the notification, in km to a tenth. */
 fun rideKm(m: Double): Double = sectionKm(m)
+
+/** A ride that ends within this of where it started is ridden again as a
+ * loop. */
+const val RIDE_AGAIN_LOOP_M = 200.0
+
+/** A ride's line to ride it again: its segments joined (straight across
+ * a gap in the recording), and closed back to its start when it ends
+ * within [RIDE_AGAIN_LOOP_M] of it, so it is followed as a loop; null
+ * when there is too little of it to follow. */
+fun rideAgainLine(segments: List<List<LatLon>>): List<LatLon>? {
+    val line = segments.flatten()
+    if (line.size < 2 || lengthM(line) < 2 * RIDE_AGAIN_LOOP_M) return null
+    return if (rideAgainIsLoop(line)) line + line.first() else line
+}
+
+/** Whether a ride's [line] is ridden again as a loop. */
+fun rideAgainIsLoop(line: List<LatLon>): Boolean =
+    line.size >= 2 && lengthM(line) >= 2 * RIDE_AGAIN_LOOP_M &&
+        approxDistanceM(line.first(), line.last()) <= RIDE_AGAIN_LOOP_M
+
+/** The time to ride a ride again: as long as it took (0 while it is
+ * still going or its times are odd). */
+fun rideAgainDurationS(startedAt: Long, endedAt: Long?): Double =
+    if (endedAt == null || endedAt < startedAt) 0.0 else (endedAt - startedAt).toDouble()

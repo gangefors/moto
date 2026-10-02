@@ -266,9 +266,9 @@
     <string name="say_close">the X</string>
     <string name="say_stop">the stop button</string>
     <string name="help_riding_title">Ride a route</string>
-    <string name="help_riding">Ride a route or loop you planned, or a saved route, with the map following you. The way you’re going is up, and the card at the top shows how far is left, when you’ll arrive, and the favourites in the next 2 km. Leave the route and you’ll hear an alert: follow the dashed line back. Recording starts when you reach the route’s start (tap [record] to record the way there, or a ride joined part way), and stops by itself 15 s after the end.</string>
+    <string name="help_riding">Ride a route or loop you planned, a saved route, or a ride again, with the map following you. The way you’re going is up, and the card at the top shows how far is left, when you’ll arrive, and the favourites in the next 2 km. Leave the route and you’ll hear an alert: follow the dashed line back. Recording starts when you reach the route’s start (tap [record] to record the way there, or a ride joined part way), and stops by itself 15 s after the end.</string>
     <string name="help_key_ride">Ride</string>
-    <string name="help_key_ride_what">on the route or loop sheet, or on a saved route: starts riding it</string>
+    <string name="help_key_ride_what">on the route or loop sheet, or on a saved route or ride: starts riding it</string>
     <string name="help_key_recentre">Recentre</string>
     <string name="help_key_recentre_what">after you move the map: follows you again</string>
     <string name="help_key_ride_compass">Compass</string>
@@ -478,6 +478,7 @@
     <string name="ride_shown">Ride %1$s · %2$.1f km</string>
     <string name="ride_hide">Hide the ride</string>
     <string name="ride_edit">Rename the ride</string>
+    <string name="ride_again_too_short">Too little of this ride was recorded to ride it again.</string>
     <string name="ride_delete_failed">Couldn’t delete the ride: %1$s</string>
     <string name="rides_import">Import GPX…</string>
     <plurals name="rides_imported_many">
