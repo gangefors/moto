@@ -58,6 +58,7 @@ import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.defaultRouteOptions
 import se.gangefors.moto.core.ExportFormat
+import se.gangefors.moto.core.ImportItem
 import se.gangefors.moto.core.ImportReport
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.Track
@@ -280,7 +281,9 @@ fun RidesSheet(
             busy = false
             result.onSuccess { onSectionsChanged() }
             result.fold(
-                onSuccess = { r -> done(importSummary(resources, r)) },
+                onSuccess = { r ->
+                    if (sectionImportNeedsReport(r)) importReport = sectionImportReport(resources, r) else done(importSummary(resources, r))
+                },
                 onFailure = { failed(resources.getString(R.string.sections_import_failed, it.message ?: it.toString())) },
             )
         }
@@ -513,6 +516,35 @@ private fun rideImportReport(res: android.content.res.Resources, results: List<R
                     )
                 },
             ),
+        ),
+    )
+}
+
+/** The report of a favourites import: a summary, then the favourites
+ * that don't fit the map, those already saved, the saved ones replaced
+ * by longer ones, and those added, each by name, rating and length. */
+private fun sectionImportReport(res: android.content.res.Resources, r: ImportReport): ImportReportContent {
+    fun count(n: ULong) = n.toInt()
+    val summary = listOfNotNull(
+        count(r.added - r.unmatched).takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.sections_report_added, it, it) },
+        count(r.unmatched).takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.sections_report_unmatched, it, it) },
+        count(r.skipped).takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.sections_report_skipped, it, it) },
+        count(r.replaced).takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.sections_report_replaced, it, it) },
+    ).joinToString(" · ")
+    fun rows(items: List<ImportItem>) = items.map { i ->
+        ReportRow(
+            i.name.ifBlank { res.getString(R.string.sections_report_unnamed) },
+            res.getString(R.string.sections_report_item, res.getString(ratingLabel(i.rating)), sectionKm(i.lengthM)),
+        )
+    }
+    return ImportReportContent(
+        title = res.getString(R.string.sections_import_title),
+        summary = summary,
+        groups = listOf(
+            ReportGroup(res.getString(R.string.report_unmatched, r.unmatchedItems.size), error = true, rows = rows(r.unmatchedItems)),
+            ReportGroup(res.getString(R.string.report_already_saved, r.skippedItems.size), error = false, rows = rows(r.skippedItems)),
+            ReportGroup(res.getString(R.string.report_replaced, r.replacedItems.size), error = false, rows = rows(r.replacedItems)),
+            ReportGroup(res.getString(R.string.report_added, r.addedItems.size), error = false, rows = rows(r.addedItems)),
         ),
     )
 }
