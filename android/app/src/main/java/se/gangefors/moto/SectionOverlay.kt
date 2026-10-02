@@ -82,7 +82,8 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
                         PropertyFactory.lineWidth(2f),
                         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    ),
+                    )
+                    .apply { minZoom = GRAVEL_MIN_ZOOM },
             )
             style.addLayer(
                 SymbolLayer(ARROW_LAYER, SOURCE)
@@ -160,7 +161,7 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
         val width = look.lineWidth
         style.getLayer(CASING_LAYER)?.setProperties(
             PropertyFactory.lineWidth(widthByZoom(width) { it + SECTION_CASING_EXTRA }),
-            PropertyFactory.lineOpacity(look.casingOpacity),
+            PropertyFactory.lineOpacity(outlineByZoom(look.casingOpacity)),
         )
         style.getLayer(LINE_LAYER)?.setProperties(
             PropertyFactory.lineWidth(widthByZoom(width)),

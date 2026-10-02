@@ -32,21 +32,35 @@ fun sectionLook(routeShown: Boolean, darkMap: Boolean = false): SectionLook =
 /** How much of its width ([SectionLook.lineWidth]) a favourite section is
  * drawn at, by zoom (zoom to share): half when zoomed far out, where full
  * width made them look heavy (2026-10-01), full from zoom 12; never
- * under [SECTION_MIN_WIDTH]. */
+ * under [SECTION_MIN_WIDTH] from zoom 8 in. */
 val SECTION_WIDTH_SCALE: List<Pair<Float, Float>> = listOf(8f to 0.5f, 12f to 1f)
 
-/** The thinnest a favourite section is drawn, dp: room for a gravel dash
- * of 1 dp with 1 dp of its colour on each side (2026-10-01). */
+/** The thinnest a favourite section is drawn from zoom 8 in, dp: room for
+ * a gravel dash of 1 dp with 1 dp of its colour on each side (the rider,
+ * 2026-10-01). Further out the gravel dashes don't show
+ * ([GRAVEL_MIN_ZOOM]) and the line narrows on ([FAR_ZOOM]). */
 const val SECTION_MIN_WIDTH = 3f
 
+/** From zoom 8 out to this zoom the lines (favourites, rides, routes)
+ * narrow to [FAR_SHARE] of their width there, so they don't turn into
+ * blobs when the map shows a whole country (2026-10-02). */
+const val FAR_ZOOM = 5f
+const val FAR_SHARE = 0.5f
+
+/** The zooms at which a favourite's width is set; between them it changes
+ * evenly ([sectionWidthAt]). */
+val SECTION_WIDTH_ZOOMS: List<Float> = listOf(FAR_ZOOM) + SECTION_WIDTH_SCALE.map { it.first }
+
 /** A favourite section's width at [zoom], dp, for [width] at full scale,
- * as the map draws it from [SECTION_WIDTH_SCALE]. */
+ * as the map draws it from [SECTION_WIDTH_SCALE], narrowing on from zoom 8
+ * to [FAR_ZOOM]. */
 fun sectionWidthAt(width: Float, zoom: Float): Float {
     val (z0, s0) = SECTION_WIDTH_SCALE.first()
     val (z1, s1) = SECTION_WIDTH_SCALE.last()
     fun at(share: Float) = maxOf(SECTION_MIN_WIDTH, width * share)
     return when {
-        zoom <= z0 -> at(s0)
+        zoom <= FAR_ZOOM -> at(s0) * FAR_SHARE
+        zoom < z0 -> at(s0) * (FAR_SHARE + (1 - FAR_SHARE) * (zoom - FAR_ZOOM) / (z0 - FAR_ZOOM))
         zoom >= z1 -> at(s1)
         else -> at(s0) + (at(s1) - at(s0)) * (zoom - z0) / (z1 - z0)
     }
@@ -54,8 +68,36 @@ fun sectionWidthAt(width: Float, zoom: Float): Float {
 
 /** Width of the white gravel dashes on a favourite [lineWidth] dp wide:
  * two fifths of it, and always at least 1 dp of the line's colour on each
- * side. */
-fun sectionGravelWidth(lineWidth: Float): Float = minOf(lineWidth * 0.4f, lineWidth - 2f)
+ * side (none on a line too thin for that; they are hidden there anyway). */
+fun sectionGravelWidth(lineWidth: Float): Float = minOf(lineWidth * 0.4f, lineWidth - 2f).coerceAtLeast(0f)
+
+/** Below this zoom no gravel dashes are drawn, on routes or favourites:
+ * too small to see there (2026-10-02). */
+const val GRAVEL_MIN_ZOOM = 8f
+
+/** The zoom from which a route is drawn at full width; further out it
+ * narrows to [FAR_SHARE] of it at [FAR_ZOOM] ([routeWidthAt]). */
+const val ROUTE_FULL_ZOOM = 9f
+
+/** A route line's width at [zoom], dp, for [width] at full scale. */
+fun routeWidthAt(width: Float, zoom: Float): Float = width * when {
+    zoom <= FAR_ZOOM -> FAR_SHARE
+    zoom >= ROUTE_FULL_ZOOM -> 1f
+    else -> FAR_SHARE + (1 - FAR_SHARE) * (zoom - FAR_ZOOM) / (ROUTE_FULL_ZOOM - FAR_ZOOM)
+}
+
+/** The white outlines of routes and favourites fade out between these
+ * zooms: zoomed far out a thin pale band round a narrow line reads as a
+ * blur, not an edge (2026-10-02). */
+const val OUTLINE_GONE_ZOOM = 7f
+const val OUTLINE_FULL_ZOOM = 9f
+
+/** An outline's opacity at [zoom], for [opacity] at full strength. */
+fun outlineOpacityAt(opacity: Float, zoom: Float): Float = opacity * when {
+    zoom <= OUTLINE_GONE_ZOOM -> 0f
+    zoom >= OUTLINE_FULL_ZOOM -> 1f
+    else -> (zoom - OUTLINE_GONE_ZOOM) / (OUTLINE_FULL_ZOOM - OUTLINE_GONE_ZOOM)
+}
 
 /** How much wider than its line a favourite's white outline is, dp, at
  * full scale. */

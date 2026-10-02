@@ -123,8 +123,8 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                     .withFilter(Expression.eq(Expression.get(KIND), OTHER))
                     .withProperties(
                         PropertyFactory.lineColor(CASING_COLOR),
-                        PropertyFactory.lineWidth(6f),
-                        PropertyFactory.lineOpacity(0.8f * outlineStrength(darkMap)),
+                        PropertyFactory.lineWidth(routeWidthByZoom(6f)),
+                        PropertyFactory.lineOpacity(outlineByZoom(0.8f * outlineStrength(darkMap))),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
@@ -134,7 +134,7 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                     .withFilter(Expression.eq(Expression.get(KIND), OTHER))
                     .withProperties(
                         PropertyFactory.lineColor(routeColor()),
-                        PropertyFactory.lineWidth(3.5f),
+                        PropertyFactory.lineWidth(routeWidthByZoom(3.5f)),
                         PropertyFactory.lineOpacity(0.45f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -147,7 +147,7 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                     .withFilter(Expression.eq(Expression.get(KIND), FAVOURITE))
                     .withProperties(
                         PropertyFactory.lineColor(Expression.get(GLOW_COLOR)),
-                        PropertyFactory.lineWidth(18f),
+                        PropertyFactory.lineWidth(routeWidthByZoom(18f)),
                         PropertyFactory.lineBlur(4f),
                         PropertyFactory.lineOpacity(0.55f),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -159,8 +159,8 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                     .withFilter(Expression.eq(Expression.get(KIND), ROUTE))
                     .withProperties(
                         PropertyFactory.lineColor(CASING_COLOR),
-                        PropertyFactory.lineWidth(9f),
-                        PropertyFactory.lineOpacity(outlineStrength(darkMap)),
+                        PropertyFactory.lineWidth(routeWidthByZoom(9f)),
+                        PropertyFactory.lineOpacity(outlineByZoom(outlineStrength(darkMap))),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
@@ -170,7 +170,7 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                     .withFilter(Expression.eq(Expression.get(KIND), ROUTE))
                     .withProperties(
                         PropertyFactory.lineColor(routeColor()),
-                        PropertyFactory.lineWidth(5f),
+                        PropertyFactory.lineWidth(routeWidthByZoom(5f)),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
@@ -188,7 +188,8 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                         PropertyFactory.lineDasharray(dashesByZoom(::gravelDashes)),
                         PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    ),
+                    )
+                    .apply { minZoom = GRAVEL_MIN_ZOOM },
             )
             // A one-way section shown as the route: its direction, with the
             // same arrows as on the sections.
