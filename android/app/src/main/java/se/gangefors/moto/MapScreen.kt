@@ -1904,7 +1904,8 @@ fun MapScreen() {
         val via = selectedVia?.takeIf { it in vias.indices }
         val taskCard = message != null || marking || offerLoop || via != null
         // The buttons at the bottom step aside for them, as for planning.
-        val cardsShown = taskCard || shownRide != null || shownSaved != null || shownSection != null || roadInfo != null
+        val cardsShown = taskCard || shownRide != null || shownSaved != null || shownSection != null || roadInfo != null ||
+            (favouriteInfo != null && !riding)
         // The ridden roads button, above the sheet on the right: switches
         // the layer, and Ride settings' switch with it. Cards above the
         // sheet take its place.
