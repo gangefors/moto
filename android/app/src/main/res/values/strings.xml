@@ -477,6 +477,8 @@
     </plurals>
     <string name="ride_shown">Ride %1$s · %2$.1f km</string>
     <string name="ride_hide">Hide the ride</string>
+    <string name="ride_edit">Rename the ride</string>
+    <string name="ride_delete_failed">Couldn’t delete the ride: %1$s</string>
     <string name="rides_import">Import GPX…</string>
     <plurals name="rides_imported_many">
         <item quantity="one">%1$d ride imported: %2$.1f km</item>
