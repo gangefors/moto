@@ -1086,6 +1086,9 @@ fun MapScreen() {
     // id, so a change of its rating shows at once.
     var shownSectionId by remember { mutableStateOf<Long?>(null) }
     val shownSection = shownSectionId?.let { id -> sections.firstOrNull { it.id == id } }
+    // A favourite tapped while something else is open: only its facts.
+    var favouriteInfoId by remember { mutableStateOf<Long?>(null) }
+    val favouriteInfo = favouriteInfoId?.let { id -> sections.firstOrNull { it.id == id } }
     fun hideSection() {
         if (shownSectionId == null) return
         shownSectionId = null
@@ -1108,6 +1111,7 @@ fun MapScreen() {
         roadInfo = null
         overlays?.snap?.clear()
         shownSectionId = s.id
+        favouriteInfoId = null
         // What was on the route layer (a saved route or ride) goes.
         overlays?.route?.show(null, null, null)
         if (fit) showOnMap(listOf(s.geometry), always = true)
@@ -1493,8 +1497,20 @@ fun MapScreen() {
                 return@OnMapClickListener true
             }
             val hit = o.sections.sectionAt(m, tap)?.let { id -> sections.firstOrNull { it.id == id } }
-            if (hit != null) {
+            val tapped = hit?.let {
+                favouriteTap(
+                    planning = routeEnds != null || loopStart != null || startPicked != null,
+                    routeShown = shownSaved != null || shownRide != null,
+                )
+            }
+            if (hit != null && tapped == FavouriteTap.OPEN) {
                 showSection(hit, fit = false)
+            } else if (hit != null) {
+                // Beside what is open, which stays as it is; it replaces
+                // a road's card, as one tapped thing's card does another's.
+                roadInfo = null
+                o.snap.clear()
+                favouriteInfoId = hit.id
             } else if (ready == null) {
                 notify(regionStatus(resources, region), long = true)
             } else {
@@ -1503,6 +1519,7 @@ fun MapScreen() {
                     o.snap.show(tap, LatLng(info.point.position.lat, info.point.position.lon))
                     // One card for what was tapped: the road's replaces a section's.
                     hideSection()
+                    favouriteInfoId = null
                     roadInfo = info
                     message = null
                 } catch (e: MotoException) {
@@ -2053,6 +2070,15 @@ fun MapScreen() {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                if (!riding) favouriteInfo?.let { f ->
+                    FavouriteInfoCard(
+                        f,
+                        engine = (region as? RegionState.Ready)?.engine,
+                        darkMap = darkMap,
+                        onClose = { favouriteInfoId = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 roadInfo?.let {
                     RoadInfoCard(
                         it,
@@ -2067,7 +2093,7 @@ fun MapScreen() {
         }
         // Back steps back through what is on the map before it leaves the
         // app (a pulled-up sheet handles Back itself first).
-        BackHandler(enabled = marking || addingVia || selectedVia != null || roadInfo != null || planning ||
+        BackHandler(enabled = marking || addingVia || selectedVia != null || roadInfo != null || favouriteInfoId != null || planning ||
             startPicked != null || shownRide != null || shownSaved != null || shownSectionId != null) {
             when {
                 marking -> markBack()
@@ -2080,6 +2106,7 @@ fun MapScreen() {
                     roadInfo = null
                     overlays?.snap?.clear()
                 }
+                favouriteInfoId != null -> favouriteInfoId = null
                 routeEnds != null -> closeRoute()
                 loopStart != null -> closeLoop()
                 startPicked != null -> {

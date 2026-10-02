@@ -222,4 +222,12 @@ class SectionsLogicTest {
         org.junit.Assert.assertTrue(sectionImportNeedsReport(report(1, replaced = 1)))
         org.junit.Assert.assertTrue(sectionImportNeedsReport(report(2, unmatched = 1)))
     }
+
+    @Test
+    fun aFavouriteOpensOnlyWhenNothingElseIsOpen() {
+        assertEquals(FavouriteTap.OPEN, favouriteTap(planning = false, routeShown = false))
+        assertEquals(FavouriteTap.INFO, favouriteTap(planning = true, routeShown = false))
+        assertEquals(FavouriteTap.INFO, favouriteTap(planning = false, routeShown = true))
+        assertEquals(FavouriteTap.INFO, favouriteTap(planning = true, routeShown = true))
+    }
 }

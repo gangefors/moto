@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.core.graphics.toColorInt
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -390,14 +393,7 @@ fun ShownSectionCard(
     modifier: Modifier = Modifier,
     actions: @Composable () -> Unit = {},
 ) {
-    var description by remember(section.geometry, engine) { mutableStateOf(SectionDescriptions.cached(engine, section)) }
-    LaunchedEffect(section.geometry, engine) {
-        val e = engine ?: return@LaunchedEffect
-        if (description == null) {
-            description = withContext(Dispatchers.Default) { SectionDescriptions.describeAll(e, listOf(section))[section.geometry] }
-        }
-    }
-    val row = SectionRow(section, lengthM(section.geometry), description)
+    val row = rememberSectionRow(section, engine)
     MapCard(
         title = sectionTitle(row),
         supporting = listOfNotNull(sectionRoadLine(row), sectionFacts(row)).joinToString("\n"),
@@ -434,6 +430,49 @@ fun ShownSectionCard(
                 onLoop?.let { IconTextButton(R.drawable.ic_loop, stringResource(R.string.section_loop_through), it) }
                 onRide?.let { IconTextButton(R.drawable.ic_directions, stringResource(R.string.section_ride_from_here), it) }
             }
+        }
+    }
+}
+
+/** [section] as a row, described (where it runs, its road) once the
+ * engine has done so. */
+@Composable
+private fun rememberSectionRow(section: Section, engine: Engine?): SectionRow {
+    var description by remember(section.geometry, engine) { mutableStateOf(SectionDescriptions.cached(engine, section)) }
+    LaunchedEffect(section.geometry, engine) {
+        val e = engine ?: return@LaunchedEffect
+        if (description == null) {
+            description = withContext(Dispatchers.Default) { SectionDescriptions.describeAll(e, listOf(section))[section.geometry] }
+        }
+    }
+    return SectionRow(section, lengthM(section.geometry), description)
+}
+
+/**
+ * A favourite tapped while something else is open (a plan, a saved route
+ * or ride): only its facts, like the road card, with its rating behind a
+ * star in the rating's colour; the cross closes it and nothing else
+ * changes (2026-10-02).
+ */
+@Composable
+fun FavouriteInfoCard(section: Section, engine: Engine?, darkMap: Boolean, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val row = rememberSectionRow(section, engine)
+    MapCard(
+        title = sectionTitle(row),
+        supporting = sectionRoadLine(row),
+        onClose = onClose,
+        closeDescription = stringResource(R.string.favourite_info_close),
+        modifier = modifier,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painterResource(R.drawable.ic_star),
+                contentDescription = null,
+                tint = Color(ratingColor(section.rating, darkMap).toColorInt()),
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(sectionFacts(row), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
