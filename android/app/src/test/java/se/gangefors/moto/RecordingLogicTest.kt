@@ -213,4 +213,17 @@ class RecordingLogicTest {
         val stockholm = java.time.ZoneId.of("Europe/Stockholm")
         assertEquals("moto-favourite-sections-2026-09-24.geojson.gz", sectionsFileName(1_790_227_800L, stockholm, "geojson.gz"))
     }
+
+    @Test
+    fun aNamedRideShowsTheDayItWasRidden() {
+        val zone = java.time.ZoneId.of("Europe/Stockholm")
+        // 2026-09-24 07:30 local.
+        val start = java.time.ZonedDateTime.of(2026, 9, 24, 7, 30, 0, 0, zone).toEpochSecond()
+        assertEquals("2026-09-24", rideDate("Lakes and ridges", start, zone))
+        assertEquals("2026-09-24 · 42.0 km · 1 h", rideLine("Lakes and ridges", start, zone, "42.0 km · 1 h"))
+        // Without a name of the rider's, its name is already its start.
+        assertNull(rideDate(null, start, zone))
+        assertNull(rideDate("  ", start, zone))
+        assertEquals("42.0 km · 1 h", rideLine(null, start, zone, "42.0 km · 1 h"))
+    }
 }

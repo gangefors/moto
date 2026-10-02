@@ -43,7 +43,10 @@ fun ShownRideCard(
     val res = LocalResources.current
     MapCard(
         title = rideName(ride.track.name, ride.track.startedAt, zone),
-        supporting = stringResource(R.string.library_ride, rideSummary(res, ride.track)),
+        supporting = stringResource(
+            R.string.library_ride,
+            rideLine(ride.track.name, ride.track.startedAt, zone, rideSummary(res, ride.track)),
+        ),
         onClose = onClose,
         closeDescription = stringResource(R.string.ride_hide),
         modifier = modifier,
