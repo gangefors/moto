@@ -69,14 +69,18 @@ fn round_trips_through_every_format() {
         let mut target = Store::open_in_memory().unwrap();
         let r = import_sections(&mut target, Some(&e), &bytes, T0 + 60).unwrap();
         assert_eq!(
-            r,
-            ImportReport {
-                added: 2,
-                skipped: 0,
-                replaced: 0,
-                unmatched: 0
-            },
+            (r.added, r.skipped, r.replaced, r.unmatched),
+            (2, 0, 0, 0),
             "{format:?}"
+        );
+        // The report names what it added, in file order.
+        let ratings: Vec<Rating> = r.added_items.iter().map(|i| i.rating).collect();
+        assert_eq!(ratings, [Rating::Epic, Rating::Great]);
+        assert!(r.added_items.iter().all(|i| i.length_m > 100.0));
+        assert!(
+            r.unmatched_items.is_empty()
+                && r.skipped_items.is_empty()
+                && r.replaced_items.is_empty()
         );
         let got = target.list_sections(None).unwrap();
         let want = source.list_sections(None).unwrap();
@@ -118,14 +122,13 @@ fn importing_the_same_file_twice_adds_nothing() {
     import_sections(&mut target, Some(&e), &bytes, T0).unwrap();
     let again = import_sections(&mut target, Some(&e), &bytes, T0).unwrap();
     assert_eq!(
-        again,
-        ImportReport {
-            added: 0,
-            skipped: 1,
-            replaced: 0,
-            unmatched: 0
-        }
+        (again.added, again.skipped, again.replaced, again.unmatched),
+        (0, 1, 0, 0)
     );
+    // The one skipped, named.
+    assert_eq!(again.skipped_items.len(), 1);
+    assert_eq!(again.skipped_items[0].rating, Rating::Good);
+    assert!(again.added_items.is_empty());
     assert_eq!(target.list_sections(None).unwrap().len(), 1);
 }
 
@@ -162,6 +165,10 @@ fn a_longer_imported_section_replaces_the_shorter_saved_one() {
     let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
     let r = import_sections(&mut store, Some(&e), &bytes, T0).unwrap();
     assert_eq!((r.added, r.skipped, r.replaced), (1, 0, 1));
+    // The report names the saved one replaced, as it was.
+    assert_eq!(r.replaced_items.len(), 1);
+    assert_eq!(r.replaced_items[0].name, "13.203-13.207");
+    assert_eq!(r.added_items[0].name, "13.201-13.209");
     // The one on B→D is untouched: the import doesn't reach it.
     assert_eq!(names(&store), ["13.201-13.209", "13.212-13.218"]);
 }
@@ -232,6 +239,8 @@ fn one_way_sections_only_cover_the_same_way() {
     // The east-bound piece isn't covered by the west-bound section; the
     // shorter east-bound piece is covered by the longer one in the file.
     assert_eq!((r.added, r.skipped, r.replaced), (1, 1, 0), "{r:?}");
+    assert_eq!(r.skipped_items.len(), 1);
+    assert!(r.skipped_items[0].length_m < r.added_items[0].length_m);
     // A west-bound import inside the saved one is covered.
     let file = store_with(&[along(&e, 13.207, 13.203, Rating::Good, Direction::Forward)]);
     let bytes = export_sections(&file, ExportFormat::GeoJson).unwrap();
@@ -249,6 +258,10 @@ fn sections_off_the_map_are_imported_waiting_for_their_region() {
     let mut store = Store::open_in_memory().unwrap();
     let r = import_sections(&mut store, Some(&engine()), json, T0).unwrap();
     assert_eq!((r.added, r.unmatched), (1, 1));
+    // Named as not fitting the map, not as fitted.
+    assert!(r.added_items.is_empty());
+    assert_eq!(r.unmatched_items.len(), 1);
+    assert_eq!(r.unmatched_items[0].rating, Rating::Great);
     let s = &store.list_sections(None).unwrap()[0];
     assert_eq!(
         (s.status, s.rating, s.direction),
