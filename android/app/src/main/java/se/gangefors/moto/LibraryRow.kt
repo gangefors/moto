@@ -86,7 +86,10 @@ fun LibraryRow(item: LibraryItem, zone: ZoneId, actions: LibraryActions) {
                         sectionKm(item.route.distanceM),
                         durationText((item.route.durationS / 60).toInt()),
                     )
-                    is LibraryItem.Ride -> stringResource(R.string.library_ride, rideSummary(res, item.track))
+                    is LibraryItem.Ride -> stringResource(
+                        R.string.library_ride,
+                        rideLine(item.track.name, item.track.startedAt, zone, rideSummary(res, item.track)),
+                    )
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -206,6 +206,21 @@ fun rideTitle(startedAtSec: Long, zone: java.time.ZoneId): String =
 fun rideName(name: String?, startedAtSec: Long, zone: java.time.ZoneId): String =
     name?.takeIf { it.isNotBlank() } ?: rideTitle(startedAtSec, zone)
 
+/** The day ride [name] was ridden, shown beside it ("2026-09-24"); null
+ * when it has no name of the rider's, as its name is then its start. */
+fun rideDate(name: String?, startedAtSec: Long, zone: java.time.ZoneId): String? =
+    if (name.isNullOrBlank()) {
+        null
+    } else {
+        java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT))
+    }
+
+/** A ride's line under its name: the day it was ridden (when not in its
+ * name already) and [summary]. */
+fun rideLine(name: String?, startedAtSec: Long, zone: java.time.ZoneId, summary: String): String =
+    listOfNotNull(rideDate(name, startedAtSec, zone), summary).joinToString(" · ")
+
 /** Suggested export file name: "moto-ride-2026-09-24-0730.gpx". */
 fun rideFileName(startedAtSec: Long, zone: java.time.ZoneId): String =
     "moto-ride-" + java.time.Instant.ofEpochSecond(startedAtSec).atZone(zone)
