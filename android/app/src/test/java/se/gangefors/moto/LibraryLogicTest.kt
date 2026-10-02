@@ -103,6 +103,19 @@ class LibraryLogicTest {
     }
 
     @Test
+    fun aShortRideIsNotALoop() {
+        // About 200 m straight on: it ends near its start only because it
+        // never went anywhere.
+        val start = LatLon(55.70, 13.20)
+        assertFalse(rideIsLoop(listOf(start, LatLon(55.701, 13.20), LatLon(55.7018, 13.20))))
+        // Ended 1.5 km away (within 2 km of its start), and went no
+        // farther out than that: from one place to another.
+        assertFalse(rideIsLoop(listOf(start, LatLon(55.7135, 13.20))))
+        // Out 1.1 km and back to the start: a loop.
+        assertTrue(rideIsLoop(listOf(start, LatLon(55.71, 13.20), LatLon(55.7001, 13.20))))
+    }
+
+    @Test
     fun aPickedFilesNameIsMadeSafeToShow() {
         assertEquals("Morning ride.gpx", shownFileName("  Morning ride.gpx ", "a file"))
         // Control and bidi characters from another app are dropped.
