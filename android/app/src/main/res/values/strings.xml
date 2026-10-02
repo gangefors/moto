@@ -258,7 +258,7 @@
     <string name="help_line_ridden_what">roads your rides have been on, when Show ridden roads is on in Ride settings [settings]</string>
     <string name="say_ridden">the dashed line</string>
     <string name="help_key_ridden_button">Ridden roads</string>
-    <string name="help_key_ridden_button_what">above the sheet: shows or hides the roads your rides have been on, as Show ridden roads in Ride settings does</string>
+    <string name="help_key_ridden_button_what">above the sheet: shows or hides the roads your rides have been on while you plan; Show ridden roads in Ride settings stays as it is</string>
     <string name="say_ridden_button">the ridden roads button</string>
     <string name="help_key_route_here">Route from my position</string>
     <string name="help_key_route_here_what">from your position to the place</string>
@@ -387,7 +387,7 @@
     <string name="settings_keep_screen_on">Keep the screen on while recording</string>
     <string name="settings_keep_screen_on_hint">For the phone on a handlebar mount. Uses more battery.</string>
     <string name="settings_show_ridden">Show ridden roads</string>
-    <string name="settings_show_ridden_hint">Draws the roads your rides have been on as a thin dashed line, so you can see where you haven’t been. Not on favourite sections or routes: favourites count as ridden, and a route covers its own roads. Hidden when the map shows more than 70 km across. While a route or loop is shown, the button above it switches them too.</string>
+    <string name="settings_show_ridden_hint">Draws the roads your rides have been on as a thin dashed line, so you can see where you haven’t been. Not on favourite sections or routes: favourites count as ridden, and a route covers its own roads. Hidden when the map shows more than 70 km across. While a route or loop is shown, the button above it shows or hides them for that route or loop only.</string>
     <string name="settings_group_routing">Routes and loops</string>
     <string name="settings_group_map">Map</string>
     <string name="settings_group_recording">Recording</string>
