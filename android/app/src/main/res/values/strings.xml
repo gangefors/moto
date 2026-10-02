@@ -420,29 +420,45 @@
     <string name="ride_shown">Ride %1$s · %2$.1f km</string>
     <string name="ride_hide">Hide the ride</string>
     <string name="rides_import">Import GPX…</string>
-    <string name="rides_import_failed">Import failed: %1$s</string>
     <plurals name="rides_imported_many">
         <item quantity="one">%1$d ride imported: %2$.1f km</item>
         <item quantity="other">%1$d rides imported: %2$.1f km</item>
-    </plurals>
-    <plurals name="rides_imported_some">
-        <item quantity="one">%1$d ride imported (%2$.1f km). Not imported: %3$s</item>
-        <item quantity="other">%1$d rides imported (%2$.1f km). Not imported: %3$s</item>
-    </plurals>
-    <plurals name="rides_import_already">
-        <item quantity="one">%1$d ride already in the app, left out</item>
-        <item quantity="other">%1$d rides already in the app, left out</item>
     </plurals>
     <plurals name="rides_import_all_saved">
         <item quantity="one">That ride is already in the app</item>
         <item quantity="other">All %1$d rides are already in the app</item>
     </plurals>
-    <string name="rides_import_and">%1$s; %2$s</string>
-    <string name="rides_import_none">No rides imported. %1$s</string>
-    <string name="rides_import_file_failed">%1$s: %2$s</string>
-    <string name="rides_import_more">%1$s; and %2$d more</string>
     <string name="rides_import_too_many">Pick at most %1$d files at a time</string>
     <string name="rides_import_unnamed">a file</string>
+    <string name="rides_import_title">Import GPX</string>
+    <plurals name="rides_report_imported">
+        <item quantity="one">%1$d ride imported (%2$.1f km)</item>
+        <item quantity="other">%1$d rides imported (%2$.1f km)</item>
+    </plurals>
+    <plurals name="rides_report_already">
+        <item quantity="one">%1$d already in the app</item>
+        <item quantity="other">%1$d already in the app</item>
+    </plurals>
+    <plurals name="rides_report_failed">
+        <item quantity="one">%1$d file not imported</item>
+        <item quantity="other">%1$d files not imported</item>
+    </plurals>
+    <plurals name="rides_report_rides">
+        <item quantity="one">%1$d ride</item>
+        <item quantity="other">%1$d rides</item>
+    </plurals>
+    <plurals name="rides_report_some_saved">
+        <item quantity="one">%1$d of %2$d ride</item>
+        <item quantity="other">%1$d of %2$d rides</item>
+    </plurals>
+    <plurals name="rides_report_rides_km">
+        <item quantity="one">%1$d ride · %2$.1f km</item>
+        <item quantity="other">%1$d rides · %2$.1f km</item>
+    </plurals>
+    <string name="report_not_imported">Not imported · %1$d</string>
+    <string name="report_already">Already in the app · %1$d</string>
+    <string name="report_imported">Imported · %1$d</string>
+    <string name="ok">OK</string>
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>
     <string name="rides_cannot_write">can’t write to the chosen file</string>

@@ -54,35 +54,42 @@ class LibraryLogicTest {
     }
 
     @Test
-    fun aRideImportOfManyFilesSumsUpAndListsWhatFailed() {
-        val one = rideImportSummary(listOf(RideImport.Imported(listOf(12_345.0))))
-        assertEquals(RideImportSummary(1, 1, 12.3, 0, emptyList(), 0), one)
+    fun aRideImportOfManyFilesSumsUpAndGroupsItsFiles() {
+        val one = rideImportSummary(listOf(RideImport.Imported("a.gpx", listOf(12_345.0))))
+        assertEquals(RideImportSummary(1, 1, 12.3, 0, 0), one)
 
-        val results = listOf(
-            // A file with three rides (track segments), one already saved.
-            RideImport.Imported(listOf(10_000.0, 2_000.0), alreadySaved = 1),
-            RideImport.Failed("a.gpx", "no track points"),
-            RideImport.Imported(listOf(5_060.0)),
-            RideImport.Failed("b.gpx", "not GPX"),
-            RideImport.Failed("c.gpx", "too large"),
-            RideImport.Failed("d.gpx", "not GPX"),
-            // Everything in it already saved.
-            RideImport.Imported(emptyList(), alreadySaved = 2),
-        )
+        val day = RideImport.Imported("day.gpx", listOf(10_000.0, 2_000.0), alreadySaved = 1, rideNames = listOf("A → B"))
+        val bad = RideImport.Failed("a.gpx", "no track points")
+        val single = RideImport.Imported("one.gpx", listOf(5_060.0))
+        val old = RideImport.Imported("old.gpx", emptyList(), alreadySaved = 2)
+        val results = listOf(day, bad, single, old)
         val s = rideImportSummary(results)
-        assertEquals(3, s.imported)
-        assertEquals(7, s.files)
-        assertEquals(17.1, s.km, 1e-9)
-        assertEquals(3, s.alreadySaved)
-        // The first three not imported, in the order picked, and a count.
-        assertEquals(listOf("a.gpx", "b.gpx", "c.gpx"), s.failed.map { it.name })
-        assertEquals(1, s.moreFailed)
-
-        val none = rideImportSummary(listOf(RideImport.Failed("x", "bad")))
-        assertEquals(0, none.imported)
-        assertEquals(0.0, none.km, 0.0)
-        assertEquals(0, none.moreFailed)
+        assertEquals(RideImportSummary(imported = 3, files = 4, km = 17.1, alreadySaved = 3, failed = 1), s)
+        // Files in the order picked; a file with rides of both kinds in
+        // both groups.
+        val g = rideImportGroups(results)
+        assertEquals(listOf(bad), g.failed)
+        assertEquals(listOf(day, old), g.alreadySaved)
+        assertEquals(listOf(day, single), g.imported)
         assertEquals(100, MAX_GPX_FILES)
+    }
+
+    @Test
+    fun theReportShowsWhenSomethingWasLeftOut() {
+        val ok = RideImport.Imported("a.gpx", listOf(1_000.0))
+        val fail = RideImport.Failed("b.gpx", "bad")
+        val allThere = RideImport.Imported("c.gpx", emptyList(), alreadySaved = 1)
+        val someThere = RideImport.Imported("d.gpx", listOf(1_000.0), alreadySaved = 1)
+        // Everything imported: the short message.
+        assertFalse(rideImportNeedsReport(listOf(ok)))
+        assertFalse(rideImportNeedsReport(listOf(ok, ok)))
+        // One file, all already there: the short message says it all.
+        assertFalse(rideImportNeedsReport(listOf(allThere)))
+        // A file not imported, even alone; rides left out otherwise.
+        assertTrue(rideImportNeedsReport(listOf(fail)))
+        assertTrue(rideImportNeedsReport(listOf(ok, fail)))
+        assertTrue(rideImportNeedsReport(listOf(someThere)))
+        assertTrue(rideImportNeedsReport(listOf(ok, allThere)))
     }
 
     @Test
