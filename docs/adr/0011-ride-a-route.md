@@ -84,11 +84,10 @@ A gives a ride in one app with what matters for a fun-roads route (progress, fav
 
 ## Action Items
 
-- [ ] Core: `follow` with tests (straight, loop, out and back, figure eight, noise, gaps, poor accuracy, skipping ahead, joining, finishing, malformed input, never panics); a replay test along a golden route.
-- [ ] Core: `rejoin` with tests; benchmark entries in `--check` (updates and rejoin).
-- [ ] Store: schema 8 (the followed route, segment breaks); GPX, distance, drawing and matching honour breaks; tests.
-- [ ] FFI and bindings.
-- [ ] App: service, state, alert channel, notification text, Ride settings.
-- [ ] App: ride screen (camera, compass, route look, card, Recentre, end countdown, carrying on).
-- [ ] App: Ride buttons (sheet, saved route card), Shuffle icon-only, How to use topic, `ic_navigation`, debug timings.
-- [ ] Phone: a loop with a deliberate wrong turn, the screen off, forest, the finish.
+- [x] Core: `follow` with tests (straight, loop, out and back, figure eight, noise, gaps, poor accuracy, skipping ahead, joining, finishing, malformed input, a random-fix test that it never panics) (416401e); replayed in the benchmark along its Skåne routes instead of a golden route: 81 426 noisy fixes over 1628 km, none off the route, all 20 rides to the end.
+- [x] Core: `rejoin` with tests; benchmark entries in `--check` and the CI comparison (`follow_us_mean`, `rejoin_ms_mean`, `rejoin_ms_p95`): 2.1 µs per fix, ways back 0.5 ms (65f8912).
+- [x] Store: schema 8 (the followed route, segment breaks); distance, ride matching, ridden stats and GPX export honour breaks; tests (09c552a).
+- [x] FFI and bindings (4a0d82f).
+- [x] App: service, state, alert channel, notification text, Ride settings; ride screen (camera, compass, route look, card, Recentre, end countdown, carrying on); Ride buttons (sheet, saved route card), Shuffle icon-only, How to use topic, `ic_navigation`, debug timings; shown rides drawn by segment (128abd5).
+- [ ] Saved routes keep only their line, so riding one shows no favourite rows: keep their favourite parts when saving (later).
+- [ ] Phone: a loop with a deliberate wrong turn, the screen off, forest, the finish; carrying on after force-stopping the app.
