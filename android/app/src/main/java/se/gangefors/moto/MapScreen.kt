@@ -1048,6 +1048,24 @@ fun MapScreen() {
     // A saved route the rider asked to see (Menu > Routes & rides > Show),
     // and a route or loop being saved (its name is asked first).
     var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
+    // A saved route keeps only its line: its favourite stretches are
+    // worked out from the favourites as they are now, when it shows and
+    // whenever they change, and glow on it as on a new route (ADR-0011).
+    LaunchedEffect(shownSaved?.route?.id, shownSaved?.line, sections, store) {
+        val shown = shownSaved ?: return@LaunchedEffect
+        val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
+        val found = withContext(Dispatchers.IO) {
+            runCatching {
+                DebugTools.query("favourites on saved route", { "${it.parts.size} parts" }) { s.favouritePartsAlong(shown.line) }
+            }.getOrNull()
+        } ?: return@LaunchedEffect
+        val now = shownSaved
+        if (now == null || now.route.id != shown.route.id) return@LaunchedEffect
+        shownSaved = now.copy(favouriteParts = found.parts, favouriteRatings = found.ratings)
+        val start = LatLng(now.line.first().lat, now.line.first().lon)
+        val end = if (now.route.isLoop) null else LatLng(now.line.last().lat, now.line.last().lon)
+        overlays?.route?.show(start, end, now.line, favourites = found.parts, favouriteRatings = found.ratings)
+    }
     // A saved section the rider asked to see (Menu > Sections, a row): by
     // id, so a change of its rating shows at once.
     var shownSectionId by remember { mutableStateOf<Long?>(null) }
@@ -2000,7 +2018,9 @@ fun MapScreen() {
                         },
                         modifier = Modifier.fillMaxWidth(),
                         onRide = {
-                            beginRide(RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, emptyList(), emptyList()))
+                            beginRide(
+                                RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, s.favouriteParts, s.favouriteRatings),
+                            )
                         },
                     )
                 }
