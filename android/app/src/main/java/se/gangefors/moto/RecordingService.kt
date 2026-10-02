@@ -66,12 +66,20 @@ class RecordingService : Service() {
      * can't start a second recording before the first one is set up. */
     private var started = false
 
-    /** One recording, touched only on [thread]. */
-    private inner class Session(val store: SectionStore, val trackId: Long, val buffer: PointBuffer) {
-        val startedAtMs = System.currentTimeMillis()
-        val startedElapsed = SystemClock.elapsedRealtime()
-        val batteryAtStart = batteryPercent()
-        val progress = RideProgress()
+    /** One recording, or a ride along a route that isn't recorded yet
+     * ([trackId] null: Ride records from the route's start, ADR-0011);
+     * touched only on [thread]. */
+    private inner class Session(val store: SectionStore) {
+        var trackId: Long? = null
+        var buffer: PointBuffer? = null
+        /** The recording was started by reaching the route's start, not by
+         * the rider: it is dropped if they turn out to ride the route the
+         * wrong way. */
+        var autoStarted = false
+        var startedAtMs = System.currentTimeMillis()
+        var startedElapsed = SystemClock.elapsedRealtime()
+        var batteryAtStart = batteryPercent()
+        var progress = RideProgress()
         val pending = ArrayList<TrackPoint>()
         var oldestPendingAt = 0L
         var lastPublishAt = 0L
@@ -109,8 +117,9 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> start(resume = null)
-            ACTION_RESUME -> start(resume = intent.getLongExtra(EXTRA_TRACK, -1).takeIf { it >= 0 })
+            ACTION_START -> start(resume = null, record = true)
+            ACTION_RIDE -> start(resume = null, record = false)
+            ACTION_RESUME -> start(resume = intent.getLongExtra(EXTRA_TRACK, -1).takeIf { it >= 0 }, record = true)
             ACTION_FOLLOW -> handler.post { Recording.takeRequest()?.let { r -> session?.let { follow(it, r) } } }
             ACTION_UNFOLLOW -> handler.post { session?.let { unfollow(it) } }
             ACTION_STOP -> handler.post { stop() }
@@ -119,10 +128,19 @@ class RecordingService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun start(resume: Long?) {
+    private fun start(resume: Long?, record: Boolean) {
         if (started) {
-            // Already recording: Ride follows the route on the same ride.
-            handler.post { Recording.takeRequest()?.let { r -> session?.let { follow(it, r) } } }
+            handler.post {
+                val s = session ?: return@post
+                if (record) {
+                    // Record while riding to a route: recording starts now.
+                    startTrack(s, auto = false)
+                    publish(s, force = true)
+                } else {
+                    // Ride while recording: the same ride follows the route.
+                    Recording.takeRequest()?.let { r -> follow(s, r) }
+                }
+            }
             return
         }
         if (!hasLocationPermission()) {
@@ -138,11 +156,11 @@ class RecordingService : Service() {
             notification(getString(R.string.recording_waiting)),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0,
         )
-        handler.post { begin(resume) }
+        handler.post { begin(resume, record) }
     }
 
     @SuppressLint("MissingPermission") // Checked in start().
-    private fun begin(resume: Long?) {
+    private fun begin(resume: Long?, record: Boolean) {
         val store = (SavedSections.open(applicationContext) as? StoreState.Ready)?.store
         if (store == null) {
             fail(getString(R.string.recording_no_store))
@@ -157,14 +175,18 @@ class RecordingService : Service() {
                 Recording.recover(applicationContext, store, finishFollowed = resume == null, keep = resume)
                 Recording.answered()
                 val reopened = resume?.let { id -> store.getTrack(id)?.takeIf { it.endedAt == null } }
-                val track = reopened ?: store.startTrack()
-                // Carrying on: the fixes from now on are a new segment.
-                if (reopened != null) store.breakTrack(track.id)
-                val file = File(Recording.bufferDir(applicationContext), PointBuffer.fileName(track.id))
-                Session(store, track.id, PointBuffer(file)).also {
+                Session(store).also {
                     session = it
+                    if (reopened != null) {
+                        // Carrying on: the fixes from now on are a new segment.
+                        store.breakTrack(reopened.id)
+                        it.trackId = reopened.id
+                        it.buffer = PointBuffer(File(Recording.bufferDir(applicationContext), PointBuffer.fileName(reopened.id)))
+                    } else if (record) {
+                        startTrack(it, auto = false)
+                    }
                     val route = if (reopened != null) {
-                        runCatching { store.followedRoute(track.id)?.toRideRoute() }.getOrNull()
+                        runCatching { store.followedRoute(reopened.id)?.toRideRoute() }.getOrNull()
                     } else {
                         Recording.takeRequest()
                     }
@@ -191,16 +213,20 @@ class RecordingService : Service() {
         ) ?: return
         s.gotFix = true
         s.lastFix = fix
-        try {
-            s.buffer.append(fix)
-        } catch (e: Exception) {
-            Log.w(TAG, "buffer write failed: ${e.message}")
-        }
-        if (s.pending.isEmpty()) s.oldestPendingAt = SystemClock.elapsedRealtime()
-        s.pending += fix
-        s.progress.add(fix.position)
-        if (policy.due(s.pending.size, SystemClock.elapsedRealtime() - s.oldestPendingAt)) flush(s)
+        // Following first: reaching the route's start may start recording,
+        // with this fix as its first.
         val followed = s.follow?.let { onFollowFix(s, it, fix) } == true
+        if (s.trackId != null) {
+            try {
+                s.buffer?.append(fix)
+            } catch (e: Exception) {
+                Log.w(TAG, "buffer write failed: ${e.message}")
+            }
+            if (s.pending.isEmpty()) s.oldestPendingAt = SystemClock.elapsedRealtime()
+            s.pending += fix
+            s.progress.add(fix.position)
+            if (policy.due(s.pending.size, SystemClock.elapsedRealtime() - s.oldestPendingAt)) flush(s)
+        }
         publish(s, force = followed)
     }
 
@@ -209,7 +235,7 @@ class RecordingService : Service() {
     private fun follow(s: Session, route: RideRoute) {
         try {
             val follower = RouteFollower(route.line, route.favouriteParts, route.favouriteRatings, route.durationS)
-            s.store.setFollowedRoute(s.trackId, route.toFollowed())
+            s.trackId?.let { s.store.setFollowedRoute(it, route.toFollowed()) }
             s.follow?.let { endFollow(s, it) }
             s.follow = Follow(route, follower)
             publish(s, force = true)
@@ -219,13 +245,52 @@ class RecordingService : Service() {
         }
     }
 
-    /** Stops following, keeps recording (the card's X). */
+    /** Stops following, keeps recording (the card's X); with nothing
+     * recorded yet the ride just ends. */
     private fun unfollow(s: Session) {
         val f = s.follow ?: return
+        val id = s.trackId
+        if (id == null) {
+            stop()
+            return
+        }
         endFollow(s, f)
         s.follow = null
-        runCatching { s.store.clearFollowedRoute(s.trackId) }
+        runCatching { s.store.clearFollowedRoute(id) }
         publish(s, force = true)
+    }
+
+    /** Starts recording on [s] (the rider tapped Record, or with [auto]
+     * the ride reached the route's start). */
+    private fun startTrack(s: Session, auto: Boolean) {
+        if (s.trackId != null) return
+        try {
+            val track = s.store.startTrack()
+            s.trackId = track.id
+            s.buffer = PointBuffer(File(Recording.bufferDir(applicationContext), PointBuffer.fileName(track.id)))
+            s.autoStarted = auto
+            s.progress = RideProgress()
+            s.startedAtMs = System.currentTimeMillis()
+            s.startedElapsed = SystemClock.elapsedRealtime()
+            s.batteryAtStart = batteryPercent()
+            s.follow?.let { s.store.setFollowedRoute(track.id, it.route.toFollowed()) }
+        } catch (e: Exception) {
+            Log.w(TAG, "could not start recording: ${e.message}")
+        }
+    }
+
+    /** Drops a recording the ride started by itself: the rider turned out
+     * to ride the route the wrong way, on their way to its start. */
+    private fun discardTrack(s: Session) {
+        val id = s.trackId ?: return
+        s.pending.clear()
+        s.buffer?.delete()
+        s.buffer = null
+        s.trackId = null
+        s.autoStarted = false
+        s.progress = RideProgress()
+        runCatching { s.store.deleteTrack(id) }
+        RideChanges.changed()
     }
 
     private fun endFollow(s: Session, f: Follow) {
@@ -253,8 +318,13 @@ class RecordingService : Service() {
         f.updateNs += ns
         f.maxUpdateNs = maxOf(f.maxUpdateNs, ns)
         val before = f.state.phase
+        val wasStarted = f.state.started
         f.state = next
         val now = System.currentTimeMillis()
+        // Ride records from the route's start; a recording it started is
+        // dropped if the rider turns out to ride the route backwards.
+        if (next.started && !wasStarted && s.trackId == null) startTrack(s, auto = true)
+        if (next.phase == FollowPhase.JOINING && next.wrongWay && s.autoStarted) discardTrack(s)
         when {
             next.phase == FollowPhase.OFF_ROUTE && before != FollowPhase.OFF_ROUTE -> {
                 f.offTimes++
@@ -348,11 +418,12 @@ class RecordingService : Service() {
 
     /** Hands the pending fixes to the core, then empties the buffer file. */
     private fun flush(s: Session) {
+        val id = s.trackId ?: return
         if (s.pending.isEmpty()) return
         try {
-            for (batch in batches(s.pending)) s.store.appendTrackPoints(s.trackId, batch)
+            for (batch in batches(s.pending)) s.store.appendTrackPoints(id, batch)
             s.pending.clear()
-            s.buffer.clear()
+            s.buffer?.clear()
         } catch (e: Exception) {
             // Kept in memory and in the buffer file; tried again next time.
             Log.w(TAG, "could not store fixes: ${e.message}")
@@ -369,19 +440,27 @@ class RecordingService : Service() {
         flush(s)
         s.follow?.let { endFollow(s, it) }
         session = null
+        val id = s.trackId
+        if (id == null) {
+            // A ride to a route that never recorded: nothing to save.
+            Recording.set(Recording.State.Idle)
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         try {
             if (s.pending.isNotEmpty()) {
                 // The core could not take the last fixes: leave the track open
                 // with its buffer, for the next start to save and finish.
-                s.buffer.close()
+                s.buffer?.close()
                 Recording.set(Recording.State.Failed(getString(R.string.recording_saved_later)))
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return
             }
-            val track = s.store.finishTrack(s.trackId)
+            val track = s.store.finishTrack(id)
             RideChanges.changed()
-            s.buffer.delete()
+            s.buffer?.delete()
             val duration = SystemClock.elapsedRealtime() - s.startedElapsed
             Recording.set(
                 if (track != null) {
@@ -422,7 +501,9 @@ class RecordingService : Service() {
                 following = following,
             ),
         )
-        val text = if (following != null && s.gotFix && following.state.phase != FollowPhase.JOINING) {
+        val text = if (following != null && s.trackId == null) {
+            getString(R.string.ride_not_recording, following.route.name)
+        } else if (following != null && s.gotFix && following.state.phase != FollowPhase.JOINING) {
             val arrive = android.text.format.DateFormat.getTimeFormat(this)
                 .format(java.util.Date(System.currentTimeMillis() + (following.state.leftS * 1000).toLong()))
             getString(R.string.ride_progress, following.route.name, rideKm(following.state.leftM), arrive)
@@ -431,10 +512,11 @@ class RecordingService : Service() {
         } else {
             getString(R.string.recording_waiting)
         }
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text))
+        val title = getString(if (s.trackId == null) R.string.ride_title else R.string.recording_title)
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, title))
     }
 
-    private fun notification(text: String): Notification {
+    private fun notification(text: String, title: String = getString(R.string.recording_title)): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(
@@ -455,7 +537,7 @@ class RecordingService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_record)
-            .setContentTitle(getString(R.string.recording_title))
+            .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(open)
             .addAction(0, getString(R.string.recording_stop), stop)
@@ -488,6 +570,7 @@ class RecordingService : Service() {
         private const val ACTION_START = "se.gangefors.moto.action.START_RECORDING"
         private const val ACTION_STOP = "se.gangefors.moto.action.STOP_RECORDING"
         private const val ACTION_RESUME = "se.gangefors.moto.action.RESUME_RECORDING"
+        private const val ACTION_RIDE = "se.gangefors.moto.action.RIDE_ROUTE"
         private const val ACTION_FOLLOW = "se.gangefors.moto.action.FOLLOW_ROUTE"
         private const val ACTION_UNFOLLOW = "se.gangefors.moto.action.UNFOLLOW_ROUTE"
         private const val EXTRA_TRACK = "track"
@@ -506,14 +589,17 @@ class RecordingService : Service() {
             )
         }
 
-        /** Records a ride following [route]: a new one, or the one being
-         * recorded (ADR-0011). */
+        /** Rides [route] (ADR-0011): recording starts at its start, or
+         * the ride being recorded follows it. */
         fun ride(context: Context, route: RideRoute) {
             Recording.request(route)
-            if (Recording.activeTrackId != null) {
+            if (Recording.state.value is Recording.State.Active) {
                 context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_FOLLOW))
             } else {
-                start(context)
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, RecordingService::class.java).setAction(ACTION_RIDE),
+                )
             }
         }
 

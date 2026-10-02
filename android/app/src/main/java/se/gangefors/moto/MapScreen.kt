@@ -2247,7 +2247,9 @@ fun MapScreen() {
                 // Record: a red dot. While recording: a stop square with a
                 // red arc running round the button, the same size as the
                 // others; the distance is in the notification.
-                val active = recording as? Recording.State.Active
+                // Riding to a route's start records nothing yet: Record is
+                // still there, to record the way there too.
+                val active = (recording as? Recording.State.Active)?.takeIf { it.trackId != null }
                 if (active != null) {
                     RecordingButton(
                         onStop = { RecordingService.stop(context) },
