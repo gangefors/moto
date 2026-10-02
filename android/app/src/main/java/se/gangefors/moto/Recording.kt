@@ -76,12 +76,20 @@ object Recording {
         try {
             store.listTracks()
                 .filter { it.endedAt == null && it.id != active }
-                .forEach { store.finishTrack(it.id) }
+                .forEach { store.finishTrack(it.id)?.let { t -> finishedUnnamed += t.id } }
             RideChanges.changed()
         } catch (e: Exception) {
             Log.w(TAG, "could not finish interrupted tracks: ${e.message}")
         }
     }
+
+    /** Rides [recover] finished, waiting to be named once a map is open
+     * (the map screen does it, as for a ride finished normally). */
+    private val finishedUnnamed = mutableSetOf<Long>()
+
+    /** The rides [recover] finished since the last call, to name. */
+    @Synchronized
+    fun takeFinished(): List<Long> = finishedUnnamed.toList().also { finishedUnnamed.clear() }
 
     private const val TAG = "moto"
 }
