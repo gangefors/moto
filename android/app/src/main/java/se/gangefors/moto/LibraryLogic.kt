@@ -128,9 +128,19 @@ fun rideImportGroups(results: List<RideImport>): RideImportGroups {
  * Lund via Höör") rather than from one place to another. */
 const val RIDE_LOOP_M = 2_000.0
 
-/** Whether a ride along [line] came back to where it began. */
-fun rideIsLoop(line: List<se.gangefors.moto.core.LatLon>): Boolean =
-    line.size >= 2 && approxDistanceM(line.first(), line.last()) <= RIDE_LOOP_M
+/** How far out a ride must have gone to be named as a loop: at least
+ * this, and twice as far as it ended from its start, so a short ride
+ * (ending within [RIDE_LOOP_M] because it never went anywhere) is not. */
+const val RIDE_LOOP_OUT_M = 1_000.0
+
+/** Whether a ride along [line] went out and came back to where it began. */
+fun rideIsLoop(line: List<se.gangefors.moto.core.LatLon>): Boolean {
+    if (line.size < 2) return false
+    val gap = approxDistanceM(line.first(), line.last())
+    if (gap > RIDE_LOOP_M) return false
+    val out = farthestPoint(line)?.let { approxDistanceM(line.first(), it) } ?: return false
+    return out >= maxOf(RIDE_LOOP_OUT_M, 2 * gap)
+}
 
 /** A picked file's name as it may be shown in a message: the name comes
  * from another app, so control and formatting characters are dropped and
