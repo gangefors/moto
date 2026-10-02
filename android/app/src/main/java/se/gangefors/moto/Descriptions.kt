@@ -7,9 +7,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.Engine
+import se.gangefors.moto.core.Route
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.Track
+import se.gangefors.moto.debug.DebugTools
 
 /*
  * Sections, routes and rides in words the rider recognises, from the
@@ -136,7 +138,10 @@ fun planNameText(res: android.content.res.Resources, name: PlanName): String = w
  * recorded one when it is finished. Left as it is when it already has a
  * name, the map has no names there, or anything fails. The name given,
  * or null. */
-fun SectionStore.nameRide(res: android.content.res.Resources, engine: Engine, ride: Track): String? = runCatching {
+fun SectionStore.nameRide(res: android.content.res.Resources, engine: Engine, ride: Track): String? =
+    DebugTools.query("ride name", { if (it == null) "no name" else "named" }) { nameRideUntimed(res, engine, ride) }
+
+private fun SectionStore.nameRideUntimed(res: android.content.res.Resources, engine: Engine, ride: Track): String? = runCatching {
     if (getTrack(ride.id)?.name != null) return null
     val line = trackPoints(ride.id)?.map { it.position } ?: return null
     val far = if (rideIsLoop(line)) farthestPoint(line)?.let { engine.describe(listOf(it, it)) } else null
@@ -144,3 +149,13 @@ fun SectionStore.nameRide(res: android.content.res.Resources, engine: Engine, ri
     val text = planNameText(res, name)
     if (renameTrack(ride.id, text)) text else null
 }.getOrNull()
+
+/** Debug report summaries: counts only, never place names or positions. */
+fun descriptionSummary(d: Description): String =
+    "${d.roads.size} roads, ${listOfNotNull(d.start, d.end).size} of 2 ends named"
+
+fun linesSummary(lines: List<List<LatLon>>): String = "${lines.size} lines, ${lines.sumOf { it.size }} points"
+
+fun routesSummary(routes: List<Route>): String = "${routes.size} routes"
+
+fun bytesSummary(text: String): String = "${text.length} chars"

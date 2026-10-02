@@ -137,14 +137,16 @@ fun RidesSheet(
     LaunchedEffect(store) { reload() }
 
     /** The GPX of a route or ride, named as listed. Call off the main thread. */
-    fun gpxOf(item: LibraryItem): String = when (item) {
-        is LibraryItem.Ride ->
-            store.exportTrackGpx(item.track.id, libraryTitle(item, zone))
-                ?: error(resources.getString(R.string.rides_gone))
-        is LibraryItem.Route -> {
-            val e = engine ?: error(resources.getString(R.string.region_missing))
-            val line = store.routeGeometry(item.route.id) ?: error(resources.getString(R.string.rides_gone))
-            e.routeGpx(line, item.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
+    fun gpxOf(item: LibraryItem): String = DebugTools.query("saved GPX", ::bytesSummary) {
+        when (item) {
+            is LibraryItem.Ride ->
+                store.exportTrackGpx(item.track.id, libraryTitle(item, zone))
+                    ?: error(resources.getString(R.string.rides_gone))
+            is LibraryItem.Route -> {
+                val e = engine ?: error(resources.getString(R.string.region_missing))
+                val line = store.routeGeometry(item.route.id) ?: error(resources.getString(R.string.rides_gone))
+                e.routeGpx(line, item.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
+            }
         }
     }
 
@@ -214,7 +216,7 @@ fun RidesSheet(
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val bytes = store.exportSections(format)
+                    val bytes = DebugTools.query("favourites export", { "${it.size} bytes" }) { store.exportSections(format) }
                     context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
                         ?: error(resources.getString(R.string.rides_cannot_write))
                 }
@@ -244,7 +246,9 @@ fun RidesSheet(
                             ?: error(resources.getString(R.string.sections_cannot_read))
                         val bytes = input.use { readCapped(it, MAX_GPX_FILE_BYTES) }
                             ?: error(resources.getString(R.string.sections_file_too_large, MAX_GPX_FILE_BYTES shr 20))
-                        val got = store.importTracksGpx(bytes)
+                        val got = DebugTools.query("rides import", { "${it.rides.size} rides, ${it.alreadySaved} already saved" }) {
+                            store.importTracksGpx(bytes)
+                        }
                         // Each new ride named from where it went, as routes
                         // and loops are, when the map has names there.
                         val names = if (engine != null) got.rides.mapNotNull { store.nameRide(resources, engine, it) } else emptyList()
@@ -275,7 +279,9 @@ fun RidesSheet(
                         ?: error(resources.getString(R.string.sections_cannot_read))
                     val bytes = input.use { readCapped(it, MAX_IMPORT_FILE_BYTES) }
                         ?: error(resources.getString(R.string.sections_file_too_large, MAX_IMPORT_FILE_BYTES shr 20))
-                    store.importSections(bytes, engine)
+                    DebugTools.query("favourites import", { "${it.added} added, ${it.skipped} skipped, ${it.replaced} replaced, ${it.unmatched} unmatched" }) {
+                        store.importSections(bytes, engine)
+                    }
                 }
             }
             busy = false

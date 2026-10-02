@@ -324,12 +324,14 @@ fun MapScreen() {
     // The menu topic open as a page, if any.
     var dataPage by remember { mutableStateOf<DataPage?>(null) }
     LaunchedEffect(Unit) {
-        store = withContext(Dispatchers.IO) { SavedSections.open(context.applicationContext) }
+        store = withContext(Dispatchers.IO) {
+            DebugTools.startup("store open") { SavedSections.open(context.applicationContext) }
+        }
         when (val s = store) {
             is StoreState.Ready -> withContext(Dispatchers.IO) {
                 // Save a ride the app died in the middle of.
-                Recording.recover(context.applicationContext, s.store)
-                runCatching { s.store.list(null) }
+                DebugTools.startup("recording recovered") { Recording.recover(context.applicationContext, s.store) }
+                runCatching { DebugTools.startup("favourites loaded") { s.store.list(null) } }
             }
                 .onSuccess { sections = it }
                 .onFailure { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) }
@@ -636,7 +638,7 @@ fun MapScreen() {
                 withContext(Dispatchers.Default) {
                     runCatching {
                         val track = tag.trackId?.let { ready.store.trackPoints(it) }
-                        engine.suggestSection(tag, track)
+                        DebugTools.query("favourite suggestion") { engine.suggestSection(tag, track) }
                     }
                 }
             }
@@ -711,7 +713,9 @@ fun MapScreen() {
                 scope.launch {
                     val result = busy.run(R.string.busy_section) {
                         withContext(Dispatchers.Default) {
-                            runCatching { ready.engine.sectionBetween(st.start.toLatLon(), st.end.toLatLon()) }
+                            runCatching {
+                                DebugTools.query("favourite draft") { ready.engine.sectionBetween(st.start.toLatLon(), st.end.toLatLon()) }
+                            }
                         }
                     }
                     proposing = false
@@ -838,7 +842,9 @@ fun MapScreen() {
         val hidden = hiddenForGravel(sectionGravel, gravel)
         val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
         val hiddenIds = hiddenSectionIds(sections.map { it.id }, shown.map { it.id })
-        val lines = withContext(Dispatchers.Default) { runCatching { f.riddenLines(engine, hiddenIds) }.getOrDefault(emptyList()) }
+        val lines = withContext(Dispatchers.Default) { runCatching {
+                DebugTools.query("ridden roads", ::linesSummary) { f.riddenLines(engine, hiddenIds) }
+            }.getOrDefault(emptyList()) }
         o.ridden.show(lines, riddenMinZoom)
     }
     // A start picked and waiting for an end, or for "Loop from here".
@@ -1271,7 +1277,9 @@ fun MapScreen() {
                     val via = vias.map { it.toLatLon() }
                     val bothWays = routeThrough
                     if (bothWays != null) {
-                        ready.engine.roundTripVia(start.toLatLon(), via, bothWays, opts, favs)
+                        DebugTools.query("there and back", ::routesSummary) {
+                            ready.engine.roundTripVia(start.toLatLon(), via, bothWays, opts, favs)
+                        }
                     } else {
                         DebugTools.routes(start.toLatLon(), via, end.toLatLon(), opts, favs) {
                             ready.engine.routeChoices(start.toLatLon(), via, end.toLatLon(), opts, favs)
@@ -1520,7 +1528,7 @@ fun MapScreen() {
             val zone = ZoneId.systemDefault()
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val gpx = engine.routeGpx(line, gpxName, opts)
+                    val gpx = DebugTools.query("route GPX", ::bytesSummary) { engine.routeGpx(line, gpxName, opts) }
                     RouteShare.prepare(
                         context,
                         gpx,
@@ -2134,7 +2142,9 @@ fun MapScreen() {
         draftWords = null
         val line = proposed?.geometry?.takeIf { savingDraft } ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
-        draftWords = withContext(Dispatchers.Default) { runCatching { engine.describe(line) }.getOrNull() }
+        draftWords = withContext(Dispatchers.Default) { runCatching {
+            DebugTools.query("draft name", ::descriptionSummary) { engine.describe(line) }
+        }.getOrNull() }
     }
     if (savingDraft && proposed != null) {
         val tag = reviewTag
@@ -2189,8 +2199,10 @@ fun MapScreen() {
         val named = engine?.let { e ->
             withContext(Dispatchers.Default) {
                 runCatching {
-                    val far = if (isLoop) farthestPoint(r.geometry)?.let { p -> e.describe(listOf(p, p)) } else null
-                    planName(isLoop, e.describe(r.geometry), far)
+                    DebugTools.query("plan name", { n -> if (n == null) "no name" else "named" }) {
+                        val far = if (isLoop) farthestPoint(r.geometry)?.let { p -> e.describe(listOf(p, p)) } else null
+                        planName(isLoop, e.describe(r.geometry), far)
+                    }
                 }.getOrNull()
             }
         }

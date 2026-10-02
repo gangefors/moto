@@ -9,6 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import se.gangefors.moto.core.Description
+import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.PlaceKind
 import se.gangefors.moto.core.PlaceName
 import se.gangefors.moto.core.RoadLabel
@@ -76,5 +77,17 @@ class DescriptionsTest {
         )
         assertEquals(line[1], farthestPoint(line))
         assertNull(farthestPoint(emptyList()))
+    }
+
+    @Test
+    fun debugSummariesGiveCountsOnly() {
+        assertEquals("0 roads, 1 of 2 ends named", descriptionSummary(d("Aby", null)))
+        val summary = descriptionSummary(d("Aby", "Bro"))
+        assertEquals("0 roads, 2 of 2 ends named", summary)
+        assertFalse(summary.contains("Aby"))
+        val a = LatLon(55.0, 13.0)
+        assertEquals("2 lines, 3 points", linesSummary(listOf(listOf(a, a), listOf(a))))
+        assertEquals("0 lines, 0 points", linesSummary(emptyList()))
+        assertEquals("5 chars", bytesSummary("<gpx>"))
     }
 }

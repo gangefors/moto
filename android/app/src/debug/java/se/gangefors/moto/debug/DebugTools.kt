@@ -101,6 +101,9 @@ object DebugTools {
     /** Times [block], a small call into the core such as a snap. */
     fun <T> query(kind: String, block: () -> T): T = record(kind, { "" }, { "ok" }, block)
 
+    /** Times [block] like [query] and records [summary] of what it returned. */
+    fun <T> query(kind: String, summary: (T) -> String, block: () -> T): T = record(kind, { "" }, summary, block)
+
     /** Runs and records [block]; failures are recorded and rethrown. */
     private fun <T> record(kind: String, detail: () -> String, summary: (T) -> String, block: () -> T): T {
         val (record, result) = measured(kind, runCatching(detail).getOrDefault("?"), summary, block)

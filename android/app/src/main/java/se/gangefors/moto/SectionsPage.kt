@@ -49,6 +49,7 @@ import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.Engine
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.debug.DebugTools
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionRidden
@@ -67,7 +68,9 @@ object SectionDescriptions {
     /** Describes those of [sections] not yet described, and returns all
      * of theirs by line. Call off the main thread. */
     fun describeAll(engine: Engine, sections: List<Section>): Map<List<LatLon>, Description> =
-        cache.fill(engine, sections.map { it.geometry }) { line -> runCatching { engine.describe(line) }.getOrNull() }
+        DebugTools.query("favourite names", { "${sections.size} favourites, ${it.size} described" }) {
+            cache.fill(engine, sections.map { it.geometry }) { line -> runCatching { engine.describe(line) }.getOrNull() }
+        }
 }
 
 /** A section's title: the rider's name for it, else where it runs

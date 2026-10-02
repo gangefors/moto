@@ -48,6 +48,8 @@ object DebugTools {
 
     fun <T> query(kind: String, block: () -> T): T = block()
 
+    fun <T> query(kind: String, summary: (T) -> String, block: () -> T): T = block()
+
     fun rideEnded(context: Context, km: Double, minutes: Int, batteryPerHour: Double?) = Unit
 
     @Composable
