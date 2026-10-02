@@ -84,5 +84,5 @@ A changes only what pulls, so routes stay sensible around home where every road 
 - [x] Core: ridden bits in the overlay; `unridden` route option and `ridden_worth`; `unridden_share` on routes and loops; unit tests (e5657b8).
 - [x] Golden: rides in the runner, cases 48–50 (made-up rides), and a sweep of `ridden_worth` (d24d995): at 0.2 or less some routes fall back to dull roads, at 0.5 a ridden road is kept where another curvy way was as quick; 0.3 kept.
 - [x] FFI and app: the option, the setting in Ride settings and on the sheets, the figure, the chip, the help key, `ic_unridden`; rebuild the overlay when rides change (274fbf6).
-- [ ] Phone: plan in an area with several rides, Any against Prefer.
+- [x] Phone: plan in an area with several rides, Any against Prefer (Stefan, 2026-10-01: far more unridden road with Prefer).
 - [x] Ridden roads on the map: lines from the core (less drawn favourites), the dashed layer, the switch, the How to use line (6cbe091, 981f4e3); long lines and dashes per zoom (b777b46, 46ce568); under the route (1d67bdc); the button while planning (e5d73c3).
