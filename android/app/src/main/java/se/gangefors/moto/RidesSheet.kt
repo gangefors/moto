@@ -201,6 +201,8 @@ fun RidesSheet(
     var formatMenu by remember { mutableStateOf(false) }
     var libraryMenu by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    // The report of the last import, until OK.
+    var importReport by remember { mutableStateOf<ImportReportContent?>(null) }
     val saveSections = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri: Uri? ->
@@ -235,6 +237,7 @@ fun RidesSheet(
         scope.launch {
             val results = withContext(Dispatchers.IO) {
                 uris.map { uri ->
+                    val name = shownFileName(displayName(context.contentResolver, uri), resources.getString(R.string.rides_import_unnamed))
                     runCatching {
                         val input = context.contentResolver.openInputStream(uri)
                             ?: error(resources.getString(R.string.sections_cannot_read))
@@ -243,22 +246,22 @@ fun RidesSheet(
                         val got = store.importTracksGpx(bytes)
                         // Each new ride named from where it went, as routes
                         // and loops are, when the map has names there.
-                        if (engine != null) got.rides.forEach { store.nameRide(resources, engine, it) }
-                        RideImport.Imported(got.rides.map { it.distanceM }, got.alreadySaved.toInt())
-                    }.getOrElse {
-                        RideImport.Failed(
-                            shownFileName(displayName(context.contentResolver, uri), resources.getString(R.string.rides_import_unnamed)),
-                            it.message ?: it.toString(),
-                        )
-                    }
+                        val names = if (engine != null) got.rides.mapNotNull { store.nameRide(resources, engine, it) } else emptyList()
+                        RideImport.Imported(name, got.rides.map { it.distanceM }, got.alreadySaved.toInt(), names)
+                    }.getOrElse { RideImport.Failed(name, it.message ?: it.toString()) }
                 }
             }
             busy = false
             reload()
             val summary = rideImportSummary(results)
             if (summary.imported > 0) RideChanges.changed()
-            val (text, ok) = rideImportMessage(resources, summary, results)
-            if (ok) done(text) else failed(text)
+            if (rideImportNeedsReport(results)) {
+                importReport = rideImportReport(resources, results)
+            } else if (summary.imported == 0) {
+                done(resources.getQuantityString(R.plurals.rides_import_all_saved, summary.alreadySaved, summary.alreadySaved))
+            } else {
+                done(resources.getQuantityString(R.plurals.rides_imported_many, summary.imported, summary.imported, summary.km))
+            }
         }
     }
     val openSections = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -411,6 +414,7 @@ fun RidesSheet(
             if (page == DataPage.REGION) item(key = "region") { RegionSection() }
         }
     }
+    importReport?.let { ImportReportDialog(it, onDismiss = { importReport = null }) }
     renaming?.let { item ->
         RouteNameDialog(
             title = stringResource(
@@ -462,32 +466,55 @@ private fun displayName(resolver: android.content.ContentResolver, uri: Uri): St
     }
 }.getOrNull()
 
-/** The message after a ride import, and whether all went well: the rides
- * imported and their km, those left out as already saved, and the files
- * not imported, each with why (one file: just why). */
-private fun rideImportMessage(
-    res: android.content.res.Resources,
-    s: RideImportSummary,
-    results: List<RideImport>,
-): Pair<String, Boolean> {
-    val only = results.singleOrNull()
-    if (only is RideImport.Failed) return res.getString(R.string.rides_import_failed, only.reason) to false
-    val already = s.alreadySaved.takeIf { it > 0 }?.let {
-        res.getQuantityString(R.plurals.rides_import_already, it, it)
-    }
-    fun withAlready(text: String) = already?.let { res.getString(R.string.rides_import_and, text, it) } ?: text
-    if (s.failed.isEmpty()) {
-        if (s.imported == 0) return res.getQuantityString(R.plurals.rides_import_all_saved, s.alreadySaved, s.alreadySaved) to true
-        return withAlready(res.getQuantityString(R.plurals.rides_imported_many, s.imported, s.imported, s.km)) to true
-    }
-    val listed = s.failed.joinToString("; ") { res.getString(R.string.rides_import_file_failed, it.name, it.reason) }
-    val failures = if (s.moreFailed > 0) res.getString(R.string.rides_import_more, listed, s.moreFailed) else listed
-    val text = if (s.imported == 0) {
-        res.getString(R.string.rides_import_none, failures)
-    } else {
-        res.getQuantityString(R.plurals.rides_imported_some, s.imported, s.imported, s.km, failures)
-    }
-    return withAlready(text) to false
+/** The report of a ride import (mockup Import GPX report): a summary,
+ * then the files not imported (each with why), those with rides already
+ * in the app, and those imported with the names their rides got. */
+private fun rideImportReport(res: android.content.res.Resources, results: List<RideImport>): ImportReportContent {
+    val s = rideImportSummary(results)
+    val g = rideImportGroups(results)
+    val summary = listOfNotNull(
+        s.imported.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.rides_report_imported, it, it, s.km) },
+        s.alreadySaved.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.rides_report_already, it, it) },
+        s.failed.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.rides_report_failed, it, it) },
+    ).joinToString(" · ")
+    return ImportReportContent(
+        title = res.getString(R.string.rides_import_title),
+        summary = summary,
+        groups = listOf(
+            ReportGroup(
+                res.getString(R.string.report_not_imported, g.failed.size),
+                error = true,
+                rows = g.failed.map { ReportRow(it.name, it.reason) },
+            ),
+            ReportGroup(
+                res.getString(R.string.report_already, g.alreadySaved.size),
+                error = false,
+                rows = g.alreadySaved.map { f ->
+                    val total = f.alreadySaved + f.distancesM.size
+                    ReportRow(
+                        f.name,
+                        if (total == f.alreadySaved) {
+                            res.getQuantityString(R.plurals.rides_report_rides, total, total)
+                        } else {
+                            res.getQuantityString(R.plurals.rides_report_some_saved, total, f.alreadySaved, total)
+                        },
+                    )
+                },
+            ),
+            ReportGroup(
+                res.getString(R.string.report_imported, g.imported.size),
+                error = false,
+                rows = g.imported.map { f ->
+                    val n = f.distancesM.size
+                    ReportRow(
+                        f.name,
+                        res.getQuantityString(R.plurals.rides_report_rides_km, n, n, sectionKm(f.distancesM.sum())),
+                        f.rideNames.takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                    )
+                },
+            ),
+        ),
+    )
 }
 
 private fun importSummary(res: android.content.res.Resources, r: ImportReport): String {

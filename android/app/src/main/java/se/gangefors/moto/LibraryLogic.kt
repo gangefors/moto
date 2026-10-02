@@ -54,40 +54,73 @@ fun filterLibrary(items: List<LibraryItem>, filter: LibraryFilter): List<Library
  * 2026-10-01): a bound on the work a single pick can start. */
 const val MAX_GPX_FILES = 100
 
-/** What became of one file of a ride import: rides of
- * [Imported.distancesM] metres (one per track segment) and how many of
- * its rides were already saved ([Imported.alreadySaved]), or nothing,
- * with the file's [Failed.name] and why. */
+/** What became of one file ([name], as shown) of a ride import: rides of
+ * [Imported.distancesM] metres (one per track segment) named
+ * [Imported.rideNames] (where a name was found), and how many of its
+ * rides were already saved ([Imported.alreadySaved]); or nothing, and
+ * why ([Failed.reason]). */
 sealed interface RideImport {
-    data class Imported(val distancesM: List<Double>, val alreadySaved: Int = 0) : RideImport
-    data class Failed(val name: String, val reason: String) : RideImport
+    val name: String
+
+    data class Imported(
+        override val name: String,
+        val distancesM: List<Double>,
+        val alreadySaved: Int = 0,
+        val rideNames: List<String> = emptyList(),
+    ) : RideImport
+
+    data class Failed(override val name: String, val reason: String) : RideImport
 }
 
-/** A ride import in numbers, for its message: [imported] rides from
- * [files] files, [km] in all, [alreadySaved] rides left out as already
- * saved, the first [failed] files not imported and how many more
- * ([moreFailed]). */
+/** A ride import in numbers: [imported] rides from [files] files, [km] in
+ * all, [alreadySaved] rides left out as already saved, and [failed]
+ * files not imported. */
 data class RideImportSummary(
     val imported: Int,
     val files: Int,
     val km: Double,
     val alreadySaved: Int,
-    val failed: List<RideImport.Failed>,
-    val moreFailed: Int,
+    val failed: Int,
 )
 
-/** Sums up [results], one per file in the order picked, listing at most
- * [listed] of the files not imported. */
-fun rideImportSummary(results: List<RideImport>, listed: Int = 3): RideImportSummary {
+/** Sums up [results], one per file in the order picked. */
+fun rideImportSummary(results: List<RideImport>): RideImportSummary {
     val imported = results.filterIsInstance<RideImport.Imported>()
-    val failed = results.filterIsInstance<RideImport.Failed>()
     return RideImportSummary(
         imported = imported.sumOf { it.distancesM.size },
         files = results.size,
         km = sectionKm(imported.sumOf { it.distancesM.sum() }),
         alreadySaved = imported.sumOf { it.alreadySaved },
-        failed = failed.take(listed),
-        moreFailed = (failed.size - listed).coerceAtLeast(0),
+        failed = results.count { it is RideImport.Failed },
+    )
+}
+
+/** Whether an import gets the report dialog (mockup Import GPX report)
+ * rather than the short message: when a file was not imported, or rides
+ * were left out as already saved, except a single file whose rides were
+ * all already saved ("That ride is already in the app" says it all). */
+fun rideImportNeedsReport(results: List<RideImport>): Boolean {
+    val s = rideImportSummary(results)
+    if (s.failed > 0) return true
+    if (s.alreadySaved == 0) return false
+    return !(s.files == 1 && s.imported == 0)
+}
+
+/** The files of an import for the report, in the order picked: those not
+ * imported, those with rides already saved, and those with rides
+ * imported (a file can be in the last two). */
+data class RideImportGroups(
+    val failed: List<RideImport.Failed>,
+    val alreadySaved: List<RideImport.Imported>,
+    val imported: List<RideImport.Imported>,
+)
+
+fun rideImportGroups(results: List<RideImport>): RideImportGroups {
+    val read = results.filterIsInstance<RideImport.Imported>()
+    return RideImportGroups(
+        failed = results.filterIsInstance<RideImport.Failed>(),
+        alreadySaved = read.filter { it.alreadySaved > 0 },
+        imported = read.filter { it.distancesM.isNotEmpty() },
     )
 }
 
