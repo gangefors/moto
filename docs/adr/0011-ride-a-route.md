@@ -89,5 +89,5 @@ A gives a ride in one app with what matters for a fun-roads route (progress, fav
 - [x] Store: schema 8 (the followed route, segment breaks); distance, ride matching, ridden stats and GPX export honour breaks; tests (09c552a).
 - [x] FFI and bindings (4a0d82f).
 - [x] App: service, state, alert channel, notification text, Ride settings; ride screen (camera, compass, route look, card, Recentre, end countdown, carrying on); Ride buttons (sheet, saved route card), Shuffle icon-only, How to use topic, `ic_navigation`, debug timings; shown rides drawn by segment (128abd5).
-- [ ] Saved routes keep only their line, so riding one shows no favourite rows: keep their favourite parts when saving (later).
+- [x] Saved routes keep only their line: their favourite parts are worked out from the favourites as they are now when shown or ridden (Stefan, 2026-10-02: no stored parts to update when favourites change), and glow on the map too (`favourite_parts_along`).
 - [ ] Phone: a loop with a deliberate wrong turn, the screen off, forest, the finish; carrying on after force-stopping the app.
