@@ -46,10 +46,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.SavedRoute
 
 /** A saved route drawn on the map, and its line. */
-data class ShownSavedRoute(val route: SavedRoute, val line: List<LatLon>)
+data class ShownSavedRoute(
+    val route: SavedRoute,
+    val line: List<LatLon>,
+    /** Its stretches on favourite sections as they are now (ADR-0011),
+     * worked out once it shows, and again when the favourites change. */
+    val favouriteParts: List<List<LatLon>> = emptyList(),
+    val favouriteRatings: List<Rating> = emptyList(),
+)
 
 /**
  * Asks for a route's name, starting from [initial]. Save is offered once
