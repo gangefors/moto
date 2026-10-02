@@ -1257,6 +1257,25 @@ fun MapScreen() {
         overlays?.route?.show(null, null, null)
     }
 
+    /** Before a saved route or ride is shown from Routes & rides: what
+     * else was on the map goes (a plan, a picked start, a shown section,
+     * route or ride, and the road's and a favourite's cards), so its card
+     * is the only one. */
+    fun clearForShown() {
+        if (routeEnds != null) closeRoute()
+        if (loopStart != null) closeLoop()
+        startPicked = null
+        picker.reset()
+        message = null
+        hideSection()
+        shownSaved = null
+        shownRide = null
+        roadInfo = null
+        overlays?.snap?.clear()
+        favouriteInfoId = null
+        overlays?.route?.show(null, null, null)
+    }
+
     /** Rides [route] (ADR-0011): planning ends, recording starts (or the
      * ride being recorded follows it), asking for the permissions first. */
     fun beginRide(route: RideRoute) {
@@ -2611,12 +2630,7 @@ fun MapScreen() {
                     if (line.isNullOrEmpty()) {
                         notify(resources.getString(R.string.rides_gone), long = true)
                     } else {
-                        routeEnds = null
-                        loopStart = null
-                        startPicked = null
-                        picker.reset()
-                        // One card at a time: the route replaces a shown ride.
-                        shownRide = null
+                        clearForShown()
                         shownSaved = ShownSavedRoute(saved, line)
                         val start = LatLng(line.first().lat, line.first().lon)
                         val end = if (saved.isLoop) null else LatLng(line.last().lat, line.last().lon)
@@ -2636,11 +2650,7 @@ fun MapScreen() {
                     if (line.isNullOrEmpty()) {
                         notify(resources.getString(R.string.rides_gone), long = true)
                     } else {
-                        // One card at a time: the ride replaces a shown route.
-                        if (shownSaved != null) {
-                            shownSaved = null
-                            overlays?.route?.show(null, null, null)
-                        }
+                        clearForShown()
                         shownRide = ShownRide(track, line, segments)
                         showOnMap(listOf(line), always = true)
                     }
