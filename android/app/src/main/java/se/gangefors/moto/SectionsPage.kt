@@ -267,7 +267,6 @@ private fun sortLabel(s: SectionSort): Int = when (s) {
     SectionSort.RATING -> R.string.sort_rating
     SectionSort.LENGTH -> R.string.sort_length
     SectionSort.CURVY -> R.string.sort_curvy
-    SectionSort.NEWEST -> R.string.sort_newest
     SectionSort.NEAREST -> R.string.sort_nearest
     SectionSort.LONGEST_UNRIDDEN -> R.string.sort_longest_unridden
 }
