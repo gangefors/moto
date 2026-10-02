@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 mod exchange;
+mod follow;
 mod regions;
 mod road;
 mod routes;
@@ -17,6 +18,7 @@ mod sections;
 mod tags;
 mod tracks;
 pub use exchange::*;
+pub use follow::*;
 pub use regions::*;
 pub use road::*;
 pub use routes::*;
