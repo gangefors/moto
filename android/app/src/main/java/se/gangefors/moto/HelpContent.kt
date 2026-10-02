@@ -65,8 +65,8 @@ val HELP_TOPICS = listOf(
     HelpTopic(
         HelpTopicId.PLAN, R.string.help_plan_title, R.string.help_plan,
         keys = listOf(
-            HelpKey("directions", R.string.help_key_route_here, R.string.help_key_route_here_what),
             HelpKey("loop", R.string.help_key_loop_here, R.string.help_key_loop_here_what),
+            HelpKey("directions", R.string.help_key_route_here, R.string.help_key_route_here_what),
             HelpKey("share", R.string.help_key_share, R.string.help_key_share_what),
             HelpKey("save", R.string.help_key_save, R.string.help_key_save_what),
             HelpKey("ridden_button", R.string.help_key_ridden_button, R.string.help_key_ridden_button_what),
