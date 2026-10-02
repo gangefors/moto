@@ -539,3 +539,9 @@ private fun settingItems(gravel: Gravel, favourites: FavouritesMode, unridden: U
  * drop its tile cache: only once the app is in the background and the
  * system wants memory back, never while the rider looks at the map. */
 fun dropsMapCaches(level: Int): Boolean = level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+
+/** How far below the safe area's top the map's compass sits, dp: under
+ * Ride settings' round button (8 dp from the top, 48 dp, then the same
+ * 8 dp gap the notices keep) when it shows ([settingsButtonShown]),
+ * else 8 dp from the top, in its place. */
+fun compassTopDp(settingsButtonShown: Boolean): Float = if (settingsButtonShown) 8f + 48f + 8f else 8f
