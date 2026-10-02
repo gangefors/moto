@@ -380,12 +380,11 @@ class RideOverlay(style: Style, darkMap: Boolean = false) {
         }
     }
 
-    /** Shows [line], or nothing when it is null or a single point. */
-    fun show(line: List<LatLon>?) {
-        val features = if (line != null && line.size >= 2) {
-            listOf(Feature.fromGeometry(LineString.fromLngLats(line.map { Point.fromLngLat(it.lon, it.lat) })))
-        } else {
-            emptyList()
+    /** Shows [lines] (a ride's segments), or nothing; single points are
+     * left out. */
+    fun show(lines: List<List<LatLon>>?) {
+        val features = lines.orEmpty().filter { it.size >= 2 }.map { line ->
+            Feature.fromGeometry(LineString.fromLngLats(line.map { Point.fromLngLat(it.lon, it.lat) }))
         }
         source.setGeoJson(FeatureCollection.fromFeatures(features))
     }

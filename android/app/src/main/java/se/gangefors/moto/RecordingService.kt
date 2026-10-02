@@ -28,9 +28,15 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import java.io.File
+import se.gangefors.moto.core.FollowFix
+import se.gangefors.moto.core.FollowPhase
+import se.gangefors.moto.core.FollowState
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.RouteFollower
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.TrackPoint
+import se.gangefors.moto.core.defaultRouteOptions
+import se.gangefors.moto.debug.DebugTools
 
 /**
  * Records a ride (PRD R4) as a foreground service of type location with a
@@ -42,7 +48,14 @@ import se.gangefors.moto.core.TrackPoint
  * If the system kills the process mid-ride, the service is not restarted
  * (Android does not let a location service start itself from the
  * background); the next app start saves what was buffered and ends the
- * track ([Recording.recover]). Not exported: only this app can start it.
+ * track ([Recording.recover]), or, for a ride following a route, asks the
+ * rider whether to carry on into it. Not exported: only this app can
+ * start it.
+ *
+ * Riding a route (ADR-0011): each fix also goes to the core's
+ * [RouteFollower]; the state reaches the map screen with the recording's,
+ * an alert sounds when the rider leaves the route, and the recording
+ * stops by itself [FINISH_COUNTDOWN_MS] after the end.
  */
 class RecordingService : Service() {
     private lateinit var thread: HandlerThread
@@ -64,6 +77,22 @@ class RecordingService : Service() {
         var lastPublishAt = 0L
         var gotFix = false
         var lastFix: TrackPoint? = null
+        var follow: Follow? = null
+    }
+
+    /** A route being ridden in a [Session]. */
+    private class Follow(val route: RideRoute, val follower: RouteFollower) {
+        var state: FollowState = follower.state()
+        var back: List<LatLon>? = null
+        var backM: Double? = null
+        var turnRound = false
+        var askedAt: Long? = null
+        var alertedAt: Long? = null
+        var stopsAt: Long? = null
+        var fixes = 0L
+        var updateNs = 0L
+        var maxUpdateNs = 0L
+        var offTimes = 0
     }
 
     private val policy = FlushPolicy()
@@ -80,15 +109,22 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> start()
+            ACTION_START -> start(resume = null)
+            ACTION_RESUME -> start(resume = intent.getLongExtra(EXTRA_TRACK, -1).takeIf { it >= 0 })
+            ACTION_FOLLOW -> handler.post { Recording.takeRequest()?.let { r -> session?.let { follow(it, r) } } }
+            ACTION_UNFOLLOW -> handler.post { session?.let { unfollow(it) } }
             ACTION_STOP -> handler.post { stop() }
             else -> stopSelf() // e.g. a restart with no intent
         }
         return START_NOT_STICKY
     }
 
-    private fun start() {
-        if (started) return
+    private fun start(resume: Long?) {
+        if (started) {
+            // Already recording: Ride follows the route on the same ride.
+            handler.post { Recording.takeRequest()?.let { r -> session?.let { follow(it, r) } } }
+            return
+        }
         if (!hasLocationPermission()) {
             Recording.set(Recording.State.Failed(getString(R.string.recording_no_permission)))
             stopSelf()
@@ -102,11 +138,11 @@ class RecordingService : Service() {
             notification(getString(R.string.recording_waiting)),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0,
         )
-        handler.post { begin() }
+        handler.post { begin(resume) }
     }
 
     @SuppressLint("MissingPermission") // Checked in start().
-    private fun begin() {
+    private fun begin(resume: Long?) {
         val store = (SavedSections.open(applicationContext) as? StoreState.Ready)?.store
         if (store == null) {
             fail(getString(R.string.recording_no_store))
@@ -116,12 +152,23 @@ class RecordingService : Service() {
             // Under the recovery lock, so a recovery started by the map screen
             // can't finish this track before it shows as active.
             val s = synchronized(Recording) {
-                // Save what an earlier, interrupted ride left behind first.
-                Recording.recover(applicationContext, store)
-                val track = store.startTrack()
+                // Save what an earlier, interrupted ride left behind first;
+                // a new recording finishes one that waited to carry on.
+                Recording.recover(applicationContext, store, finishFollowed = resume == null, keep = resume)
+                Recording.answered()
+                val reopened = resume?.let { id -> store.getTrack(id)?.takeIf { it.endedAt == null } }
+                val track = reopened ?: store.startTrack()
+                // Carrying on: the fixes from now on are a new segment.
+                if (reopened != null) store.breakTrack(track.id)
                 val file = File(Recording.bufferDir(applicationContext), PointBuffer.fileName(track.id))
                 Session(store, track.id, PointBuffer(file)).also {
                     session = it
+                    val route = if (reopened != null) {
+                        runCatching { store.followedRoute(track.id)?.toRideRoute() }.getOrNull()
+                    } else {
+                        Recording.takeRequest()
+                    }
+                    if (route != null) follow(it, route)
                     publish(it, force = true)
                 }
             }
@@ -153,7 +200,150 @@ class RecordingService : Service() {
         s.pending += fix
         s.progress.add(fix.position)
         if (policy.due(s.pending.size, SystemClock.elapsedRealtime() - s.oldestPendingAt)) flush(s)
-        publish(s, force = false)
+        val followed = s.follow?.let { onFollowFix(s, it, fix) } == true
+        publish(s, force = followed)
+    }
+
+    /** Starts following [route] on the ride [s] records; kept in the store
+     * until the ride ends, so it survives Android stopping the app. */
+    private fun follow(s: Session, route: RideRoute) {
+        try {
+            val follower = RouteFollower(route.line, route.favouriteParts, route.favouriteRatings, route.durationS)
+            s.store.setFollowedRoute(s.trackId, route.toFollowed())
+            s.follow?.let { endFollow(s, it) }
+            s.follow = Follow(route, follower)
+            publish(s, force = true)
+        } catch (e: Exception) {
+            Log.w(TAG, "could not follow the route: ${e.message}")
+            Recording.set(Recording.State.Failed(e.message ?: e.toString()))
+        }
+    }
+
+    /** Stops following, keeps recording (the card's X). */
+    private fun unfollow(s: Session) {
+        val f = s.follow ?: return
+        endFollow(s, f)
+        s.follow = null
+        runCatching { s.store.clearFollowedRoute(s.trackId) }
+        publish(s, force = true)
+    }
+
+    private fun endFollow(s: Session, f: Follow) {
+        cancelAlert()
+        if (f.fixes > 0) {
+            DebugTools.mark(
+                "follow: ${f.fixes} fixes, ${f.updateNs / f.fixes / 1000} µs mean, " +
+                    "${f.maxUpdateNs / 1000} µs max, off the route ${f.offTimes} times",
+            )
+        }
+        if (s.follow === f) f.stopsAt = null
+    }
+
+    /** One fix for the route being ridden; true when the state changed. */
+    private fun onFollowFix(s: Session, f: Follow, fix: TrackPoint): Boolean {
+        val t0 = SystemClock.elapsedRealtimeNanos()
+        val next = try {
+            f.follower.update(FollowFix(fix.position, fix.timeMs, fix.accuracyM, fix.speedMps, fix.bearingDeg))
+        } catch (e: Exception) {
+            Log.w(TAG, "follow update failed: ${e.message}")
+            return false
+        }
+        val ns = SystemClock.elapsedRealtimeNanos() - t0
+        f.fixes++
+        f.updateNs += ns
+        f.maxUpdateNs = maxOf(f.maxUpdateNs, ns)
+        val before = f.state.phase
+        f.state = next
+        val now = System.currentTimeMillis()
+        when {
+            next.phase == FollowPhase.OFF_ROUTE && before != FollowPhase.OFF_ROUTE -> {
+                f.offTimes++
+                if (RoutePrefs.offRouteAlert(applicationContext)) alert(f, sound = alertDue(f.alertedAt, now))
+                f.alertedAt = now
+            }
+            next.phase == FollowPhase.ON_ROUTE && before == FollowPhase.OFF_ROUTE -> cancelAlert()
+            next.phase == FollowPhase.FINISHED && f.stopsAt == null -> {
+                cancelAlert()
+                f.stopsAt = now + FINISH_COUNTDOWN_MS
+                handler.postDelayed({ if (session === s && s.follow === f && f.stopsAt != null) stop() }, FINISH_COUNTDOWN_MS)
+            }
+        }
+        if (next.phase == FollowPhase.ON_ROUTE || next.phase == FollowPhase.FINISHED) {
+            f.back = null
+            f.backM = null
+            f.turnRound = false
+        } else if (next.phase == FollowPhase.JOINING && next.offM?.let { it <= JOIN_LINE_M } == true) {
+            f.back = null
+            f.backM = null
+        }
+        if (rejoinDue(next, f.askedAt, now)) {
+            f.askedAt = now
+            askWayBack(f, fix)
+            if (next.phase == FollowPhase.OFF_ROUTE && RoutePrefs.offRouteAlert(applicationContext)) alert(f, sound = false)
+        }
+        return true
+    }
+
+    /** The way back to the route from [fix], if a map is open. */
+    private fun askWayBack(f: Follow, fix: TrackPoint) {
+        val engine = (Regions.active.value.state as? RegionState.Ready)?.engine ?: return
+        val opts = routeOptions(
+            defaultRouteOptions(),
+            ROUTE_EXTRA_PERCENT,
+            RoutePrefs.gravel(applicationContext),
+            RoutePrefs.avoid(applicationContext),
+        )
+        val back = try {
+            DebugTools.query("way back", { "${sectionKm(it.route.distanceM)} km, turn round ${it.turnRound}" }) {
+                engine.rejoin(fix.position, fix.bearingDeg, f.follower, opts)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "no way back: ${e.message}")
+            return
+        }
+        f.back = back.route.geometry
+        f.backM = back.route.distanceM
+        f.turnRound = back.turnRound
+    }
+
+    /** The off-route alert: a notification of its own, with the channel's
+     * sound (no vibration: the phone is in a holder); [sound] false
+     * updates it silently. */
+    private fun alert(f: Follow, sound: Boolean) {
+        val nm = getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(ALERT_CHANNEL) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(ALERT_CHANNEL, getString(R.string.ride_off_channel), NotificationManager.IMPORTANCE_HIGH).apply {
+                    enableVibration(false)
+                },
+            )
+        }
+        val open = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(this, ALERT_CHANNEL)
+            .setSmallIcon(R.drawable.ic_navigation)
+            .setContentTitle(getString(R.string.ride_off_title))
+            .setContentText(offText(f))
+            .setContentIntent(open)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSilent(!sound)
+            .setOnlyAlertOnce(!sound)
+            .build()
+        nm.notify(ALERT_ID, n)
+    }
+
+    private fun offText(f: Follow): String {
+        val m = f.backM ?: return getString(R.string.ride_off_follow)
+        return getString(if (f.turnRound) R.string.ride_off_turn_round else R.string.ride_off_back_in, rideKm(m))
+    }
+
+    private fun cancelAlert() {
+        getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
     }
 
     /** Hands the pending fixes to the core, then empties the buffer file. */
@@ -177,6 +367,7 @@ class RecordingService : Service() {
         }
         getSystemService(LocationManager::class.java).removeUpdates(listener)
         flush(s)
+        s.follow?.let { endFollow(s, it) }
         session = null
         try {
             if (s.pending.isNotEmpty()) {
@@ -217,6 +408,9 @@ class RecordingService : Service() {
         val now = SystemClock.elapsedRealtime()
         if (!force && now - s.lastPublishAt < PUBLISH_INTERVAL_MS) return
         s.lastPublishAt = now
+        val following = s.follow?.let {
+            Following(it.route, it.state, it.back, it.backM, it.turnRound, it.stopsAt)
+        }
         Recording.set(
             Recording.State.Active(
                 trackId = s.trackId,
@@ -225,9 +419,14 @@ class RecordingService : Service() {
                 line = s.progress.line,
                 waitingForGps = !s.gotFix,
                 lastFix = s.lastFix,
+                following = following,
             ),
         )
-        val text = if (s.gotFix) {
+        val text = if (following != null && s.gotFix && following.state.phase != FollowPhase.JOINING) {
+            val arrive = android.text.format.DateFormat.getTimeFormat(this)
+                .format(java.util.Date(System.currentTimeMillis() + (following.state.leftS * 1000).toLong()))
+            getString(R.string.ride_progress, following.route.name, rideKm(following.state.leftM), arrive)
+        } else if (s.gotFix) {
             getString(R.string.recording_progress, sectionKm(s.progress.distanceM), formatDuration(now - s.startedElapsed))
         } else {
             getString(R.string.recording_waiting)
@@ -288,8 +487,14 @@ class RecordingService : Service() {
     companion object {
         private const val ACTION_START = "se.gangefors.moto.action.START_RECORDING"
         private const val ACTION_STOP = "se.gangefors.moto.action.STOP_RECORDING"
+        private const val ACTION_RESUME = "se.gangefors.moto.action.RESUME_RECORDING"
+        private const val ACTION_FOLLOW = "se.gangefors.moto.action.FOLLOW_ROUTE"
+        private const val ACTION_UNFOLLOW = "se.gangefors.moto.action.UNFOLLOW_ROUTE"
+        private const val EXTRA_TRACK = "track"
         private const val CHANNEL = "recording"
+        private const val ALERT_CHANNEL = "off_route"
         private const val NOTIFICATION_ID = 1
+        private const val ALERT_ID = 2
         private const val FIX_INTERVAL_MS = 1_000L
         private const val PUBLISH_INTERVAL_MS = 3_000L
         private const val TAG = "moto"
@@ -299,6 +504,31 @@ class RecordingService : Service() {
                 context,
                 Intent(context, RecordingService::class.java).setAction(ACTION_START),
             )
+        }
+
+        /** Records a ride following [route]: a new one, or the one being
+         * recorded (ADR-0011). */
+        fun ride(context: Context, route: RideRoute) {
+            Recording.request(route)
+            if (Recording.activeTrackId != null) {
+                context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_FOLLOW))
+            } else {
+                start(context)
+            }
+        }
+
+        /** Carries on ride [trackId], left open when Android stopped the
+         * app, following its route again. */
+        fun resume(context: Context, trackId: Long) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, RecordingService::class.java).setAction(ACTION_RESUME).putExtra(EXTRA_TRACK, trackId),
+            )
+        }
+
+        /** Stops following the route; the ride records on. */
+        fun unfollow(context: Context) {
+            context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_UNFOLLOW))
         }
 
         fun stop(context: Context) {

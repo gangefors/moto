@@ -46,6 +46,8 @@ data class RideSettings(
     val zooms: LocateZooms,
     val keepScreenOn: Boolean,
     val showRidden: Boolean = false,
+    val turnMap: Boolean = true,
+    val offRouteAlert: Boolean = true,
 )
 
 /**
@@ -109,6 +111,18 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
                 stringResource(R.string.settings_keep_screen_on),
                 stringResource(R.string.settings_keep_screen_on_hint),
             ) { onChange(settings.copy(keepScreenOn = it)) }
+
+            SettingsGroup(stringResource(R.string.settings_group_riding))
+            SwitchRow(
+                settings.turnMap,
+                stringResource(R.string.settings_turn_map),
+                stringResource(R.string.settings_turn_map_hint),
+            ) { onChange(settings.copy(turnMap = it)) }
+            SwitchRow(
+                settings.offRouteAlert,
+                stringResource(R.string.settings_off_alert),
+                stringResource(R.string.settings_off_alert_hint),
+            ) { onChange(settings.copy(offRouteAlert = it)) }
         }
     }
 }
