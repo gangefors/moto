@@ -14,3 +14,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0008](0008-region-download.md) | Region download — built in CI, published as GitHub release files, installed by the core | Accepted | 2026-09-27 |
 | [0009](0009-linked-regions.md) | Linked regions — one file per country, joined on the phone at the borders | Accepted | 2026-09-29 |
 | [0010](0010-unridden-roads.md) | Unridden roads — rides as a query-time overlay that makes ridden curvy roads pull less | Accepted | 2026-10-01 |
+| [0011](0011-ride-a-route.md) | Ride a route — follow a route in the app with progress and an off-route alert, no turn-by-turn | Accepted | 2026-10-02 |
