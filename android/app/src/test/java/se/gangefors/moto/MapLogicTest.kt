@@ -305,6 +305,16 @@ class MapLogicTest {
     }
 
     @Test
+    fun theRiddenRoadsButtonChoosesForThePlanOnly() {
+        // Not pressed: the setting.
+        assertTrue(riddenShown(setting = true, whilePlanning = null))
+        assertFalse(riddenShown(setting = false, whilePlanning = null))
+        // Pressed: its choice, whatever the setting.
+        assertTrue(riddenShown(setting = false, whilePlanning = true))
+        assertFalse(riddenShown(setting = true, whilePlanning = false))
+    }
+
+    @Test
     fun theRiddenRoadsButtonShowsWhilePlanningNearEnough() {
         val min = 7.8f
         assertTrue(riddenButtonShown(planning = true, sheetExpanded = false, hasRidden = true, zoom = 10f, minZoom = min))

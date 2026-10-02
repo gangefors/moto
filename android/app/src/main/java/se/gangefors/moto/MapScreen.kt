@@ -460,6 +460,10 @@ fun MapScreen() {
     var keepScreenOn by remember { mutableStateOf(RoutePrefs.keepScreenOn(context)) }
     // The roads the rides have been on, drawn as dashes (ADR-0010).
     var showRidden by remember { mutableStateOf(RoutePrefs.showRidden(context)) }
+    // The ridden roads button's choice while a route or loop is planned:
+    // for that plan only, never saved; null follows the setting.
+    var riddenWhilePlanning by remember { mutableStateOf<Boolean?>(null) }
+    val riddenOn = riddenShown(showRidden, riddenWhilePlanning)
     // Sections that no longer fit the map are hidden unless the rider asks.
     // Quick-tags waiting for review, and the review in progress (it runs in
     // "mark section" mode, starting from each tag's suggested section).
@@ -810,11 +814,11 @@ fun MapScreen() {
         val f = favourites
         hasRidden = f != null && withContext(Dispatchers.Default) { runCatching { f.riddenEdgeCount() > 0u }.getOrDefault(false) }
     }
-    LaunchedEffect(overlays, favourites, sections, sectionGravel, gravel, showRidden) {
+    LaunchedEffect(overlays, favourites, sections, sectionGravel, gravel, riddenOn) {
         val o = overlays ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine
         val f = favourites
-        if (!showRidden || engine == null || f == null) {
+        if (!riddenOn || engine == null || f == null) {
             o.ridden.show(emptyList(), 0f)
             return@LaunchedEffect
         }
@@ -959,6 +963,8 @@ fun MapScreen() {
     // The map's own controls (compass, logo, attribution) stay clear of
     // the system bars, the buttons and the sheet.
     val riddenButton = riddenButtonShown(planning, cardExpanded, hasRidden, mapZoom, riddenMinZoom)
+    // Planning over: the ridden roads follow the setting again.
+    LaunchedEffect(planning) { if (!planning) riddenWhilePlanning = null }
     LaunchedEffect(map, insets, planning, sheetTop, mapSize, riddenButton) {
         val m = map ?: return@LaunchedEffect
         val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
@@ -1667,11 +1673,8 @@ fun MapScreen() {
                 if (sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
             }
             RiddenButton(
-                on = showRidden,
-                onChange = {
-                    showRidden = it
-                    RoutePrefs.setShowRidden(context, it)
-                },
+                on = riddenOn,
+                onChange = { riddenWhilePlanning = it },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
