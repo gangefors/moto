@@ -19,6 +19,7 @@ pub mod exchange;
 pub mod favourites;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixture;
+pub mod follow;
 pub mod geo;
 pub mod gpx;
 pub mod handoff;
