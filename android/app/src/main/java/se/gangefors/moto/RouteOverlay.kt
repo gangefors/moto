@@ -165,6 +165,10 @@ class RouteOverlay(private val style: Style, private val density: Float, private
                         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     ),
             )
+            // On the dark map the glow alone hardly shows: the route's
+            // outline on favourite stretches is drawn solid in the rating's
+            // colour, at every zoom (2026-10-02).
+            if (darkMap) style.addLayer(favouriteEdge(FAVOURITE_EDGE_LAYER, SOURCE, Expression.eq(Expression.get(KIND), FAVOURITE), GLOW_COLOR))
             style.addLayer(
                 LineLayer(LINE_LAYER, SOURCE)
                     .withFilter(Expression.eq(Expression.get(KIND), ROUTE))
@@ -322,6 +326,7 @@ class RouteOverlay(private val style: Style, private val density: Float, private
         const val CASING_LAYER = "moto-route-casing"
         const val LINE_LAYER = "moto-route-line"
         const val GLOW_LAYER = "moto-route-favourite-glow"
+        const val FAVOURITE_EDGE_LAYER = "moto-route-favourite-edge"
         const val GRAVEL_LAYER = "moto-route-gravel"
         const val PIN_LAYER = "moto-route-pins"
         const val ARROW_LAYER = "moto-route-arrows"
@@ -394,3 +399,15 @@ class RideOverlay(style: Style, darkMap: Boolean = false) {
         const val LAYER = "moto-ride-line"
     }
 }
+
+/** A route's outline along its favourite stretches, solid in each
+ * stretch's rating colour (property [colour]); for the dark map. */
+fun favouriteEdge(id: String, source: String, filter: Expression?, colour: String): LineLayer =
+    LineLayer(id, source)
+        .apply { if (filter != null) withFilter(filter) }
+        .withProperties(
+            PropertyFactory.lineColor(Expression.get(colour)),
+            PropertyFactory.lineWidth(routeWidthByZoom(9f)),
+            PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        )
