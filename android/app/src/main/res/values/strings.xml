@@ -459,6 +459,29 @@
     <string name="report_already">Already in the app · %1$d</string>
     <string name="report_imported">Imported · %1$d</string>
     <string name="ok">OK</string>
+    <string name="sections_import_title">Import favourites</string>
+    <plurals name="sections_report_added">
+        <item quantity="one">%1$d added</item>
+        <item quantity="other">%1$d added</item>
+    </plurals>
+    <plurals name="sections_report_unmatched">
+        <item quantity="one">%1$d doesn’t fit the map</item>
+        <item quantity="other">%1$d don’t fit the map</item>
+    </plurals>
+    <plurals name="sections_report_skipped">
+        <item quantity="one">%1$d already saved</item>
+        <item quantity="other">%1$d already saved</item>
+    </plurals>
+    <plurals name="sections_report_replaced">
+        <item quantity="one">%1$d replaced by a longer one</item>
+        <item quantity="other">%1$d replaced by longer ones</item>
+    </plurals>
+    <string name="sections_report_item">%1$s · %2$.1f km</string>
+    <string name="sections_report_unnamed">Favourite without a name</string>
+    <string name="report_unmatched">Don’t fit the map · %1$d</string>
+    <string name="report_already_saved">Already saved · %1$d</string>
+    <string name="report_replaced">Replaced by longer ones · %1$d</string>
+    <string name="report_added">Added · %1$d</string>
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>
     <string name="rides_cannot_write">can’t write to the chosen file</string>

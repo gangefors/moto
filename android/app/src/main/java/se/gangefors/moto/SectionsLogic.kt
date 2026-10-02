@@ -189,3 +189,9 @@ fun nameUpdate(stored: String, typed: String): String? {
         else -> null
     }
 }
+
+/** Whether a favourites import gets the report dialog rather than the
+ * short message: when anything but adding happened (some already saved,
+ * replaced, or not fitting the map), so each can be read by name. */
+fun sectionImportNeedsReport(r: se.gangefors.moto.core.ImportReport): Boolean =
+    r.skipped > 0uL || r.replaced > 0uL || r.unmatched > 0uL

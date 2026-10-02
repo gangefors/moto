@@ -200,4 +200,25 @@ class SectionsLogicTest {
         assertNull(pageAfterDelete(7L to filter, deletedId = 8L))
         assertNull(pageAfterDelete(null, deletedId = 7L))
     }
+
+    @Test
+    fun aFavouritesImportGetsTheReportWhenNotEverythingWasAdded() {
+        val item = se.gangefors.moto.core.ImportItem("Ridge road", se.gangefors.moto.core.Rating.GREAT, 3_200.0)
+        fun report(added: Int, skipped: Int = 0, replaced: Int = 0, unmatched: Int = 0) = se.gangefors.moto.core.ImportReport(
+            added = added.toULong(),
+            skipped = skipped.toULong(),
+            replaced = replaced.toULong(),
+            unmatched = unmatched.toULong(),
+            addedItems = List(added - unmatched) { item },
+            unmatchedItems = List(unmatched) { item },
+            skippedItems = List(skipped) { item },
+            replacedItems = List(replaced) { item },
+        )
+        // All added and fitting: the short message.
+        org.junit.Assert.assertFalse(sectionImportNeedsReport(report(3)))
+        // Anything else: the report, to read each by name.
+        org.junit.Assert.assertTrue(sectionImportNeedsReport(report(0, skipped = 2)))
+        org.junit.Assert.assertTrue(sectionImportNeedsReport(report(1, replaced = 1)))
+        org.junit.Assert.assertTrue(sectionImportNeedsReport(report(2, unmatched = 1)))
+    }
 }
