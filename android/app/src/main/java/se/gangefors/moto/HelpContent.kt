@@ -4,7 +4,7 @@
 package se.gangefors.moto
 
 /** The topics of the how-to page, in page order. */
-enum class HelpTopicId { MAP, PLAN, FAVOURITES, RIDE, LIBRARY, SETTINGS }
+enum class HelpTopicId { MAP, PLAN, FAVOURITES, RIDE, RIDE_ROUTE, LIBRARY, SETTINGS }
 
 /**
  * A button in a topic's key: its icon (a key of [BUTTON_ICONS]), its
@@ -106,6 +106,17 @@ val HELP_TOPICS = listOf(
             HelpKey("flag", R.string.help_key_review, R.string.help_key_review_what),
         ),
     ),
+    HelpTopic(
+        HelpTopicId.RIDE_ROUTE, R.string.help_riding_title, R.string.help_riding,
+        titleIcon = "navigation",
+        keys = listOf(
+            HelpKey("navigation", R.string.help_key_ride, R.string.help_key_ride_what),
+            HelpKey("location", R.string.help_key_recentre, R.string.help_key_recentre_what),
+            HelpKey("compass", R.string.help_key_ride_compass, R.string.help_key_ride_compass_what),
+            HelpKey("close", R.string.help_key_stop_following, R.string.help_key_stop_following_what),
+            HelpKey("stop", R.string.help_key_stop_ride, R.string.help_key_stop_ride_what),
+        ),
+    ),
     // The same line as the Routes & rides page.
     HelpTopic(
         HelpTopicId.LIBRARY, R.string.help_library_title, R.string.library_hint,
@@ -133,6 +144,13 @@ val HELP_TOPICS = listOf(
             HelpGroup(
                 R.string.settings_group_recording,
                 listOf(HelpSetting(R.string.settings_keep_screen_on, R.string.settings_keep_screen_on_hint)),
+            ),
+            HelpGroup(
+                R.string.settings_group_riding,
+                listOf(
+                    HelpSetting(R.string.settings_turn_map, R.string.settings_turn_map_hint),
+                    HelpSetting(R.string.settings_off_alert, R.string.settings_off_alert_hint),
+                ),
             ),
         ),
     ),

@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Stefan Gangefors
+
+package se.gangefors.moto
+
+import kotlin.math.PI
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.tan
+import se.gangefors.moto.core.FollowPhase
+import se.gangefors.moto.core.FollowState
+import se.gangefors.moto.core.FollowedRoute
+import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.Rating
+import se.gangefors.moto.core.Route
+
+/**
+ * Riding a route (ADR-0011): what is ridden, and the small decisions the
+ * service and the ride screen make from the core's follow state. Pure, so
+ * it is unit tested.
+ */
+data class RideRoute(
+    val name: String,
+    val isLoop: Boolean,
+    val durationS: Double,
+    val line: List<LatLon>,
+    val favouriteParts: List<List<LatLon>>,
+    val favouriteRatings: List<Rating>,
+    /** Gravel stretches, for the dashes; not kept in the store. */
+    val unpavedParts: List<List<LatLon>> = emptyList(),
+)
+
+fun rideRouteOf(route: Route, name: String, isLoop: Boolean): RideRoute {
+    // Parts without a rating (older routes) are left out.
+    val n = minOf(route.favouriteParts.size, route.favouriteRatings.size)
+    return RideRoute(
+        name = name,
+        isLoop = isLoop,
+        durationS = route.durationS,
+        line = route.geometry,
+        favouriteParts = route.favouriteParts.take(n),
+        favouriteRatings = route.favouriteRatings.take(n),
+        unpavedParts = route.unpavedParts,
+    )
+}
+
+fun RideRoute.toFollowed() = FollowedRoute(name, isLoop, durationS, line, favouriteParts, favouriteRatings)
+
+fun FollowedRoute.toRideRoute() = RideRoute(name, isLoop, durationS, line, favouriteParts, favouriteRatings)
+
+/** A ride's following, as the screen and the notification see it. */
+data class Following(
+    val route: RideRoute,
+    val state: FollowState,
+    /** The way back to the route, while off it or joining. */
+    val back: List<LatLon>? = null,
+    val backM: Double? = null,
+    val turnRound: Boolean = false,
+    /** When the recording stops by itself after the end, ms since the epoch. */
+    val stopsAtMs: Long? = null,
+)
+
+/** The recording stops this long after the end of the route (the rider). */
+const val FINISH_COUNTDOWN_MS = 15_000L
+
+/** An off-route alert sounds at most this often. */
+const val ALERT_EVERY_MS = 30_000L
+
+/** The way back is asked for again at most this often. */
+const val REJOIN_EVERY_MS = 10_000L
+
+/** Joining: a way to the route is shown when further than this. */
+const val JOIN_LINE_M = 40.0
+
+/** The progress bar is at least this full, so it reads as one (the rider). */
+const val MIN_PROGRESS = 0.02f
+
+/** Zoom while riding: closer when slow, wider at speed. */
+const val RIDE_ZOOM_SLOW = 15.5
+const val RIDE_ZOOM_FAST = 14.0
+private const val SLOW_MPS = 30 / 3.6
+private const val FAST_MPS = 90 / 3.6
+
+/** The rider sits this far down the screen while followed (0 top, 1 bottom). */
+const val RIDER_DOWN = 0.7
+
+fun rideZoom(speedMps: Double?): Double {
+    val v = speedMps?.takeIf { it.isFinite() } ?: return RIDE_ZOOM_SLOW
+    val f = ((v - SLOW_MPS) / (FAST_MPS - SLOW_MPS)).coerceIn(0.0, 1.0)
+    return RIDE_ZOOM_SLOW + f * (RIDE_ZOOM_FAST - RIDE_ZOOM_SLOW)
+}
+
+/** Camera top padding, px, that puts the followed rider [RIDER_DOWN] of
+ * the way down a map [heightPx] high. */
+fun riderTopPadding(heightPx: Int): Int = max(0, ((2 * RIDER_DOWN - 1) * heightPx).toInt())
+
+/** The progress bar's fill for the route [state] describes. */
+fun progressShown(state: FollowState): Float {
+    val f = if (state.totalM > 0) (state.alongM / state.totalM).toFloat() else 0f
+    return f.coerceIn(MIN_PROGRESS, 1f)
+}
+
+/**
+ * The share of [line]'s length on the map (web Mercator, as MapLibre's
+ * line-progress measures it) up to each point, 0 to 1.
+ */
+fun mercatorProgress(line: List<LatLon>): DoubleArray {
+    val out = DoubleArray(line.size)
+    var total = 0.0
+    for (i in 1 until line.size) {
+        val (x0, y0) = mercator(line[i - 1])
+        val (x1, y1) = mercator(line[i])
+        total += Math.hypot(x1 - x0, y1 - y0)
+        out[i] = total
+    }
+    if (total > 0) for (i in out.indices) out[i] /= total
+    return out
+}
+
+/** How far along the drawn line the rider is, 0–1, for segment [segment]
+ * at [t] along it. */
+fun lineProgressAt(progress: DoubleArray, segment: Int, t: Double): Double {
+    if (progress.isEmpty()) return 0.0
+    val i = segment.coerceIn(0, progress.size - 1)
+    val j = (i + 1).coerceAtMost(progress.size - 1)
+    return (progress[i] + t.coerceIn(0.0, 1.0) * (progress[j] - progress[i])).coerceIn(0.0, 1.0)
+}
+
+private fun mercator(p: LatLon): Pair<Double, Double> {
+    val lat = p.lat.coerceIn(-85.0, 85.0) * PI / 180
+    return p.lon * PI / 180 to ln(tan(PI / 4 + lat / 2))
+}
+
+/** Whether to sound the alert on leaving the route now. */
+fun alertDue(lastAlertMs: Long?, nowMs: Long): Boolean = lastAlertMs == null || nowMs - lastAlertMs >= ALERT_EVERY_MS
+
+/** Whether to ask for the way back now, in [state]. */
+fun rejoinDue(state: FollowState, lastAskedMs: Long?, nowMs: Long): Boolean {
+    val wanted = when (state.phase) {
+        FollowPhase.OFF_ROUTE -> true
+        FollowPhase.JOINING -> state.offM.let { it == null || it > JOIN_LINE_M }
+        else -> false
+    }
+    return wanted && (lastAskedMs == null || nowMs - lastAskedMs >= REJOIN_EVERY_MS)
+}
+
+/** Seconds left of the countdown at the end, rounded up; null when none. */
+fun countdownS(stopsAtMs: Long?, nowMs: Long): Int? =
+    stopsAtMs?.let { ((it - nowMs).coerceAtLeast(0) + 999) / 1000 }?.toInt()
+
+/** Distances on the card and in the notification, in km to a tenth. */
+fun rideKm(m: Double): Double = sectionKm(m)

@@ -28,7 +28,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -237,6 +239,7 @@ fun RouteCard(
     onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
+    onRide: (() -> Unit)?,
     viaCount: Int,
     onAddVia: () -> Unit,
     onClearVia: () -> Unit,
@@ -283,6 +286,7 @@ fun RouteCard(
                 previousDescription = stringResource(R.string.route_previous),
                 nextDescription = stringResource(R.string.route_next),
                 kept = kept,
+                onRide = onRide,
             )
             if (!expanded) {
                 OptionChips(routeSummaryItems(arrival, viaCount, gravel, favourites, unridden), allowedKinds(avoid)) { onExpandedChange(true) }
@@ -433,6 +437,7 @@ fun LoopCard(
     onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
+    onRide: (() -> Unit)?,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
@@ -468,6 +473,7 @@ fun LoopCard(
                 nextDescription = stringResource(R.string.loop_next),
                 kept = kept,
                 onShuffle = onShuffle,
+                onRide = onRide,
             )
             if (!expanded) {
                 OptionChips(loopSummaryItems(choice, direction, gravel, favourites, unridden), allowedKinds(avoid)) {
@@ -503,10 +509,13 @@ private fun ChoiceSwitcher(
     nextDescription: String,
     kept: Int,
     onShuffle: (() -> Unit)? = null,
+    onRide: (() -> Unit)? = null,
 ) {
     // None found: 0 / 0, its buttons off; finding: no count.
     val shown = choiceCount(found, failed, position, count)
-    if (!showsSwitcher(shown, failed, kept, onShuffle != null)) return
+    val switcher = showsSwitcher(shown, failed, kept, onShuffle != null)
+    val ride = onRide != null && found
+    if (!switcher && !ride) return
     val shownCount = shown?.second ?: 0
     FlowRow(
         modifier = Modifier.padding(top = 4.dp),
@@ -514,7 +523,7 @@ private fun ChoiceSwitcher(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        run {
+        if (switcher) {
             val switchable = found && shownCount > 1
             Row(
                 Modifier
@@ -539,11 +548,26 @@ private fun ChoiceSwitcher(
             }
         }
         if (onShuffle != null) {
-            // As tall as the switcher beside it.
-            FilledTonalButton(onClick = onShuffle, enabled = found || failed, modifier = Modifier.heightIn(min = 48.dp)) {
-                Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                OneLine(stringResource(R.string.loop_shuffle))
+            // Icon only, so Ride fits beside it (2026-10-02); as
+            // tall as the switcher.
+            FilledTonalIconButton(
+                onClick = onShuffle,
+                enabled = found || failed,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(painterResource(R.drawable.ic_shuffle), contentDescription = stringResource(R.string.loop_shuffle))
+            }
+        }
+        if (ride) {
+            // Riding the route shown (ADR-0011): the sheet's main action.
+            Button(
+                onClick = onRide,
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Icon(painterResource(R.drawable.ic_navigation), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                OneLine(stringResource(R.string.ride_start))
             }
         }
     }

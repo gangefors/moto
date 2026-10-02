@@ -22,8 +22,9 @@ import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Track
 import java.time.ZoneId
 
-/** A saved ride drawn on the map, and its line. */
-data class ShownRide(val track: Track, val line: List<LatLon>)
+/** A saved ride drawn on the map, and its line; [segments] split it
+ * where recording started again after a gap (ADR-0011). */
+data class ShownRide(val track: Track, val line: List<LatLon>, val segments: List<List<LatLon>> = listOf(line))
 
 /** Which ride is on the map: its name and figures, with a cross to hide it. */
 @Composable

@@ -30,6 +30,8 @@ object RoutePrefs {
     private const val CLOSE_ZOOM = "locate_close_zoom"
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
     private const val SHOW_RIDDEN = "show_ridden_roads"
+    private const val TURN_MAP = "ride_turn_map"
+    private const val OFF_ROUTE_ALERT = "ride_off_route_alert"
     private const val MAP_HINTS = "map_hints_shown"
     private const val SECTIONS_SORT = "sections_sort"
     private const val LIBRARY_FILTER = "library_filter"
@@ -128,6 +130,22 @@ object RoutePrefs {
 
     fun setShowRidden(context: Context, on: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(SHOW_RIDDEN, on) }
+    }
+
+    /** Riding a route (ADR-0011): the map turns with the rider's direction. */
+    fun turnMap(context: Context): Boolean =
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(TURN_MAP, true) }.getOrDefault(true)
+
+    fun setTurnMap(context: Context, on: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(TURN_MAP, on) }
+    }
+
+    /** Riding a route: a sound when the rider leaves it. */
+    fun offRouteAlert(context: Context): Boolean =
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(OFF_ROUTE_ALERT, true) }.getOrDefault(true)
+
+    fun setOffRouteAlert(context: Context, on: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(OFF_ROUTE_ALERT, on) }
     }
 
     /** The location button's zoom levels, as last set (defaults 10 and 14). */

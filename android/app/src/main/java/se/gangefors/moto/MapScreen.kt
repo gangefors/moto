@@ -79,6 +79,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -128,6 +129,7 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
+import org.maplibre.android.location.OnCameraTrackingChangedListener
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -478,7 +480,26 @@ fun MapScreen() {
     // The ridden roads button's choice while a route or loop is planned:
     // for that plan only, never saved; null follows the setting.
     var riddenWhilePlanning by remember { mutableStateOf<Boolean?>(null) }
-    val riddenOn = riddenShown(showRidden, riddenWhilePlanning)
+    // Riding a route (ADR-0011): the route and its state, from the
+    // recording service.
+    val following = (Recording.state.collectAsState().value as? Recording.State.Active)?.following
+    val riding = following != null
+    val ridingNow = rememberUpdatedState(riding)
+    // Ride settings: the map turns with the rider; an alert off the route.
+    var turnMap by remember { mutableStateOf(RoutePrefs.turnMap(context)) }
+    var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
+    // The rider fixed north up with the compass, or moved the map: until
+    // Recentre (or another tap on the compass).
+    var northFixed by remember { mutableStateOf(false) }
+    var ridePanned by remember { mutableStateOf(false) }
+    LaunchedEffect(riding) {
+        if (!riding) {
+            northFixed = false
+            ridePanned = false
+        }
+    }
+    // Hidden while riding, as while planning.
+    val riddenOn = riddenShown(showRidden, riddenWhilePlanning) && !riding
     // Sections that no longer fit the map are hidden unless the rider asks.
     // Quick-tags waiting for review, and the review in progress (it runs in
     // "mark section" mode, starting from each tag's suggested section).
@@ -493,6 +514,7 @@ fun MapScreen() {
             Overlays(
                 SectionOverlay(s, density.density, darkMap),
                 RideOverlay(s, darkMap),
+                FollowOverlay(s, darkMap),
                 SectionDraftOverlay(s),
                 RouteOverlay(s, density.density, darkMap),
                 RiddenOverlay(s, darkMap),
@@ -515,8 +537,15 @@ fun MapScreen() {
     // mark sections along it; the ride being recorded takes its place.
     var shownRide by remember { mutableStateOf<ShownRide?>(null) }
     LaunchedEffect(overlays, recording, shownRide) {
-        overlays?.ride?.show((recording as? Recording.State.Active)?.line ?: shownRide?.line)
+        overlays?.ride?.show((recording as? Recording.State.Active)?.line?.let { listOf(it) } ?: shownRide?.segments)
     }
+    // The route being ridden: ahead and behind, and the way back to it.
+    LaunchedEffect(overlays, following?.route) { overlays?.follow?.show(following?.route) }
+    LaunchedEffect(overlays, following?.state?.segment, following?.state?.segmentT) {
+        val st = following?.state ?: return@LaunchedEffect
+        overlays?.follow?.at(st.segment.toInt(), st.segmentT)
+    }
+    LaunchedEffect(overlays, following?.back) { overlays?.follow?.back(following?.back) }
     LaunchedEffect(recording) {
         when (val r = recording) {
             // Short, so the toast stays clear of the buttons; the figures
@@ -537,13 +566,26 @@ fun MapScreen() {
             else -> Unit
         }
     }
+    // A ride waiting for the permissions (Ride, or Carry on).
+    var pendingRide by remember { mutableStateOf<RideRoute?>(null) }
+    var pendingResume by remember { mutableStateOf<Long?>(null) }
     val recordPermissions = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted ->
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             hasLocation = true
-            RecordingService.start(context)
-            Toasts.show(resources.getString(R.string.recording_started))
+            val ride = pendingRide
+            val resume = pendingResume
+            pendingRide = null
+            pendingResume = null
+            when {
+                resume != null -> RecordingService.resume(context, resume)
+                ride != null -> RecordingService.ride(context, ride)
+                else -> {
+                    RecordingService.start(context)
+                    Toasts.show(resources.getString(R.string.recording_started))
+                }
+            }
         } else {
             notify(resources.getString(R.string.recording_no_permission), long = true)
         }
@@ -1142,6 +1184,41 @@ fun MapScreen() {
         overlays?.route?.show(null, null, null)
     }
 
+    /** Rides [route] (ADR-0011): planning ends, recording starts (or the
+     * ride being recorded follows it), asking for the permissions first. */
+    fun beginRide(route: RideRoute) {
+        if (routeEnds != null) closeRoute()
+        if (loopStart != null) closeLoop()
+        shownSaved = null
+        overlays?.route?.show(null, null, null)
+        startPicked = null
+        if (recording is Recording.State.Active) {
+            RecordingService.ride(context, route)
+        } else {
+            pendingRide = route
+            recordPermissions.launch(recordingPermissions())
+        }
+    }
+
+    /** Rides a planned route or loop, named from where it goes, as a saved
+     * one is ("Loop from Höör via Linderöd"). */
+    fun startRide(route: Route, isLoop: Boolean) {
+        val engine = (region as? RegionState.Ready)?.engine
+        scope.launch {
+            val named = engine?.let { e ->
+                withContext(Dispatchers.Default) {
+                    runCatching {
+                        val far = if (isLoop) farthestPoint(route.geometry)?.let { p -> e.describe(listOf(p, p)) } else null
+                        planName(isLoop, e.describe(route.geometry), far)
+                    }.getOrNull()
+                }
+            }
+            val name = named?.let { planNameText(resources, it) }
+                ?: resources.getString(if (isLoop) R.string.ride_name_loop else R.string.ride_name_route)
+            beginRide(rideRouteOf(route, name, isLoop))
+        }
+    }
+
     /** Back while marking: the last point placed goes, or marking (or the
      * tag review) stops when nothing is placed. */
     fun markBack() {
@@ -1351,6 +1428,8 @@ fun MapScreen() {
         val ready = region as? RegionState.Ready
         ready?.let { showRegionOutline(s, it.engine.info(), it.engine.coverage(), darkMap) }
         val onClick = MapLibreMap.OnMapClickListener { tap ->
+            // While riding a route the map only shows; taps do nothing.
+            if (ridingNow.value) return@OnMapClickListener false
             if (marking) {
                 if (ready == null) notify(regionStatus(resources, region), long = true) else onMarkTap(ready, tap)
                 return@OnMapClickListener true
@@ -1402,6 +1481,7 @@ fun MapScreen() {
             true
         }
         val onLongClick = MapLibreMap.OnMapLongClickListener { point ->
+            if (ridingNow.value) return@OnMapLongClickListener false
             if (marking) return@OnMapLongClickListener false
             if (ready == null) {
                 notify(regionStatus(resources, region), long = true)
@@ -1486,6 +1566,62 @@ fun MapScreen() {
         }
         m.addOnCameraMoveStartedListener(moved)
         onDispose { m.removeOnCameraMoveStartedListener(moved) }
+    }
+
+    // Riding a route (ADR-0011): the map follows the rider, the way they
+    // are going up (or north up), the rider low on the screen; a pan or
+    // pinch stops it until Recentre. Our compass takes MapLibre's place,
+    // which hides itself when north is up.
+    DisposableEffect(map, style, hasLocation, riding, northFixed, turnMap, ridePanned, mapSize) {
+        val m = map
+        val s = style
+        if (m == null || s == null || !hasLocation || !riding) {
+            m?.uiSettings?.isCompassEnabled = true
+            return@DisposableEffect onDispose {}
+        }
+        enableLocation(context, m, s)
+        val lc = m.locationComponent
+        m.uiSettings.isCompassEnabled = false
+        lc.renderMode = RenderMode.GPS
+        if (!ridePanned) {
+            m.moveCamera(CameraUpdateFactory.paddingTo(0.0, riderTopPadding(mapSize.height).toDouble(), 0.0, 0.0))
+            val course = turnMap && !northFixed
+            lc.cameraMode = if (course) CameraMode.TRACKING_GPS else CameraMode.TRACKING
+            if (!course) m.animateCamera(CameraUpdateFactory.bearingTo(0.0))
+        }
+        val dismissed = object : OnCameraTrackingChangedListener {
+            override fun onCameraTrackingDismissed() {
+                if (ridingNow.value) ridePanned = true
+            }
+
+            override fun onCameraTrackingChanged(currentMode: Int) = Unit
+        }
+        lc.addOnCameraTrackingChangedListener(dismissed)
+        onDispose { lc.removeOnCameraTrackingChangedListener(dismissed) }
+    }
+    // Riding over: the map's padding goes and the position shows as before.
+    LaunchedEffect(map, riding) {
+        val m = map ?: return@LaunchedEffect
+        if (riding) return@LaunchedEffect
+        m.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+        m.locationComponent.takeIf { it.isLocationComponentActivated }?.renderMode = RenderMode.COMPASS
+    }
+    // Zoom by speed while followed: closer when slow, wider at speed.
+    val rideZoomStep = if (riding) Math.round(rideZoom((recording as? Recording.State.Active)?.lastFix?.speedMps) * 4) / 4.0 else 0.0
+    LaunchedEffect(map, riding, ridePanned, rideZoomStep) {
+        val m = map ?: return@LaunchedEffect
+        if (!riding || ridePanned) return@LaunchedEffect
+        m.locationComponent.takeIf { it.isLocationComponentActivated }?.zoomWhileTracking(rideZoomStep, 1_500)
+    }
+    // Where north is, for our compass.
+    var mapBearing by remember { mutableFloatStateOf(0f) }
+    DisposableEffect(map, riding) {
+        val m = map
+        if (m == null || !riding) return@DisposableEffect onDispose {}
+        val move = MapLibreMap.OnCameraMoveListener { mapBearing = m.cameraPosition.bearing.toFloat() }
+        m.addOnCameraMoveListener(move)
+        mapBearing = m.cameraPosition.bearing.toFloat()
+        onDispose { m.removeOnCameraMoveListener(move) }
     }
 
     /**
@@ -1648,7 +1784,7 @@ fun MapScreen() {
         // The menu (top left) and ride settings (top right), clear of the
         // status bar and cutouts; they step aside while planning or marking,
         // like the buttons at the bottom.
-        val topButtons = !marking && !planning
+        val topButtons = !marking && !planning && !riding
         if (topButtons) {
             if (store is StoreState.Ready) {
                 TopMapButton(
@@ -1663,6 +1799,37 @@ fun MapScreen() {
                 description = stringResource(R.string.ride_settings_open),
                 onClick = { showSettings = true },
                 modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+        // Riding a route: the card at the top, our compass below it on the
+        // right (ADR-0011).
+        if (following != null) {
+            var cardBottom by remember { mutableIntStateOf(0) }
+            RideCard(
+                following = following,
+                darkMap = darkMap,
+                onStopFollowing = { RecordingService.unfollow(context) },
+                onStopNow = { RecordingService.stop(context) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .safeDrawingPadding()
+                    .padding(top = 8.dp, start = 8.dp, end = 8.dp)
+                    .widthIn(max = TOP_BOX_MAX_WIDTH)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { cardBottom = it.boundsInRoot().bottom.roundToInt() },
+            )
+            RideCompass(
+                bearing = mapBearing,
+                northFixed = northFixed || !turnMap,
+                onClick = {
+                    if (turnMap) northFixed = !northFixed
+                    ridePanned = false
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset { IntOffset(0, cardBottom + 8.dp.roundToPx()) }
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(end = TOP_BUTTON_MARGIN),
             )
         }
         // Notices across the top, the whole width below the top buttons
@@ -1832,6 +1999,9 @@ fun MapScreen() {
                             overlays?.route?.show(null, null, null)
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        onRide = {
+                            beginRide(RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, emptyList(), emptyList()))
+                        },
                     )
                 }
                 shownSection?.let { s ->
@@ -1922,6 +2092,7 @@ fun MapScreen() {
                             onClose = { closeRoute() },
                             onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
                             onSave = { shownRoute?.let { (r, _) -> savingRoute = r to (routeThrough != null) } },
+                            onRide = { shownRoute?.let { (r, _) -> startRide(r, routeThrough != null) } },
                             viaCount = vias.size,
                             onAddVia = {
                                 addingVia = true
@@ -2005,6 +2176,7 @@ fun MapScreen() {
                             onClose = { closeLoop() },
                             onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
                             onSave = { shown?.let { savingRoute = it to true } },
+                            onRide = { shown?.let { startRide(it, true) } },
                         )
                     }
             }
@@ -2021,8 +2193,8 @@ fun MapScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // Loops from where the rider is, in one tap: a new set
-                // each time.
-                if (region is RegionState.Ready && hasLocation) {
+                // each time. Not while riding a route.
+                if (region is RegionState.Ready && hasLocation && !riding) {
                     FloatingActionButton(onClick = {
                         val start = riderStart() ?: return@FloatingActionButton
                         picker.reset()
@@ -2043,6 +2215,15 @@ fun MapScreen() {
                     }
                 }
                 }
+                // Riding: Recentre after a pan or pinch, above Stop.
+                if (hasLocation && riding && ridePanned) {
+                    FloatingActionButton(onClick = { ridePanned = false }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_my_location),
+                            contentDescription = stringResource(R.string.ride_recentre),
+                        )
+                    }
+                }
                 // Record: a red dot. While recording: a stop square with a
                 // red arc running round the button, the same size as the
                 // others; the distance is in the notification.
@@ -2061,7 +2242,7 @@ fun MapScreen() {
                         )
                     }
                 }
-                if (hasLocation) {
+                if (hasLocation && !riding) {
                     FloatingActionButton(onClick = { onLocateTap() }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_my_location),
@@ -2266,10 +2447,11 @@ fun MapScreen() {
             onShow = { track ->
                 dataPage = null
                 scope.launch {
-                    val points = withContext(Dispatchers.IO) {
-                        runCatching { readyStore.store.trackPoints(track.id) }.getOrNull()
-                    }
-                    val line = points?.map { it.position }
+                    // Split where recording started again after a gap.
+                    val segments = withContext(Dispatchers.IO) {
+                        runCatching { readyStore.store.trackSegments(track.id) }.getOrNull()
+                    }?.map { s -> s.map { it.position } }
+                    val line = segments?.flatten()
                     if (line.isNullOrEmpty()) {
                         notify(resources.getString(R.string.rides_gone), long = true)
                     } else {
@@ -2278,7 +2460,7 @@ fun MapScreen() {
                             shownSaved = null
                             overlays?.route?.show(null, null, null)
                         }
-                        shownRide = ShownRide(track, line)
+                        shownRide = ShownRide(track, line, segments)
                         showOnMap(listOf(line), always = true)
                     }
                 }
@@ -2321,9 +2503,54 @@ fun MapScreen() {
             },
         )
     }
+    // A ride that followed a route when Android stopped the app: carry on
+    // into it, or save it (ADR-0011).
+    val interrupted by Recording.interrupted.collectAsState()
+    var interruptedName by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(interrupted, store) {
+        val id = interrupted
+        val s = (store as? StoreState.Ready)?.store
+        interruptedName = if (id == null || s == null) {
+            null
+        } else {
+            withContext(Dispatchers.IO) { runCatching { s.followedRoute(id)?.name }.getOrNull() } ?: ""
+        }
+    }
+    val waiting = interrupted
+    val waitingName = interruptedName
+    if (waiting != null && waitingName != null && recording !is Recording.State.Active) {
+        ResumeRideDialog(
+            name = waitingName,
+            onCarryOn = {
+                Recording.answered()
+                pendingResume = waiting
+                recordPermissions.launch(recordingPermissions())
+            },
+            onSave = {
+                Recording.answered()
+                val s = (store as? StoreState.Ready)?.store
+                val engine = (region as? RegionState.Ready)?.engine
+                if (s != null) {
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            runCatching {
+                                s.finishTrack(waiting)?.let { t -> if (engine != null) s.nameRide(resources, engine, t) }
+                            }
+                        }
+                        RideChanges.changed()
+                        Toasts.show(resources.getString(R.string.recording_saved))
+                    }
+                }
+            },
+        )
+    }
     if (showSettings) {
         RideSettingsPage(
-            settings = RideSettings(loopChoice, defaultDirection, gravel, favouritesMode, unriddenMode, avoid, locateZooms, keepScreenOn, showRidden),
+            settings = RideSettings(
+                loopChoice, defaultDirection, gravel, favouritesMode, unriddenMode, avoid, locateZooms, keepScreenOn, showRidden,
+                turnMap = turnMap,
+                offRouteAlert = offRouteAlert,
+            ),
             onChange = { new ->
                 if (new.gravel != gravel) {
                     gravel = new.gravel
@@ -2348,6 +2575,14 @@ fun MapScreen() {
                 if (new.showRidden != showRidden) {
                     showRidden = new.showRidden
                     RoutePrefs.setShowRidden(context, new.showRidden)
+                }
+                if (new.turnMap != turnMap) {
+                    turnMap = new.turnMap
+                    RoutePrefs.setTurnMap(context, new.turnMap)
+                }
+                if (new.offRouteAlert != offRouteAlert) {
+                    offRouteAlert = new.offRouteAlert
+                    RoutePrefs.setOffRouteAlert(context, new.offRouteAlert)
                 }
             },
             onDismiss = { showSettings = false },
@@ -2490,6 +2725,7 @@ internal val TAG_COLOR = Color(0xFFE8710A)
 private class Overlays(
     val sections: SectionOverlay,
     val ride: RideOverlay,
+    val follow: FollowOverlay,
     val draft: SectionDraftOverlay,
     val route: RouteOverlay,
     val ridden: RiddenOverlay,
