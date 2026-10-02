@@ -23,7 +23,7 @@ data class SectionRow(
 }
 
 /** How the page orders sections. */
-enum class SectionSort { RATING, LENGTH, CURVY, NEWEST, NEAREST, LONGEST_UNRIDDEN }
+enum class SectionSort { RATING, LENGTH, CURVY, NEAREST, LONGEST_UNRIDDEN }
 
 /** A sort stored by name; rating for none or an unknown one. */
 fun sectionSortOf(name: String?): SectionSort = SectionSort.entries.firstOrNull { it.name == name } ?: SectionSort.RATING
@@ -62,7 +62,7 @@ private fun rank(r: Rating): Int = when (r) {
 
 /**
  * [rows] in [sort] order: best rated first (then longest), longest,
- * curviest, newest, nearest to [here] (then as by rating; without a
+ * curviest, nearest to [here] (then as by rating; without a
  * position, as by rating), or longest since ridden (never ridden first;
  * the best rated first among equals).
  * Ties keep a stable order by id.
@@ -73,7 +73,6 @@ fun sortSections(rows: List<SectionRow>, sort: SectionSort, here: LatLon?): List
         SectionSort.RATING -> byRating
         SectionSort.LENGTH -> compareBy<SectionRow>({ -it.lengthM }, { it.section.id })
         SectionSort.CURVY -> compareBy<SectionRow>({ -it.curvyShare }, { rank(it.section.rating) }, { it.section.id })
-        SectionSort.NEWEST -> compareBy<SectionRow>({ -it.section.createdAt }, { it.section.id })
         // Never ridden first, then the longest since; the best of equals.
         SectionSort.LONGEST_UNRIDDEN -> compareBy<SectionRow>({ it.ridden?.lastAt ?: Long.MIN_VALUE }).then(byRating)
         SectionSort.NEAREST -> if (here == null) {

@@ -51,7 +51,6 @@ class SectionsLogicTest {
         assertEquals(listOf(1L, 3L, 4L, 2L), ids(sortSections(rows, SectionSort.LENGTH, here)))
         // Equally curvy: the better rated first.
         assertEquals(listOf(4L, 1L, 3L, 2L), ids(sortSections(rows, SectionSort.CURVY, here)))
-        assertEquals(listOf(4L, 1L, 3L, 2L), ids(sortSections(rows, SectionSort.NEWEST, here)))
         assertEquals(listOf(3L, 4L, 2L, 1L), ids(sortSections(rows, SectionSort.NEAREST, here)))
         // Nearest without a position: as by rating.
         assertEquals(listOf(3L, 2L, 4L, 1L), ids(sortSections(rows, SectionSort.NEAREST, null)))
@@ -129,6 +128,8 @@ class SectionsLogicTest {
         SectionSort.entries.forEach { assertEquals(it, sectionSortOf(it.name)) }
         assertEquals(SectionSort.RATING, sectionSortOf(null))
         assertEquals(SectionSort.RATING, sectionSortOf("SIDEWAYS"))
+        // Newest was taken away (Stefan): a saved choice of it sorts by rating.
+        assertEquals(SectionSort.RATING, sectionSortOf("NEWEST"))
     }
 
     @Test
