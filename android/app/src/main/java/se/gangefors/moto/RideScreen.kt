@@ -278,10 +278,16 @@ fun RideCard(
                             )
                         }
                         FollowPhase.JOINING -> {
-                            Text(stringResource(R.string.ride_joining), style = MaterialTheme.typography.headlineSmall)
+                            val wrongWay = state.wrongWay
+                            Text(
+                                stringResource(if (wrongWay) R.string.ride_to_start else R.string.ride_joining),
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
                             val backM = following.backM
                             Text(
-                                if (following.back != null && backM != null) {
+                                if (wrongWay) {
+                                    stringResource(R.string.ride_wrong_way)
+                                } else if (following.back != null && backM != null) {
                                     stringResource(R.string.ride_joining_text, rideKm(backM), rideKm(state.totalM))
                                 } else {
                                     stringResource(R.string.ride_joining_near)

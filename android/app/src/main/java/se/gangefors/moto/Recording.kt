@@ -21,7 +21,9 @@ object Recording {
     sealed interface State {
         data object Idle : State
         data class Active(
-            val trackId: Long,
+            /** The ride being recorded; none while riding to a route's
+             * start, before recording starts (ADR-0011). */
+            val trackId: Long?,
             val startedAtMs: Long,
             val distanceM: Double,
             /** The line ridden so far, thinned; refreshed every few seconds. */
