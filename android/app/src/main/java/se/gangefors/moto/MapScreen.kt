@@ -136,6 +136,7 @@ import org.maplibre.android.maps.Style
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.Favourites
+import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
@@ -1048,6 +1049,21 @@ fun MapScreen() {
     // A saved route the rider asked to see (Menu > Routes & rides > Show),
     // and a route or loop being saved (its name is asked first).
     var shownSaved by remember { mutableStateOf<ShownSavedRoute?>(null) }
+    // The shown saved route being renamed from its card.
+    var renamingSaved by remember { mutableStateOf<SavedRoute?>(null) }
+    /** Deletes saved route [r] from its card: the card closes and the
+     * route leaves the map. */
+    fun deleteShownSaved(r: SavedRoute) {
+        val s = (store as? StoreState.Ready)?.store ?: return
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { s.deleteRoute(r.id) } }
+            result.onFailure { notify(resources.getString(R.string.saved_route_delete_failed, it.message ?: it.toString()), long = true) }
+            if (result.isSuccess && shownSaved?.route?.id == r.id) {
+                shownSaved = null
+                overlays?.route?.show(null, null, null)
+            }
+        }
+    }
     // A saved route keeps only its line: its favourite stretches are
     // worked out from the favourites as they are now, when it shows and
     // whenever they change, and glow on it as on a new route (ADR-0011).
@@ -2012,6 +2028,8 @@ fun MapScreen() {
                         onShare = {
                             shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
                         },
+                        onRename = { renamingSaved = s.route },
+                        onDelete = { deleteShownSaved(s.route) },
                         onClose = {
                             shownSaved = null
                             overlays?.route?.show(null, null, null)
@@ -2421,6 +2439,25 @@ fun MapScreen() {
             onSave = { name ->
                 savingRoute = null
                 saveRoute(r, isLoop, name)
+            },
+        )
+    }
+    renamingSaved?.let { r ->
+        RouteNameDialog(
+            title = stringResource(R.string.saved_route_rename_title),
+            initial = r.name,
+            onDismiss = { renamingSaved = null },
+            onSave = { name ->
+                renamingSaved = null
+                val s = (store as? StoreState.Ready)?.store ?: return@RouteNameDialog
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching { s.renameRoute(r.id, name) } }
+                    result.onFailure { notify(resources.getString(R.string.route_save_failed, it.message ?: it.toString()), long = true) }
+                    val now = shownSaved
+                    if (result.isSuccess && now != null && now.route.id == r.id) {
+                        shownSaved = now.copy(route = now.route.copy(name = name))
+                    }
+                }
             },
         )
     }
