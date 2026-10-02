@@ -2023,6 +2023,17 @@ fun MapScreen() {
                     .onGloballyPositioned { cardsTop = it.boundsInRoot().top.roundToInt() },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // A favourite's facts sit on top: it was looked at beside
+                // whatever is in hand, which stays nearest the sheet.
+                if (!riding) favouriteInfo?.let { f ->
+                    FavouriteInfoCard(
+                        f,
+                        engine = (region as? RegionState.Ready)?.engine,
+                        darkMap = darkMap,
+                        onClose = { favouriteInfoId = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (taskCard) Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
@@ -2162,15 +2173,6 @@ fun MapScreen() {
                         onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
                         onEdit = { editing = s },
                         onClose = { hideSection() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (!riding) favouriteInfo?.let { f ->
-                    FavouriteInfoCard(
-                        f,
-                        engine = (region as? RegionState.Ready)?.engine,
-                        darkMap = darkMap,
-                        onClose = { favouriteInfoId = null },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
