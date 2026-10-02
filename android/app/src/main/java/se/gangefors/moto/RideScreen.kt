@@ -103,6 +103,9 @@ class FollowOverlay(private val style: Style, private val darkMap: Boolean) {
                     *round,
                 ),
             )
+            // The dark map: favourite stretches outlined in their colour,
+            // as on a planned route.
+            if (darkMap) add(favouriteEdge(EDGE_LAYER, GLOW_SOURCE, null, COLOR))
             add(
                 LineLayer(LINE_LAYER, LINE_SOURCE).withProperties(
                     PropertyFactory.lineWidth(routeWidthByZoom(5f)),
@@ -198,6 +201,7 @@ class FollowOverlay(private val style: Style, private val darkMap: Boolean) {
         const val LINE_LAYER = "moto-follow-line"
         const val CASING_LAYER = "moto-follow-casing"
         const val GLOW_LAYER = "moto-follow-glow"
+        const val EDGE_LAYER = "moto-follow-favourite-edge"
         const val GRAVEL_LAYER = "moto-follow-gravel"
         const val BACK_LAYER = "moto-follow-back"
         const val BACK_CASING_LAYER = "moto-follow-back-casing"
