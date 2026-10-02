@@ -46,8 +46,18 @@ pub const POOR_ACCURACY_M: f64 = 50.0;
 pub const FINISH_M: f64 = 30.0;
 /// ...with at least this share of the route passed.
 pub const FINISH_SHARE: f64 = 0.9;
-/// Joining: the rider reaches the route within its first this many metres.
+/// Joining: the rider reaches the route anywhere, heading along it
+/// (Stefan, 2026-10-02); within its first this many metres also without a
+/// bearing (standing at the start).
 pub const JOIN_WITHIN_M: f64 = 1_000.0;
+/// Heading along the route: within this many degrees of it...
+pub const ALONG_DEG: f64 = 60.0;
+/// ...against it: more than this many.
+pub const AGAINST_DEG: f64 = 120.0;
+/// Riding the route backwards for this many fixes in a row (heading
+/// against it, with no pass the right way near) turns following back to
+/// joining: the rider is on their way to the start.
+pub const WRONG_WAY_FIXES: u32 = 4;
 
 /// Where a way back may meet the route, metres on from the last matched
 /// place (off the route), or from its start (joining).
@@ -57,6 +67,9 @@ pub const JOIN_AT_M: [f64; 3] = [0.0, 500.0, 1_000.0];
 /// this far from the rider's bearing.
 pub const TURN_ROUND_DEG: f64 = 120.0;
 pub const TURN_CHECK_M: f64 = 100.0;
+
+/// A route ending this close to its start is a loop.
+const LOOP_END_M: f64 = 100.0;
 
 /// How far back from the last matched place a fix may still match.
 const BACK_WINDOW_M: f64 = 100.0;
@@ -164,6 +177,14 @@ pub struct FollowState {
     pub off_since_ms: Option<i64>,
     /// At most [`MAX_NEAR_FAVOURITES`], nearest first.
     pub favourites: Vec<NearFavourite>,
+    /// Joining because the rider is on the route the wrong way (on their
+    /// way to its start).
+    pub wrong_way: bool,
+    /// The rider has been at the route's start, heading along it (the app
+    /// starts recording then). Joining further on shows the figures from
+    /// there but doesn't count as started; a loop joined part way starts
+    /// when the rider comes round to its start (Stefan, 2026-10-02).
+    pub started: bool,
 }
 
 /// A favourite part placed on the route.
@@ -181,6 +202,17 @@ struct Candidate {
     t: f64,
     along_m: f64,
     distance_m: f64,
+    heading: Heading,
+}
+
+/// How the rider heads relative to the route where a fix matched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Heading {
+    /// No bearing (too slow, or none given).
+    Unknown,
+    Along,
+    Across,
+    Against,
 }
 
 /// Follows one route through a ride; see the module docs.
@@ -201,6 +233,9 @@ pub struct RouteFollower {
     far_since_ms: Option<i64>,
     near_fixes: u32,
     off_m: Option<f64>,
+    wrong_fixes: u32,
+    wrong_way: bool,
+    started: bool,
 }
 
 impl RouteFollower {
@@ -262,6 +297,9 @@ impl RouteFollower {
             far_since_ms: None,
             near_fixes: 0,
             off_m: None,
+            wrong_fixes: 0,
+            wrong_way: false,
+            started: false,
         };
         follower.stretches = follower.place_parts(favourite_parts, favourite_ratings)?;
         Ok(follower)
@@ -336,6 +374,17 @@ impl RouteFollower {
             FollowPhase::OffRoute => self.rejoin(fix),
             FollowPhase::Finished => {}
         }
+        // A loop joined part way: coming round to its start starts it.
+        if self.phase == FollowPhase::OnRoute
+            && !self.started
+            && self.is_loop()
+            && haversine_m(fix.position, self.line[0]) <= off_limit(fix)
+        {
+            self.along_m = 0.0;
+            self.segment = 0;
+            self.segment_t = 0.0;
+            self.started = true;
+        }
         if self.phase == FollowPhase::OnRoute && self.at_end(fix.position) {
             self.phase = FollowPhase::Finished;
             self.along_m = self.total_m();
@@ -375,19 +424,34 @@ impl RouteFollower {
             } else {
                 Vec::new()
             },
+            wrong_way: self.phase == FollowPhase::Joining && self.wrong_way,
+            started: self.started,
         }
     }
 
+    /// Joining: the route counts as reached anywhere the rider heads
+    /// along it (in its first kilometre also without a bearing, as when
+    /// standing at the start); heading against it, they are on the route
+    /// the wrong way, on their way to its start.
     fn join(&mut self, fix: FollowFix) {
-        let limit = JOIN_WITHIN_M.min(self.total_m());
-        let best = self.nearest_in(fix, 0.0, limit, 0.0);
+        let best = self.nearest_in(fix, 0.0, self.total_m(), None);
         self.off_m = best.map(|c| c.distance_m);
-        if let Some(c) = best
-            && c.distance_m <= off_limit(fix)
-        {
+        let Some(c) = best.filter(|c| c.distance_m <= off_limit(fix)) else {
+            return;
+        };
+        let joins = match c.heading {
+            Heading::Along => true,
+            Heading::Unknown => c.along_m <= JOIN_WITHIN_M,
+            Heading::Across | Heading::Against => false,
+        };
+        if joins {
             self.take(c);
             self.phase = FollowPhase::OnRoute;
+            self.wrong_way = false;
+            self.started |= c.along_m <= JOIN_WITHIN_M;
             self.reset_counts();
+        } else if c.heading == Heading::Against {
+            self.wrong_way = true;
         }
     }
 
@@ -402,8 +466,18 @@ impl RouteFollower {
         };
         let from = self.along_m - BACK_WINDOW_M;
         let to = self.along_m + AHEAD_WINDOW_M.max(AHEAD_FACTOR * covered);
-        let best = self.nearest_in(fix, from, to, self.along_m + covered);
+        let best = self.nearest_in(fix, from, to, Some(self.along_m + covered));
         match best {
+            Some(c) if c.distance_m <= off_limit(fix) && c.heading == Heading::Against => {
+                // On the route, but no pass the right way near: the rider
+                // rides it backwards, on their way to its start.
+                self.wrong_fixes += 1;
+                if self.wrong_fixes >= WRONG_WAY_FIXES {
+                    self.phase = FollowPhase::Joining;
+                    self.wrong_way = true;
+                    self.reset_counts();
+                }
+            }
             Some(c) if c.distance_m <= off_limit(fix) => {
                 if c.along_m >= self.along_m {
                     self.take(c);
@@ -424,7 +498,7 @@ impl RouteFollower {
 
     fn rejoin(&mut self, fix: FollowFix) {
         let from = self.along_m - BACK_WINDOW_M;
-        let best = self.nearest_in(fix, from, self.total_m(), self.along_m);
+        let best = self.nearest_in(fix, from, self.total_m(), Some(self.along_m));
         self.off_m = best.map(|c| c.distance_m);
         match best {
             Some(c) if c.distance_m <= BACK_ON_M => {
@@ -448,13 +522,23 @@ impl RouteFollower {
     }
 
     fn reset_counts(&mut self) {
+        self.wrong_fixes = 0;
         self.far_fixes = 0;
         self.far_since_ms = None;
         self.near_fixes = 0;
         self.off_m = None;
     }
 
+    /// A loop: it ends where it starts.
+    fn is_loop(&self) -> bool {
+        haversine_m(self.line[0], self.line[self.line.len() - 1]) <= LOOP_END_M
+    }
+
     fn at_end(&self, p: LatLon) -> bool {
+        // A loop joined part way isn't over at its start: it starts there.
+        if self.is_loop() && !self.started {
+            return false;
+        }
         let total = self.total_m();
         let end = self.line[self.line.len() - 1];
         self.along_m >= FINISH_SHARE * total && haversine_m(p, end) <= FINISH_M
@@ -463,8 +547,14 @@ impl RouteFollower {
     /// The best place on the line between `from` and `to` metres along for
     /// `fix`, within [`SEARCH_M`]: the nearest, counting a segment heading
     /// against the rider's bearing as further, and preferring places near
-    /// `expected` metres along.
-    fn nearest_in(&self, fix: FollowFix, from: f64, to: f64, expected: f64) -> Option<Candidate> {
+    /// `expected` metres along, if given.
+    fn nearest_in(
+        &self,
+        fix: FollowFix,
+        from: f64,
+        to: f64,
+        expected: Option<f64>,
+    ) -> Option<Candidate> {
         let p = fix.position;
         let bearing = fix
             .bearing_deg
@@ -490,12 +580,19 @@ impl RouteFollower {
                     if along < from || along > to {
                         continue;
                     }
-                    let wrong_way = bearing.is_some_and(|br| {
-                        a != b && angle_between(br, bearing_deg(a, b)) > WRONG_WAY_DEG
-                    });
+                    let turn = bearing
+                        .filter(|_| a != b)
+                        .map(|br| angle_between(br, bearing_deg(a, b)));
+                    let heading = match turn {
+                        None => Heading::Unknown,
+                        Some(t) if t <= ALONG_DEG => Heading::Along,
+                        Some(t) if t > AGAINST_DEG => Heading::Against,
+                        Some(_) => Heading::Across,
+                    };
+                    let wrong_way = turn.is_some_and(|t| t > WRONG_WAY_DEG);
                     let score = d
                         + if wrong_way { WRONG_WAY_PENALTY_M } else { 0.0 }
-                        + EXPECTED_WEIGHT * (along - expected).abs();
+                        + expected.map_or(0.0, |e| EXPECTED_WEIGHT * (along - e).abs());
                     if best.as_ref().is_none_or(|(b, _)| score < *b) {
                         best = Some((
                             score,
@@ -504,6 +601,7 @@ impl RouteFollower {
                                 t,
                                 along_m: along,
                                 distance_m: d,
+                                heading,
                             },
                         ));
                     }

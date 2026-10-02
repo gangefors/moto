@@ -63,6 +63,13 @@ pub struct FollowState {
     pub off_since_ms: Option<i64>,
     /// At most two, nearest first.
     pub favourites: Vec<NearFavourite>,
+    /// Joining because the rider is on the route the wrong way.
+    #[uniffi(default = false)]
+    pub wrong_way: bool,
+    /// The rider has been at the route's start heading along it: the
+    /// recording of a ride started with Ride starts then.
+    #[uniffi(default = false)]
+    pub started: bool,
 }
 
 /// The way back to a followed route.
@@ -267,6 +274,8 @@ impl From<core::FollowState> for FollowState {
                     distance_m: f.distance_m,
                 })
                 .collect(),
+            wrong_way: s.wrong_way,
+            started: s.started,
         }
     }
 }

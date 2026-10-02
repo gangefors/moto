@@ -323,11 +323,102 @@ fn joins_from_away_and_then_follows() {
 }
 
 #[test]
-fn joining_ignores_the_route_after_its_first_kilometre() {
+fn joining_further_on_needs_a_heading_along_the_route() {
     let line = path(START, &[(0.0, 3_000.0)]);
     let mut f = RouteFollower::new(line.clone(), &[], &[], 180.0).unwrap();
+    // 2 km in, no bearing: not yet (could be crossing it).
     let s = f.update(fix(line[100], 0)).unwrap();
     assert_eq!(s.phase, FollowPhase::Joining);
+    // Across it: still not.
+    let s = f.update(heading(line[101], 1, 90.0)).unwrap();
+    assert_eq!(s.phase, FollowPhase::Joining);
+    assert!(!s.wrong_way);
+    // Along it: on the route from there, figures from there, not started.
+    let s = f.update(heading(line[102], 2, 0.0)).unwrap();
+    assert_eq!(s.phase, FollowPhase::OnRoute);
+    assert!((s.along_m - 2_040.0).abs() < 5.0, "{}", s.along_m);
+    assert!((s.left_m - 960.0).abs() < 5.0);
+    assert!(!s.started);
+}
+
+#[test]
+fn joining_at_the_start_starts() {
+    let line = path(START, &[(0.0, 3_000.0)]);
+    let mut f = RouteFollower::new(line.clone(), &[], &[], 180.0).unwrap();
+    let s = f.update(heading(line[10], 0, 0.0)).unwrap();
+    assert_eq!(s.phase, FollowPhase::OnRoute);
+    assert!(s.started);
+}
+
+#[test]
+fn on_the_route_the_wrong_way_is_joining() {
+    let line = path(START, &[(0.0, 3_000.0)]);
+    let mut f = RouteFollower::new(line.clone(), &[], &[], 180.0).unwrap();
+    // Joined 2 km in, heading south: on the way to the start.
+    let s = f.update(heading(line[100], 0, 180.0)).unwrap();
+    assert_eq!(s.phase, FollowPhase::Joining);
+    assert!(s.wrong_way);
+    // At the start, turning north: started.
+    let s = f.update(heading(line[1], 200, 0.0)).unwrap();
+    assert_eq!(s.phase, FollowPhase::OnRoute);
+    assert!(s.started && !s.wrong_way);
+}
+
+#[test]
+fn riding_the_route_backwards_goes_back_to_joining() {
+    let line = path(START, &[(0.0, 3_000.0)]);
+    let mut f = RouteFollower::new(line.clone(), &[], &[], 180.0).unwrap();
+    // Joined 2 km in heading north, then turns round and rides south.
+    f.update(heading(line[100], 0, 0.0)).unwrap();
+    let mut s = f.state();
+    for (t, k) in (90..100).rev().enumerate() {
+        s = f.update(heading(line[k], t as i64 + 1, 180.0)).unwrap();
+    }
+    assert_eq!(s.phase, FollowPhase::Joining);
+    assert!(s.wrong_way);
+}
+
+#[test]
+fn a_loop_joined_part_way_starts_at_its_start() {
+    // A square loop of 4 km; joined at 3.2 km (80 %), ridden on round.
+    let line = path(
+        START,
+        &[
+            (0.0, 1_000.0),
+            (90.0, 1_000.0),
+            (180.0, 1_000.0),
+            (270.0, 1_000.0),
+        ],
+    );
+    let mut f = RouteFollower::new(line.clone(), &[], &[], 240.0).unwrap();
+    let along = f.along().to_vec();
+    let at = |m: f64| along.partition_point(|&a| a < m);
+    let mut t = 0;
+    let mut s = f.state();
+    for p in line.iter().skip(at(3_200.0)) {
+        s = f.update(heading(*p, t, 270.0)).unwrap();
+        t += 1;
+        assert_ne!(s.phase, FollowPhase::Finished, "not finished at the start");
+    }
+    // At the start: the loop starts there, all of it ahead.
+    assert!(s.started);
+    assert!(s.along_m < 50.0, "{}", s.along_m);
+    // And it finishes when ridden round.
+    let (_, states) = ride(&mut f, &line, t + 1, 0.0);
+    assert_eq!(states.last().unwrap().phase, FollowPhase::Finished);
+}
+
+#[test]
+fn a_route_joined_part_way_still_arrives() {
+    let line = path(START, &[(0.0, 3_000.0)]);
+    let mut f = RouteFollower::new(line.clone(), &[], &[], 180.0).unwrap();
+    f.update(heading(line[100], 0, 0.0)).unwrap();
+    let mut s = f.state();
+    for (t, k) in (101..line.len()).enumerate() {
+        s = f.update(heading(line[k], t as i64 + 1, 0.0)).unwrap();
+    }
+    assert_eq!(s.phase, FollowPhase::Finished);
+    assert!(!s.started);
 }
 
 #[test]
