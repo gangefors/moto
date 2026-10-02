@@ -9,7 +9,7 @@ use std::sync::Arc;
 use moto_core::exchange as core;
 
 use crate::sections::now;
-use crate::{Engine, MotoError, SectionStore};
+use crate::{Engine, MotoError, Rating, SectionStore};
 
 /// How an export is packed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -22,8 +22,28 @@ pub enum ExportFormat {
     Zip,
 }
 
-/// What an import did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+/// A section named in an import's report: its name (may be empty),
+/// rating and length.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ImportItem {
+    pub name: String,
+    pub rating: Rating,
+    pub length_m: f64,
+}
+
+impl From<core::ImportItem> for ImportItem {
+    fn from(i: core::ImportItem) -> Self {
+        Self {
+            name: i.name,
+            rating: i.rating.into(),
+            length_m: i.length_m,
+        }
+    }
+}
+
+/// What an import did: the counts, and the sections behind them, in file
+/// order.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ImportReport {
     /// Sections added.
     pub added: u64,
@@ -34,6 +54,14 @@ pub struct ImportReport {
     pub replaced: u64,
     /// Added sections that don't fit the current map (hidden as unmatched).
     pub unmatched: u64,
+    /// The sections added that fit the map.
+    pub added_items: Vec<ImportItem>,
+    /// The sections added that don't fit the map.
+    pub unmatched_items: Vec<ImportItem>,
+    /// The imported sections skipped as already saved.
+    pub skipped_items: Vec<ImportItem>,
+    /// The saved sections replaced by longer imported ones, as they were.
+    pub replaced_items: Vec<ImportItem>,
 }
 
 impl From<ExportFormat> for core::ExportFormat {
@@ -74,11 +102,16 @@ impl SectionStore {
             &bytes,
             now(),
         )?;
+        let items = |v: Vec<core::ImportItem>| v.into_iter().map(Into::into).collect();
         Ok(ImportReport {
             added: r.added,
             skipped: r.skipped,
             replaced: r.replaced,
             unmatched: r.unmatched,
+            added_items: items(r.added_items),
+            unmatched_items: items(r.unmatched_items),
+            skipped_items: items(r.skipped_items),
+            replaced_items: items(r.replaced_items),
         })
     }
 }

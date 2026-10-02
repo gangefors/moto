@@ -271,8 +271,9 @@ struct Plan {
     add: Vec<usize>,
     /// Saved sections the import replaces.
     remove: Vec<i64>,
-    /// Imported sections skipped as already covered.
-    skipped: u64,
+    /// Imported sections skipped as already covered (indices into the
+    /// import, in file order).
+    skipped: Vec<usize>,
 }
 
 /// Applies the overlap rules to `imported` against `saved`, one imported
@@ -287,7 +288,7 @@ fn plan(saved: &[Section], imported: &[NewSection]) -> Plan {
         let covered = saved.iter().any(|(_, o)| o.beats(&shape))
             || accepted.iter().any(|(_, o)| o.beats(&shape));
         if covered {
-            plan.skipped += 1;
+            plan.skipped.push(i);
             continue;
         }
         // It replaces the sections it makes redundant.
@@ -298,20 +299,45 @@ fn plan(saved: &[Section], imported: &[NewSection]) -> Plan {
             }
             !replaced
         });
-        let before = accepted.len();
-        accepted.retain(|(_, o)| !shape.beats(o));
         // One earlier in the same file that this makes redundant counts as
         // skipped.
-        plan.skipped += (before - accepted.len()) as u64;
+        accepted.retain(|(j, o)| {
+            let redundant = shape.beats(o);
+            if redundant {
+                plan.skipped.push(*j);
+            }
+            !redundant
+        });
         accepted.push((i, shape));
     }
     plan.add = accepted.into_iter().map(|(i, _)| i).collect();
     plan.add.sort_unstable();
+    plan.skipped.sort_unstable();
     plan
 }
 
-/// What an import did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// A section named in an import's report: its name (may be empty), rating
+/// and length.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportItem {
+    pub name: String,
+    pub rating: Rating,
+    pub length_m: f64,
+}
+
+impl ImportItem {
+    fn of(name: &str, rating: Rating, geometry: &[LatLon]) -> Self {
+        Self {
+            name: name.to_owned(),
+            rating,
+            length_m: crate::geo::polyline_length_m(geometry),
+        }
+    }
+}
+
+/// What an import did: the counts, and the sections behind them, each
+/// list in file order (replaced ones in the order they were saved).
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ImportReport {
     /// Sections added.
     pub added: u64,
@@ -324,6 +350,14 @@ pub struct ImportReport {
     /// Added sections that don't fit the current map (kept: waiting when
     /// no open region covers them, else flagged unmatched).
     pub unmatched: u64,
+    /// The sections added that fit the map.
+    pub added_items: Vec<ImportItem>,
+    /// The sections added that don't fit the map.
+    pub unmatched_items: Vec<ImportItem>,
+    /// The imported sections skipped.
+    pub skipped_items: Vec<ImportItem>,
+    /// The saved sections replaced, as they were.
+    pub replaced_items: Vec<ImportItem>,
 }
 
 /// Exports every saved section in `format`.
@@ -343,24 +377,43 @@ pub fn import_sections(
     now: i64,
 ) -> Result<ImportReport, CoreError> {
     let imported = from_geojson(&archive::unpack(bytes)?)?;
-    let plan = plan(&store.list_sections(None)?, &imported);
+    let saved = store.list_sections(None)?;
+    let plan = plan(&saved, &imported);
     let add: Vec<NewSection> = plan.add.iter().map(|&i| imported[i].clone()).collect();
+    let new_item = |s: &NewSection| ImportItem::of(&s.name, s.rating, &s.geometry);
+    let replaced_items: Vec<ImportItem> = saved
+        .iter()
+        .filter(|s| plan.remove.contains(&s.id))
+        .map(|s| ImportItem::of(&s.name, s.rating, &s.geometry))
+        .collect();
     let ids = store.apply_import(&add, &plan.remove, now)?;
     let mut report = ImportReport {
         added: ids.len() as u64,
-        skipped: plan.skipped,
+        skipped: plan.skipped.len() as u64,
         replaced: plan.remove.len() as u64,
-        unmatched: 0,
+        skipped_items: plan
+            .skipped
+            .iter()
+            .filter_map(|&i| imported.get(i))
+            .map(new_item)
+            .collect(),
+        replaced_items,
+        ..ImportReport::default()
     };
     if let Some(engine) = engine {
         rematch_store(store, engine)?;
-        for id in ids {
-            if store
-                .get_section(id)?
-                .is_some_and(|s| s.status != Status::Ok)
-            {
-                report.unmatched += 1;
-            }
+    }
+    for (id, s) in ids.iter().zip(&add) {
+        // Without a map they wait to be fitted; they count as added.
+        let fits = engine.is_none()
+            || store
+                .get_section(*id)?
+                .is_some_and(|s| s.status == Status::Ok);
+        if fits {
+            report.added_items.push(new_item(s));
+        } else {
+            report.unmatched += 1;
+            report.unmatched_items.push(new_item(s));
         }
     }
     Ok(report)
