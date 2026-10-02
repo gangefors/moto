@@ -1733,6 +1733,13 @@ fun MapScreen() {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
+                                // Loop first (the rider), then route from the
+                                // rider's position.
+                                IconTextButton(R.drawable.ic_loop, stringResource(R.string.loop_from_here)) {
+                                    val start = picker.takeStart() ?: return@IconTextButton
+                                    message = null
+                                    startLoop(start)
+                                }
                                 if (hasLocation) {
                                     // The long-pressed point becomes the end; the
                                     // rider's position the start. A later
@@ -1749,11 +1756,6 @@ fun MapScreen() {
                                         if (routeEnds == null) clearRoutes()
                                         routeEnds = from to to
                                     }
-                                }
-                                IconTextButton(R.drawable.ic_loop, stringResource(R.string.loop_from_here)) {
-                                    val start = picker.takeStart() ?: return@IconTextButton
-                                    message = null
-                                    startLoop(start)
                                 }
                             }
                         }
