@@ -464,3 +464,123 @@ fn a_degenerate_line_of_one_place_still_works() {
     let s = f.update(fix(START, 0)).unwrap();
     assert!(s.left_m == 0.0 && s.left_s == 0.0);
 }
+
+mod rejoin {
+    use super::*;
+    use crate::fixture;
+    use crate::region::Region;
+
+    fn engine() -> Engine {
+        let data = fixture::grid(13);
+        Engine::from_region(Region::from_bytes(&data.to_bytes().unwrap()).unwrap())
+    }
+
+    /// Grid crossing at row `r` (north) and column `c` (east).
+    fn at(r: u32, c: u32) -> LatLon {
+        LatLon {
+            lat: 55.70 + f64::from(r) * 0.009,
+            lon: 13.40 + f64::from(c) * 0.016,
+        }
+    }
+
+    /// The route east along row 2 from column 1 to 11, followed up to
+    /// column 5, then the rider rode north off it.
+    fn off_at_column_5(e: &Engine) -> (RouteFollower, LatLon) {
+        let route = e
+            .route(at(2, 1), at(2, 11), &RouteOptions::default())
+            .unwrap();
+        let line = route.geometry.clone();
+        let mut f = RouteFollower::new(line, &[], &[], route.duration_s).unwrap();
+        let mut t = 0;
+        for c in 1..=5 {
+            f.update(heading(at(2, c), t, 90.0)).unwrap();
+            t += 10;
+        }
+        let north = |m: f64| destination(at(2, 5), 0.0, m);
+        for k in 1..=6 {
+            f.update(heading(north(150.0 * k as f64), t, 0.0)).unwrap();
+            t += 2;
+        }
+        assert_eq!(f.phase(), FollowPhase::OffRoute);
+        (f, north(900.0))
+    }
+
+    #[test]
+    fn goes_back_where_the_rider_left() {
+        let e = engine();
+        let (f, here) = off_at_column_5(&e);
+        let back = e
+            .rejoin(here, Some(0.0), &f, &RouteOptions::default())
+            .unwrap();
+        // Back south to the crossing, not on to a later one.
+        assert!(
+            (back.to_along_m - f.along_m()).abs() < 1.0,
+            "{} vs {}",
+            back.to_along_m,
+            f.along_m()
+        );
+        assert!(back.turn_round, "heading north, the way back is south");
+        assert!((back.route.distance_m - 900.0).abs() < 100.0);
+    }
+
+    #[test]
+    fn no_turn_round_when_heading_back_already() {
+        let e = engine();
+        let (f, here) = off_at_column_5(&e);
+        let back = e
+            .rejoin(here, Some(180.0), &f, &RouteOptions::default())
+            .unwrap();
+        assert!(!back.turn_round);
+        let back = e.rejoin(here, None, &f, &RouteOptions::default()).unwrap();
+        assert!(!back.turn_round, "no bearing, no turn round");
+    }
+
+    #[test]
+    fn joining_goes_to_the_first_kilometre() {
+        let e = engine();
+        let route = e
+            .route(at(2, 1), at(2, 11), &RouteOptions::default())
+            .unwrap();
+        let mut f = RouteFollower::new(route.geometry.clone(), &[], &[], route.duration_s).unwrap();
+        // Two crossings north of the start.
+        let home = at(4, 1);
+        assert_eq!(f.update(fix(home, 0)).unwrap().phase, FollowPhase::Joining);
+        let back = e.rejoin(home, None, &f, &RouteOptions::default()).unwrap();
+        assert!(back.to_along_m <= JOIN_WITHIN_M);
+        assert!((back.route.distance_m - 2_000.0).abs() < 100.0);
+    }
+
+    #[test]
+    fn bad_input_is_refused() {
+        let e = engine();
+        let (f, here) = off_at_column_5(&e);
+        assert!(
+            e.rejoin(here, Some(f64::NAN), &f, &RouteOptions::default())
+                .is_err()
+        );
+        let nowhere = LatLon {
+            lat: 95.0,
+            lon: 0.0,
+        };
+        assert!(
+            e.rejoin(nowhere, None, &f, &RouteOptions::default())
+                .is_err()
+        );
+        // Far outside the region: no road to start from.
+        let sea = LatLon {
+            lat: 50.0,
+            lon: 0.0,
+        };
+        assert!(e.rejoin(sea, None, &f, &RouteOptions::default()).is_err());
+    }
+
+    #[test]
+    fn point_at_walks_the_line() {
+        let line = path(START, &[(0.0, 1_000.0)]);
+        let f = RouteFollower::new(line.clone(), &[], &[], 60.0).unwrap();
+        assert_eq!(f.point_at(-5.0), line[0]);
+        assert_eq!(f.point_at(1e9), *line.last().unwrap());
+        let mid = f.point_at(500.0);
+        assert!((haversine_m(line[0], mid) - 500.0).abs() < 1.0);
+    }
+}

@@ -13,7 +13,8 @@ fastest.
 A significant regression makes the script exit with status 1, unless
 --accepted is given (the commit carries a `Perf-Accepted:` trailer):
 more than 25 % slower for the CPU-bound snapping, routing (fastest,
-with favourites and curvy) and map matching, and more
+with favourites and curvy), map matching, following a route (also at
+least 1 µs per fix) and the way back to it, and more
 than 50 % and 5 ms slower for the short verify and open timings, which
 depend on memory and disk and vary more between CI machines. See
 "Testing and performance" in CLAUDE.md.
@@ -44,6 +45,9 @@ METRICS = [
     ("long_loop_ms_mean", "Round trip of 400 km, mean", 1.25, 0.0),
     ("long_loop_ms_p95", "Round trip of 400 km, p95", 1.25, 0.0),
     ("match_ms_per_km", "Map matching, per km", 1.25, 0.0),
+    ("follow_us_mean", "Follow a route, per fix (µs)", 1.25, 1.0),
+    ("rejoin_ms_mean", "Way back to the route, mean", 1.25, 0.0),
+    ("rejoin_ms_p95", "Way back to the route, p95", 1.25, 0.0),
 ]
 WARNING = 1.10
 IMPROVEMENT = 0.90

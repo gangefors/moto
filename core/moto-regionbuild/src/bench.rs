@@ -9,6 +9,8 @@
 use std::path::Path;
 use std::time::Instant;
 
+use moto_core::follow::{FollowFix, FollowPhase, RouteFollower};
+use moto_core::geo::{bearing_deg, destination};
 use moto_core::region::Region;
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
 use moto_core::{Avoid, Engine, Favourites, Gravel, LatLon, RoundTripTarget, RouteOptions};
@@ -43,6 +45,10 @@ const TRACK_NOISE_M: f64 = 8.0;
 /// Timed repetitions; the fastest run counts, being the one least disturbed
 /// by the rest of the machine. Short timings get more rounds.
 const ROUNDS: usize = 5;
+/// The ways back start this far beside the route...
+const OFF_M: f64 = 300.0;
+/// ...this share of the way along it.
+const OFF_SHARE: f64 = 0.4;
 // Snapping is also timed once more after each later phase (routing,
 // favourites, loops, matching): its rounds are short (tens of ms), and a
 // slow stretch of a shared CI machine could otherwise cover all of them.
@@ -117,6 +123,19 @@ pub struct Report {
     /// Matched length over ridden length, and pieces per track.
     pub match_share: f64,
     pub match_pieces: usize,
+    /// Following the matching tracks along their routes: time per fix,
+    /// fixes, times a ride went off its route (should be none) and rides
+    /// that reached the end.
+    pub follow_us_mean: f64,
+    pub follow_fixes: usize,
+    pub follow_off: usize,
+    pub follow_finished: usize,
+    /// Ways back to each route from [`OFF_M`] beside it: time per way,
+    /// requests and those that found one.
+    pub rejoin_ms_mean: f64,
+    pub rejoin_ms_p95: f64,
+    pub rejoins: usize,
+    pub rejoins_found: usize,
     /// Pairs that have no route even when avoiding nothing.
     pub unroutable: Vec<(LatLon, LatLon)>,
 }
@@ -394,6 +413,53 @@ pub fn run(path: &Path) -> Result<Report, String> {
         match_runs.push(ms(t));
     }
     let match_ms = fastest(match_runs);
+
+    // Following (ADR-0011): the same noisy tracks replayed through a
+    // follower of their route, a fix a second; then ways back from
+    // [`OFF_M`] beside each route, part way along.
+    let fixes: Vec<Vec<FollowFix>> = tracks.iter().map(|t| track_fixes(t)).collect();
+    let follow_fixes: usize = fixes.iter().map(Vec::len).sum();
+    let (mut follow_off, mut follow_finished) = (0, 0);
+    let mut follow_runs = Vec::new();
+    for round in 0..ROUNDS {
+        let mut followers = ridden
+            .iter()
+            .map(|line| RouteFollower::new(line.clone(), &[], &[], 3_600.0))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        let t = Instant::now();
+        for (f, track) in followers.iter_mut().zip(&fixes) {
+            let mut was_off = false;
+            for &fix in track {
+                let s = f.update(fix).map_err(|e| e.to_string())?;
+                let off = s.phase == FollowPhase::OffRoute;
+                if round == 0 && off && !was_off {
+                    follow_off += 1;
+                }
+                was_off = off;
+            }
+            if round == 0 && f.phase() == FollowPhase::Finished {
+                follow_finished += 1;
+            }
+        }
+        follow_runs.push(ms(t) * 1000.0 / follow_fixes.max(1) as f64);
+    }
+    let mut rejoin_times = vec![Vec::new(); ridden.len()];
+    let mut rejoins_found = 0;
+    for round in 0..SHORT_ROUNDS.min(3) {
+        for (i, (line, track)) in ridden.iter().zip(&fixes).enumerate() {
+            let Some((f, here, bearing)) = off_route(line, track)? else {
+                continue;
+            };
+            let t = Instant::now();
+            let back = engine.rejoin(here, Some(bearing), &f, &opts);
+            rejoin_times[i].push(ms(t));
+            if round == 0 && back.is_ok() {
+                rejoins_found += 1;
+            }
+        }
+    }
+    let rejoin_times = sorted(rejoin_times.into_iter().filter(|t| !t.is_empty()).collect());
     snap_again(&mut snap_runs);
     let snap_us_mean = fastest(snap_runs);
 
@@ -469,6 +535,14 @@ pub fn run(path: &Path) -> Result<Report, String> {
             0.0
         },
         match_pieces,
+        follow_us_mean: fastest(follow_runs),
+        follow_fixes,
+        follow_off,
+        follow_finished,
+        rejoin_ms_mean: mean(&rejoin_times),
+        rejoin_ms_p95: pick(&rejoin_times, 0.95),
+        rejoins: rejoin_times.len(),
+        rejoins_found,
         unroutable,
     })
 }
@@ -567,6 +641,19 @@ impl Report {
             self.match_share * 100.0,
             self.match_pieces
         ));
+        out.push(format!(
+            "follow    {:.1} µs per fix over {} fixes ({} tracks); {} went off the route, \
+             {} reached the end",
+            self.follow_us_mean,
+            self.follow_fixes,
+            self.match_tracks,
+            self.follow_off,
+            self.follow_finished
+        ));
+        out.push(format!(
+            "rejoin    {:.1} ms mean, {:.1} ms p95 over {} ways back from {OFF_M} m off; {} found",
+            self.rejoin_ms_mean, self.rejoin_ms_p95, self.rejoins, self.rejoins_found
+        ));
         for (a, z) in &self.unroutable {
             out.push(format!(
                 "no route  {:.5},{:.5} → {:.5},{:.5}",
@@ -634,6 +721,14 @@ impl Report {
             num("match_km", self.match_km),
             num("match_share", self.match_share),
             num("match_pieces", self.match_pieces as f64),
+            num("follow_us_mean", self.follow_us_mean),
+            num("follow_fixes", self.follow_fixes as f64),
+            num("follow_off", self.follow_off as f64),
+            num("follow_finished", self.follow_finished as f64),
+            num("rejoin_ms_mean", self.rejoin_ms_mean),
+            num("rejoin_ms_p95", self.rejoin_ms_p95),
+            num("rejoins", self.rejoins as f64),
+            num("rejoins_found", self.rejoins_found as f64),
         ];
         format!("{{\n{}\n}}\n", fields.join(",\n"))
     }
@@ -691,6 +786,50 @@ fn synthetic_track(line: &[LatLon], rng: &mut Rng) -> Vec<LatLon> {
         carry = len - (at - TRACK_STEP_M);
     }
     track
+}
+
+/// A track as fixes a second apart at 20 m/s, heading from each fix to
+/// the next.
+fn track_fixes(track: &[LatLon]) -> Vec<FollowFix> {
+    track
+        .iter()
+        .enumerate()
+        .map(|(i, &p)| FollowFix {
+            position: p,
+            time_ms: i as i64 * 1000,
+            accuracy_m: Some(TRACK_NOISE_M),
+            speed_mps: Some(TRACK_STEP_M),
+            bearing_deg: track.get(i + 1).map(|&q| bearing_deg(p, q)),
+        })
+        .collect()
+}
+
+/// A follower of `line` that rode the first [`OFF_SHARE`] of `track` and
+/// then went [`OFF_M`] off to the side, with where the rider is and their
+/// bearing; None for a track too short.
+fn off_route(
+    line: &[LatLon],
+    track: &[FollowFix],
+) -> Result<Option<(RouteFollower, LatLon, f64)>, String> {
+    let cut = (track.len() as f64 * OFF_SHARE) as usize;
+    let Some(last) = track.get(cut.max(1)) else {
+        return Ok(None);
+    };
+    let mut f = RouteFollower::new(line.to_vec(), &[], &[], 3_600.0).map_err(|e| e.to_string())?;
+    for &fix in &track[..cut] {
+        f.update(fix).map_err(|e| e.to_string())?;
+    }
+    let bearing = last.bearing_deg.unwrap_or(0.0);
+    let here = destination(last.position, bearing + 90.0, OFF_M);
+    for k in 0..4 {
+        f.update(FollowFix {
+            position: here,
+            time_ms: last.time_ms + 2_000 * (k + 1),
+            ..*last
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(Some((f, here, bearing)))
 }
 
 fn json_escape(s: &str) -> String {
@@ -803,7 +942,7 @@ mod tests {
         assert!(r.routes_found > 0 && r.routes_found <= r.routes_found_avoiding_nothing);
         assert!(r.route_ms_p50 <= r.route_ms_p95 && r.route_ms_p95 <= r.route_ms_max);
         assert!(r.route_km_mean > 0.0 && r.route_km_mean < 2.0, "{r:?}");
-        assert_eq!(r.lines().len(), 15 + r.unroutable.len());
+        assert_eq!(r.lines().len(), 17 + r.unroutable.len());
         // The fixture is far smaller than a loop: every request is timed
         // and none finds one.
         assert_eq!(
@@ -839,6 +978,15 @@ mod tests {
             "{r:?}"
         );
         assert!(r.match_share > 0.8 && r.match_share < 1.2, "{r:?}");
+        assert!(r.follow_fixes > 0 && r.follow_us_mean > 0.0, "{r:?}");
+        assert_eq!(
+            r.follow_off, 0,
+            "noisy tracks along their own route went off it"
+        );
+        // The fixture's routes are a few fixes long; on a real region
+        // every ride reaches its end.
+        assert!(r.follow_finished > 0, "{r:?}");
+        assert!(r.rejoins > 0 && r.rejoin_ms_mean > 0.0, "{r:?}");
     }
 
     #[test]
@@ -866,7 +1014,7 @@ mod tests {
             "{json}"
         );
         assert!(json.contains("\"edges\": 16"), "{json}");
-        assert_eq!(json.matches(':').count(), 48);
+        assert_eq!(json.matches(':').count(), 56);
     }
 
     #[test]

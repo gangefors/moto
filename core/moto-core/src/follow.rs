@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use crate::geo::{bearing_deg, haversine_m, polyline_length_m};
 use crate::handoff::MAX_LINE_POINTS;
 use crate::section::Rating;
-use crate::{CoreError, LatLon};
+use crate::{CoreError, Engine, LatLon, Route, RouteOptions};
 
 /// Longest route that can be followed, metres: far more than a day's ride.
 pub const MAX_FOLLOW_M: f64 = 5_000_000.0;
@@ -48,6 +48,15 @@ pub const FINISH_M: f64 = 30.0;
 pub const FINISH_SHARE: f64 = 0.9;
 /// Joining: the rider reaches the route within its first this many metres.
 pub const JOIN_WITHIN_M: f64 = 1_000.0;
+
+/// Where a way back may meet the route, metres on from the last matched
+/// place (off the route), or from its start (joining).
+pub const REJOIN_AHEAD_M: [f64; 4] = [0.0, 1_000.0, 3_000.0, 8_000.0];
+pub const JOIN_AT_M: [f64; 3] = [0.0, 500.0, 1_000.0];
+/// "Turn round" when the way back's first [`TURN_CHECK_M`] heads more than
+/// this far from the rider's bearing.
+pub const TURN_ROUND_DEG: f64 = 120.0;
+pub const TURN_CHECK_M: f64 = 100.0;
 
 /// How far back from the last matched place a fix may still match.
 const BACK_WINDOW_M: f64 = 100.0;
@@ -261,6 +270,37 @@ impl RouteFollower {
     /// The route's length, metres.
     pub fn total_m(&self) -> f64 {
         self.along.last().copied().unwrap_or(0.0)
+    }
+
+    /// Where the rider stands with the route now.
+    pub fn phase(&self) -> FollowPhase {
+        self.phase
+    }
+
+    /// How far along the route the rider is, metres.
+    pub fn along_m(&self) -> f64 {
+        self.along_m
+    }
+
+    /// The route's time, seconds.
+    pub fn duration_s(&self) -> f64 {
+        self.duration_s
+    }
+
+    /// The point `m` metres along the route (clamped to it).
+    pub fn point_at(&self, m: f64) -> LatLon {
+        let m = m.clamp(0.0, self.total_m());
+        let i = self
+            .along
+            .partition_point(|&a| a < m)
+            .clamp(1, self.line.len() - 1);
+        let (a0, a1) = (self.along[i - 1], self.along[i]);
+        let t = if a1 > a0 { (m - a0) / (a1 - a0) } else { 0.0 };
+        let (p, q) = (self.line[i - 1], self.line[i]);
+        LatLon {
+            lat: p.lat + t * (q.lat - p.lat),
+            lon: p.lon + t * (q.lon - p.lon),
+        }
     }
 
     /// The route's line.
@@ -540,6 +580,105 @@ impl RouteFollower {
                 }
             })
             .collect()
+    }
+}
+
+/// The way back to a followed route.
+#[derive(Debug, Clone)]
+pub struct Rejoin {
+    /// From the rider to the route.
+    pub route: Route,
+    /// Where it meets the route, metres along it.
+    pub to_along_m: f64,
+    /// It starts behind the rider.
+    pub turn_round: bool,
+}
+
+impl Engine {
+    /// The quickest way from `position` back to the route `follower`
+    /// follows (ADR-0011), meeting it at the earliest place it can reach
+    /// without riding the route backwards: of the places
+    /// [`REJOIN_AHEAD_M`] on from where the rider left it (when joining,
+    /// [`JOIN_AT_M`] from its start), the one with the least time to get
+    /// there plus time of the route skipped, so favourites aren't given up
+    /// for a small saving. `bearing_deg` (where the rider is heading) says
+    /// whether it starts behind them. Fastest roads under `opts.avoid`.
+    pub fn rejoin(
+        &self,
+        position: LatLon,
+        bearing_deg: Option<f64>,
+        follower: &RouteFollower,
+        opts: &RouteOptions,
+    ) -> Result<Rejoin, CoreError> {
+        position.validate()?;
+        if bearing_deg.is_some_and(|b| !b.is_finite()) {
+            return Err(CoreError::InvalidArgument("invalid bearing".into()));
+        }
+        let total = follower.total_m();
+        let (base, offsets): (f64, &[f64]) = if follower.phase() == FollowPhase::Joining {
+            (0.0, &JOIN_AT_M)
+        } else {
+            (follower.along_m(), &REJOIN_AHEAD_M)
+        };
+        let mut targets: Vec<f64> = offsets.iter().map(|o| (base + o).min(total)).collect();
+        targets.dedup();
+        let per_m = if total > 0.0 {
+            follower.duration_s() / total
+        } else {
+            0.0
+        };
+        let ways = crate::par::map(&targets, |&m| {
+            self.route(position, follower.point_at(m), opts)
+                .map(|r| (m, r))
+        });
+        let cost = |m: f64, r: &Route| r.duration_s + (m - base) * per_m;
+        let mut best: Option<(f64, Route)> = None;
+        let mut failure = None;
+        for way in ways {
+            match way {
+                Ok((m, r)) => {
+                    if best
+                        .as_ref()
+                        .is_none_or(|(bm, br)| cost(m, &r) < cost(*bm, br))
+                    {
+                        best = Some((m, r));
+                    }
+                }
+                Err(e) => failure = failure.or(Some(e)),
+            }
+        }
+        let (to_along_m, route) = match (best, failure) {
+            (Some(b), _) => b,
+            (None, Some(e)) => return Err(e),
+            (None, None) => return Err(CoreError::NoRoute("no way back to the route".into())),
+        };
+        let turn_round = bearing_deg.is_some_and(|b| starts_behind(&route.geometry, b));
+        Ok(Rejoin {
+            route,
+            to_along_m,
+            turn_round,
+        })
+    }
+}
+
+/// Whether `line`'s first [`TURN_CHECK_M`] head more than
+/// [`TURN_ROUND_DEG`] away from `bearing`.
+fn starts_behind(line: &[LatLon], bearing: f64) -> bool {
+    let Some(&first) = line.first() else {
+        return false;
+    };
+    let mut walked = 0.0;
+    let mut to = None;
+    for w in line.windows(2) {
+        walked += haversine_m(w[0], w[1]);
+        to = Some(w[1]);
+        if walked >= TURN_CHECK_M {
+            break;
+        }
+    }
+    match to {
+        Some(to) if to != first => angle_between(bearing, bearing_deg(first, to)) > TURN_ROUND_DEG,
+        _ => false,
     }
 }
 

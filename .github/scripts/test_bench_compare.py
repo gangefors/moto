@@ -29,6 +29,9 @@ BASE = {
     "choices_ms_mean": 120.0,
     "choices_ms_p95": 300.0,
     "match_ms_per_km": 0.3,
+    "follow_us_mean": 4.0,
+    "rejoin_ms_mean": 20.0,
+    "rejoin_ms_p95": 40.0,
 }
 
 
