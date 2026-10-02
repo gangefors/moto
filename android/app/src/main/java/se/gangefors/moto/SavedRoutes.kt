@@ -107,11 +107,8 @@ fun RouteNameDialog(
 }
 
 /** A saved route on the map: its name and figures and a cross to hide
- * it; below, Ride, and at the right of that row Rename ([onRename]),
- * Share and the bin ([onDelete]; a second tap deletes), so the route can
- * be changed where it is open (2026-10-02). The icons wrap onto
- * their own line, still at the right, when the row has no room. */
-@OptIn(ExperimentalLayoutApi::class)
+ * it; below, Ride and the route's actions ([CardActionRow]), so it can be
+ * changed where it is open (2026-10-02). */
 @Composable
 fun SavedRouteCard(
     shown: ShownSavedRoute,
@@ -122,7 +119,6 @@ fun SavedRouteCard(
     modifier: Modifier = Modifier,
     onRide: (() -> Unit)? = null,
 ) {
-    var confirming by remember(shown.route.id) { mutableStateOf(false) }
     MapCard(
         title = shown.route.name,
         supporting = savedRouteSummary(shown.route),
@@ -130,41 +126,67 @@ fun SavedRouteCard(
         closeDescription = stringResource(R.string.saved_route_hide),
         modifier = modifier,
     ) {
-        FlowRow(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
+        CardActionRow(
+            key = shown.route.id,
+            renameDescription = stringResource(R.string.saved_route_edit),
+            onRide = onRide,
+            onRename = onRename,
+            onShare = onShare,
+            onDelete = onDelete,
+        )
+    }
+}
+
+/**
+ * The row under a saved route's or ride's card: Ride ([onRide], the
+ * card's main action and only filled button), and at the right Rename,
+ * Share and the bin ([onDelete]; a second tap deletes). The icons wrap
+ * onto their own line, still at the right, when the row has no room.
+ * [key] is what the bin would delete, so it disarms for another.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CardActionRow(
+    key: Long,
+    renameDescription: String,
+    onRide: (() -> Unit)?,
+    onRename: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var confirming by remember(key) { mutableStateOf(false) }
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (onRide != null) {
+            Button(onClick = onRide, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
+                Icon(painterResource(R.drawable.ic_navigation), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                OneLine(stringResource(R.string.ride_start))
+            }
+        }
+        // The rest of the row, icons at its end; under the cross, past
+        // the content's end padding.
+        Row(
+            Modifier.weight(1f).offset(x = 12.dp),
+            horizontalArrangement = Arrangement.End,
         ) {
-            // Riding it (ADR-0011): the card's main action, the only filled
-            // button.
-            if (onRide != null) {
-                Button(onClick = onRide, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
-                    Icon(painterResource(R.drawable.ic_navigation), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                    OneLine(stringResource(R.string.ride_start))
-                }
+            IconButton(onClick = onRename) {
+                Icon(painterResource(R.drawable.ic_edit), renameDescription)
             }
-            // The rest of the row, icons at its end; under the cross, past
-            // the content's end padding.
-            Row(
-                Modifier.weight(1f).offset(x = 12.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                IconButton(onClick = onRename) {
-                    Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.saved_route_edit))
-                }
-                IconButton(onClick = onShare) {
-                    Icon(painterResource(R.drawable.ic_share), stringResource(R.string.route_share))
-                }
-                DeleteButton(
-                    confirming = confirming,
-                    onArm = { confirming = true },
-                    onDelete = {
-                        confirming = false
-                        onDelete()
-                    },
-                )
+            IconButton(onClick = onShare) {
+                Icon(painterResource(R.drawable.ic_share), stringResource(R.string.route_share))
             }
+            DeleteButton(
+                confirming = confirming,
+                onArm = { confirming = true },
+                onDelete = {
+                    confirming = false
+                    onDelete()
+                },
+            )
         }
     }
 }

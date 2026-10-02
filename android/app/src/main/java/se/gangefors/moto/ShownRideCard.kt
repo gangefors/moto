@@ -26,9 +26,19 @@ import java.time.ZoneId
  * where recording started again after a gap (ADR-0011). */
 data class ShownRide(val track: Track, val line: List<LatLon>, val segments: List<List<LatLon>> = listOf(line))
 
-/** Which ride is on the map: its name and figures, with a cross to hide it. */
+/** Which ride is on the map: its name and figures, with a cross to hide
+ * it; below, Ride (to ride it again) and Rename, Share and the bin, as on
+ * a saved route's card. */
 @Composable
-fun ShownRideCard(ride: ShownRide, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun ShownRideCard(
+    ride: ShownRide,
+    onClose: () -> Unit,
+    onRename: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+    onRide: (() -> Unit)? = null,
+) {
     val zone = remember { ZoneId.systemDefault() }
     val res = LocalResources.current
     MapCard(
@@ -37,7 +47,16 @@ fun ShownRideCard(ride: ShownRide, onClose: () -> Unit, modifier: Modifier = Mod
         onClose = onClose,
         closeDescription = stringResource(R.string.ride_hide),
         modifier = modifier,
-    )
+    ) {
+        CardActionRow(
+            key = ride.track.id,
+            renameDescription = stringResource(R.string.ride_edit),
+            onRide = onRide,
+            onRename = onRename,
+            onShare = onShare,
+            onDelete = onDelete,
+        )
+    }
 }
 
 /**

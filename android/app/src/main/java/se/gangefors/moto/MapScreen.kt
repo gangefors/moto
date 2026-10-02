@@ -137,6 +137,7 @@ import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.SavedRoute
+import se.gangefors.moto.core.Track
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MotoException
@@ -537,6 +538,40 @@ fun MapScreen() {
     // A saved ride the rider asked to see (Menu > Routes & rides > Show), to
     // mark sections along it; the ride being recorded takes its place.
     var shownRide by remember { mutableStateOf<ShownRide?>(null) }
+    // The shown ride being renamed from its card.
+    var renamingRide by remember { mutableStateOf<Track?>(null) }
+    /** Shares ride [t] as GPX, as Routes & rides does. */
+    fun shareRide(t: Track) {
+        val s = (store as? StoreState.Ready)?.store ?: return
+        scope.launch {
+            val zone = ZoneId.systemDefault()
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val gpx = DebugTools.query("saved GPX", ::bytesSummary) {
+                        s.exportTrackGpx(t.id, rideName(t.name, t.startedAt, zone)) ?: error(resources.getString(R.string.rides_gone))
+                    }
+                    RouteShare.prepare(context, gpx, rideFileName(t.startedAt, zone), resources.getString(R.string.route_share_title))
+                }
+            }
+            result.fold(
+                onSuccess = { context.startActivity(it) },
+                onFailure = { notify(resources.getString(R.string.route_share_failed, it.message ?: it.toString()), long = true) },
+            )
+        }
+    }
+    /** Deletes ride [t] from its card: the card closes and the ride leaves
+     * the map. */
+    fun deleteShownRide(t: Track) {
+        val s = (store as? StoreState.Ready)?.store ?: return
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { s.deleteTrack(t.id) } }
+            result.onFailure { notify(resources.getString(R.string.ride_delete_failed, it.message ?: it.toString()), long = true) }
+            if (result.isSuccess) {
+                RideChanges.changed()
+                if (shownRide?.track?.id == t.id) shownRide = null
+            }
+        }
+    }
     LaunchedEffect(overlays, recording, shownRide) {
         overlays?.ride?.show((recording as? Recording.State.Active)?.line?.let { listOf(it) } ?: shownRide?.segments)
     }
@@ -2038,7 +2073,14 @@ fun MapScreen() {
                     }
                 }
                 shownRide?.let {
-                    ShownRideCard(it, onClose = { shownRide = null }, modifier = Modifier.fillMaxWidth())
+                    ShownRideCard(
+                        it,
+                        onClose = { shownRide = null },
+                        onRename = { renamingRide = it.track },
+                        onShare = { shareRide(it.track) },
+                        onDelete = { deleteShownRide(it.track) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 shownSaved?.let { s ->
                     SavedRouteCard(
@@ -2467,6 +2509,25 @@ fun MapScreen() {
             onSave = { name ->
                 savingRoute = null
                 saveRoute(r, isLoop, name)
+            },
+        )
+    }
+    renamingRide?.let { t ->
+        RouteNameDialog(
+            title = stringResource(R.string.ride_rename_title),
+            initial = rideName(t.name, t.startedAt, ZoneId.systemDefault()),
+            onDismiss = { renamingRide = null },
+            onSave = { name ->
+                renamingRide = null
+                val s = (store as? StoreState.Ready)?.store ?: return@RouteNameDialog
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching { s.renameTrack(t.id, name) } }
+                    result.onFailure { notify(resources.getString(R.string.route_save_failed, it.message ?: it.toString()), long = true) }
+                    val now = shownRide
+                    if (result.isSuccess && now != null && now.track.id == t.id) {
+                        shownRide = now.copy(track = now.track.copy(name = name))
+                    }
+                }
             },
         )
     }
