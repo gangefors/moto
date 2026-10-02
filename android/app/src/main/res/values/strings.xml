@@ -96,8 +96,8 @@
     <string name="road_destination_only">Access to destinations only</string>
     <string name="road_details">%1$.1f km to the next junction · OSM way %2$d</string>
     <string name="road_tap_off">%1$d m from where you tapped</string>
-    <string name="route_pick_end">Start set. Long-press where you want to go, or ride a loop from here.</string>
-    <string name="route_pick_end_or_me">Point set. Long-press where you want to go from here, route from your position, or ride a loop from here.</string>
+    <string name="route_pick_end">Start set. Ride a loop from here, or long-press where you want to go.</string>
+    <string name="route_pick_end_or_me">Point set. Ride a loop from here, route from your position, or long-press where you want to go from here.</string>
     <string name="loop_from_here">Loop from here</string>
     <string name="loop_from_me">Loops from my position</string>
     <string name="route_from_me">Route from my position</string>
