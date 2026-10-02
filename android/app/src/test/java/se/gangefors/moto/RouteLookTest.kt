@@ -31,17 +31,40 @@ class RouteLookTest {
     }
 
     @Test
+    fun zoomedFarOutLinesNarrowAndLoseTheirOutline() {
+        // Favourites: from their width at zoom 8 to half of it at zoom 5,
+        // and no further; the gravel dashes, which need 3 dp, are hidden
+        // there.
+        assertEquals(3f, sectionWidthAt(5f, 8f), 1e-4f)
+        assertEquals(2.25f, sectionWidthAt(5f, 6.5f), 1e-4f)
+        assertEquals(1.5f, sectionWidthAt(5f, 5f), 1e-4f)
+        assertEquals(1.5f, sectionWidthAt(3f, 3f), 1e-4f)
+        assertEquals(8f, GRAVEL_MIN_ZOOM, 0f)
+        assertEquals(0f, sectionGravelWidth(1.5f), 0f)
+        assertEquals(listOf(5f, 8f, 12f), SECTION_WIDTH_ZOOMS)
+        // Routes: full from zoom 9, half at zoom 5.
+        assertEquals(5f, routeWidthAt(5f, 12f), 1e-4f)
+        assertEquals(5f, routeWidthAt(5f, 9f), 1e-4f)
+        assertEquals(3.75f, routeWidthAt(5f, 7f), 1e-4f)
+        assertEquals(2.5f, routeWidthAt(5f, 4f), 1e-4f)
+        // Outlines: full from zoom 9, gone from zoom 7 out.
+        assertEquals(0.45f, outlineOpacityAt(0.45f, 10f), 1e-6f)
+        assertEquals(0.225f, outlineOpacityAt(0.45f, 8f), 1e-6f)
+        assertEquals(0f, outlineOpacityAt(0.45f, 7f), 0f)
+        assertEquals(0f, outlineOpacityAt(1f, 5f), 0f)
+    }
+
+    @Test
     fun favouritesAreThinnerZoomedOutButNeverTooThinForGravel() {
         // Full from zoom 12; thinner far out, but never under 3 dp.
         assertEquals(3f, SECTION_MIN_WIDTH, 0f)
-        assertEquals(3f, sectionWidthAt(5f, 6f), 1e-4f)
         assertEquals(3f, sectionWidthAt(5f, 8f), 1e-4f)
         assertEquals(4f, sectionWidthAt(5f, 10f), 1e-4f)
         assertEquals(5f, sectionWidthAt(5f, 12f), 1e-4f)
         assertEquals(5f, sectionWidthAt(5f, 17f), 1e-4f)
-        // While planning (3 dp) they stay as they are.
+        // While planning (3 dp) they stay as they are from zoom 8 in.
         val planning = sectionLook(routeShown = true).lineWidth
-        for (z in listOf(6f, 8f, 10f, 12f)) assertEquals(3f, sectionWidthAt(planning, z), 1e-4f)
+        for (z in listOf(8f, 10f, 12f)) assertEquals(3f, sectionWidthAt(planning, z), 1e-4f)
         // A gravel dash keeps at least 1 dp of colour on each side, and is
         // at least 1 dp itself, at every width a section is drawn at.
         assertEquals(2f, sectionGravelWidth(5f), 1e-4f)

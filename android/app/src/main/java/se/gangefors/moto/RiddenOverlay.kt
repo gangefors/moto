@@ -64,7 +64,25 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
 fun widthByZoom(width: Float, of: (Float) -> Float = { it }): Expression = Expression.interpolate(
     Expression.linear(),
     Expression.zoom(),
-    *SECTION_WIDTH_SCALE.map { (z, _) -> Expression.stop(z, of(sectionWidthAt(width, z))) }.toTypedArray(),
+    *SECTION_WIDTH_ZOOMS.map { z -> Expression.stop(z, of(sectionWidthAt(width, z))) }.toTypedArray(),
+)
+
+/** A route line [width] dp wide at full scale, narrower zoomed far out
+ * ([routeWidthAt]). */
+fun routeWidthByZoom(width: Float): Expression = Expression.interpolate(
+    Expression.linear(),
+    Expression.zoom(),
+    Expression.stop(FAR_ZOOM, routeWidthAt(width, FAR_ZOOM)),
+    Expression.stop(ROUTE_FULL_ZOOM, width),
+)
+
+/** An outline of [opacity] that fades out zoomed far out
+ * ([outlineOpacityAt]). */
+fun outlineByZoom(opacity: Float): Expression = Expression.interpolate(
+    Expression.linear(),
+    Expression.zoom(),
+    Expression.stop(OUTLINE_GONE_ZOOM, 0f),
+    Expression.stop(OUTLINE_FULL_ZOOM, opacity),
 )
 
 /** A dash array that changes at each of [DASH_ZOOMS]: [dashes] of that
