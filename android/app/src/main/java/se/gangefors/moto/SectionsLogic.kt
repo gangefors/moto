@@ -194,3 +194,19 @@ fun nameUpdate(stored: String, typed: String): String? {
  * replaced, or not fitting the map), so each can be read by name. */
 fun sectionImportNeedsReport(r: se.gangefors.moto.core.ImportReport): Boolean =
     r.skipped > 0uL || r.replaced > 0uL || r.unmatched > 0uL
+
+/** What a tap on a favourite section on the map does. */
+enum class FavouriteTap {
+    /** Opens it, with its card and actions. */
+    OPEN,
+
+    /** Only shows its facts in a card of their own; what is open stays. */
+    INFO,
+}
+
+/** A tap on a favourite opens it only when nothing else is on the map:
+ * while a route or loop is being planned, or a saved route or ride is
+ * shown, it only shows its facts, so the open route is never lost
+ * (Stefan, 2026-10-02). */
+fun favouriteTap(planning: Boolean, routeShown: Boolean): FavouriteTap =
+    if (planning || routeShown) FavouriteTap.INFO else FavouriteTap.OPEN

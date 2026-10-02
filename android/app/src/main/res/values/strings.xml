@@ -594,6 +594,7 @@
     <string name="sections_export_as">Export as %1$s</string>
     <string name="sections_import_menu">Import favourites…</string>
     <string name="section_hide">Hide the favourite</string>
+    <string name="favourite_info_close">Close favourite info</string>
     <string name="section_edit">Change rating or direction</string>
     <string name="section_loop_through">Loop through it</string>
     <string name="section_ride_from_here">Route through it</string>
