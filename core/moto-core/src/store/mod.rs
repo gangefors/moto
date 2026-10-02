@@ -116,6 +116,28 @@ const MIGRATIONS: &[&str] = &[
         to_idx      INTEGER NOT NULL CHECK (to_idx BETWEEN 0 AND 4294967295),
         PRIMARY KEY (track_id, seq)
     ) STRICT, WITHOUT ROWID;",
+    // 8: riding a route (ADR-0011): the route a ride follows, kept until
+    // the ride ends, with its favourite parts; and where recording of a
+    // ride started again after a gap (the first fix of a new segment).
+    "CREATE TABLE followed_routes (
+        track_id    INTEGER PRIMARY KEY REFERENCES tracks (id) ON DELETE CASCADE,
+        name        TEXT    NOT NULL,
+        is_loop     INTEGER NOT NULL CHECK (is_loop IN (0, 1)),
+        duration_s  REAL    NOT NULL CHECK (duration_s >= 0),
+        geometry    BLOB    NOT NULL
+    ) STRICT;
+    CREATE TABLE followed_parts (
+        track_id    INTEGER NOT NULL REFERENCES followed_routes (track_id) ON DELETE CASCADE,
+        seq         INTEGER NOT NULL,
+        rating      INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 3),
+        geometry    BLOB    NOT NULL,
+        PRIMARY KEY (track_id, seq)
+    ) STRICT, WITHOUT ROWID;
+    CREATE TABLE track_breaks (
+        track_id    INTEGER NOT NULL REFERENCES tracks (id) ON DELETE CASCADE,
+        seq         INTEGER NOT NULL CHECK (seq > 0),
+        PRIMARY KEY (track_id, seq)
+    ) STRICT, WITHOUT ROWID;",
 ];
 
 /// The schema version this build writes.
@@ -545,6 +567,8 @@ fn decode_line(bytes: &[u8], max: usize) -> Option<Vec<LatLon>> {
 }
 
 mod exchange;
+mod followed;
+pub use followed::FollowedRoute;
 mod rematch;
 mod ride_ways;
 pub use ride_ways::MAX_RIDE_WAYS;

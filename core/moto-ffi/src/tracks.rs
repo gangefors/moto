@@ -106,10 +106,12 @@ impl SectionStore {
     /// A track as a GPX 1.1 document named `name`, for the rider to export;
     /// `None` if there is no such track.
     pub fn export_track_gpx(&self, id: i64, name: String) -> Result<Option<String>, MotoError> {
+        // A trkseg per segment: not across a gap where recording started
+        // again (ADR-0011).
         Ok(self
             .store()
-            .track_points(id)?
-            .map(|points| moto_core::gpx::track_gpx(&name, &points)))
+            .track_segments(id)?
+            .map(|segments| moto_core::gpx::track_gpx_segments(&name, &segments)))
     }
 
     /// Imports a GPX file (at most 64 MiB) from another app or an earlier
