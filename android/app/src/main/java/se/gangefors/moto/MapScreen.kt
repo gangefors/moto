@@ -965,19 +965,20 @@ fun MapScreen() {
     val riddenButton = riddenButtonShown(planning, cardExpanded, hasRidden, mapZoom, riddenMinZoom)
     // Planning over: the ridden roads follow the setting again.
     LaunchedEffect(planning) { if (!planning) riddenWhilePlanning = null }
-    LaunchedEffect(map, insets, planning, sheetTop, mapSize, riddenButton) {
+    // The compass at the top right, under Ride settings' button when that
+    // shows, else in the corner: clear of the cards and the sheet at the
+    // bottom (2026-10-02).
+    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize) {
         val m = map ?: return@LaunchedEffect
         val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
-        // Above the ridden roads button when it shows.
-        val planningCompass = if (riddenButton) FAB_PADDING + TOP_BUTTON_SIZE + COMPASS_GAP else CONTROL_MARGIN
         with(density) {
             applyControlMargins(
                 m,
                 insets.copy(bottom = max(insets.bottom, sheet)),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
-                compassRight = if (planning) (if (riddenButton) FAB_PADDING else CONTROL_MARGIN).roundToPx() else (FAB_PADDING + FAB_SIZE + COMPASS_GAP).roundToPx(),
-                compassBottom = if (planning) planningCompass.roundToPx() else (FAB_PADDING + (FAB_SIZE - COMPASS_SIZE) / 2).roundToPx(),
+                compassRight = TOP_BUTTON_MARGIN.roundToPx(),
+                compassTop = compassTopDp(settingsButtonShown = !marking && !planning).dp.roundToPx(),
             )
         }
     }
@@ -2596,28 +2597,22 @@ private val CONTROL_MARGIN: Dp = 4.dp
 /** MapLibre's default attribution offset from the left, which keeps it clear of the logo. */
 private val ATTRIBUTION_OFFSET: Dp = 92.dp
 
-/** The bottom-right buttons' distance from the safe edges, the size of the
- * my-position button at the bottom (a standard FAB), and the compass: it
- * sits just left of that button, clear of the messages and cards at the
- * top. */
+/** The bottom-right buttons' distance from the safe edges. */
 private val FAB_PADDING: Dp = 16.dp
-private val FAB_SIZE: Dp = 56.dp
-private val COMPASS_SIZE: Dp = 48.dp
-private val COMPASS_GAP: Dp = 8.dp
 
 /** Moves the compass, logo and attribution inside the safe area; px
- * arguments. The compass is placed from the bottom right corner. */
+ * arguments. The compass is placed from the top right corner. */
 private fun applyControlMargins(
     map: MapLibreMap,
     insets: SafeInsets,
     margin: Int,
     attributionOffset: Int,
     compassRight: Int,
-    compassBottom: Int,
+    compassTop: Int,
 ) {
     map.uiSettings.apply {
-        compassGravity = Gravity.BOTTOM or Gravity.END
-        setCompassMargins(0, 0, insets.right + compassRight, insets.bottom + compassBottom)
+        compassGravity = Gravity.TOP or Gravity.END
+        setCompassMargins(0, insets.top + compassTop, insets.right + compassRight, 0)
         setLogoMargins(insets.left + margin, 0, 0, insets.bottom + margin)
         setAttributionMargins(insets.left + attributionOffset, 0, 0, insets.bottom + margin)
     }

@@ -305,6 +305,12 @@ class MapLogicTest {
     }
 
     @Test
+    fun theCompassSitsUnderRideSettingsOrInItsPlace() {
+        assertEquals(64f, compassTopDp(settingsButtonShown = true), 0f)
+        assertEquals(8f, compassTopDp(settingsButtonShown = false), 0f)
+    }
+
+    @Test
     fun theRiddenRoadsButtonChoosesForThePlanOnly() {
         // Not pressed: the setting.
         assertTrue(riddenShown(setting = true, whilePlanning = null))
