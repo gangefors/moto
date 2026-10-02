@@ -205,3 +205,26 @@ fn gpx_has_a_segment_per_part() {
     assert_eq!(gpx.matches("<trkseg>").count(), 2);
     assert_eq!(gpx.matches("<trkpt").count(), 3);
 }
+
+#[test]
+fn favourite_parts_come_from_the_sections_near_the_line() {
+    use crate::section::tests::sample;
+    let mut s = Store::open_in_memory().unwrap();
+    // The sample section runs 56.30,12.45 → 56.31,12.46; a line along it.
+    let n = sample();
+    let line: Vec<LatLon> = (0..=40)
+        .map(|i| {
+            let f = f64::from(i) / 40.0;
+            ll(56.30 + f * 0.01, 12.45 + f * 0.01)
+        })
+        .collect();
+    assert!(s.favourite_parts_along(&line).unwrap().is_empty());
+    s.add_section(&n, T0).unwrap();
+    let parts = s.favourite_parts_along(&line).unwrap();
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].rating, n.rating);
+    // Far away: nothing.
+    let elsewhere = vec![ll(58.0, 15.0), ll(58.01, 15.0)];
+    assert!(s.favourite_parts_along(&elsewhere).unwrap().is_empty());
+    assert!(s.favourite_parts_along(&[ll(58.0, 15.0)]).is_err());
+}

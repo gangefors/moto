@@ -16,6 +16,7 @@ mod draft;
 mod engine;
 mod error;
 pub mod exchange;
+pub mod favourite_parts;
 pub mod favourites;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixture;
