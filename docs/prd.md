@@ -21,7 +21,7 @@ v1 solves this for a single rider (the rider): capture favourite road sections e
 ## Non-Goals
 
 - **Community ratings / accounts / sync** — v1 is single-user. The whole point of the project needs it eventually, but it adds backend, auth, moderation and privacy (GDPR) work before the core loop is proven.
-- **Built-in turn-by-turn navigation** — Kurviger, Google Maps and other nav apps already do this well; building voice guidance and rerouting would dwarf everything else.
+- **Built-in turn-by-turn navigation** — Kurviger, Google Maps and other nav apps already do this well; building voice guidance and turn instructions would dwarf everything else. Riding a route in the app with progress and an off-route alert (R13, ADR-0011) is in; spoken directions are not.
 - **iOS app** — deferred per decision log; keep logic in Rust so the port is cheap later.
 - **Social features** (sharing rides, groups, feeds) — no users to share with yet.
 - **Hazard/traffic/weather data** — nice context, not core to "find fun roads".
@@ -174,6 +174,13 @@ A section is an ordered sequence of OSM way segments (with direction-agnostic de
 - [x] App can install/replace the region file (bundled or downloaded) and reports its OSM data date. Signed downloads per country on the Map region page, with updates (ADR-0008, ADR-0009).
 - [x] Sweden region file size and peak routing memory are measured and fit comfortably on the rider's phone (targets set after first build). Measured 2026-09-28 (ADR-0001).
 
+**R13. Ride a route in the app** (2026-10-02; ADR-0011)
+
+- [ ] Ride a planned route or loop, or a saved route, in the app: the map follows the rider with the way they're going up, and the ride is recorded at the same time.
+- [ ] A card shows distance and time left, progress, arrival time and the favourites within the next 2 km.
+- [ ] Leaving the route gives a sound alert, also with the screen off, and a line back to the route.
+- [ ] The end of the route stops the recording after a 15 s countdown; after Android stops the app mid-ride, the rider can carry on into the same recording.
+
 ### Nice-to-Have (P1)
 
 - **Hardware quick-tag** via Bluetooth handlebar remote or volume key.
@@ -187,7 +194,7 @@ A section is an ordered sequence of OSM way segments (with direction-agnostic de
 
 - **Community ratings:** accounts, sync, aggregated popularity weighting ("the more riders like it, the more likely it's included"), anti-gaming. → Keep `rider_id` in model; keep scoring function composable (personal + community weight).
 - **iOS app** reusing the Rust core via UniFFI. → No Android types in core APIs.
-- **Built-in navigation.**
+- **Spoken turn-by-turn directions** (needs turn restrictions in the region file first; ADR-0011).
 - **Road surface / seasonal info** (e.g. roadworks, gravel on spring roads).
 - **Section discovery:** suggest unrated high-curvature roads nearby.
 
