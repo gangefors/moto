@@ -105,4 +105,39 @@ class RideLogicTest {
         // The gravel dashes are not kept.
         assertEquals(r.copy(unpavedParts = emptyList()), r.toFollowed().toRideRoute())
     }
+
+    // About 1.1 km per 0.01° of latitude.
+    private fun north(lat: Double) = LatLon(lat, 13.5)
+
+    @Test
+    fun aRideEndingWhereItStartedIsRiddenAgainAsALoop() {
+        val out = listOf(north(55.70), north(55.72), LatLon(55.72, 13.53))
+        val back = listOf(LatLon(55.70, 13.53), LatLon(55.7005, 13.5005))
+        val line = rideAgainLine(listOf(out, back))!!
+        assertTrue(rideAgainIsLoop(line))
+        // Closed back to its start, so the follower sees a loop.
+        assertEquals(out.first(), line.last())
+        assertEquals(6, line.size)
+    }
+
+    @Test
+    fun aRideEndingElsewhereIsARoute() {
+        val line = rideAgainLine(listOf(listOf(north(55.70), north(55.73))))!!
+        assertFalse(rideAgainIsLoop(line))
+        assertEquals(2, line.size)
+    }
+
+    @Test
+    fun tooLittleOfARideIsNotRiddenAgain() {
+        assertNull(rideAgainLine(emptyList()))
+        assertNull(rideAgainLine(listOf(listOf(north(55.70)))))
+        assertNull(rideAgainLine(listOf(listOf(north(55.70), north(55.7001)))))
+    }
+
+    @Test
+    fun aRideTakesAsLongAsItDid() {
+        assertEquals(3600.0, rideAgainDurationS(1_000, 4_600), 1e-9)
+        assertEquals(0.0, rideAgainDurationS(1_000, null), 1e-9)
+        assertEquals(0.0, rideAgainDurationS(5_000, 1_000), 1e-9)
+    }
 }
