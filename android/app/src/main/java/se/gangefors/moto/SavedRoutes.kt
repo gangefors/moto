@@ -4,10 +4,12 @@
 package se.gangefors.moto
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -104,37 +106,64 @@ fun RouteNameDialog(
     )
 }
 
-/** A saved route on the map: its name and figures, Share, and a cross to
- * hide it. */
+/** A saved route on the map: its name and figures and a cross to hide
+ * it; below, Ride, and at the right of that row Rename ([onRename]),
+ * Share and the bin ([onDelete]; a second tap deletes), so the route can
+ * be changed where it is open (Stefan, 2026-10-02). The icons wrap onto
+ * their own line, still at the right, when the row has no room. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SavedRouteCard(
     shown: ShownSavedRoute,
     onShare: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onRide: (() -> Unit)? = null,
 ) {
+    var confirming by remember(shown.route.id) { mutableStateOf(false) }
     MapCard(
         title = shown.route.name,
         supporting = savedRouteSummary(shown.route),
         onClose = onClose,
         closeDescription = stringResource(R.string.saved_route_hide),
         modifier = modifier,
-        actions = {
-            IconButton(onClick = onShare) {
-                Icon(painterResource(R.drawable.ic_share), stringResource(R.string.route_share))
-            }
-        },
     ) {
-        // Riding it (ADR-0011): the card's main action, the only filled
-        // button.
-        if (onRide != null) {
-            FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Riding it (ADR-0011): the card's main action, the only filled
+            // button.
+            if (onRide != null) {
                 Button(onClick = onRide, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
                     Icon(painterResource(R.drawable.ic_navigation), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                     Spacer(Modifier.width(ButtonDefaults.IconSpacing))
                     OneLine(stringResource(R.string.ride_start))
                 }
+            }
+            // The rest of the row, icons at its end; under the cross, past
+            // the content's end padding.
+            Row(
+                Modifier.weight(1f).offset(x = 12.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                IconButton(onClick = onRename) {
+                    Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.saved_route_edit))
+                }
+                IconButton(onClick = onShare) {
+                    Icon(painterResource(R.drawable.ic_share), stringResource(R.string.route_share))
+                }
+                DeleteButton(
+                    confirming = confirming,
+                    onArm = { confirming = true },
+                    onDelete = {
+                        confirming = false
+                        onDelete()
+                    },
+                )
             }
         }
     }
