@@ -86,6 +86,13 @@ pub struct FollowedRoute {
     pub favourite_ratings: Vec<Rating>,
 }
 
+/// A line's stretches on favourite sections, each with its rating.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FavouriteParts {
+    pub parts: Vec<Vec<LatLon>>,
+    pub ratings: Vec<Rating>,
+}
+
 /// Follows one route through a ride: feed it every fix. Thread-safe.
 #[derive(Debug, uniffi::Object)]
 pub struct RouteFollower {
@@ -176,6 +183,21 @@ impl SectionStore {
     /// The route ride `track_id` follows, if any.
     pub fn followed_route(&self, track_id: i64) -> Result<Option<FollowedRoute>, MotoError> {
         Ok(self.store().followed_route(track_id)?.map(Into::into))
+    }
+
+    /// The stretches of `line` (a saved route's) on the rider's favourite
+    /// sections as they are now, with their ratings: for its glow on the
+    /// map and the favourites while riding it.
+    pub fn favourite_parts_along(&self, line: Vec<LatLon>) -> Result<FavouriteParts, MotoError> {
+        let line: Vec<moto_core::LatLon> = line.into_iter().map(Into::into).collect();
+        let found = self.store().favourite_parts_along(&line)?;
+        Ok(FavouriteParts {
+            ratings: found.iter().map(|p| p.rating.into()).collect(),
+            parts: found
+                .into_iter()
+                .map(|p| p.line.into_iter().map(Into::into).collect())
+                .collect(),
+        })
     }
 
     /// Stops keeping the route ride `track_id` follows.

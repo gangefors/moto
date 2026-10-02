@@ -190,6 +190,47 @@ impl Store {
         Ok(changed > 0)
     }
 
+    /// The stretches of `line` on the rider's favourite sections as they
+    /// are now, with their ratings (for a saved route, shown or ridden;
+    /// ADR-0011). Only sections near the line are read.
+    pub fn favourite_parts_along(
+        &self,
+        line: &[LatLon],
+    ) -> Result<Vec<crate::favourite_parts::FavouritePart>, CoreError> {
+        if line.len() < 2 || line.len() > MAX_LINE_POINTS {
+            return Err(CoreError::InvalidArgument(format!(
+                "a route line needs 2–{MAX_LINE_POINTS} points"
+            )));
+        }
+        for p in line {
+            p.validate()?;
+        }
+        let pad = 0.001;
+        let (mut sw, mut ne) = (line[0], line[0]);
+        for p in line {
+            sw = LatLon {
+                lat: sw.lat.min(p.lat),
+                lon: sw.lon.min(p.lon),
+            };
+            ne = LatLon {
+                lat: ne.lat.max(p.lat),
+                lon: ne.lon.max(p.lon),
+            };
+        }
+        let area = (
+            LatLon {
+                lat: (sw.lat - pad).max(-90.0),
+                lon: (sw.lon - pad).max(-180.0),
+            },
+            LatLon {
+                lat: (ne.lat + pad).min(90.0),
+                lon: (ne.lon + pad).min(180.0),
+            },
+        );
+        let sections = self.list_sections(Some(area))?;
+        crate::favourite_parts::favourite_parts_along(line, &sections)
+    }
+
     /// Marks that recording of ride `track_id` starts again after a gap:
     /// the next fix appended begins a new segment. Nothing to mark before
     /// the first fix, or twice at the same place. The ride must still be
