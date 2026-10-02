@@ -281,13 +281,21 @@ impl Store {
         if track.ended_at.is_some() {
             return Ok(Some(track));
         }
-        let points = self.track_points(id)?.unwrap_or_default();
+        // Not across a gap where recording started again.
+        let distance: f64 = self
+            .track_segments(id)?
+            .unwrap_or_default()
+            .iter()
+            .map(|s| ridden_distance_m(s))
+            .sum();
         self.conn
             .execute(
                 "UPDATE tracks SET ended_at = ?2, distance_m = ?3 WHERE id = ?1",
-                params![id, now, ridden_distance_m(&points)],
+                params![id, now, distance],
             )
             .map_err(db_err)?;
+        // The route it followed is kept only while it records (ADR-0011).
+        self.clear_followed_route(id)?;
         self.get_track(id)
     }
 
@@ -332,10 +340,10 @@ impl Store {
             .into_iter()
             .filter(|t| t.ended_at.is_some())
         {
-            if let Some(points) = self.track_points(t.id)? {
+            for segment in self.track_segments(t.id)?.unwrap_or_default() {
                 lines.push((
                     t.started_at,
-                    points.into_iter().map(|p| p.position).collect(),
+                    segment.into_iter().map(|p| p.position).collect(),
                 ));
             }
         }

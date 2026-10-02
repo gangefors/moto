@@ -44,11 +44,27 @@ pub fn route_gpx(name: &str, route_points: &[LatLon], line: &[LatLon]) -> String
 /// with its time. Speed, bearing and accuracy go in a `moto` extension so
 /// the file can be read back without losing them.
 pub fn track_gpx(name: &str, points: &[TrackPoint]) -> String {
-    let mut out = String::with_capacity(200 + points.len() * 160);
+    track_gpx_segments(name, std::slice::from_ref(&points))
+}
+
+/// As [`track_gpx`], with a `trkseg` for each of `segments` (where
+/// recording of the ride started again after a gap, ADR-0011).
+pub fn track_gpx_segments<P: AsRef<[TrackPoint]>>(name: &str, segments: &[P]) -> String {
+    let count: usize = segments.iter().map(|s| s.as_ref().len()).sum();
+    let mut out = String::with_capacity(200 + count * 160);
     out.push_str(HEADER);
     out.push_str("<trk>\n");
     let _ = writeln!(out, "<name>{}</name>", escape(name));
-    out.push_str("<trkseg>\n");
+    for points in segments {
+        out.push_str("<trkseg>\n");
+        write_points(&mut out, points.as_ref());
+        out.push_str("</trkseg>\n");
+    }
+    out.push_str("</trk>\n</gpx>\n");
+    out
+}
+
+fn write_points(out: &mut String, points: &[TrackPoint]) {
     for p in points {
         let _ = write!(
             out,
@@ -72,8 +88,6 @@ pub fn track_gpx(name: &str, points: &[TrackPoint]) -> String {
         }
         out.push_str("</trkpt>\n");
     }
-    out.push_str("</trkseg>\n</trk>\n</gpx>\n");
-    out
 }
 
 /// Text safe inside an XML element: markup characters escaped and

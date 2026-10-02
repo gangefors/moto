@@ -164,23 +164,29 @@ pub fn match_rides(store: &mut Store, engine: &Engine) -> Result<RideMatchReport
     let key = region_key(engine);
     let mut report = RideMatchReport::default();
     for id in store.rides_to_match(&key)? {
-        let Some(points) = store.track_points(id)? else {
+        let Some(segments) = store.track_segments(id)? else {
             continue; // deleted meanwhile
         };
-        let line: Vec<LatLon> = points.iter().map(|p| p.position).collect();
-        // A ride the matcher refuses (more points than it takes) is stored
-        // with no spans rather than tried again on every start; spans past
-        // the cap are left out.
-        let ways: Vec<WaySpan> = engine
-            .match_track(&line)
-            .map(|m| {
-                m.pieces
-                    .into_iter()
-                    .flat_map(|p| p.ways)
-                    .take(crate::store::MAX_RIDE_WAYS)
-                    .collect()
+        // Each segment on its own, so a gap where recording started again
+        // isn't matched across. A ride the matcher refuses (more points
+        // than it takes) is stored with no spans rather than tried again
+        // on every start; spans past the cap are left out.
+        let ways: Vec<WaySpan> = segments
+            .iter()
+            .flat_map(|segment| {
+                let line: Vec<LatLon> = segment.iter().map(|p| p.position).collect();
+                engine
+                    .match_track(&line)
+                    .map(|m| {
+                        m.pieces
+                            .into_iter()
+                            .flat_map(|p| p.ways)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
             })
-            .unwrap_or_default();
+            .take(crate::store::MAX_RIDE_WAYS)
+            .collect();
         if store.save_ride_ways(id, &key, &ways)? {
             report.matched += 1;
             report.ways += ways.len() as u64;
