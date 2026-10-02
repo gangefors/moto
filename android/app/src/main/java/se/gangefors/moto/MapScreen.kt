@@ -395,6 +395,19 @@ fun MapScreen() {
     // Rides finished, imported or deleted: their roads are matched (once
     // per ride and map) and the set is built again (ADR-0010).
     val ridesVersion by RideChanges.version.collectAsState()
+    // Rides finished after the app died mid-ride (Recording.recover) get a
+    // name from where they went, as one finished normally does, once the
+    // map is open.
+    LaunchedEffect(store, region, ridesVersion) {
+        val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
+        val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
+        val ids = Recording.takeFinished()
+        if (ids.isEmpty()) return@LaunchedEffect
+        val named = withContext(Dispatchers.IO) {
+            ids.count { id -> s.getTrack(id)?.let { s.nameRide(resources, engine, it) } != null }
+        }
+        if (named > 0) RideChanges.changed()
+    }
     LaunchedEffect(store, region, sections, ridesVersion) {
         val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
         val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
