@@ -40,7 +40,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -153,7 +152,7 @@ private fun KeyRow(key: HelpKey, seeTitle: String?, onSee: () -> Unit) {
 private fun KeyIcon(icon: String) {
     when (icon) {
         "tag" -> Box(Modifier.size(24.dp).background(TAG_COLOR, CircleShape), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.tag_button), color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            Icon(painterResource(R.drawable.ic_add_road), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
         }
         else -> BUTTON_ICONS[icon]?.drawable?.let {
             Icon(

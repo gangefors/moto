@@ -4,13 +4,13 @@
 package se.gangefors.moto
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.verticalScroll
@@ -30,17 +30,16 @@ import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 
 /**
  * The buttons text may show, by the key it names them with ("[mark]"):
  * the button's own icon, drawn in the text's colour so it reads as well
  * as the words, and what a screen reader says in its place, words that
- * fit the sentence ("the bin"). TAG is drawn as the button itself, a
- * label on orange. [then] is an arrow between menu steps, read "then".
+ * fit the sentence ("the bin"). The tag button's icon is drawn as the
+ * button itself, white on its colour. [then] is an arrow between menu
+ * steps, read "then".
  */
 internal class ButtonIcon(val drawable: Int?, val spoken: Int)
 
@@ -54,7 +53,7 @@ internal val BUTTON_ICONS = mapOf(
     "mark" to ButtonIcon(R.drawable.ic_add_road, R.string.say_mark),
     "sections" to ButtonIcon(R.drawable.ic_star, R.string.say_sections),
     "record" to ButtonIcon(R.drawable.ic_record_dot, R.string.say_record),
-    "tag" to ButtonIcon(null, R.string.say_tag),
+    "tag" to ButtonIcon(R.drawable.ic_add_road, R.string.say_tag),
     "flag" to ButtonIcon(R.drawable.ic_flag, R.string.say_flag),
     "settings" to ButtonIcon(R.drawable.ic_settings, R.string.say_settings),
     "bin" to ButtonIcon(R.drawable.ic_delete, R.string.say_bin),
@@ -154,22 +153,26 @@ private fun IconLine(text: String, modifier: Modifier = Modifier, style: TextSty
         }
     }
     val inline = BUTTON_ICONS.mapValues { (key, icon) ->
-        val width = if (icon.drawable == null) 2.6.em else 1.3.em
-        InlineTextContent(Placeholder(width, 1.3.em, PlaceholderVerticalAlign.TextCenter)) {
-            if (icon.drawable != null) {
+        InlineTextContent(Placeholder(1.3.em, 1.3.em, PlaceholderVerticalAlign.TextCenter)) {
+            if (key == "tag" && icon.drawable != null) {
+                Box(
+                    Modifier.fillMaxSize().background(TAG_COLOR, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painterResource(icon.drawable),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.fillMaxSize(0.7f),
+                    )
+                }
+            } else if (icon.drawable != null) {
                 Icon(
                     painterResource(icon.drawable),
                     contentDescription = null,
                     tint = LocalContentColor.current,
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else if (key == "tag") {
-                Box(
-                    Modifier.fillMaxSize().background(TAG_COLOR, RoundedCornerShape(50)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(stringResource(R.string.tag_button), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                }
             }
         }
     }

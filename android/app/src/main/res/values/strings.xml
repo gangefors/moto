@@ -211,7 +211,7 @@
     <string name="say_mark">the mark favourite section button</string>
     <string name="say_sections">" "</string>
     <string name="say_record">the record button</string>
-    <string name="say_tag">the TAG button</string>
+    <string name="say_tag">the tag button</string>
     <string name="say_flag">the review flag</string>
     <string name="say_motorway">the motorway chip</string>
     <string name="say_ferry">the ferry chip</string>
@@ -249,7 +249,7 @@
     <string name="help_key_review">Review</string>
     <string name="help_key_review_map">shown when tagged spots wait</string>
     <string name="help_key_review_what">how many tagged spots wait; tap to go through them</string>
-    <string name="help_key_tag">TAG</string>
+    <string name="help_key_tag">Tag</string>
     <string name="help_key_tag_what">saves the spot you are on (while you ride)</string>
     <string name="help_key_settings">Ride settings</string>
     <string name="help_key_settings_what">gravel, favourites, loop length, zooms, screen</string>
@@ -564,7 +564,6 @@
     <string name="rides_export_failed">Export failed: %1$s</string>
     <string name="rides_gone">the ride no longer exists</string>
     <string name="rides_cannot_write">can’t write to the chosen file</string>
-    <string name="tag_button">TAG</string>
     <string name="tag_button_description">Tag this road</string>
     <string name="tag_saved">Tagged</string>
     <string name="tag_no_fix">No GPS position yet; nothing tagged.</string>
