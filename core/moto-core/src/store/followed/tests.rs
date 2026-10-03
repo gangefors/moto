@@ -228,3 +228,20 @@ fn favourite_parts_come_from_the_sections_near_the_line() {
     assert!(s.favourite_parts_along(&elsewhere).unwrap().is_empty());
     assert!(s.favourite_parts_along(&[ll(58.0, 15.0)]).is_err());
 }
+
+#[test]
+fn near_favourites_come_from_the_sections_near_the_rider() {
+    use crate::section::tests::sample;
+    let mut s = Store::open_in_memory().unwrap();
+    // The sample section runs 56.30,12.45 → 56.31,12.46.
+    let at = ll(56.305, 12.48);
+    assert!(s.near_favourites(at, None).unwrap().is_empty());
+    let saved = s.add_section(&sample(), T0).unwrap();
+    let near = s.near_favourites(at, Some(0.0)).unwrap();
+    assert_eq!(near.len(), 1);
+    assert_eq!(near[0].section_id, saved.id);
+    assert!(near[0].distance_m > 500.0 && near[0].distance_m < 2_000.0);
+    // Far away: nothing; a bad position is an error.
+    assert!(s.near_favourites(ll(58.0, 15.0), None).unwrap().is_empty());
+    assert!(s.near_favourites(ll(f64::NAN, 15.0), None).is_err());
+}

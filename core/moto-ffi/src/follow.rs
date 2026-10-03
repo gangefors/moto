@@ -100,6 +100,34 @@ pub struct FavouriteParts {
     pub ratings: Vec<Rating>,
 }
 
+/// A favourite near the rider while recording without a route.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FavouriteNearby {
+    pub section_id: i64,
+    pub rating: Rating,
+    /// To its nearest point, metres.
+    pub distance_m: f64,
+    /// The way to that point, degrees from north (0–360).
+    pub bearing_deg: f64,
+    /// The rider is on it.
+    pub on: bool,
+    /// On it: how much of it is left the way the rider is going.
+    pub left_m: Option<f64>,
+}
+
+impl From<moto_core::near::NearFavourite> for FavouriteNearby {
+    fn from(n: moto_core::near::NearFavourite) -> Self {
+        Self {
+            section_id: n.section_id,
+            rating: n.rating.into(),
+            distance_m: n.distance_m,
+            bearing_deg: n.bearing_deg,
+            on: n.on,
+            left_m: n.left_m,
+        }
+    }
+}
+
 /// Follows one route through a ride: feed it every fix. Thread-safe.
 #[derive(Debug, uniffi::Object)]
 pub struct RouteFollower {
@@ -205,6 +233,22 @@ impl SectionStore {
                 .map(|p| p.line.into_iter().map(Into::into).collect())
                 .collect(),
         })
+    }
+
+    /// The rider's favourites near `position` (at most two, within 5 km,
+    /// nearest first), with `heading_deg` for the way they go along one
+    /// they are on: for the recording card.
+    pub fn near_favourites(
+        &self,
+        position: LatLon,
+        heading_deg: Option<f64>,
+    ) -> Result<Vec<FavouriteNearby>, MotoError> {
+        Ok(self
+            .store()
+            .near_favourites(position.into(), heading_deg)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
     }
 
     /// Stops keeping the route ride `track_id` follows.

@@ -231,6 +231,31 @@ impl Store {
         crate::favourite_parts::favourite_parts_along(line, &sections)
     }
 
+    /// The rider's favourites near `at` (while recording without a route),
+    /// with `heading` for the way they go along one they are on; see
+    /// [`crate::near::near_favourites`]. Only sections near `at` are read.
+    pub fn near_favourites(
+        &self,
+        at: LatLon,
+        heading: Option<f64>,
+    ) -> Result<Vec<crate::near::NearFavourite>, CoreError> {
+        at.validate()?;
+        let dlat = crate::near::NEAR_M / 111_195.0;
+        let dlon = dlat / at.lat.to_radians().cos().max(0.01);
+        let area = (
+            LatLon {
+                lat: (at.lat - dlat).max(-90.0),
+                lon: (at.lon - dlon).max(-180.0),
+            },
+            LatLon {
+                lat: (at.lat + dlat).min(90.0),
+                lon: (at.lon + dlon).min(180.0),
+            },
+        );
+        let sections = self.list_sections(Some(area))?;
+        crate::near::near_favourites(&sections, at, heading)
+    }
+
     /// Marks that recording of ride `track_id` starts again after a gap:
     /// the next fix appended begins a new segment. Nothing to mark before
     /// the first fix, or twice at the same place. The ride must still be
