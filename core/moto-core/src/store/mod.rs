@@ -406,11 +406,22 @@ fn insert_section(
     now: i64,
     status: Status,
 ) -> Result<i64, CoreError> {
+    insert_section_at(tx, s, now, now, status)
+}
+
+/// As [`insert_section`], created and last changed at the given times.
+fn insert_section_at(
+    tx: &Transaction<'_>,
+    s: &NewSection,
+    created_at: i64,
+    updated_at: i64,
+    status: Status,
+) -> Result<i64, CoreError> {
     let (min, max) = bounds(&s.geometry);
     tx.execute(
         "INSERT INTO sections (rider_id, name, rating, direction, source, status,
             created_at, updated_at, min_lat, min_lon, max_lat, max_lon, geometry)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?13, ?8, ?9, ?10, ?11, ?12)",
         params![
             s.rider_id,
             s.name,
@@ -418,12 +429,13 @@ fn insert_section(
             s.direction as i64,
             s.source as i64,
             status as i64,
-            now,
+            created_at,
             min.0,
             min.1,
             max.0,
             max.1,
             encode_geometry(&s.geometry),
+            updated_at,
         ],
     )
     .map_err(db_err)?;
@@ -515,6 +527,12 @@ fn migrate(conn: &mut Connection, migrations: &[&str]) -> Result<(), CoreError> 
     Ok(())
 }
 
+/// [`e7`], for tests elsewhere in the crate.
+#[cfg(test)]
+pub(crate) fn tests_e7(p: LatLon) -> (i32, i32) {
+    e7(p)
+}
+
 fn e7(p: LatLon) -> (i32, i32) {
     (
         (p.lat * COORD_SCALE).round() as i32,
@@ -566,6 +584,8 @@ fn decode_line(bytes: &[u8], max: usize) -> Option<Vec<LatLon>> {
         .collect()
 }
 
+mod backup;
+pub use backup::Restore;
 mod exchange;
 mod followed;
 pub use followed::FollowedRoute;

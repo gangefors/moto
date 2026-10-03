@@ -11,7 +11,7 @@ use crate::LatLon;
 use crate::track::TrackPoint;
 
 mod read;
-pub use read::{MAX_GPX_BYTES, MAX_GPX_RIDES, read_track, read_tracks};
+pub use read::{MAX_GPX_BYTES, MAX_GPX_RIDES, read_track, read_tracks, read_waypoints};
 
 const HEADER: &str = concat!(
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
@@ -57,18 +57,18 @@ pub fn track_gpx_segments<P: AsRef<[TrackPoint]>>(name: &str, segments: &[P]) ->
     let _ = writeln!(out, "<name>{}</name>", escape(name));
     for points in segments {
         out.push_str("<trkseg>\n");
-        write_points(&mut out, points.as_ref());
+        write_points(&mut out, "trkpt", points.as_ref());
         out.push_str("</trkseg>\n");
     }
     out.push_str("</trk>\n</gpx>\n");
     out
 }
 
-fn write_points(out: &mut String, points: &[TrackPoint]) {
+fn write_points(out: &mut String, element: &str, points: &[TrackPoint]) {
     for p in points {
         let _ = write!(
             out,
-            "<trkpt lat=\"{:.7}\" lon=\"{:.7}\"><time>{}</time>",
+            "<{element} lat=\"{:.7}\" lon=\"{:.7}\"><time>{}</time>",
             p.position.lat,
             p.position.lon,
             iso_time(p.time_ms)
@@ -86,8 +86,32 @@ fn write_points(out: &mut String, points: &[TrackPoint]) {
             }
             out.push_str("</extensions>");
         }
-        out.push_str("</trkpt>\n");
+        let _ = writeln!(out, "</{element}>");
     }
+}
+
+/// A line without times (a saved route, for a backup) as a GPX 1.1
+/// document: one track named `name`, one segment.
+pub fn line_gpx(name: &str, line: &[LatLon]) -> String {
+    let mut out = String::with_capacity(200 + line.len() * 50);
+    out.push_str(HEADER);
+    let _ = writeln!(out, "<trk>\n<name>{}</name>\n<trkseg>", escape(name));
+    for p in line {
+        let _ = writeln!(out, "<trkpt lat=\"{:.7}\" lon=\"{:.7}\"/>", p.lat, p.lon);
+    }
+    out.push_str("</trkseg>\n</trk>\n</gpx>\n");
+    out
+}
+
+/// Fixes as GPX 1.1 waypoints (`<wpt>`), with their times and the `moto`
+/// extension, as [`track_gpx`] writes track points: quick-tags in a
+/// backup (heading as the bearing).
+pub fn waypoints_gpx(points: &[TrackPoint]) -> String {
+    let mut out = String::with_capacity(200 + points.len() * 160);
+    out.push_str(HEADER);
+    write_points(&mut out, "wpt", points);
+    out.push_str("</gpx>\n");
+    out
 }
 
 /// Text safe inside an XML element: markup characters escaped and
@@ -217,5 +241,49 @@ mod tests {
         assert!(gpx.contains("<rtept lat=\"55.7200000\" lon=\"13.2100000\"/>"));
         // The route points come before the track.
         assert!(gpx.find("<rte>").unwrap() < gpx.find("<trk>").unwrap());
+    }
+
+    #[test]
+    fn waypoints_read_back_with_their_times_and_extension() {
+        let mut a = fix(1_790_000_000_123);
+        a.accuracy_m = None;
+        let gpx = waypoints_gpx(&[a, fix(1_790_000_005_000)]);
+        assert_eq!(gpx.matches("<wpt ").count(), 2);
+        let back = read_waypoints(&gpx).unwrap();
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].time_ms, 1_790_000_000_123);
+        assert_eq!(back[0].position, a.position);
+        assert_eq!((back[0].accuracy_m, back[0].speed_mps), (None, a.speed_mps));
+        assert_eq!(back[1].bearing_deg, fix(0).bearing_deg);
+    }
+
+    #[test]
+    fn a_waypoint_without_a_time_is_an_error() {
+        let gpx = "<gpx><wpt lat=\"57\" lon=\"14\"/></gpx>";
+        assert!(read_waypoints(gpx).is_err());
+        assert!(read_waypoints("<gpx></gpx>").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_line_reads_back_point_for_point() {
+        let line = [
+            LatLon {
+                lat: 57.0,
+                lon: 14.0,
+            },
+            LatLon {
+                lat: 57.000_000_1,
+                lon: 14.123_456_7,
+            },
+        ];
+        let gpx = line_gpx("A & B", &line);
+        assert!(gpx.contains("<name>A &amp; B</name>"));
+        assert!(!gpx.contains("<time>"));
+        let back: Vec<LatLon> = read_track(&gpx, 0)
+            .unwrap()
+            .iter()
+            .map(|p| p.position)
+            .collect();
+        assert_eq!(back, line);
     }
 }

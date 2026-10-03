@@ -60,7 +60,7 @@ fn to_track(r: TrackRow) -> Result<Track, CoreError> {
 }
 
 /// Stores `points` on track `id` from sequence number `first` on.
-fn insert_points<'a>(
+pub(super) fn insert_points<'a>(
     tx: &rusqlite::Transaction<'_>,
     id: i64,
     first: usize,

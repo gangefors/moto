@@ -10,6 +10,7 @@
 
 #![deny(unsafe_code)]
 
+pub mod backup;
 pub mod curvature;
 pub mod describe;
 mod draft;
