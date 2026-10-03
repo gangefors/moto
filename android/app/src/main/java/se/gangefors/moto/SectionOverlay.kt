@@ -139,13 +139,15 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
             shownSource.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
             return
         }
+        // Narrower zoomed far out, as a route's line is (routeWidthAt),
+        // and its outline fades as theirs does.
         style.getLayer(SHOWN_CASING_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(look.casingWidth),
-            PropertyFactory.lineOpacity(look.casingOpacity),
+            PropertyFactory.lineWidth(routeWidthByZoom(look.casingWidth)),
+            PropertyFactory.lineOpacity(outlineByZoom(look.casingOpacity)),
         )
-        style.getLayer(SHOWN_EDGE_LAYER)?.setProperties(PropertyFactory.lineWidth(look.edgeWidth))
+        style.getLayer(SHOWN_EDGE_LAYER)?.setProperties(PropertyFactory.lineWidth(routeWidthByZoom(look.edgeWidth)))
         style.getLayer(SHOWN_LINE_LAYER)?.setProperties(
-            PropertyFactory.lineWidth(look.lineWidth),
+            PropertyFactory.lineWidth(routeWidthByZoom(look.lineWidth)),
             PropertyFactory.lineColor(look.color),
         )
         val feature = Feature.fromGeometry(line.toLineString()).apply { addBooleanProperty(ONE_WAY, arrows) }
