@@ -37,6 +37,7 @@ Forces:
   - **End:** "Back at the start" / "You've arrived", a 15 s countdown, then recording stops; the ride is always saved and named (the rider deletes it if unwanted); Stop now ends it at once; the X keeps recording without the route.
   - **Carrying on:** if Android stops the app mid-ride, the next start asks "Carry on riding?". Carry on starts recording again on the same ride (a segment break) and follows the route from where the rider is; Save the ride finishes it as today and drops the route.
   - **While riding:** the menu, Ride settings, Loop and Add favourite buttons step aside; the tag button and Stop stay.
+  - **Recording without a route** (Stefan, 2026-10-03): Record starts the same ride mode (map following, buttons, compass, + and −) with a card of its own: distance and riding time, and the favourites within 5 km (at most two, nearest first) with an arrow the way to each, or on one how much is left (core `near_favourites`). A long-press still plans: ride mode pauses while planning; riding the plan swaps in the ride card, whose X brings the recording card back.
   - **Ride settings:** a group "Riding a route" with "Turn the map with your direction" and "Alert when off the route", both on; "Zoom while riding" in the Map group.
 - **Debug tools:** time per update (mean and max per ride), rejoin timings, off-route events.
 
@@ -92,4 +93,5 @@ A gives a ride in one app with what matters for a fun-roads route (progress, fav
 - [x] Saved routes keep only their line: their favourite parts are worked out from the favourites as they are now when shown or ridden (Stefan, 2026-10-02: no stored parts to update when favourites change), and glow on the map too (`favourite_parts_along`).
 - [x] Ride records from the route's start; joins anywhere along it; the wrong way back to joining (974cb03, e74f260).
 - [x] Map's compass instead of our own; zoom while riding setting; + and − (9163bee, 00a2a05, 60d1d28).
+- [x] Recording as ride mode with its card; core `near_favourites` (76cbe7c and the app commit after it).
 - [ ] Phone: a loop with a deliberate wrong turn, the screen off, forest, the finish; carrying on after force-stopping the app.
