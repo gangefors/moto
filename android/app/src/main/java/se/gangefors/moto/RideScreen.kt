@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -24,7 +23,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,7 +33,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
@@ -410,31 +407,6 @@ fun ratingName(r: Rating): Int = when (r) {
     Rating.GOOD -> R.string.rating_good
     Rating.GREAT -> R.string.rating_great
     Rating.EPIC -> R.string.rating_epic
-}
-
-/**
- * The compass while riding (MapLibre's own hides when north is up): its
- * needle points north on the map turned [bearing] degrees; a tap fixes
- * north up (the button lilac) or turns the map with the rider again.
- */
-@Composable
-fun RideCompass(bearing: Float, northFixed: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = if (northFixed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        shadowElevation = 3.dp,
-        modifier = modifier.size(40.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                painterResource(R.drawable.ic_compass),
-                contentDescription = stringResource(if (northFixed) R.string.ride_north_free else R.string.ride_north_fix),
-                tint = LocalContentColor.current,
-                modifier = Modifier.size(24.dp).rotate(-bearing),
-            )
-        }
-    }
 }
 
 /** After Android stopped the app mid-ride: carry on, or save the ride. */
