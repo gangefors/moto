@@ -87,6 +87,9 @@ class RecordingService : Service() {
         var lastFix: TrackPoint? = null
         /** The last fix kept in the ride, for skipping standing still. */
         var lastKept: TrackPoint? = null
+        /** How far the ride got from its first kept fix, for not saving a
+         * ride that went nowhere; a ride carried on counts as gone. */
+        var reach = RideReach()
         var follow: Follow? = null
         /** Paused while the rider plans (Stefan, 2026-10-03): where it
          * paused, since when (elapsed), and earlier pauses' total. */
@@ -191,6 +194,7 @@ class RecordingService : Service() {
                         // Carrying on: the fixes from now on are a new segment.
                         store.breakTrack(reopened.id)
                         it.trackId = reopened.id
+                        it.reach = RideReach(carriedOn = true)
                         it.buffer = PointBuffer(File(Recording.bufferDir(applicationContext), PointBuffer.fileName(reopened.id)))
                     } else if (record) {
                         startTrack(it, auto = false)
@@ -228,6 +232,7 @@ class RecordingService : Service() {
         val followed = s.follow?.let { onFollowFix(s, it, fix) } == true
         if (s.trackId != null && s.pausedSince == null && accurateEnough(fix) && !standingStill(s.lastKept, fix)) {
             s.lastKept = fix
+            s.reach.add(fix.position)
             try {
                 s.buffer?.append(fix)
             } catch (e: Exception) {
@@ -306,6 +311,7 @@ class RecordingService : Service() {
             s.buffer = PointBuffer(File(Recording.bufferDir(applicationContext), PointBuffer.fileName(track.id)))
             s.autoStarted = auto
             s.lastKept = null
+            s.reach = RideReach()
             s.progress = RideProgress()
             s.startedAtMs = System.currentTimeMillis()
             s.startedElapsed = SystemClock.elapsedRealtime()
@@ -326,6 +332,7 @@ class RecordingService : Service() {
         s.trackId = null
         s.autoStarted = false
         s.lastKept = null
+        s.reach = RideReach()
         s.progress = RideProgress()
         runCatching { s.store.deleteTrack(id) }
         RideChanges.changed()
@@ -492,6 +499,18 @@ class RecordingService : Service() {
                 // with its buffer, for the next start to save and finish.
                 s.buffer?.close()
                 Recording.set(Recording.State.Failed(getString(R.string.recording_saved_later)))
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return
+            }
+            if (!s.reach.went()) {
+                // Never got anywhere (a test at home, Stefan 2026-10-03):
+                // not saved.
+                s.store.deleteTrack(id)
+                s.buffer?.delete()
+                RideChanges.changed()
+                Toasts.show(getString(R.string.recording_not_saved))
+                Recording.set(Recording.State.Idle)
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return

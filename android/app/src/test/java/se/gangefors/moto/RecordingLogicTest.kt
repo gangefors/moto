@@ -257,4 +257,18 @@ class RecordingLogicTest {
         assertFalse(accurateEnough(fix(48.0)))
         assertFalse(accurateEnough(fix(Double.NaN)))
     }
+
+    @Test
+    fun aRideThatWentNowhereIsNotSaved() {
+        val r = RideReach()
+        assertFalse(r.went())
+        r.add(se.gangefors.moto.core.LatLon(55.70, 13.20))
+        r.add(se.gangefors.moto.core.LatLon(55.7005, 13.20)) // ~56 m
+        r.add(se.gangefors.moto.core.LatLon(55.70, 13.2001))
+        assertFalse(r.went())
+        r.add(se.gangefors.moto.core.LatLon(55.7012, 13.20)) // ~133 m
+        assertTrue(r.went())
+        // A ride carried on after Android stopped the app is always kept.
+        assertTrue(RideReach(carriedOn = true).went())
+    }
 }
