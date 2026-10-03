@@ -284,7 +284,7 @@
     <string name="help_key_zoom_what">while riding or recording, without pinching; on a route, for the rest of the ride</string>
     <string name="help_key_ride_compass_what">shows where north is while the map turns with you</string>
     <string name="help_key_stop_following">X on the card</string>
-    <string name="help_key_stop_following_what">stops following the route and keeps recording, with the recording card back</string>
+    <string name="help_key_stop_following_what">asks first: end the ride, or keep recording without the route (the recording card comes back)</string>
     <string name="help_key_stop_ride">Stop</string>
     <string name="help_key_stop_ride_what">ends the ride; it is saved and named</string>
     <string name="help_key_route_here">Route from my position</string>
@@ -436,6 +436,13 @@
     <string name="ride_finished_text">%1$s · %2$.1f km</string>
     <string name="ride_stops_in">Recording stops in %1$d s</string>
     <string name="ride_stop_now">Stop now</string>
+    <string name="ride_leave_title">Leave the route?</string>
+    <string name="ride_leave_text">Your ride is being recorded. Keep recording without the route, or end the ride here.</string>
+    <string name="ride_leave_end">End ride</string>
+    <string name="ride_leave_keep">Keep recording</string>
+    <string name="ride_stop_title">Stop riding this route?</string>
+    <string name="ride_stop_text">Nothing is recorded yet: recording starts at the route’s start.</string>
+    <string name="ride_stop_riding">Stop riding</string>
     <string name="ride_stop_following">Stop following the route and keep recording</string>
     <string name="ride_left_description">%1$.1f km and %2$s left</string>
     <string name="ride_arrive_description">Arrive at %1$s</string>

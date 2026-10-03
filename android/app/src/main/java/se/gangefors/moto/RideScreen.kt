@@ -535,3 +535,36 @@ private fun NearbyRow(f: FavouriteNearby, mapBearing: Float, darkMap: Boolean) {
         }
     }
 }
+
+/**
+ * Asked before the ride card's X leaves the route, so a stray tap is
+ * harmless (2026-10-03). While [recording]: End ride (stops
+ * following and recording), Keep recording (stops following only) or
+ * Cancel, stacked as three don't fit in a row; before recording started:
+ * Stop riding or Cancel.
+ */
+@Composable
+fun LeaveRouteDialog(recording: Boolean, onEndRide: () -> Unit, onKeepRecording: () -> Unit, onDismiss: () -> Unit) {
+    if (recording) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.ride_leave_title)) },
+            text = { Text(stringResource(R.string.ride_leave_text)) },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = onEndRide) { OneLine(stringResource(R.string.ride_leave_end)) }
+                    TextButton(onClick = onKeepRecording) { OneLine(stringResource(R.string.ride_leave_keep)) }
+                    TextButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) }
+                }
+            },
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.ride_stop_title)) },
+            text = { Text(stringResource(R.string.ride_stop_text)) },
+            confirmButton = { TextButton(onClick = onKeepRecording) { OneLine(stringResource(R.string.ride_stop_riding)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { OneLine(stringResource(R.string.cancel)) } },
+        )
+    }
+}

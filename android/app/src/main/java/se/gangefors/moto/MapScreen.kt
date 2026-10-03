@@ -138,6 +138,7 @@ import org.maplibre.android.maps.Style
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.FavouriteNearby
+import se.gangefors.moto.core.FollowPhase
 import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.Track
@@ -497,6 +498,9 @@ fun MapScreen() {
     // Zoom levels the rider added with + and − on this ride.
     var rideZoomNudge by remember { mutableDoubleStateOf(0.0) }
     var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
+    // The ride card's X asked to leave the route: the confirmation shows.
+    var leavingRoute by remember { mutableStateOf(false) }
+    LaunchedEffect(riding) { if (!riding) leavingRoute = false }
     // Where the ride card ends (px from the top), so the compass sits under it.
     var rideCardBottom by remember { mutableIntStateOf(0) }
     // The rider moved the map in ride mode: until Recentre.
@@ -2038,7 +2042,10 @@ fun MapScreen() {
             RideCard(
                 following = following,
                 darkMap = darkMap,
-                onStopFollowing = { RecordingService.unfollow(context) },
+                // At the end the X just keeps recording; on the way it asks.
+                onStopFollowing = {
+                    if (following.state.phase == FollowPhase.FINISHED) RecordingService.unfollow(context) else leavingRoute = true
+                },
                 onStopNow = { RecordingService.stop(context) },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -2713,6 +2720,20 @@ fun MapScreen() {
                 savingRoute = null
                 saveRoute(r, isLoop, name)
             },
+        )
+    }
+    if (leavingRoute) {
+        LeaveRouteDialog(
+            recording = (recording as? Recording.State.Active)?.trackId != null,
+            onEndRide = {
+                leavingRoute = false
+                RecordingService.stop(context)
+            },
+            onKeepRecording = {
+                leavingRoute = false
+                RecordingService.unfollow(context)
+            },
+            onDismiss = { leavingRoute = false },
         )
     }
     renamingRide?.let { t ->
