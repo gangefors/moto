@@ -2576,11 +2576,13 @@ fun MapScreen() {
                 }
             }
         }
-        // Quick-tag (PRD R3): one big button, usable with gloves, whenever the
-        // map is open. Bottom left, above the map's logo and attribution;
-        // the tags waiting for review above it (the right-hand column has
-        // no room to spare in landscape).
-        if (store is StoreState.Ready && !marking && !planning && !cardsShown) {
+        // Quick-tag (PRD R3): one big button, usable with gloves, in ride
+        // mode only (Stefan, 2026-10-03). Bottom left, above the map's logo
+        // and attribution; the tags waiting for review above it when not
+        // recording (the right-hand column has no room to spare in
+        // landscape).
+        val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
+        if (store is StoreState.Ready && !marking && !planning && !cardsShown && (rideMode || reviewShown)) {
             DisposableEffect(Unit) { onDispose { tagTop = Int.MAX_VALUE } }
             Column(
                 modifier = Modifier
@@ -2591,7 +2593,7 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready) {
+                if (reviewShown) {
                     // A flag (the spots tagged on rides) with how many wait,
                     // the count on the button's corner, clear of the flag.
                     BadgedBox(badge = { Badge { Text(badgeCount(pendingTags)) } }) {
@@ -2603,16 +2605,18 @@ fun MapScreen() {
                         }
                     }
                 }
-                LargeFloatingActionButton(
-                    onClick = { quickTag() },
-                    shape = CircleShape,
-                    containerColor = TAG_COLOR,
-                    contentColor = Color.White,
-                    modifier = Modifier
-                        .size(TAG_BUTTON_SIZE)
-                        .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
-                ) {
-                    Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
+                if (rideMode) {
+                    LargeFloatingActionButton(
+                        onClick = { quickTag() },
+                        shape = CircleShape,
+                        containerColor = TAG_COLOR,
+                        contentColor = Color.White,
+                        modifier = Modifier
+                            .size(TAG_BUTTON_SIZE)
+                            .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
+                    ) {
+                        Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
+                    }
                 }
             }
         }
