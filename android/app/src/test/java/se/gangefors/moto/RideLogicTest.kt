@@ -157,8 +157,10 @@ class RideLogicTest {
 
     @Test
     fun zoomButtonsNudgeTheRideZoomWithinLimits() {
-        assertEquals(0.5, nudgeRideZoom(0.0, ZOOM_BUTTON_STEP), 1e-9)
-        assertEquals(-1.0, nudgeRideZoom(-0.5, -ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(1.0, nudgeRideZoom(0.0, ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(-1.5, nudgeRideZoom(-0.5, -ZOOM_BUTTON_STEP), 1e-9)
+        // Six taps from one end to the other.
+        assertEquals(6, (1..20).takeWhile { nudgeRideZoom(-3.0 + (it - 1) * ZOOM_BUTTON_STEP, ZOOM_BUTTON_STEP) > -3.0 + (it - 1) * ZOOM_BUTTON_STEP }.count())
         assertEquals(3.0, nudgeRideZoom(3.0, ZOOM_BUTTON_STEP), 1e-9)
         assertEquals(-3.0, nudgeRideZoom(-3.0, -ZOOM_BUTTON_STEP), 1e-9)
     }
