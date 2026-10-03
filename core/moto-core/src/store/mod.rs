@@ -571,9 +571,11 @@ mod followed;
 pub use followed::FollowedRoute;
 mod rematch;
 mod ride_ways;
+mod starts;
 pub use ride_ways::MAX_RIDE_WAYS;
 mod routes;
 pub use routes::{MAX_ROUTE_POINTS, NewRoute, SavedRoute};
+pub use starts::Start;
 mod tags;
 mod tracks;
 

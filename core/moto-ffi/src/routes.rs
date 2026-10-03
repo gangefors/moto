@@ -36,6 +36,22 @@ impl From<core::SavedRoute> for SavedRoute {
     }
 }
 
+/// Where a saved route or ride starts (see `SectionStore::route_starts`).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ItemStart {
+    pub id: i64,
+    pub position: LatLon,
+}
+
+impl From<core::Start> for ItemStart {
+    fn from(s: core::Start) -> Self {
+        Self {
+            id: s.id,
+            position: s.position.into(),
+        }
+    }
+}
+
 #[uniffi::export]
 impl SectionStore {
     /// Saves `route` (as found by `Engine.route` or `Engine.round_trip`)
@@ -91,6 +107,27 @@ impl SectionStore {
             .store()
             .save_track_as_route(track_id, &name, now())?
             .map(Into::into))
+    }
+
+    /// Where every saved route starts (its first point), for listing
+    /// them nearest first.
+    pub fn route_starts(&self) -> Result<Vec<ItemStart>, MotoError> {
+        Ok(self
+            .store()
+            .route_starts()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Where every ride with fixes starts (its first fix).
+    pub fn track_starts(&self) -> Result<Vec<ItemStart>, MotoError> {
+        Ok(self
+            .store()
+            .track_starts()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
     }
 
     /// Deletes a saved route; `false` if it did not exist.
