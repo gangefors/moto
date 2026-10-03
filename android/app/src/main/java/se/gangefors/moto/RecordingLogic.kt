@@ -299,3 +299,12 @@ fun standingStill(lastKept: TrackPoint?, fix: TrackPoint): Boolean {
     val within = accuracy.coerceIn(STILL_M, STILL_MAX_M)
     return approxDistanceM(last.position, fix.position) < within
 }
+
+/** A fix less accurate than this (metres) isn't kept in a ride: GPS
+ * warming up indoors, a tunnel's mouth. The map and following still use it. */
+const val KEEP_MAX_ACCURACY_M = 30.0
+
+/** Whether [fix] is accurate enough to keep in a ride (no accuracy given
+ * counts as enough). */
+fun accurateEnough(fix: TrackPoint): Boolean =
+    fix.accuracyM?.let { it.isFinite() && it <= KEEP_MAX_ACCURACY_M } ?: true

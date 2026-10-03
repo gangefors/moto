@@ -226,7 +226,7 @@ class RecordingService : Service() {
         // Following first: reaching the route's start may start recording,
         // with this fix as its first.
         val followed = s.follow?.let { onFollowFix(s, it, fix) } == true
-        if (s.trackId != null && s.pausedSince == null && !standingStill(s.lastKept, fix)) {
+        if (s.trackId != null && s.pausedSince == null && accurateEnough(fix) && !standingStill(s.lastKept, fix)) {
             s.lastKept = fix
             try {
                 s.buffer?.append(fix)

@@ -247,4 +247,14 @@ class RecordingLogicTest {
         assertFalse(standingStill(kept, fix(55.70005, null)))
         assertFalse(standingStill(null, fix(55.70005, 0.0)))
     }
+
+    @Test
+    fun poorFixesAreNotKept() {
+        fun fix(acc: Double?) = se.gangefors.moto.core.TrackPoint(0, se.gangefors.moto.core.LatLon(55.7, 13.2), acc, 0.0, null)
+        assertTrue(accurateEnough(fix(5.0)))
+        assertTrue(accurateEnough(fix(KEEP_MAX_ACCURACY_M)))
+        assertTrue(accurateEnough(fix(null)))
+        assertFalse(accurateEnough(fix(48.0)))
+        assertFalse(accurateEnough(fix(Double.NaN)))
+    }
 }
