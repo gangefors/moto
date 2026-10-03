@@ -280,9 +280,10 @@ fun sectionsFileName(atSec: Long, zone: java.time.ZoneId, extension: String): St
 const val STILL_MPS = 0.5
 
 /** A still fix is skipped within this of the last one kept, metres, or
- * within its accuracy (up to [STILL_MAX_M]) when that is worse. */
-const val STILL_M = 10.0
-const val STILL_MAX_M = 30.0
+ * within the worse accuracy of the two (up to [STILL_MAX_M]): indoor
+ * jitter at speed 0 jumps 10–20 m (the rider's test, 2026-10-03). */
+const val STILL_M = 25.0
+const val STILL_MAX_M = 50.0
 
 /**
  * Whether [fix] is the rider standing still where [lastKept] was (at a
@@ -294,6 +295,7 @@ fun standingStill(lastKept: TrackPoint?, fix: TrackPoint): Boolean {
     val last = lastKept ?: return false
     val speed = fix.speedMps?.takeIf { it.isFinite() } ?: return false
     if (speed > STILL_MPS) return false
-    val within = (fix.accuracyM?.takeIf { it.isFinite() } ?: 0.0).coerceIn(STILL_M, STILL_MAX_M)
+    val accuracy = maxOf(fix.accuracyM?.takeIf { it.isFinite() } ?: 0.0, last.accuracyM?.takeIf { it.isFinite() } ?: 0.0)
+    val within = accuracy.coerceIn(STILL_M, STILL_MAX_M)
     return approxDistanceM(last.position, fix.position) < within
 }

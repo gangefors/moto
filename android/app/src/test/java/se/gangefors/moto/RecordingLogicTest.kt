@@ -232,13 +232,16 @@ class RecordingLogicTest {
         fun fix(lat: Double, mps: Double?, acc: Double? = 5.0) =
             se.gangefors.moto.core.TrackPoint(0, se.gangefors.moto.core.LatLon(lat, 13.2), acc, mps, null)
         val kept = fix(55.70, 0.0)
-        // Slow and within 10 m: skipped.
+        // Slow and within 25 m: skipped (indoor jitter jumps 10–20 m).
         assertTrue(standingStill(kept, fix(55.70005, 0.2))) // ~6 m
-        // Slow but farther than 10 m (a good fix): kept.
-        assertFalse(standingStill(kept, fix(55.7002, 0.2))) // ~22 m
-        // A poor fix's accuracy widens it, up to 30 m.
-        assertTrue(standingStill(kept, fix(55.7002, 0.2, acc = 25.0)))
-        assertFalse(standingStill(kept, fix(55.7004, 0.2, acc = 80.0))) // ~44 m
+        assertTrue(standingStill(kept, fix(55.7001, 0.0))) // ~11 m
+        assertTrue(standingStill(kept, fix(55.7002, 0.2))) // ~22 m
+        // Slow but farther than 25 m (good fixes): kept.
+        assertFalse(standingStill(kept, fix(55.7003, 0.2))) // ~33 m
+        // The worse accuracy of the two widens it, up to 50 m.
+        assertTrue(standingStill(kept, fix(55.7003, 0.2, acc = 40.0)))
+        assertTrue(standingStill(fix(55.70, 0.0, acc = 45.0), fix(55.7003, 0.2)))
+        assertFalse(standingStill(kept, fix(55.7005, 0.2, acc = 80.0))) // ~56 m
         // Moving, no speed, or nothing kept yet: kept.
         assertFalse(standingStill(kept, fix(55.70005, 3.0)))
         assertFalse(standingStill(kept, fix(55.70005, null)))
