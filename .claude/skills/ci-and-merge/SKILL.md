@@ -30,12 +30,12 @@ Medians from push (25 green runs, 2026-09-29): Core 2 min, Android app and
 16). Golden routes run in the Core job; the Skåne (M0) and border regions
 are rebuilt about once a week (cache miss: a few minutes more). The rider can
 install `debug-branch` about 6 minutes after a push to a work branch; the
-merge into main follows the benchmark, about 15 minutes after the push.
+merge into main follows the app build, about 6 minutes after the push.
 
 ## Merging into main
 
-The `merge` job in `android.yml` does it: once core, bench and build pass
-on a Claude work branch (`ccr-*`, `claude/*`), it fast-forwards `main` to
+The `merge` job in `android.yml` does it: once core and build pass (not the
+benchmark) on a Claude work branch (`ccr-*`, `claude/*`), it fast-forwards `main` to
 the branch tip and starts main's CI (`debug-latest`, the benchmark
 baseline) and CodeQL. `.github/scripts/fast_forward.py` decides. So after
 a code push, never wait, poll or schedule a check-in just to merge.
