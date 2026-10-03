@@ -38,6 +38,9 @@ use crate::tag::{NewTag, TagStatus};
 use crate::track::TrackPoint;
 use crate::{CoreError, Engine, LatLon};
 
+mod settings;
+pub use settings::{MAX_SETTINGS, Setting, SettingValue};
+
 /// The backup format this build writes and the newest it reads.
 pub const FORMAT: u32 = 1;
 /// Largest backup file read.
@@ -87,8 +90,8 @@ pub struct BackupInfo {
     pub app: String,
     /// The keys of the map regions installed, to offer after a restore.
     pub regions: Vec<String>,
-    /// The app's settings as a JSON object; carried as they are.
-    pub settings_json: Option<String>,
+    /// The app's settings; `None` writes no settings file.
+    pub settings: Option<Vec<Setting>>,
     /// When the backup is made, milliseconds since the Unix epoch.
     pub created_at_ms: i64,
 }
@@ -123,8 +126,9 @@ pub struct RestoreReport {
     pub routes_skipped: u64,
     pub tags_added: u64,
     pub tags_skipped: u64,
-    /// The backup's settings, for the app to apply (validated by it).
-    pub settings_json: Option<String>,
+    /// The backup's settings, for the app to apply (it checks which keys
+    /// it knows); `None` if the backup has none.
+    pub settings: Option<Vec<Setting>>,
     /// The map regions the backup was made with.
     pub regions: Vec<String>,
 }
@@ -260,18 +264,6 @@ fn valid_region(key: &str) -> bool {
         && key
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
-/// A JSON object of at most [`MAX_SETTINGS_BYTES`]; its keys and values
-/// are the app's to check.
-fn check_settings(json: &str) -> Result<(), CoreError> {
-    if json.len() > MAX_SETTINGS_BYTES {
-        return Err(bad("settings too large"));
-    }
-    match serde_json::from_str::<serde_json::Value>(json) {
-        Ok(serde_json::Value::Object(_)) => Ok(()),
-        _ => Err(bad("settings are not a JSON object")),
-    }
 }
 
 impl Manifest {
@@ -425,9 +417,11 @@ pub fn write_backup(
     path: &Path,
     info: &BackupInfo,
 ) -> Result<BackupSummary, CoreError> {
-    if let Some(json) = &info.settings_json {
-        check_settings(json).map_err(|_| CoreError::InvalidArgument("invalid settings".into()))?;
-    }
+    let settings_json = info
+        .settings
+        .as_deref()
+        .map(settings::to_json)
+        .transpose()?;
     let regions: Vec<String> = info
         .regions
         .iter()
@@ -532,8 +526,8 @@ pub fn write_backup(
             .collect();
     }
 
-    if let Some(json) = &info.settings_json {
-        w.add(SETTINGS, json.as_bytes())?;
+    if let Some(json) = &settings_json {
+        w.add(SETTINGS, json)?;
     }
 
     let manifest = Manifest {
@@ -732,9 +726,7 @@ pub fn restore_backup(
 
     // Read and check the small files first.
     if opened.sizes.contains_key(SETTINGS) {
-        let json = utf8(read_entry(&mut opened, SETTINGS)?, SETTINGS)?;
-        check_settings(&json)?;
-        report.settings_json = Some(json);
+        report.settings = Some(settings::from_json(&read_entry(&mut opened, SETTINGS)?)?);
     }
     let sections = if opened.sizes.contains_key(SECTIONS) {
         let read = exchange::read_features(&read_entry(&mut opened, SECTIONS)?)?;

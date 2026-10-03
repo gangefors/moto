@@ -14,6 +14,47 @@ use moto_core::backup as core;
 use crate::sections::now;
 use crate::{Engine, MotoError, SectionStore};
 
+/// One of the app's settings in a backup: a simple key (lower-case
+/// letters, digits and `_`) and its value.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BackupSetting {
+    pub key: String,
+    pub value: BackupSettingValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum BackupSettingValue {
+    Bool { value: bool },
+    Int { value: i64 },
+    Text { value: String },
+}
+
+impl From<core::Setting> for BackupSetting {
+    fn from(s: core::Setting) -> Self {
+        Self {
+            key: s.key,
+            value: match s.value {
+                core::SettingValue::Bool(value) => BackupSettingValue::Bool { value },
+                core::SettingValue::Int(value) => BackupSettingValue::Int { value },
+                core::SettingValue::Text(value) => BackupSettingValue::Text { value },
+            },
+        }
+    }
+}
+
+impl From<BackupSetting> for core::Setting {
+    fn from(s: BackupSetting) -> Self {
+        Self {
+            key: s.key,
+            value: match s.value {
+                BackupSettingValue::Bool { value } => core::SettingValue::Bool(value),
+                BackupSettingValue::Int { value } => core::SettingValue::Int(value),
+                BackupSettingValue::Text { value } => core::SettingValue::Text(value),
+            },
+        }
+    }
+}
+
 /// What a backup holds.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BackupSummary {
@@ -61,9 +102,9 @@ pub struct RestoreReport {
     pub routes_skipped: u64,
     pub tags_added: u64,
     pub tags_skipped: u64,
-    /// The backup's settings (a JSON object), for the app to check and
-    /// apply; `None` if it has none.
-    pub settings_json: Option<String>,
+    /// The backup's settings, for the app to check (which keys it knows)
+    /// and apply; `None` if it has none.
+    pub settings: Option<Vec<BackupSetting>>,
     /// The map regions the backup was made with.
     pub regions: Vec<String>,
 }
@@ -80,7 +121,7 @@ impl From<core::RestoreReport> for RestoreReport {
             routes_skipped: r.routes_skipped,
             tags_added: r.tags_added,
             tags_skipped: r.tags_skipped,
-            settings_json: r.settings_json,
+            settings: r.settings.map(|v| v.into_iter().map(Into::into).collect()),
             regions: r.regions,
         }
     }
@@ -103,18 +144,18 @@ pub fn backup_summary(path: String) -> Result<BackupSummary, MotoError> {
 impl SectionStore {
     /// Writes a backup of everything to a new file at `path`: `app` names
     /// the app and its version, `regions` the map regions installed, and
-    /// `settings_json` (a JSON object) the app's settings.
+    /// `settings` the app's settings (`None`: no settings file).
     pub fn write_backup(
         &self,
         path: String,
         app: String,
         regions: Vec<String>,
-        settings_json: Option<String>,
+        settings: Option<Vec<BackupSetting>>,
     ) -> Result<BackupSummary, MotoError> {
         let info = core::BackupInfo {
             app,
             regions,
-            settings_json,
+            settings: settings.map(|v| v.into_iter().map(Into::into).collect()),
             created_at_ms: now_ms(),
         };
         Ok(core::write_backup(&self.store(), Path::new(&path), &info)?.into())
@@ -174,14 +215,23 @@ mod tests {
                 path.clone(),
                 "moto test".into(),
                 vec!["sweden".into()],
-                Some(r#"{"schema":1}"#.into()),
+                Some(vec![BackupSetting {
+                    key: "ride_zoom_step".into(),
+                    value: BackupSettingValue::Int { value: 3 },
+                }]),
             )
             .unwrap();
         assert_eq!(written, backup_summary(path.clone()).unwrap());
         assert!(written.has_settings);
         let (other, b) = open_db("b");
         let report = other.restore_backup(path.clone(), None).unwrap();
-        assert_eq!(report.settings_json.as_deref(), Some(r#"{"schema":1}"#));
+        assert_eq!(
+            report.settings,
+            Some(vec![BackupSetting {
+                key: "ride_zoom_step".into(),
+                value: BackupSettingValue::Int { value: 3 },
+            }])
+        );
         assert_eq!(report.regions, ["sweden"]);
         drop((store, other));
         for p in [&a, &b, &path] {
