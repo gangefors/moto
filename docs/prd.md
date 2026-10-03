@@ -49,7 +49,7 @@ Later decisions:
 **AD1. Map widget: MapLibre Native Android**
 
 - \+ Open source (BSD), no API key or billing, offline regions, fully stylable vector maps, iOS SDK exists, renders OSM data so routes and sections line up exactly with the drawn roads.
-- − Needs a tile source; less polished than Google out of the box; no built-in place search (add Nominatim/Photon later).
+- − Needs a tile source; less polished than Google out of the box; no built-in place search (dropped 2026-10-03: points are picked on the map).
 - Rejected: Google Maps SDK (no offline control, ToS grey zone mixing with OSM routes, geometry mismatch), osmdroid (raster only, not cross-platform).
 - One map widget does three jobs: **pick** (tap → lat/lon), **draw** (route + favourite sections as GeoJSON line layers), **hit-test** (tap a drawn section via rendered-feature query). It never does routing or snapping.
 
