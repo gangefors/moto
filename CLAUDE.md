@@ -32,6 +32,8 @@ core/                   cargo workspace
 android/                Gradle project (AGP 9, Compose); app/ builds the core via cargo-ndk
 docs/prd.md             product requirements (v1)
 docs/adr/               architecture decision records (index in README.md)
+docs/mockups/           shared mockup kit (CSS, map backgrounds, template)
+.claude/skills/         skills: commands, CI and merging, mockups
 ```
 
 ## Rules
@@ -44,9 +46,9 @@ docs/adr/               architecture decision records (index in README.md)
 - Record significant new architecture decisions as an ADR in `docs/adr/`, and keep each ADR's action items up to date as work lands. ADRs live only in the repo: Notion pages link to the files on GitHub and never hold copies. Add every new rule or decision (ADR or not) to the Notion decisions log; don't keep a decisions log or progress notes in the repo.
 - Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping. One exception: a release that fixes a published vulnerability (GitHub, RustSec or CVE advisory) in a version we use may be adopted once it is at least a day old and has been reviewed (changelog, scope of the diff, licence) and CI is green.
 - Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, ADRs) go in their own commits, separate from code changes. One fix or feature per commit, so each can be reverted alone; changes go together only when one can't work without the other.
-- Mockups look as close to the real app as possible, never ASCII sketches: an HTML page published as an artifact, with phones at real size (360 dp wide) and the app's own Material 3 colours (light and dark), Roboto type scale, components at their real dp sizes, strings from `strings.xml` and icons from `res/drawable`. Build each one from the components of the last mockup (read that artifact and reuse its CSS), check them against the composables it draws (padding, type style, component) and fix any drift there first. Mark what changes, and show the current screen beside the proposal when something moves.
+- Mockups look as close to the real app as possible, never ASCII sketches: an HTML page published as an artifact, with phones at real size (360 dp wide), the app's own Material 3 colours (light and dark), Roboto, components at their real dp sizes, strings from `strings.xml` and icons from `res/drawable`, built from the kit in `docs/mockups/`. Mark what changes, and show the current screen beside the proposal when something moves. The `mockups` skill has the details.
 - Open questions and ideas from Stefan start a discussion, not a change: propose options, agree on one, and implement only when he says so. Work beyond what he asked is suggested first and agreed before it is committed.
-- Work that should be published is pushed to the workspace's own branch, never straight to `main`. Once CI is green on the branch's newest commit, the branch is merged into `main` (no PR unless asked); if `main` has moved on meanwhile, bring it into the branch and wait for CI to pass again first. A push that gets no CI run (no code changed, see below) is merged right away. Every `main` build is a test release (`debug-latest`); every build of a Claude work branch (`ccr-*`, `claude/*`, the patterns the `debug-signing` environment allows) is published as `debug-branch` once the app builds and its tests pass, before the benchmark, so Stefan can test it about 6 minutes after the push; both are signed with the debug key and install over each other. Tags get proper releases.
+- Work that should be published is pushed to the workspace's own branch, never straight to `main` (no PR unless asked). CI merges it: once core, benchmark and app build pass on a Claude work branch, the `merge` job fast-forwards `main` to it and starts main's CI, so never wait, poll or schedule check-ins to merge. Merge by hand only where the job can't: a push with no CI run (merge right away, if `origin/main..HEAD` changes no code), a change to `.github/workflows/` (once CI is green on the newest commit), or when `main` has moved on (bring it into the branch and push; CI merges when green). Every `main` build is a test release (`debug-latest`); every build of a Claude work branch (`ccr-*`, `claude/*`, the patterns the `debug-signing` environment allows) is published as `debug-branch` once the app builds and its tests pass, before the benchmark, so Stefan can test it about 6 minutes after the push; both are signed with the debug key and install over each other. Tags get proper releases. The `ci-and-merge` skill has the details.
 - UI draws edge to edge, but interactive or informational elements (buttons, map controls, attribution, text) must never sit under the status bar, navigation bar or a display cutout; offset them by `WindowInsets.safeDrawing`. System bar icons must stay readable: keep the status bar fully transparent and switch its icons between light and dark to contrast with whatever is behind them, whatever the map style or overlay (like Google Maps); give the navigation bar a translucent scrim in the app theme's colour (light or dark: it follows the phone until the rider picks one in the menu), with icons that follow that theme; where an app panel (like the planning sheet) reaches down behind the bar, its icons contrast with that panel instead.
 - User-facing text (app strings, messages from the core, file names) is in British English and calls what the rider marks and rates "favourite sections"; where space is tight "favourites" (or "favourite" for one); never "section" alone. Code, logic and docs keep saying sections.
 - The how-to page shows a button's own icon inline wherever its text refers to a button or other on-screen control, so the rider can find it. Elsewhere, add an icon to text only where it helps in that spot (e.g. pointing at a button on the same card).
@@ -71,10 +73,10 @@ Security comes first: before performance, features and convenience. Never choose
 ## Testing and performance
 
 - **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
-- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints.
-- **When CI builds, and how long it takes.** CI (`android.yml`) runs only for pushes that change code in `android/` or `core/`, or `.github/scripts/third_party.py` (the app build runs it), and never for Markdown alone: a commit that only touches docs, ADRs, `CLAUDE.md` or other files in `.github/` gets no CI run and no `debug-latest`, so there is nothing to wait for. The CI scripts' tests run in their own workflow (`scripts.yml`, seconds) whenever a script changes, without building anything. To test a change to `android.yml` before the next code change, start it by hand (workflow_dispatch) on the branch. Push each fix as soon as the local checks pass, never holding it for a CI run still going: Stefan tests several fixes at once and wants fast turnaround. A newer push cancels the run still going; the newer run covers both commits, so check CI on the newest one. Medians from push (25 green runs, 2026-09-29): Core 2 min, Android app and `debug-latest` 6 min (at most 9), Benchmark 14 min (at most 16); golden routes run in the Core job, and the Skåne (M0) and border regions are rebuilt about once a week (cache miss: a few minutes more). Check the app about 6 minutes after a push (`debug-branch` on the work branch, `debug-latest` on main), the benchmark about 15.
-- **Performance is measured on every build.** CI runs the benchmark (`moto-regionbuild --check` on the Skåne region: region open and verify, snapping, routing) with this build's binary and with the last `main` build's binary, alternately on the same machine, and compares them. The job summary shows the table. It runs in its own job beside the app build, so `debug-latest` doesn't wait for it (faster phone tests); a failed benchmark still turns CI red and is fixed next, and a release build is never made from a commit whose benchmark hasn't passed.
-- **Route quality is measured on every build.** CI runs the golden routes (`core/moto-core/tests/golden/`) with this build and the last `main` build and shows a before/after table; a route that breaks its expectations fails CI. Change scoring weights only with a stated hypothesis and that before/after table, and add a golden case for every bad route found on a real ride instead of tuning weights to one route.
+- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints. The commands are in the `dev-commands` skill.
+- **When CI builds.** Only for pushes that change code in `android/` or `core/` (or `.github/scripts/third_party.py`), never for Markdown alone. Push each fix as soon as the local checks pass; a newer push cancels the run still going. Timings and details: the `ci-and-merge` skill.
+- **Performance is measured on every build.** CI benchmarks each build (region open and verify, snapping, routing on the Skåne region) against the last `main` build's binary on the same machine, beside the app build so `debug-latest` doesn't wait. A failed benchmark turns CI red and is fixed next; a release is never made from a commit whose benchmark hasn't passed.
+- **Route quality is measured on every build.** CI runs the golden routes (`core/moto-core/tests/golden/`) against the last `main` build; a route that breaks its expectations fails CI. Change scoring weights only with a stated hypothesis and that before/after table, and add a golden case for every bad route found on a real ride instead of tuning weights to one route.
 - A significant regression fails CI: more than 25 % slower for snapping and routing, or more than 50 % and 5 ms slower for the short, memory- and disk-bound region verify and open timings (each binary runs twice; each metric keeps its faster result). Re-evaluate the implementation and try to recover the loss first. Accept a regression only when it buys something worth it (correctness, security, a feature), with a `Perf-Accepted: <reason>` trailer in the commit message and an entry in the decisions log. Improvements of more than 10 % are reported too; note them in the commit message.
 - Security beats performance: never accept an insecure change to win back speed.
 
@@ -87,55 +89,3 @@ AGPL-3.0-only, with no outside contributions: Stefan holds the whole copyright (
 - Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (crates in `core/` use `license.workspace = true`).
 - Never copy in third-party GPL/AGPL code — it ends the sole copyright and blocks relicensing.
 - Dependencies must be AGPL-compatible (MIT, Apache-2.0, BSD, MPL-2.0, …). Check new ones before adding.
-
-## Commands
-
-```sh
-cd core
-cargo test --workspace
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo fmt --all
-cargo deny --locked check   # advisories, licences, sources (deny.toml; cargo-deny 0.20.2)
-
-# Region file and benchmark (CI compares --json output between builds).
-# The Skåne region (the M0 region) for golden routes and the benchmark:
-# download main's build from the skane-region release (CI publishes it
-# when it is built again, about weekly), check it, then use it.
-R=https://github.com/gangefors/moto/releases/download/skane-region
-curl -fsSL --proto '=https' -O "$R/skane.region.gz" -O "$R/skane.region.gz.sha256"
-sha256sum -c skane.region.gz.sha256 && gunzip skane.region.gz
-cargo run --release -p moto-regionbuild -- --check skane.region
-# Build it yourself only when your change touches the builder or the
-# region format. The extract: download.geofabrik.de refuses Claude's
-# sessions (never try it); use the same data from the openstreetmap.fr
-# mirror:
-# https://download.openstreetmap.fr/extracts/europe/sweden-latest.osm.pbf
-cargo run --release -p moto-regionbuild -- sweden-latest.osm.pbf skane.region
-# Derive curvature and built-up areas afresh for an existing region file,
-# without the extract
-cargo run --release -p moto-regionbuild -- --refresh skane.region skane-new.region
-cargo run --release -p moto-regionbuild -- --check skane.region --json bench.json
-python3 ../.github/scripts/bench_compare.py old.json bench.json
-# Golden routes: route-quality regression set (run before and after every
-# scoring change; see moto-core/tests/golden/README.md)
-cargo run --release -p moto-regionbuild -- --golden skane.region moto-core/tests/golden --json golden.json
-# Map matching on a real ride exported from the app (Rides → Export)
-cargo run --release -p moto-regionbuild -- --match skane.region ride.gpx --geojson ride.geojson
-python3 -m unittest discover -s ../.github/scripts -p 'test_*.py'
-cargo llvm-cov --workspace --summary-only   # coverage (needs cargo-llvm-cov)
-
-# Kotlin bindings (package se.gangefors.moto.core, see moto-ffi/uniffi.toml)
-cargo build -p moto-ffi
-cargo run -p moto-ffi --features cli --bin uniffi-bindgen -- \
-  generate --library target/debug/libmoto_ffi.so --language kotlin --out-dir <dir>
-
-# Android libs (needs cargo-ndk + ANDROID_NDK_HOME); Gradle runs this for you
-cargo ndk -t arm64-v8a -t x86_64 -o ../android/app/src/main/jniLibs build --release -p moto-ffi
-
-# Android app (needs ANDROID_HOME or android/local.properties, cargo-ndk,
-# python3 and the aarch64/x86_64-linux-android Rust targets). preBuild runs
-# cargo-ndk and generates the UniFFI bindings into app/build/generated/; the
-# licence notices (.github/scripts/third_party.py) go into the assets.
-cd ../android
-./gradlew assembleDebug lintDebug testDebugUnitTest compileReleaseKotlin
-```
