@@ -140,4 +140,18 @@ class RideLogicTest {
         assertEquals(0.0, rideAgainDurationS(1_000, null), 1e-9)
         assertEquals(0.0, rideAgainDurationS(5_000, 1_000), 1e-9)
     }
+
+    @Test
+    fun theRideZoomSettingMovesBothEnds() {
+        // The default step is the zoom as it always was.
+        assertEquals(0.0, rideZoomOffset(RIDE_ZOOM_DEFAULT_STEP), 1e-9)
+        // Closest: one level in (half as wide); widest: two out (four times).
+        assertEquals(1.0, rideZoomOffset(0), 1e-9)
+        assertEquals(-2.0, rideZoomOffset(RIDE_ZOOM_STEPS - 1), 1e-9)
+        assertEquals(1.0, rideZoomOffset(-3), 1e-9)
+        assertEquals(-2.0, rideZoomOffset(99), 1e-9)
+        assertEquals(RIDE_ZOOM_SLOW + 1.0, rideZoom(null, 1.0), 1e-9)
+        assertEquals(RIDE_ZOOM_FAST - 2.0, rideZoom(30.0, -2.0), 1e-9)
+        assertEquals(RIDE_ZOOM_SLOW, rideZoom(null, Double.NaN), 1e-9)
+    }
 }

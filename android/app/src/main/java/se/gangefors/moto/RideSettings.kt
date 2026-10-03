@@ -16,10 +16,12 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,6 +32,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import se.gangefors.moto.core.Avoid
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
@@ -47,6 +50,7 @@ data class RideSettings(
     val keepScreenOn: Boolean,
     val showRidden: Boolean = false,
     val turnMap: Boolean = true,
+    val rideZoomStep: Int = RIDE_ZOOM_DEFAULT_STEP,
     val offRouteAlert: Boolean = true,
 )
 
@@ -98,6 +102,10 @@ fun RideSettingsPage(settings: RideSettings, onChange: (RideSettings) -> Unit, o
             SettingsGroup(stringResource(R.string.settings_group_map))
             Heading(stringResource(R.string.locate_zooms), stringResource(R.string.locate_zooms_hint))
             ZoomRange(settings.zooms) { onChange(settings.copy(zooms = it)) }
+            Box(Modifier.padding(top = 16.dp)) {
+                Heading(stringResource(R.string.settings_ride_zoom), stringResource(R.string.settings_ride_zoom_hint))
+            }
+            RideZoomSlider(settings.rideZoomStep) { onChange(settings.copy(rideZoomStep = it)) }
             SwitchRow(
                 settings.showRidden,
                 stringResource(R.string.settings_show_ridden),
@@ -170,11 +178,11 @@ private fun ZoomRange(zooms: LocateZooms, onZooms: (LocateZooms) -> Unit) {
     val widthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toDouble() }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_close), spanText(shown.close, widthDp))),
+            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_close), spanText(shown.close.toDouble(), widthDp))),
             style = MaterialTheme.typography.titleSmall,
         )
         Text(
-            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_area), spanText(shown.area, widthDp))),
+            noBreak(stringResource(R.string.locate_zoom_value, stringResource(R.string.locate_zoom_area), spanText(shown.area.toDouble(), widthDp))),
             style = MaterialTheme.typography.titleSmall,
         )
     }
@@ -194,10 +202,45 @@ private fun ZoomRange(zooms: LocateZooms, onZooms: (LocateZooms) -> Unit) {
     )
 }
 
+/**
+ * How close the map zooms while riding, in [RIDE_ZOOM_STEPS] steps from
+ * closer to wider, shown as how wide the map is when slow and at 90 km/h
+ * on this screen. Saved when the thumb is let go.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RideZoomSlider(step: Int, onStep: (Int) -> Unit) {
+    var value by remember(step) { mutableFloatStateOf(step.toFloat()) }
+    val shown = value.roundToInt()
+    val offset = rideZoomOffset(shown)
+    val widthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toDouble() }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            noBreak(stringResource(R.string.ride_zoom_slow, spanText(RIDE_ZOOM_SLOW + offset, widthDp))),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            noBreak(stringResource(R.string.ride_zoom_fast, spanText(RIDE_ZOOM_FAST + offset, widthDp))),
+            style = MaterialTheme.typography.titleSmall,
+        )
+    }
+    Slider(
+        value = value,
+        onValueChange = { value = it },
+        onValueChangeFinished = { if (value.roundToInt() != step) onStep(value.roundToInt()) },
+        valueRange = 0f..(RIDE_ZOOM_STEPS - 1).toFloat(),
+        steps = RIDE_ZOOM_STEPS - 2,
+    )
+    SliderScale(
+        listOf(stringResource(R.string.locate_zoom_closer), stringResource(R.string.locate_zoom_wider)),
+        listOf(0f, 1f),
+    )
+}
+
 /** How wide the map is at [zoom] on a screen [widthDp] wide: "18 km". */
 @Composable
-private fun spanText(zoom: Int, widthDp: Double): String =
-    when (val s = readableSpan(spanAtZoom(zoom.toDouble(), widthDp, SETTINGS_LATITUDE))) {
+private fun spanText(zoom: Double, widthDp: Double): String =
+    when (val s = readableSpan(spanAtZoom(zoom, widthDp, SETTINGS_LATITUDE))) {
         is Span.Km -> stringResource(R.string.span_km, s.km)
         is Span.KmTenths -> stringResource(R.string.span_km_tenths, s.km)
         is Span.Metres -> stringResource(R.string.span_m, s.m)

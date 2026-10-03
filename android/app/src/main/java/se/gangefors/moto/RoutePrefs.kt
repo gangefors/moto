@@ -31,6 +31,7 @@ object RoutePrefs {
     private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
     private const val SHOW_RIDDEN = "show_ridden_roads"
     private const val TURN_MAP = "ride_turn_map"
+    private const val RIDE_ZOOM_STEP = "ride_zoom_step"
     private const val OFF_ROUTE_ALERT = "ride_off_route_alert"
     private const val MAP_HINTS = "map_hints_shown"
     private const val SECTIONS_SORT = "sections_sort"
@@ -138,6 +139,15 @@ object RoutePrefs {
 
     fun setTurnMap(context: Context, on: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putBoolean(TURN_MAP, on) }
+    }
+
+    /** How close the map zooms while riding (see [rideZoomOffset]). */
+    fun rideZoomStep(context: Context): Int = runCatching {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt(RIDE_ZOOM_STEP, RIDE_ZOOM_DEFAULT_STEP)
+    }.getOrDefault(RIDE_ZOOM_DEFAULT_STEP).coerceIn(0, RIDE_ZOOM_STEPS - 1)
+
+    fun setRideZoomStep(context: Context, step: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putInt(RIDE_ZOOM_STEP, step.coerceIn(0, RIDE_ZOOM_STEPS - 1)) }
     }
 
     /** Riding a route: a sound when the rider leaves it. */

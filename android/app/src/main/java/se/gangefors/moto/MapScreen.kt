@@ -489,6 +489,8 @@ fun MapScreen() {
     val ridingNow = rememberUpdatedState(riding)
     // Ride settings: the map turns with the rider; an alert off the route.
     var turnMap by remember { mutableStateOf(RoutePrefs.turnMap(context)) }
+    // How close the map zooms while riding (Ride settings).
+    var rideZoomStep by remember { mutableIntStateOf(RoutePrefs.rideZoomStep(context)) }
     var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
     // The rider fixed north up with the map's compass (for the rest of
     // the ride), or moved the map (until Recentre).
@@ -1754,11 +1756,15 @@ fun MapScreen() {
         m.locationComponent.takeIf { it.isLocationComponentActivated }?.renderMode = RenderMode.COMPASS
     }
     // Zoom by speed while followed: closer when slow, wider at speed.
-    val rideZoomStep = if (riding) Math.round(rideZoom((recording as? Recording.State.Active)?.lastFix?.speedMps) * 4) / 4.0 else 0.0
-    LaunchedEffect(map, riding, ridePanned, rideZoomStep) {
+    val rideZoomTarget = if (riding) {
+        Math.round(rideZoom((recording as? Recording.State.Active)?.lastFix?.speedMps, rideZoomOffset(rideZoomStep)) * 4) / 4.0
+    } else {
+        0.0
+    }
+    LaunchedEffect(map, riding, ridePanned, rideZoomTarget) {
         val m = map ?: return@LaunchedEffect
         if (!riding || ridePanned) return@LaunchedEffect
-        m.locationComponent.takeIf { it.isLocationComponentActivated }?.zoomWhileTracking(rideZoomStep, 1_500)
+        m.locationComponent.takeIf { it.isLocationComponentActivated }?.zoomWhileTracking(rideZoomTarget, 1_500)
     }
     /**
      * Runs [action] on the store off the main thread, then reloads the
@@ -2727,6 +2733,7 @@ fun MapScreen() {
             settings = RideSettings(
                 loopChoice, defaultDirection, gravel, favouritesMode, unriddenMode, avoid, locateZooms, keepScreenOn, showRidden,
                 turnMap = turnMap,
+                rideZoomStep = rideZoomStep,
                 offRouteAlert = offRouteAlert,
             ),
             onChange = { new ->
@@ -2753,6 +2760,10 @@ fun MapScreen() {
                 if (new.showRidden != showRidden) {
                     showRidden = new.showRidden
                     RoutePrefs.setShowRidden(context, new.showRidden)
+                }
+                if (new.rideZoomStep != rideZoomStep) {
+                    rideZoomStep = new.rideZoomStep
+                    RoutePrefs.setRideZoomStep(context, new.rideZoomStep)
                 }
                 if (new.turnMap != turnMap) {
                     turnMap = new.turnMap

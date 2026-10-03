@@ -84,11 +84,24 @@ private const val FAST_MPS = 90 / 3.6
 /** The rider sits this far down the screen while followed (0 top, 1 bottom). */
 const val RIDER_DOWN = 0.7
 
-fun rideZoom(speedMps: Double?): Double {
-    val v = speedMps?.takeIf { it.isFinite() } ?: return RIDE_ZOOM_SLOW
+/** The zoom while riding at [speedMps], moved by [offset] zoom levels
+ * (closer when positive: Ride settings' step, [rideZoomOffset]). */
+fun rideZoom(speedMps: Double?, offset: Double = 0.0): Double {
+    val off = offset.takeIf { it.isFinite() } ?: 0.0
+    val v = speedMps?.takeIf { it.isFinite() } ?: return RIDE_ZOOM_SLOW + off
     val f = ((v - SLOW_MPS) / (FAST_MPS - SLOW_MPS)).coerceIn(0.0, 1.0)
-    return RIDE_ZOOM_SLOW + f * (RIDE_ZOOM_FAST - RIDE_ZOOM_SLOW)
+    return RIDE_ZOOM_SLOW + f * (RIDE_ZOOM_FAST - RIDE_ZOOM_SLOW) + off
 }
+
+/** Ride settings' "Zoom while riding": steps from closer (0) to wider;
+ * [RIDE_ZOOM_DEFAULT_STEP] is the zoom by speed as it always was. */
+const val RIDE_ZOOM_STEPS = 7
+const val RIDE_ZOOM_DEFAULT_STEP = 2
+
+/** How many zoom levels step [step] moves the zoom while riding: half a
+ * level a step, from one closer (half as wide) to two wider (four times as
+ * wide). Steps out of range count as the nearest. */
+fun rideZoomOffset(step: Int): Double = (RIDE_ZOOM_DEFAULT_STEP - step.coerceIn(0, RIDE_ZOOM_STEPS - 1)) * 0.5
 
 /** Camera top padding, px, that puts the followed rider [RIDER_DOWN] of
  * the way down a map [heightPx] high. */

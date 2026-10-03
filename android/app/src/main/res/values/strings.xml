@@ -22,6 +22,10 @@
     <string name="locate_zoom_value">%1$s: %2$s across</string>
     <string name="locate_zoom_wider">Wider</string>
     <string name="locate_zoom_closer">Closer</string>
+    <string name="settings_ride_zoom">Zoom while riding</string>
+    <string name="settings_ride_zoom_hint">How much of the map you see while riding a route; it still zooms out as you go faster. Widths are across this screen in southern Sweden.</string>
+    <string name="ride_zoom_slow">Slow: %1$s across</string>
+    <string name="ride_zoom_fast">At 90 km/h: %1$s across</string>
     <string name="span_km">%1$d km</string>
     <string name="span_km_tenths">%1$.1f km</string>
     <string name="span_m">%1$d m</string>
