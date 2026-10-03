@@ -220,4 +220,21 @@ class RideLogicTest {
         p.add(LatLon(55.7110, 13.20))
         assertTrue(p.distanceM > before + 100)
     }
+
+    @Test
+    fun zoomButtonsStepFromWhatTheMapShows() {
+        // The map still farther out (14) on its way to the ride's zoom
+        // (15.5): − goes one step out from 14, not in towards 15.5.
+        assertEquals(13.0, 15.5 + nudgeFromShown(14.0, 15.5, -ZOOM_BUTTON_STEP), 1e-9)
+        // + from there goes one step in.
+        assertEquals(15.0, 15.5 + nudgeFromShown(14.0, 15.5, ZOOM_BUTTON_STEP), 1e-9)
+        // Near the widest − goes (3 out), it stops there: still outwards.
+        assertEquals(12.5, 15.5 + nudgeFromShown(13.0, 15.5, -ZOOM_BUTTON_STEP), 1e-9)
+        // Already past how far − goes (12 is 3.5 out): it stays, never in.
+        assertEquals(12.0, 15.5 + nudgeFromShown(12.0, 15.5, -ZOOM_BUTTON_STEP), 1e-9)
+        // On the ride's zoom: one step either way.
+        assertEquals(1.0, nudgeFromShown(15.5, 15.5, ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(-1.0, nudgeFromShown(15.5, 15.5, -ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(0.0, nudgeFromShown(Double.NaN, 15.5, 1.0), 1e-9)
+    }
 }
