@@ -35,7 +35,16 @@ fn info() -> BackupInfo {
     BackupInfo {
         app: "moto 0.9 (42)".into(),
         regions: vec!["sweden".into(), "denmark".into()],
-        settings_json: Some(r#"{"schema":1,"ride_zoom_step":3}"#.into()),
+        settings: Some(vec![
+            Setting {
+                key: "ride_zoom_step".into(),
+                value: SettingValue::Int(3),
+            },
+            Setting {
+                key: "dark_theme".into(),
+                value: SettingValue::Text("dark".into()),
+            },
+        ]),
         created_at_ms: T0_MS,
     }
 }
@@ -264,10 +273,10 @@ fn a_backup_restores_everything_into_an_empty_app() {
         ),
         (2, 2, 2, 3)
     );
-    assert_eq!(
-        r.settings_json.as_deref(),
-        Some(r#"{"schema":1,"ride_zoom_step":3}"#)
-    );
+    // Settings come back in key order.
+    let mut want = info().settings.unwrap();
+    want.sort_by(|a, b| a.key.cmp(&b.key));
+    assert_eq!(r.settings, Some(want));
     assert_eq!(r.regions, ["sweden", "denmark"]);
     // The live ride's tag comes back, without its ride.
     let src_text = without_live(&src);
@@ -361,7 +370,7 @@ fn an_empty_app_makes_a_backup_with_only_a_manifest() {
     let src = Store::open_in_memory().unwrap();
     let f = Temp::new("empty");
     let mut i = info();
-    i.settings_json = None;
+    i.settings = None;
     let sum = write_backup(&src, &f.0, &i).unwrap();
     assert_eq!(
         (
@@ -376,24 +385,43 @@ fn an_empty_app_makes_a_backup_with_only_a_manifest() {
     let mut dst = filled();
     let before = contents(&dst);
     let r = restore_backup(&mut dst, None, &f.0, 0).unwrap();
-    assert_eq!(r.settings_json, None);
+    assert_eq!(r.settings, None);
     assert_eq!(contents(&dst), before);
 }
 
 #[test]
-fn settings_must_be_a_json_object() {
+fn settings_are_checked_both_ways() {
     let src = Store::open_in_memory().unwrap();
     let f = Temp::new("settings");
-    for bad in [
-        "[1,2]",
-        "not json",
-        "\"text\"",
-        &format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_SETTINGS_BYTES)),
-    ] {
-        let mut i = info();
-        i.settings_json = Some(bad.to_string());
-        assert!(write_backup(&src, &f.0, &i).is_err(), "{bad:.20}");
-    }
+    let mut i = info();
+    i.settings = Some(vec![Setting {
+        key: "Bad Key".into(),
+        value: SettingValue::Bool(true),
+    }]);
+    assert!(write_backup(&src, &f.0, &i).is_err());
+    // Settings that aren't simple values, with a matching hash: refused.
+    let g = backup_of(&src, "settings2");
+    let odd = br#"{"schema":1,"settings":{"a":[1,2]}}"#.to_vec();
+    let files: Vec<_> = entries(&g.0)
+        .into_iter()
+        .map(|(n, b)| {
+            if n == SETTINGS {
+                (n, odd.clone())
+            } else {
+                (n, b)
+            }
+        })
+        .collect();
+    let files = with_manifest(&files, |m| {
+        for f in m["files"].as_array_mut().unwrap() {
+            if f["name"] == SETTINGS {
+                f["size"] = odd.len().into();
+                f["sha256"] = hex(&Sha256::digest(&odd)).into();
+            }
+        }
+    });
+    zip_of(&f.0, &files);
+    refused(&f.0);
 }
 
 #[test]
