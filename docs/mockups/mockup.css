@@ -1,0 +1,361 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+   Copyright (C) 2026 Stefan Gangefors
+
+   Shared stylesheet for mockups (the mockups skill): page chrome, the
+   phone frame and the app's components at real dp sizes, Material 3
+   colours light and dark. Taken from the "Backup and restore" mockup
+   (2026-10-03). Add new or changed components here. */
+
+:root {
+  --page-bg: #f3f1f6; --page-fg: #1d1b20; --page-muted: #5d5966; --page-line: #d9d4e0; --page-accent: #6750a4;
+  --note-bg: #ffffff;
+  --font-ui: "Roboto", system-ui, sans-serif;
+  --font-head: "Roboto Flex", "Roboto", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page-bg: #0f0d13; --page-fg: #e6e0e9; --page-muted: #aaa4b3; --page-line: #36323d; --page-accent: #d0bcff; --note-bg: #1d1b20; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page-bg: #0f0d13; --page-fg: #e6e0e9; --page-muted: #aaa4b3; --page-line: #36323d; --page-accent: #d0bcff; --note-bg: #1d1b20; color-scheme: dark }
+body { margin: 0; background: var(--page-bg); color: var(--page-fg); font-family: var(--font-ui); }
+.wrap { padding-inline: 16px; padding-block: 28px 40px; max-width: 1640px; margin: 0 auto; }
+h1 { font-family: var(--font-head); font-weight: 600; font-size: 1.7rem; margin: 0 0 .4rem; text-wrap: balance; }
+.lede { max-width: 72ch; color: var(--page-muted); line-height: 1.5; margin: 0 0 1rem; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; color: var(--page-muted); }
+.controls button { font: 500 13px var(--font-ui); border: 1px solid var(--page-line); background: var(--note-bg); color: var(--page-fg); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.controls button[aria-pressed="true"] { background: var(--page-accent); color: var(--page-bg); border-color: var(--page-accent); }
+.row { overflow-x: auto; padding-bottom: 12px; }
+.phones { display: flex; gap: 28px; width: max-content; align-items: flex-start; }
+figure { margin: 0; width: 376px; display: flex; flex-direction: column; gap: 10px; }
+figcaption { font-size: 13px; line-height: 1.45; color: var(--page-muted); max-width: 360px; }
+figcaption b { color: var(--page-fg); font-weight: 500; display: block; font-size: 14px; margin-bottom: 2px; }
+.section { margin-top: 30px; }
+.section h2 { font: 600 1.15rem var(--font-head); margin: 0 0 .3rem; }
+.section > p { color: var(--page-muted); max-width: 72ch; line-height: 1.5; margin: 0 0 14px; font-size: 14px; }
+.rec { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--page-accent); font-weight: 500; }
+
+.phone {
+  --primary: #6750a4; --on-primary: #ffffff; --surface: #fef7ff; --on-surface: #1d1b20; --on-surface-variant: #49454f;
+  --outline: #79747e; --outline-variant: #cac4d0; --sec-container: #e8def8; --on-sec-container: #4a4458;
+  --container-low: #f7f2fa; --container-highest: #e6e0e9; --sheet: #f3edf7;
+  width: 360px; height: 760px; border-radius: 28px; overflow: hidden; position: relative;
+  background: var(--surface); color: var(--on-surface); font-family: "Roboto", system-ui, sans-serif;
+  box-shadow: 0 0 0 8px #1b1a1f, 0 12px 30px rgb(0 0 0 / .25); margin: 8px;
+}
+.phone.darkp {
+  --primary: #d0bcff; --on-primary: #381e72; --surface: #141218; --on-surface: #e6e0e9; --on-surface-variant: #cac4d0;
+  --outline: #938f99; --outline-variant: #49454f; --sec-container: #4a4458; --on-sec-container: #e8def8;
+  --container-low: #1d1b20; --container-highest: #36343b; --sheet: #211f26;
+}
+.status { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 13px; font-weight: 500; }
+.status i { display: inline-block; width: 14px; height: 9px; border: 1.5px solid currentColor; border-radius: 2px; margin-left: 4px; }
+.topbar { display: flex; align-items: center; padding: 8px 4px 0; }
+.topbar h3 { font: 400 22px/28px "Roboto", sans-serif; margin: 0; flex: 1; }
+.iconbtn { width: 48px; height: 48px; display: grid; place-items: center; flex: none; }
+.iconbtn svg { width: 24px; height: 24px; }
+.iconbtn.small svg { width: 20px; height: 20px; color: var(--on-surface-variant); }
+svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.page { padding: 8px 24px; height: calc(760px - 28px - 56px - 24px); overflow: hidden; position: relative; }
+.page::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(transparent, var(--surface)); }
+.group { font: 500 14px/20px "Roboto", sans-serif; color: var(--primary); letter-spacing: .1px; padding: 8px 0 4px; }
+.heading { display: flex; align-items: center; font: 500 16px/24px "Roboto", sans-serif; letter-spacing: .15px; }
+.heading .iconbtn { margin: -4px 0; }
+.mt16 { margin-top: 16px; }
+.opt-heading { display: flex; align-items: center; font: 500 14px/20px "Roboto", sans-serif; color: var(--on-surface-variant); letter-spacing: .1px; padding-top: 12px; }
+.seg { display: flex; height: 40px; }
+.seg span { flex: 1; display: grid; place-items: center; border: 1px solid var(--outline); margin-left: -1px; font: 500 14px/20px "Roboto", sans-serif; letter-spacing: .1px; white-space: nowrap; }
+.seg span:first-child { border-radius: 20px 0 0 20px; margin-left: 0; }
+.seg span:last-child { border-radius: 0 20px 20px 0; }
+.seg span.on { background: var(--sec-container); color: var(--on-sec-container); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { height: 32px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--outline-variant); font: 500 14px/20px "Roboto", sans-serif; letter-spacing: .1px; color: var(--on-surface-variant); white-space: nowrap; }
+.chip.lead { padding-left: 8px; }
+.chip.only { padding: 0 15px; }
+.chip svg { width: 18px; height: 18px; flex: none; }
+.slider-row { display: flex; align-items: center; justify-content: space-between; }
+.slider-row .val { font: 500 16px/24px "Roboto", sans-serif; }
+.slider { position: relative; height: 44px; display: flex; align-items: center; }
+.slider .act { height: 16px; background: var(--primary); border-radius: 8px 2px 2px 8px; width: 34%; }
+.slider .thumb { width: 4px; height: 44px; background: var(--primary); border-radius: 2px; margin: 0 6px; flex: none; }
+.slider .rest { flex: 1; height: 16px; background: var(--sec-container); border-radius: 2px 8px 8px 2px; }
+/* The sheet. */
+.strip.phone { height: auto; margin: 0; border-radius: 12px; width: 360px; box-shadow: 0 0 0 1px var(--page-line); }
+.strip .sheet { background: var(--sheet); padding: 4px 8px 8px 16px; }
+.handle { height: 32px; display: grid; place-items: center; }
+.handle i { width: 36px; height: 4px; border-radius: 2px; background: var(--on-surface-variant); display: block; }
+.sheettop .fig { font: 400 24px/32px "Roboto", sans-serif; display: flex; gap: 12px; align-items: baseline; white-space: nowrap; }
+.sheettop .fig small { font: 500 14px/20px "Roboto", sans-serif; color: var(--on-surface-variant); letter-spacing: .1px; }
+.qline { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; padding: 6px 8px 0 0; align-items: center; }
+/* Drift fixed: StatFigure draws its icon at 16 dp (the last mockup had 14). */
+.qstat { display: inline-flex; align-items: center; gap: 4px; font: 500 14px/20px "Roboto", sans-serif; letter-spacing: .1px; color: var(--on-surface-variant); white-space: nowrap; }
+.qstat svg { width: 16px; height: 16px; flex: none; }
+.qstat.dim { opacity: .5; }
+.chiprow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px 0 0; }
+.upicon { width: 48px; height: 48px; display: grid; place-items: center; color: var(--on-surface); }
+.upicon svg { width: 24px; height: 24px; }
+.cut { stroke: var(--sheet); }
+/* What changes. */
+.hl { position: relative; }
+.hl::before { content: ""; position: absolute; inset: -4px -8px; border-radius: 12px; border: 2px dashed #e0457b; pointer-events: none; }
+.hl-badge { white-space: nowrap; position: absolute; right: -6px; top: -16px; background: #e0457b; color: #fff; font: 500 10px/16px "Roboto", sans-serif; padding: 0 6px; border-radius: 8px; letter-spacing: .3px; z-index: 1; }
+.opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 22px; }
+.opt { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.opt h3 { margin: 0; font: 500 14px var(--font-ui); }
+.opt p { margin: 0; font-size: 13px; color: var(--page-muted); line-height: 1.45; max-width: 380px; }
+.pair { display: flex; flex-direction: column; gap: 6px; }
+.tip { background: var(--note-bg); border: 1px solid var(--page-line); border-radius: 12px; padding: 12px 14px; max-width: 332px; font-size: 14px; line-height: 20px; }
+.tip b { font-weight: 500; }
+.tip .t { font: 500 14px/20px var(--font-ui); margin-bottom: 4px; }
+.big { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+.big .z svg { width: 96px; height: 96px; }
+.sizes { display: flex; gap: 18px; align-items: center; background: var(--sheet); border-radius: 12px; padding: 12px 16px; color: var(--on-surface-variant); }
+.sizes svg { flex: none; }
+.sizes { flex-wrap: wrap; }
+.sizes span { font: 500 11px/16px Roboto, sans-serif; flex-basis: 100%; }
+.iconcmp { display: flex; flex-direction: column; gap: 8px; }
+.iconcmp .lab { font-size: 13px; color: var(--page-muted); }
+.iconcmp .lab b { color: var(--page-fg); font-weight: 500; }
+.big .z { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; color: var(--page-muted); }
+
+
+.mapph { position:relative; }
+.mapph .mapimg { position:absolute; top:0; left:0; width:360px; height:700px; object-fit:cover; }
+.sbar { position:absolute; top:0; left:0; right:0; height:28px; padding:0 20px; display:flex; align-items:center; font:500 13px Roboto,sans-serif; color:#1d1b20; }
+.darkp .sbar { color:#ffffff; }
+.topbtn { position:absolute; top:36px; width:48px; height:48px; border-radius:50%; display:grid; place-items:center; background:var(--pc); color:var(--opc); box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.fabb { position:absolute; right:16px; width:56px; height:56px; border-radius:16px; display:grid; place-items:center; background:var(--pc); color:var(--opc); box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.tagb { position:absolute; left:16px; bottom:64px; width:96px; height:96px; border-radius:28px; background:#e8710a; color:#fff; font:500 22px Roboto,sans-serif; display:grid; place-items:center; box-shadow:0 1px 4px rgba(0,0,0,.4); }
+.attr { position:absolute; left:0; right:0; bottom:28px; text-align:center; font:400 9px Roboto,sans-serif; color:#333; opacity:.8; }
+.darkp .attr { color:#ddd; }
+.navb { position:absolute; left:0; right:0; bottom:0; height:24px; background:rgba(254,247,255,.7); }
+.darkp .navb { background:rgba(20,18,24,.7); }
+.phone { --pc:#eaddff; --opc:#21005d; }
+.phone.darkp { --pc:#4f378b; --opc:#eaddff; }
+svg.i path { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+svg.i path[fill="currentColor"], svg.i path[fill="#d93025"] { stroke:none; }
+.switch.on { background:var(--primary); border-color:var(--primary); }
+.switch.on::after { left:24px; top:2px; width:24px; height:24px; background:var(--on-primary, #fff); }
+.darkp .switch.on::after { background:#381e72; }
+.muted { color:var(--on-surface-variant); font-size:13px; padding:8px 0 0; }
+.swatch { display:inline-block; width:28px; height:6px; border-radius:3px; vertical-align:middle; margin-right:6px; }
+
+/* From the Sheet summary icons mockup: Ride settings' range slider and switches. */
+.divider { height: 1px; background: var(--outline-variant); margin-top: 24px; }
+.divider + .group { padding-top: 16px; }
+.switch-row { display: flex; align-items: center; padding: 4px 0; }
+.switch-row .heading { flex: 1; padding-right: 16px; }
+.switch { width: 52px; height: 32px; box-sizing: border-box; border-radius: 16px; border: 2px solid var(--outline); position: relative; flex: none; background: var(--container-highest); }
+.switch::after { content: ""; position: absolute; left: 6px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--outline); }
+.zoomvals { display: flex; gap: 4px 16px; flex-wrap: wrap; font: 500 14px/20px "Roboto", sans-serif; letter-spacing: .1px; }
+.rslider { display: flex; align-items: center; height: 44px; }
+.rslider .in { height: 16px; background: var(--sec-container); }
+.rslider .l { width: 22%; border-radius: 8px 2px 2px 8px; }
+.rslider .r { flex: 1; border-radius: 2px 8px 8px 2px; }
+.rslider .mid { width: 34%; height: 16px; background: var(--primary); border-radius: 2px; }
+.rslider .thumb { width: 4px; height: 44px; background: var(--primary); border-radius: 2px; margin: 0 6px; }
+svg.i path[fill="currentColor"] { fill: currentColor; stroke: none; }
+svg.i path[fill="#d93025"] { fill: #d93025; stroke: none; }
+.switch.on { background:var(--primary); border-color:var(--primary); }
+.switch.on::after { left:22px; top:2px; width:24px; height:24px; background:#ffffff; }
+.darkp .switch.on::after { background:#381e72; }
+.ct { border-collapse: collapse; font-size: 13px; margin: 6px 0 14px; }
+.ct th, .ct td { border: 1px solid var(--page-line); padding: 3px 8px; text-align: right; }
+.ct th:first-child, .ct td:first-child { text-align: left; }
+.ct td.bad { color: #c5221f; font-weight: 500; }
+.rowtitle { font: 600 1rem var(--font-head); margin: 18px 0 2px; }
+.rownote { color: var(--page-muted); font-size: 13px; margin: 0 0 8px; max-width: 72ch; }
+
+
+.phone.lib { --sc-high:#ece6f0; --err:#b3261e; --inv:#322f35; --oninv:#f5eff7; --scrim:rgba(0,0,0,.32); }
+.phone.lib.darkp { --sc-high:#2b2930; --err:#f2b8b5; --inv:#e6e0e9; --oninv:#322f35; }
+.lpage { padding:8px 24px 24px; }
+.lpage .chips { padding-top:12px; }
+.fon { background:var(--sec-container); border-color:var(--sec-container); color:var(--on-sec-container); }
+.hint { font:400 12px/16px Roboto,sans-serif; letter-spacing:.4px; color:var(--on-surface-variant); padding-top:4px; }
+.lrow { display:flex; align-items:center; padding:8px 0; border-bottom:1px solid var(--outline-variant); }
+.lic { color:var(--on-surface-variant); margin-right:12px; display:grid; }
+.lt { flex:1; min-width:0; font:400 16px/24px Roboto,sans-serif; letter-spacing:.5px; padding-right:4px; }
+.ls { font:400 12px/16px Roboto,sans-serif; letter-spacing:.4px; color:var(--on-surface-variant); }
+.ib { width:48px; height:48px; display:grid; place-items:center; flex:none; color:var(--on-surface-variant); }
+.ib.del { color:#c5221f; }
+.darkp .ib.del { color:#f28b82; }
+.snack { position:absolute; left:8px; right:8px; bottom:40px; background:var(--inv); color:var(--oninv); border-radius:4px; padding:14px 16px; font:400 14px/20px Roboto,sans-serif; letter-spacing:.25px; box-shadow:0 3px 6px rgba(0,0,0,.3); }
+.snack.clip { max-height:120px; overflow:hidden; }
+.scrim { position:absolute; inset:0; background:var(--scrim); }
+.dlg { position:absolute; left:24px; right:24px; top:96px; max-height:560px; display:flex; flex-direction:column; background:var(--sc-high); border-radius:28px; padding:24px 0 24px; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+.dlg h4 { margin:0 24px 16px; font:400 24px/32px Roboto,sans-serif; color:var(--on-surface); }
+.dbody { position:relative; overflow:hidden; flex:1; min-height:0; padding:0 24px; }
+.dbody::after { content:""; position:absolute; left:0; right:0; bottom:0; height:32px; background:linear-gradient(transparent, var(--sc-high)); }
+.dbody.scrolled::before { content:""; position:absolute; left:0; right:0; top:0; height:32px; background:linear-gradient(var(--sc-high), transparent); z-index:1; }
+.dbody.scrolled::after { display:none; }
+.dsum { margin:0 0 8px; font:400 14px/20px Roboto,sans-serif; letter-spacing:.25px; color:var(--on-surface); }
+.dgroup { font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; color:var(--on-surface-variant); padding:12px 0 4px; }
+.dgroup.err { color:var(--err); }
+.drow { padding:4px 0 6px; border-bottom:1px solid var(--outline-variant); }
+.dname { font:400 14px/20px Roboto,sans-serif; letter-spacing:.25px; color:var(--on-surface); overflow-wrap:anywhere; }
+.dsub { font:400 12px/16px Roboto,sans-serif; letter-spacing:.4px; color:var(--on-surface-variant); }
+.dsub.err { color:var(--err); }
+.dbtns { display:flex; justify-content:flex-end; padding:24px 24px 0; }
+.tbtn { height:40px; padding:0 12px; display:inline-flex; align-items:center; font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; color:var(--primary); border-radius:20px; }
+
+.mapph .mapimg { height:760px; }
+.psheet { position:absolute; left:0; right:0; bottom:0; background:var(--sheet); border-radius:28px 28px 0 0; padding:0 8px 32px 16px; box-sizing:border-box; }
+.psheet .handle { height:32px; }
+.toprow { display:flex; align-items:center; }
+.toprow .fig { flex:1; min-width:0; display:flex; gap:12px; font:500 16px/24px Roboto,sans-serif; letter-spacing:.15px; white-space:nowrap; }
+.toprow .ib { color:var(--on-surface-variant); }
+.psheet .qline { padding:6px 8px 0 0; }
+.swrow { display:flex; gap:8px; align-items:center; padding-top:4px; }
+.switcher { display:inline-flex; align-items:center; border:1px solid var(--outline); border-radius:24px; }
+.switcher .cnt { font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; }
+.tonal { height:48px; display:inline-flex; align-items:center; gap:8px; padding:0 24px 0 16px; border-radius:24px; background:var(--sec-container); color:var(--on-sec-container); font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; box-sizing:border-box; }
+.psheet .chiprow { padding:4px 8px 0 0; gap:8px; }
+.fchip { color:var(--on-surface-variant); }
+.fchip.on { background:var(--sec-container); border-color:var(--sec-container); color:var(--on-sec-container); }
+.mspot { position:absolute; z-index:2; }
+.mbtn { width:48px; height:48px; border-radius:50%; display:grid; place-items:center; box-shadow:0 1px 3px rgba(0,0,0,.35); background:var(--surface); color:var(--on-surface-variant); }
+.mbtn.on { background:var(--pc); color:var(--opc); }
+.mlogo { position:absolute; left:10px; font:400 18px/1 Roboto,sans-serif; color:#3477d6; opacity:.85; }
+.legend { display:flex; gap:24px; flex-wrap:wrap; align-items:center; font-size:13px; color:var(--page-muted); margin:6px 0 4px; }
+.legend .phone { margin:0; }
+
+/* New for this mockup: the ride screen. Sizes from Material 3 (Compose defaults) as noted. */
+.phone { --err-c:#f9dedc; --on-err-c:#410e0b; --sheet-hi:#ece6f0; }
+.phone.darkp { --err-c:#8c1d18; --on-err-c:#f9dedc; --sheet-hi:#2b2930; }
+/* ExtendedFloatingActionButton: 56 dp high, 16 dp corners, 16/20 dp padding, 24 dp icon, 12 dp gap, labelLarge. */
+.efab { position:absolute; height:56px; border-radius:16px; padding:0 20px 0 16px; display:inline-flex; align-items:center; gap:12px; background:var(--pc); color:var(--opc); font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; box-shadow:0 1px 3px rgba(0,0,0,.35); box-sizing:border-box; white-space:nowrap; }
+/* The ride card: a Surface like MapCard (16 dp corners, tonal elevation 3), 8 dp from the sides, 8 dp under the status bar. */
+.rcard { position:absolute; left:8px; right:8px; top:36px; background:var(--sheet); color:var(--on-surface); border-radius:16px; box-shadow:0 1px 3px rgba(0,0,0,.3); padding:0 4px 12px 16px; z-index:2; }
+.rcard.err { background:var(--err-c); color:var(--on-err-c); }
+.rcard.err .sub, .rcard.err .ib { color:var(--on-err-c); }
+.rtop { display:flex; align-items:flex-start; }
+.rtop .grow { flex:1; min-width:0; padding-top:12px; }
+.rbig { font:400 28px/36px Roboto,sans-serif; display:flex; flex-wrap:wrap; column-gap:12px; align-items:baseline; white-space:nowrap; }
+.rbig small { font:400 22px/28px Roboto,sans-serif; color:var(--on-surface-variant); }
+.rcard.err .rbig small { color:var(--on-err-c); }
+.rhead { font:400 24px/32px Roboto,sans-serif; }
+.sub { font:400 16px/24px Roboto,sans-serif; letter-spacing:.5px; color:var(--on-surface-variant); padding-right:12px; }
+.rline { display:flex; align-items:center; gap:8px; font:500 16px/24px Roboto,sans-serif; letter-spacing:.15px; padding:2px 12px 0 0; }
+.rline svg { width:20px; height:20px; }
+.ib { width:48px; height:48px; display:grid; place-items:center; flex:none; color:var(--on-surface-variant); }
+/* LinearProgressIndicator: 4 dp track, gap and stop dot as in M3 2024. */
+.prog { display:flex; align-items:center; gap:4px; height:4px; margin:10px 12px 8px 0; }
+.prog .done { height:4px; border-radius:2px; background:var(--primary); }
+.prog .rest { flex:1; height:4px; border-radius:2px; background:var(--sec-container); position:relative; }
+.prog .rest::after { content:""; position:absolute; right:0; top:0; width:4px; height:4px; border-radius:2px; background:var(--primary); }
+.rbtns { display:flex; flex-wrap:wrap; gap:8px; padding:12px 12px 0 0; }
+/* Button / OutlinedButton: 40 dp high, labelLarge, 24 dp padding (16 dp before an icon). */
+.btn { height:40px; border-radius:20px; padding:0 24px; display:inline-flex; align-items:center; gap:8px; font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; box-sizing:border-box; white-space:nowrap; }
+.btn.icon { padding-left:16px; }
+.btn.filled { background:var(--primary); color:var(--on-primary); }
+.btn.outl { border:1px solid var(--outline); color:var(--primary); }
+.btn svg { width:18px; height:18px; }
+/* The position puck (MapLibre RenderMode.GPS): an arrow pointing the way you're going. */
+.puck { position:absolute; width:40px; height:40px; margin:-20px 0 0 -20px; display:grid; place-items:center; z-index:1; }
+.puck i { position:absolute; inset:2px; border-radius:50%; background:rgba(26,115,232,.18); }
+.puck span { width:26px; height:26px; border-radius:50%; background:#fff; display:grid; place-items:center; box-shadow:0 1px 3px rgba(0,0,0,.4); position:relative; }
+.fab56 { position:absolute; right:16px; width:56px; height:56px; border-radius:16px; display:grid; place-items:center; background:var(--pc); color:var(--opc); box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.fab56.rec::after { content:""; position:absolute; inset:-5px; border-radius:21px; padding:3px; background:conic-gradient(from 30deg, transparent 0 60%, #d93025); -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; }
+/* Drift fixed: the tag button is a 96 dp circle (LargeFloatingActionButton, CircleShape); earlier mockups drew 28 dp corners. */
+.tagb { border-radius:50%; }
+/* MapLibre's own compass: a white disc with a red north needle. */
+.cmp svg { width:24px; height:24px; }
+.cmp { position:absolute; right:16px; width:40px; height:40px; border-radius:50%; background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,.35); display:grid; place-items:center; }
+/* The notification shade. */
+.shade { width:360px; border-radius:28px; padding:16px 12px 20px; box-sizing:border-box; background:#e9e4ec; display:flex; flex-direction:column; gap:8px; font-family:Roboto,sans-serif; }
+.darkp.shade { background:#101014; }
+.ntf { background:#fbf8fd; color:#1d1b20; border-radius:20px; padding:12px 16px 12px 12px; display:flex; gap:12px; }
+.darkp .ntf { background:#2b2930; color:#e6e0e9; }
+.ntf .ap { width:32px; height:32px; border-radius:50%; background:#6750a4; color:#fff; display:grid; place-items:center; flex:none; }
+.ntf .ap.alert { background:#b3261e; }
+.ntf .meta { font:400 12px/16px Roboto,sans-serif; opacity:.75; }
+.ntf .t { font:500 15px/20px Roboto,sans-serif; }
+.ntf .x { font:400 14px/20px Roboto,sans-serif; opacity:.85; }
+.ntf .acts { display:flex; gap:20px; padding-top:8px; font:500 14px/20px Roboto,sans-serif; color:#6750a4; }
+.darkp .ntf .acts { color:#d0bcff; }
+.plan { max-width:880px; }
+.plan h3 { font:600 1rem var(--font-head); margin:22px 0 6px; }
+.plan p, .plan li { line-height:1.55; font-size:14.5px; }
+.plan ul, .plan ol { padding-left:22px; margin:6px 0; }
+.plan li { margin:3px 0; }
+.plan code { font-size:13px; background:var(--note-bg); border:1px solid var(--page-line); border-radius:4px; padding:0 4px; }
+.qs li b { color:var(--page-fg); }
+.helpp .page { height:auto; padding-top:16px; }
+.helpp .page::after { display:none; }
+.helpp p { font:400 16px/24px Roboto,sans-serif; letter-spacing:.5px; margin:0 0 12px; }
+.helpp svg { vertical-align:-5px; }
+/* Progress: 8 dp thick (LinearProgressIndicator's trackThickness), so it reads as a bar at a glance; at least 2 % filled. */
+.prog { height:8px; margin:12px 12px 10px 0; }
+.prog .done, .prog .rest { height:8px; border-radius:4px; }
+.prog .rest::after { width:8px; height:8px; border-radius:4px; }
+.rfl { display:flex; flex-wrap:wrap; align-items:center; column-gap:12px; row-gap:2px; padding-right:12px; font:500 16px/24px Roboto,sans-serif; letter-spacing:.15px; }
+.rfl > span { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.cprog { display:flex; align-items:center; gap:12px; padding-right:12px; }
+.cprog .prog { flex:1; margin:0; }
+.cprog .at { display:inline-flex; align-items:center; gap:6px; font:500 16px/24px Roboto,sans-serif; letter-spacing:.15px; white-space:nowrap; }
+.cprog .at svg { width:20px; height:20px; }
+.frows { display:flex; flex-direction:column; gap:2px; padding:8px 12px 0 0; }
+.frow { display:flex; align-items:center; gap:8px; height:28px; padding:0 8px; margin-left:-8px; border-radius:8px; font:500 16px/24px Roboto,sans-serif; letter-spacing:.15px; }
+.frow svg { width:20px; height:20px; flex:none; }
+.frow .d { margin-left:auto; white-space:nowrap; }
+.frow.on { background:color-mix(in srgb, var(--rc) 22%, transparent); }
+.fstrip { display:flex; align-items:center; gap:12px; padding:10px 12px 0 0; font:500 14px/20px Roboto,sans-serif; color:var(--on-surface-variant); }
+.fstrip .track { position:relative; flex:1; height:12px; border-radius:6px; background:var(--sec-container); overflow:hidden; }
+.fstrip .track i { position:absolute; top:0; bottom:0; border-radius:6px; }
+.rfl .bar { width:1px; height:20px; background:var(--outline-variant); }
+.rfl svg { width:20px; height:20px; }
+/* FilledTonalIconButton at the switcher row's 48 dp height. */
+.tonal.iconly { width:48px; padding:0; justify-content:center; }
+/* Our own compass button while riding (MapLibre's hides when north is up): 40 dp; on (primary container) while north is fixed. */
+.cmp.on { background:var(--pc); }
+/* AlertDialog: 28 dp corners, 24 dp padding, headlineSmall, bodyMedium, text buttons at the end. */
+.scrim { position:absolute; inset:0; background:rgba(0,0,0,.32); z-index:4; }
+.dlg { position:absolute; left:24px; right:24px; top:250px; background:var(--container-highest); border-radius:28px; padding:24px 24px 20px; z-index:5; color:var(--on-surface); }
+.phone:not(.darkp) .dlg { background:#ece6f0; }
+.dlg h4 { margin:0 0 16px; font:400 24px/32px Roboto,sans-serif; }
+.dlg p { margin:0; font:400 14px/20px Roboto,sans-serif; letter-spacing:.25px; color:var(--on-surface-variant); }
+.dlg .acts { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; padding-top:24px; }
+.dlg .acts span { height:40px; padding:0 12px; display:inline-flex; align-items:center; font:500 14px/20px Roboto,sans-serif; color:var(--primary); letter-spacing:.1px; }
+.cd { font:500 14px/20px Roboto,sans-serif; letter-spacing:.1px; color:var(--on-surface-variant); padding:8px 12px 0 0; }
+.cdbar { height:4px; border-radius:2px; background:var(--sec-container); margin:6px 12px 0 0; overflow:hidden; }
+.cdbar i { display:block; height:100%; width:80%; background:var(--primary); }
+
+/* New for this mockup. Zoom buttons: one 48 dp wide surface (like the map's other buttons: surface colour,
+   shadow), two 48 dp IconButtons with a 1 dp divider; at the right, between the compass and Stop. */
+.zoomp{position:absolute;right:20px;top:300px;width:48px;border-radius:24px;background:var(--surface);color:var(--on-surface-variant);box-shadow:0 1px 3px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;z-index:2}
+.zoomp .zb{width:48px;height:52px;display:grid;place-items:center}
+.zoomp .zdiv{width:28px;height:1px;background:var(--outline-variant)}
+.zoomp .hl-badge{right:-10px;top:-18px}
+.zoomp::before{content:"";position:absolute;inset:-5px;border-radius:28px;border:2px dashed #e0457b}
+.zoomtoast{position:absolute;left:50%;transform:translateX(-50%);top:330px;background:var(--inv,#322f35);color:#f5eff7;border-radius:4px;padding:8px 14px;font:400 14px/20px Roboto,sans-serif;white-space:nowrap;box-shadow:0 3px 6px rgba(0,0,0,.3)}
+.vals{display:flex;flex-wrap:wrap;column-gap:16px;font:500 14px/20px Roboto,sans-serif;letter-spacing:.1px}
+.sl{display:flex;align-items:center;height:44px}
+.sl .a{height:16px;background:var(--primary);border-radius:8px 2px 2px 8px}
+.sl .t{width:4px;height:44px;background:var(--primary);border-radius:2px;margin:0 6px;flex:none}
+.sl .r{flex:1;height:16px;background:var(--sec-container);border-radius:2px 8px 8px 2px;position:relative}
+.sl .r i{position:absolute;top:6px;width:4px;height:4px;border-radius:2px;background:var(--primary)}
+.scale{display:flex;justify-content:space-between;font:400 12px/16px Roboto,sans-serif;color:var(--on-surface-variant)}
+.lt2{font:400 16px/24px Roboto,sans-serif;letter-spacing:.5px}
+.sortb{height:40px;display:inline-flex;align-items:center;gap:4px;padding:0 12px;border-radius:20px;color:var(--primary);font:500 14px/20px Roboto,sans-serif;letter-spacing:.1px;white-space:nowrap}
+.menu{position:absolute;right:24px;top:150px;width:200px;background:var(--sc-high);border-radius:4px;box-shadow:0 3px 8px rgba(0,0,0,.3);padding:8px 0;z-index:5;color:var(--on-surface)}
+.menu div{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font:400 16px/24px Roboto,sans-serif;letter-spacing:.5px}
+.menu svg{width:24px;height:24px}
+.fchip svg{width:18px;height:18px}
+
+.dlg{top:200px}
+.dlg .acts{display:flex;flex-direction:row-reverse;flex-wrap:wrap;justify-content:flex-start;gap:8px}
+.dlg .acts.stack{flex-direction:column;align-items:flex-end;gap:4px}
+.dlg .acts span.end{color:var(--primary)}
+.hl2::before{content:"";position:absolute;inset:-6px;border-radius:32px;border:2px dashed #e0457b;pointer-events:none}
+.dlg .hl-badge{right:12px;top:-10px}
+.bigf .dlg h4{font-size:31px;line-height:40px}.bigf .dlg p{font-size:18px;line-height:26px}.bigf .dlg .acts span{font-size:18px}
+
+/* Map backgrounds, published beside the page (mockups skill): curvy roads
+   north of Stockholm in the app's styles, OpenFreeMap liberty (light) and
+   fiord (dark), 360 x 760 dp at 2x. © OpenFreeMap © OpenMapTiles, data
+   © OpenStreetMap contributors (ODbL); the phone's .attr line shows it. */
+.mapl{background:url(map-light.png) center/cover}
+.mapd{background:url(map-dark.png) center/cover}
+.mapl2{background:url(map2-light.png) center/cover}
+.mapd2{background:url(map2-dark.png) center/cover}
+.mapl3{background:url(map3-light.png) center/cover}
+.mapd3{background:url(map3-dark.png) center/cover}
