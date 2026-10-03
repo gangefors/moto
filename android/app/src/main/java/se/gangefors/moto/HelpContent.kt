@@ -113,6 +113,7 @@ val HELP_TOPICS = listOf(
             HelpKey("navigation", R.string.help_key_ride, R.string.help_key_ride_what),
             HelpKey("location", R.string.help_key_recentre, R.string.help_key_recentre_what),
             HelpKey("compass", R.string.help_key_ride_compass, R.string.help_key_ride_compass_what),
+            HelpKey("zoom_in", R.string.help_key_zoom, R.string.help_key_zoom_what),
             HelpKey("close", R.string.help_key_stop_following, R.string.help_key_stop_following_what),
             HelpKey("stop", R.string.help_key_stop_ride, R.string.help_key_stop_ride_what),
         ),

@@ -74,6 +74,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -491,6 +492,8 @@ fun MapScreen() {
     var turnMap by remember { mutableStateOf(RoutePrefs.turnMap(context)) }
     // How close the map zooms while riding (Ride settings).
     var rideZoomStep by remember { mutableIntStateOf(RoutePrefs.rideZoomStep(context)) }
+    // Zoom levels the rider added with + and − on this ride.
+    var rideZoomNudge by remember { mutableDoubleStateOf(0.0) }
     var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
     // The rider fixed north up with the map's compass (for the rest of
     // the ride), or moved the map (until Recentre).
@@ -502,6 +505,7 @@ fun MapScreen() {
         if (!riding) {
             northFixed = false
             ridePanned = false
+            rideZoomNudge = 0.0
         }
     }
     // Hidden while riding, as while planning.
@@ -1757,7 +1761,7 @@ fun MapScreen() {
     }
     // Zoom by speed while followed: closer when slow, wider at speed.
     val rideZoomTarget = if (riding) {
-        Math.round(rideZoom((recording as? Recording.State.Active)?.lastFix?.speedMps, rideZoomOffset(rideZoomStep)) * 4) / 4.0
+        Math.round(rideZoom((recording as? Recording.State.Active)?.lastFix?.speedMps, rideZoomOffset(rideZoomStep) + rideZoomNudge) * 4) / 4.0
     } else {
         0.0
     }
@@ -2367,6 +2371,21 @@ fun MapScreen() {
                         Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
                     }
                 }
+                }
+                // While riding or recording: + and −, as a pinch is hard
+                // with gloves. Followed on a route they change its zoom for
+                // the rest of the ride; otherwise they zoom the map.
+                if (recording is Recording.State.Active) {
+                    ZoomButtons(
+                        onZoom = { by ->
+                            if (riding && !ridePanned) {
+                                rideZoomNudge = nudgeRideZoom(rideZoomNudge, by)
+                            } else {
+                                map?.animateCamera(CameraUpdateFactory.zoomBy(by))
+                            }
+                        },
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
                 }
                 // Riding: Recentre after a pan or pinch, above Stop.
                 if (hasLocation && riding && ridePanned) {

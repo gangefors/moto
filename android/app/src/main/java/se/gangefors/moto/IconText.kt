@@ -68,6 +68,7 @@ internal val BUTTON_ICONS = mapOf(
     "clock" to ButtonIcon(R.drawable.ic_clock, R.string.say_clock),
     "pin" to ButtonIcon(R.drawable.ic_pin, R.string.say_pin),
     "compass" to ButtonIcon(R.drawable.ic_compass, R.string.say_compass),
+    "zoom_in" to ButtonIcon(R.drawable.ic_zoom_in, R.string.say_zoom_in),
     "star_off" to ButtonIcon(R.drawable.ic_star_off, R.string.say_star_off),
     "unridden" to ButtonIcon(R.drawable.ic_unridden, R.string.say_unridden),
     "ridden" to ButtonIcon(R.drawable.ic_ridden, R.string.say_ridden),
