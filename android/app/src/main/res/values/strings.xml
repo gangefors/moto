@@ -281,7 +281,7 @@
     <string name="help_key_ride_compass">Compass</string>
     <string name="help_key_zoom">Zoom in and out</string>
     <string name="help_key_zoom_what">while riding or recording, without pinching; on a route, for the rest of the ride</string>
-    <string name="help_key_ride_compass_what">shows where north is while the map turns with you; a tap fixes north up for the rest of the ride</string>
+    <string name="help_key_ride_compass_what">shows where north is while the map turns with you</string>
     <string name="help_key_stop_following">X on the card</string>
     <string name="help_key_stop_following_what">stops following the route and keeps recording</string>
     <string name="help_key_stop_ride">Stop</string>
@@ -414,7 +414,7 @@
     <string name="settings_keep_screen_on_hint">For the phone on a handlebar mount. Uses more battery.</string>
     <string name="settings_group_riding">Riding a route</string>
     <string name="settings_turn_map">Turn the map with your direction</string>
-    <string name="settings_turn_map_hint">While you ride a route, the way you’re going is up. Tap the compass to fix north up for the rest of the ride.</string>
+    <string name="settings_turn_map_hint">While you ride a route, the way you’re going is up.</string>
     <string name="settings_off_alert">Alert when off the route</string>
     <string name="settings_off_alert_hint">A sound when you leave the route, also with the screen off. Change the sound in the phone’s notification settings.</string>
     <string name="ride_start">Ride</string>
