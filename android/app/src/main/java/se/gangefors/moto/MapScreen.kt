@@ -2478,9 +2478,24 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // Loops from where the rider is, in one tap: a new set
-                // each time. Not in ride mode (riding a route or recording).
+                // Not in ride mode (riding a route or recording). Add
+                // favourite on top, Loop below it, right above Record
+                // (2026-10-03).
                 if (region is RegionState.Ready && hasLocation && !rideMode) {
+                    if (store is StoreState.Ready) {
+                        FloatingActionButton(onClick = {
+                            marker.begin()
+                            markSession++
+                            marking = true
+                            draft = null
+                            showDraft()
+                            message = resources.getString(R.string.section_pick_start)
+                        }) {
+                            Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
+                        }
+                    }
+                    // Loops from where the rider is, in one tap: a new set
+                    // each time.
                     FloatingActionButton(onClick = {
                         val start = riderStart() ?: return@FloatingActionButton
                         picker.reset()
@@ -2488,18 +2503,6 @@ fun MapScreen() {
                     }) {
                         Icon(painterResource(R.drawable.ic_loop), contentDescription = stringResource(R.string.loop_from_me))
                     }
-                if (store is StoreState.Ready && region is RegionState.Ready) {
-                    FloatingActionButton(onClick = {
-                        marker.begin()
-                        markSession++
-                        marking = true
-                        draft = null
-                        showDraft()
-                        message = resources.getString(R.string.section_pick_start)
-                    }) {
-                        Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
-                    }
-                }
                 }
                 // While riding or recording: + and −, as a pinch is hard
                 // with gloves. Followed on a route they change its zoom for
