@@ -141,14 +141,14 @@ fn a_damaged_row_is_a_storage_error() {
 fn saves_a_ride_as_a_route() {
     use crate::track::tests::fix;
     let mut s = Store::open_in_memory().unwrap();
-    // Out 20 fixes north and back: a loop, ending where it started.
+    // Out about 2 km north and back: a loop, ending where it started.
     let mut points: Vec<_> = (0..20)
-        .map(|i| fix(T0 * 1000 + i * 1000, 55.7 + i as f64 * 2e-4, 13.2))
+        .map(|i| fix(T0 * 1000 + i * 1000, 55.7 + i as f64 * 1e-3, 13.2))
         .collect();
     points.extend((0..20).map(|i| {
         fix(
             T0 * 1000 + (20 + i) * 1000,
-            55.7 + (19 - i) as f64 * 2e-4,
+            55.7 + (19 - i) as f64 * 1e-3,
             13.2005,
         )
     }));
@@ -172,6 +172,37 @@ fn saves_a_ride_as_a_route() {
     let one_way = s.import_track(&straight).unwrap();
     assert!(
         !s.save_track_as_route(one_way.id, "To work", T0)
+            .unwrap()
+            .unwrap()
+            .is_loop
+    );
+
+    // A short ride ends near its start only because it never went
+    // anywhere: about 200 m straight on is not a loop.
+    let short: Vec<_> = (0..10)
+        .map(|i| fix(T0 * 1000 + i * 1000, 55.7 + i as f64 * 2e-4, 13.2))
+        .collect();
+    let short = s.import_track(&short).unwrap();
+    assert!(
+        !s.save_track_as_route(short.id, "Round the block", T0)
+            .unwrap()
+            .unwrap()
+            .is_loop
+    );
+    // Nor is out 400 m and back.
+    let mut there_and_back: Vec<_> = (0..20)
+        .map(|i| fix(T0 * 1000 + i * 1000, 55.7 + i as f64 * 2e-4, 13.2))
+        .collect();
+    there_and_back.extend((0..20).map(|i| {
+        fix(
+            T0 * 1000 + (20 + i) * 1000,
+            55.7 + (19 - i) as f64 * 2e-4,
+            13.2005,
+        )
+    }));
+    let there_and_back = s.import_track(&there_and_back).unwrap();
+    assert!(
+        !s.save_track_as_route(there_and_back.id, "To the shop", T0)
             .unwrap()
             .unwrap()
             .is_loop

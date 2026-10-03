@@ -14,8 +14,26 @@ use crate::{CoreError, LatLon};
 /// Most points a saved route may have: a 400 km loop has about 20 000.
 pub const MAX_ROUTE_POINTS: usize = 200_000;
 
-/// A ride that ends this close to where it started is saved as a loop.
+/// A ride that ends this close to where it started is saved as a loop,
+/// when it also went out at least [`LOOP_OUT_M`].
 pub const LOOP_END_M: f64 = 300.0;
+/// How far out a ride must have gone to be saved as a loop: at least this,
+/// and twice as far as it ended from its start, so a short ride that never
+/// went anywhere is not one (as the app names rides).
+pub const LOOP_OUT_M: f64 = 1_000.0;
+
+/// Whether a ride along `line` went out and came back to where it began.
+fn ride_is_loop(line: &[LatLon]) -> bool {
+    let (Some(&first), Some(&last)) = (line.first(), line.last()) else {
+        return false;
+    };
+    let gap = crate::geo::haversine_m(first, last);
+    let out = line
+        .iter()
+        .map(|&p| crate::geo::haversine_m(first, p))
+        .fold(0.0, f64::max);
+    gap <= LOOP_END_M && out >= LOOP_OUT_M.max(2.0 * gap)
+}
 
 /// A route to save.
 #[derive(Debug, Clone, PartialEq)]
@@ -126,7 +144,8 @@ impl Store {
     /// Saves a finished ride as a route to ride again, named `name`: its
     /// line (every fix, or evenly thinned to [`MAX_ROUTE_POINTS`]), its
     /// length and riding time, and a loop when it ends within
-    /// [`LOOP_END_M`] of where it started. `None` if there is no such ride.
+    /// [`LOOP_END_M`] of where it started after going out at least
+    /// [`LOOP_OUT_M`]. `None` if there is no such ride.
     pub fn save_track_as_route(
         &mut self,
         track_id: i64,
@@ -154,7 +173,7 @@ impl Store {
         }
         let route = NewRoute {
             name: name.to_owned(),
-            is_loop: crate::geo::haversine_m(first.position, last.position) <= LOOP_END_M,
+            is_loop: ride_is_loop(&geometry),
             distance_m: track.distance_m,
             duration_s: (last.time_ms - first.time_ms).max(0) as f64 / 1000.0,
             geometry,
