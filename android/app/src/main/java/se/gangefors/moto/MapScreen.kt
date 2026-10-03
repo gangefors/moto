@@ -125,6 +125,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.maps.widgets.CompassView
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
@@ -495,15 +496,12 @@ fun MapScreen() {
     // Zoom levels the rider added with + and − on this ride.
     var rideZoomNudge by remember { mutableDoubleStateOf(0.0) }
     var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
-    // The rider fixed north up with the map's compass (for the rest of
-    // the ride), or moved the map (until Recentre).
-    var northFixed by remember { mutableStateOf(false) }
+    // The rider moved the map while riding: until Recentre.
     // Where the ride card ends (px from the top), so the compass sits under it.
     var rideCardBottom by remember { mutableIntStateOf(0) }
     var ridePanned by remember { mutableStateOf(false) }
     LaunchedEffect(riding) {
         if (!riding) {
-            northFixed = false
             ridePanned = false
             rideZoomNudge = 0.0
         }
@@ -1741,8 +1739,14 @@ fun MapScreen() {
     // Riding a route (ADR-0011): the map follows the rider, the way they
     // are going up (or north up), the rider low on the screen; a pan or
     // pinch stops it until Recentre. MapLibre's compass shows while the map
-    // is turned; a tap on it fixes north up for the rest of the ride.
-    DisposableEffect(map, style, hasLocation, riding, northFixed, turnMap, ridePanned, mapSize) {
+    // is turned, but takes no taps while riding: a tap would fix north up
+    // with no way back (2026-10-03; a switch for that comes later).
+    DisposableEffect(map, riding) {
+        val compass = if (map != null) mapView.findCompass() else null
+        compass?.isClickable = !riding
+        onDispose { compass?.isClickable = true }
+    }
+    DisposableEffect(map, style, hasLocation, riding, turnMap, ridePanned, mapSize) {
         val m = map
         val s = style
         if (m == null || s == null || !hasLocation || !riding) return@DisposableEffect onDispose {}
@@ -1751,20 +1755,15 @@ fun MapScreen() {
         lc.renderMode = RenderMode.GPS
         if (!ridePanned) {
             m.moveCamera(CameraUpdateFactory.paddingTo(0.0, riderTopPadding(mapSize.height).toDouble(), 0.0, 0.0))
-            val course = turnMap && !northFixed
-            lc.cameraMode = if (course) CameraMode.TRACKING_GPS else CameraMode.TRACKING
-            if (!course) m.animateCamera(CameraUpdateFactory.bearingTo(0.0))
+            lc.cameraMode = if (turnMap) CameraMode.TRACKING_GPS else CameraMode.TRACKING
+            if (!turnMap) m.animateCamera(CameraUpdateFactory.bearingTo(0.0))
         }
         val dismissed = object : OnCameraTrackingChangedListener {
             override fun onCameraTrackingDismissed() {
                 if (ridingNow.value) ridePanned = true
             }
 
-            // The compass tapped: the location component stops turning
-            // the map; keep north up rather than turning it back.
-            override fun onCameraTrackingChanged(currentMode: Int) {
-                if (ridingNow.value && currentMode == CameraMode.TRACKING && turnMap && !northFixed) northFixed = true
-            }
+            override fun onCameraTrackingChanged(currentMode: Int) = Unit
         }
         lc.addOnCameraTrackingChangedListener(dismissed)
         onDispose { lc.removeOnCameraTrackingChangedListener(dismissed) }
@@ -2988,6 +2987,16 @@ private fun coreErrorMessage(res: Resources, e: Throwable): String = when (class
 }
 
 private fun LatLng.toLatLon() = LatLon(latitude, longitude)
+
+/** MapLibre's compass in this map, once it has made one. */
+private fun MapView.findCompass(): CompassView? {
+    fun find(v: android.view.View): CompassView? = when (v) {
+        is CompassView -> v
+        is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+        else -> null
+    }
+    return find(this)
+}
 
 /**
  * Samples the map pixels behind the status bar and switches the status bar
