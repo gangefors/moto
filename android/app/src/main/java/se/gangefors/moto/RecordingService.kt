@@ -85,6 +85,8 @@ class RecordingService : Service() {
         var lastPublishAt = 0L
         var gotFix = false
         var lastFix: TrackPoint? = null
+        /** The last fix kept in the ride, for skipping standing still. */
+        var lastKept: TrackPoint? = null
         var follow: Follow? = null
         /** Paused while the rider plans (Stefan, 2026-10-03): where it
          * paused, since when (elapsed), and earlier pauses' total. */
@@ -224,7 +226,8 @@ class RecordingService : Service() {
         // Following first: reaching the route's start may start recording,
         // with this fix as its first.
         val followed = s.follow?.let { onFollowFix(s, it, fix) } == true
-        if (s.trackId != null && s.pausedSince == null) {
+        if (s.trackId != null && s.pausedSince == null && !standingStill(s.lastKept, fix)) {
+            s.lastKept = fix
             try {
                 s.buffer?.append(fix)
             } catch (e: Exception) {
@@ -302,6 +305,7 @@ class RecordingService : Service() {
             s.trackId = track.id
             s.buffer = PointBuffer(File(Recording.bufferDir(applicationContext), PointBuffer.fileName(track.id)))
             s.autoStarted = auto
+            s.lastKept = null
             s.progress = RideProgress()
             s.startedAtMs = System.currentTimeMillis()
             s.startedElapsed = SystemClock.elapsedRealtime()
@@ -321,6 +325,7 @@ class RecordingService : Service() {
         s.buffer = null
         s.trackId = null
         s.autoStarted = false
+        s.lastKept = null
         s.progress = RideProgress()
         runCatching { s.store.deleteTrack(id) }
         RideChanges.changed()

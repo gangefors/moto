@@ -274,3 +274,26 @@ fun readCapped(input: java.io.InputStream, limit: Int): ByteArray? {
 fun sectionsFileName(atSec: Long, zone: java.time.ZoneId, extension: String): String =
     "moto-favourite-sections-" + java.time.Instant.ofEpochSecond(atSec).atZone(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT)) + "." + extension
+
+/** At most this speed (m/s, about 2 km/h) a fix may count as standing
+ * still. */
+const val STILL_MPS = 0.5
+
+/** A still fix is skipped within this of the last one kept, metres, or
+ * within its accuracy (up to [STILL_MAX_M]) when that is worse. */
+const val STILL_M = 10.0
+const val STILL_MAX_M = 30.0
+
+/**
+ * Whether [fix] is the rider standing still where [lastKept] was (at a
+ * fuel stop, say): slow (a speed of at most [STILL_MPS]) and near it, so
+ * the ride keeps no pile of GPS jitter there (Stefan, 2026-10-03). Without
+ * a speed or a fix kept before, it is kept.
+ */
+fun standingStill(lastKept: TrackPoint?, fix: TrackPoint): Boolean {
+    val last = lastKept ?: return false
+    val speed = fix.speedMps?.takeIf { it.isFinite() } ?: return false
+    if (speed > STILL_MPS) return false
+    val within = (fix.accuracyM?.takeIf { it.isFinite() } ?: 0.0).coerceIn(STILL_M, STILL_MAX_M)
+    return approxDistanceM(last.position, fix.position) < within
+}
