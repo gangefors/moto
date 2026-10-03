@@ -911,12 +911,13 @@ fun MapScreen() {
         mapZoom = m.cameraPosition.zoom.toFloat()
         onDispose { m.removeOnCameraIdleListener(idle) }
     }
-    // Metres a pixel shows at the map's middle, for the scale bar.
-    var metresPerPx by remember { mutableDoubleStateOf(0.0) }
+    // Metres a dp shows at the map's middle, for the scale bar (MapLibre's
+    // "pixels" here are density-independent: they already are dp).
+    var metresPerDp by remember { mutableDoubleStateOf(0.0) }
     DisposableEffect(map) {
         val m = map ?: return@DisposableEffect onDispose {}
         fun measure() {
-            metresPerPx = m.projection.getMetersPerPixelAtLatitude(m.cameraPosition.target?.latitude ?: 0.0)
+            metresPerDp = m.projection.getMetersPerPixelAtLatitude(m.cameraPosition.target?.latitude ?: 0.0)
         }
         val move = MapLibreMap.OnCameraMoveListener { measure() }
         val idle = MapLibreMap.OnCameraIdleListener { measure() }
@@ -1988,7 +1989,7 @@ fun MapScreen() {
             max(insets.bottom, sheet).toDp()
         }
         ScaleBar(
-            metresPerDp = metresPerPx * density.density,
+            metresPerDp = metresPerDp,
             darkMap = darkMap,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
