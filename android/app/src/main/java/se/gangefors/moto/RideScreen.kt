@@ -34,6 +34,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +58,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import se.gangefors.moto.core.FavouriteNearby
 import se.gangefors.moto.core.FollowPhase
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.NearFavourite
@@ -435,6 +437,99 @@ fun ZoomButtons(onZoom: (Double) -> Unit, modifier: Modifier = Modifier) {
             HorizontalDivider(Modifier.width(28.dp))
             IconButton(onClick = { onZoom(-ZOOM_BUTTON_STEP) }, modifier = Modifier.size(48.dp, 52.dp)) {
                 Icon(painterResource(R.drawable.ic_zoom_out), stringResource(R.string.zoom_out))
+            }
+        }
+    }
+}
+
+/**
+ * The card at the top while recording without a route (the rider,
+ * 2026-10-03): how far and how long the recording has gone, and the
+ * favourites near the rider ([near], nearest first), each with its rating,
+ * how far and an arrow the way to it on the map, turned [mapBearing]
+ * degrees; on one, how much of it is left, the row tinted.
+ */
+@Composable
+fun RecordingCard(
+    distanceM: Double,
+    startedAtMs: Long,
+    near: List<FavouriteNearby>,
+    mapBearing: Float,
+    darkMap: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val now by produceState(System.currentTimeMillis(), startedAtMs) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(5_000)
+        }
+    }
+    val minutes = (recordingMinutes(startedAtMs, now)).toInt()
+    val km = stringResource(R.string.route_km, rideKm(distanceM))
+    val time = durationText(minutes)
+    val said = stringResource(R.string.recording_card_description, rideKm(distanceM), time)
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                itemVerticalAlignment = Alignment.Bottom,
+                modifier = Modifier.clearAndSetSemantics { contentDescription = said },
+            ) {
+                Text(noBreak(km), style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    noBreak(time),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+            }
+            if (near.isNotEmpty()) {
+                Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    near.forEach { NearbyRow(it, mapBearing, darkMap) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NearbyRow(f: FavouriteNearby, mapBearing: Float, darkMap: Boolean) {
+    val colour = Color(ratingColor(f.rating, darkMap).toColorInt())
+    val name = stringResource(ratingName(f.rating))
+    val left = f.leftM
+    val on = f.on && left != null
+    val said = if (on) {
+        stringResource(R.string.ride_fav_on_description, name, rideKm(left))
+    } else {
+        stringResource(R.string.ride_fav_near_description, name, rideKm(f.distanceM))
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 28.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .then(if (on) Modifier.background(colour.copy(alpha = 0.22f)) else Modifier)
+            .padding(horizontal = 8.dp)
+            .clearAndSetSemantics { contentDescription = said },
+    ) {
+        Icon(painterResource(R.drawable.ic_star), contentDescription = null, tint = colour, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(
+            noBreak(stringResource(R.string.route_km, rideKm(if (on) left!! else f.distanceM))),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.width(8.dp))
+        // The way to it on the map, which turns with the rider; none on it.
+        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+            if (!on) {
+                Icon(
+                    painterResource(R.drawable.ic_navigation),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp).rotate(arrowOnMap(f.bearingDeg, mapBearing)),
+                )
             }
         }
     }
