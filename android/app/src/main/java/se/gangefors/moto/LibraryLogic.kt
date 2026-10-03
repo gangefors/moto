@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.SavedRoute
 import se.gangefors.moto.core.Track
 
@@ -19,15 +20,59 @@ sealed interface LibraryItem {
     /** When it was made: saved, or when the ride started (epoch seconds). */
     val at: Long
 
+    /** Its length, metres. */
+    val distanceM: Double
+
     data class Route(val route: SavedRoute) : LibraryItem {
-        override val key get() = "route-${route.id}"
+        override val key get() = routeKey(route.id)
         override val at get() = route.createdAt
+        override val distanceM get() = route.distanceM
     }
 
     data class Ride(val track: Track) : LibraryItem {
-        override val key get() = "ride-${track.id}"
+        override val key get() = rideKey(track.id)
         override val at get() = track.startedAt
+        override val distanceM get() = track.distanceM
     }
+}
+
+/** [LibraryItem.key] of saved route [id] and of ride [id]. */
+fun routeKey(id: Long): String = "route-$id"
+fun rideKey(id: Long): String = "ride-$id"
+
+/** The orders Routes & rides can list in (Stefan, 2026-10-03). */
+enum class LibrarySort { NEWEST, OLDEST, LONGEST, NAME, NEAREST }
+
+/** The order named [name] (as stored), else newest first. */
+fun librarySortOf(name: String?): LibrarySort = LibrarySort.entries.firstOrNull { it.name == name } ?: LibrarySort.NEWEST
+
+/**
+ * [items] in [sort]'s order: newest or oldest first (a ride by when it
+ * started, a route by when it was saved), longest first, by [title] A–Z
+ * (ignoring case), or nearest first by where each starts ([starts], by
+ * [LibraryItem.key]) from [here]; those with no known start go last.
+ * Without [here], Nearest lists newest first. Ties go newest first.
+ */
+fun sortLibrary(
+    items: List<LibraryItem>,
+    sort: LibrarySort,
+    here: LatLon?,
+    starts: Map<String, LatLon>,
+    title: (LibraryItem) -> String,
+): List<LibraryItem> {
+    val newest = compareByDescending<LibraryItem> { it.at }.thenBy { it.key }
+    val order = when (sort) {
+        LibrarySort.NEWEST -> newest
+        LibrarySort.OLDEST -> compareBy<LibraryItem> { it.at }.thenBy { it.key }
+        LibrarySort.LONGEST -> compareByDescending<LibraryItem> { it.distanceM }.then(newest)
+        LibrarySort.NAME -> compareBy<LibraryItem, String>(String.CASE_INSENSITIVE_ORDER) { title(it) }.then(newest)
+        LibrarySort.NEAREST -> if (here == null) {
+            newest
+        } else {
+            compareBy<LibraryItem> { item -> starts[item.key]?.let { approxDistanceM(here, it) } ?: Double.MAX_VALUE }.then(newest)
+        }
+    }
+    return items.sortedWith(order)
 }
 
 /** Routes and rides together, newest first (null while either loads). */

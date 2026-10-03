@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
@@ -127,6 +129,9 @@ fun RidesSheet(
     // Routes & rides: the one being renamed, and which kind is listed.
     var renaming by remember { mutableStateOf<LibraryItem?>(null) }
     var libraryFilter by rememberSaveable { mutableStateOf(RoutePrefs.libraryFilter(context)) }
+    var librarySort by rememberSaveable { mutableStateOf(RoutePrefs.librarySort(context)) }
+    // Where each route and ride starts, read when listed nearest first.
+    var starts by remember { mutableStateOf<Map<String, LatLon>>(emptyMap()) }
 
     var routes by remember { mutableStateOf<List<SavedRoute>?>(null) }
 
@@ -135,6 +140,15 @@ fun RidesSheet(
         routes = withContext(Dispatchers.IO) { runCatching { store.listRoutes() }.getOrDefault(emptyList()) }
     }
     LaunchedEffect(store) { reload() }
+    LaunchedEffect(store, librarySort, routes, tracks) {
+        if (librarySort != LibrarySort.NEAREST) return@LaunchedEffect
+        starts = withContext(Dispatchers.IO) {
+            runCatching {
+                store.routeStarts().associate { routeKey(it.id) to it.position } +
+                    store.trackStarts().associate { rideKey(it.id) to it.position }
+            }.getOrDefault(emptyMap())
+        }
+    }
 
     /** The GPX of a route or ride, named as listed. Call off the main thread. */
     fun gpxOf(item: LibraryItem): String = DebugTools.query("saved GPX", ::bytesSummary) {
@@ -381,7 +395,10 @@ fun RidesSheet(
                 // All, only routes or only rides (kept between visits), and
                 // what tells them apart (the same line as How to use).
                 Column(Modifier.padding(top = 12.dp)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
                         val routeCount = library.count { it is LibraryItem.Route }
                         LibraryFilter.entries.forEach { f ->
                             FilterChip(
@@ -401,6 +418,10 @@ fun RidesSheet(
                                 },
                             )
                         }
+                        LibrarySortButton(librarySort, canNearest = here != null) {
+                            librarySort = it
+                            RoutePrefs.setLibrarySort(context, it)
+                        }
                     }
                     Text(
                         stringResource(R.string.library_hint),
@@ -416,7 +437,10 @@ fun RidesSheet(
                 library.isEmpty() -> item(key = "library-none") {
                     Text(stringResource(R.string.library_none), Modifier.padding(vertical = 16.dp))
                 }
-                else -> items(filterLibrary(library, libraryFilter), key = { it.key }) { item ->
+                else -> items(
+                    filterLibrary(sortLibrary(library, librarySort, here, starts) { libraryTitle(it, zone) }, libraryFilter),
+                    key = { it.key },
+                ) { item ->
                     LibraryRow(item, zone, actions)
                 }
             }
@@ -560,3 +584,40 @@ private fun importSummary(res: android.content.res.Resources, r: ImportReport): 
     return if (r.unmatched > 0uL) res.getString(R.string.sections_imported_unmatched, text, r.unmatched.toLong()) else text
 }
 
+
+/** The order Routes & rides lists in, as a button that opens the choices,
+ * as on Favourite sections; Nearest only when the position is known. */
+@Composable
+private fun LibrarySortButton(sort: LibrarySort, canNearest: Boolean, onSort: (LibrarySort) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) {
+            OneLine(stringResource(R.string.sections_sort, stringResource(librarySortLabel(sort))))
+            Icon(painterResource(R.drawable.ic_expand_more), contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            LibrarySort.entries.filter { it != LibrarySort.NEAREST || canNearest }.forEach { s ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(librarySortLabel(s))) },
+                    onClick = {
+                        open = false
+                        onSort(s)
+                    },
+                    trailingIcon = if (s == sort) {
+                        { Icon(painterResource(R.drawable.ic_check), contentDescription = null) }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun librarySortLabel(s: LibrarySort): Int = when (s) {
+    LibrarySort.NEWEST -> R.string.sort_newest
+    LibrarySort.OLDEST -> R.string.sort_oldest
+    LibrarySort.LONGEST -> R.string.sort_longest
+    LibrarySort.NAME -> R.string.sort_name
+    LibrarySort.NEAREST -> R.string.sort_nearest
+}

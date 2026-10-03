@@ -590,6 +590,10 @@
     <string name="sort_length">Length</string>
     <string name="sort_curvy">Curviness</string>
     <string name="sort_nearest">Nearest</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_longest">Longest</string>
+    <string name="sort_name">Name</string>
     <string name="sort_longest_unridden">Longest since ridden</string>
     <plurals name="section_ridden">
         <item quantity="one">Ridden once · last %2$s</item>

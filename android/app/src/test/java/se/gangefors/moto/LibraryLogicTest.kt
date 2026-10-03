@@ -126,4 +126,37 @@ class LibraryLogicTest {
         assertEquals(40, long.length)
         assertEquals('…', long.last())
     }
+
+    @Test
+    fun routesAndRidesSortEachWay() {
+        fun route(id: Long, at: Long, km: Double, name: String) =
+            LibraryItem.Route(SavedRoute(id, "local", name, false, at, km * 1000, 3600.0))
+        fun ride(id: Long, at: Long, km: Double, name: String?) =
+            LibraryItem.Ride(Track(id, "local", name, at, at + 3600, 10uL, km * 1000))
+        val a = route(1, 100, 50.0, "beta")
+        val b = ride(1, 300, 20.0, "Alpha")
+        val c = ride(2, 200, 80.0, null)
+        val items = listOf(a, b, c)
+        val title: (LibraryItem) -> String = {
+            when (it) {
+                is LibraryItem.Route -> it.route.name
+                is LibraryItem.Ride -> it.track.name ?: "2026"
+            }
+        }
+        fun keys(sort: LibrarySort, here: LatLon? = null, starts: Map<String, LatLon> = emptyMap()) =
+            sortLibrary(items, sort, here, starts, title).map { it.key }
+        assertEquals(listOf(b.key, c.key, a.key), keys(LibrarySort.NEWEST))
+        assertEquals(listOf(a.key, c.key, b.key), keys(LibrarySort.OLDEST))
+        assertEquals(listOf(c.key, a.key, b.key), keys(LibrarySort.LONGEST))
+        assertEquals(listOf(c.key, b.key, a.key), keys(LibrarySort.NAME))
+        // Nearest: by where each starts; one with no known start goes last.
+        val here = LatLon(55.70, 13.20)
+        val starts = mapOf(a.key to LatLon(55.71, 13.20), c.key to LatLon(55.90, 13.20))
+        assertEquals(listOf(a.key, c.key, b.key), keys(LibrarySort.NEAREST, here, starts))
+        // Without a position, newest first.
+        assertEquals(keys(LibrarySort.NEWEST), keys(LibrarySort.NEAREST, null, starts))
+        assertEquals(LibrarySort.NEWEST, librarySortOf(null))
+        assertEquals(LibrarySort.NEWEST, librarySortOf("bogus"))
+        assertEquals(LibrarySort.NAME, librarySortOf("NAME"))
+    }
 }

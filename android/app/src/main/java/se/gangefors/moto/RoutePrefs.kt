@@ -36,6 +36,7 @@ object RoutePrefs {
     private const val MAP_HINTS = "map_hints_shown"
     private const val SECTIONS_SORT = "sections_sort"
     private const val LIBRARY_FILTER = "library_filter"
+    private const val LIBRARY_SORT = "library_sort"
     private const val DARK_THEME = "dark_theme"
 
     /** How many starts show how to use the map. */
@@ -183,6 +184,15 @@ object RoutePrefs {
     }
 
     /** What Routes & rides lists, as last chosen (all at first). */
+    /** The order Routes & rides lists in (kept between visits). */
+    fun librarySort(context: Context): LibrarySort = librarySortOf(
+        runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(LIBRARY_SORT, null) }.getOrNull(),
+    )
+
+    fun setLibrarySort(context: Context, sort: LibrarySort) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(LIBRARY_SORT, sort.name) }
+    }
+
     fun libraryFilter(context: Context): LibraryFilter = libraryFilterOf(
         runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(LIBRARY_FILTER, null) }.getOrNull(),
     )
