@@ -1981,9 +1981,10 @@ fun MapScreen() {
                     .onGloballyPositioned { rideCardBottom = it.boundsInRoot().bottom.roundToInt() },
             )
         }
-        // The scale (Stefan, 2026-10-03): bottom middle, a little above
-        // the navigation bar or the planning sheet, beside the map's logo
-        // and attribution; cards drawn later cover it.
+        // The scale (Stefan, 2026-10-03): at the bottom, a little above
+        // the navigation bar or the planning sheet, just right of the map's
+        // logo and attribution and below the tag button, clear of the
+        // position button; cards drawn later cover it.
         val scaleAbove = with(density) {
             val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
             max(insets.bottom, sheet).toDp()
@@ -1992,8 +1993,9 @@ fun MapScreen() {
             metresPerDp = metresPerDp,
             darkMap = darkMap,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = scaleAbove + SCALE_BOTTOM),
+                .align(Alignment.BottomStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .padding(start = SCALE_START, bottom = scaleAbove + SCALE_BOTTOM),
         )
         // Notices across the top, the whole width below the top buttons
         // when they show; on wide screens no wider than TOP_BOX_MAX_WIDTH.
@@ -2375,8 +2377,7 @@ fun MapScreen() {
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .safeDrawingPadding()
-                    .padding(16.dp)
-                    .onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() },
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -2418,41 +2419,50 @@ fun MapScreen() {
                         modifier = Modifier.padding(end = 4.dp),
                     )
                 }
-                // Riding: Recentre after a pan or pinch, above Stop.
-                if (hasLocation && riding && ridePanned) {
-                    FloatingActionButton(onClick = { ridePanned = false }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_my_location),
-                            contentDescription = stringResource(R.string.ride_recentre),
-                        )
+                // The bottom row: the position button left of Record (or
+                // Stop), so neither moves when the position button hides
+                // (Stefan, 2026-10-03). It is the location button, or while
+                // riding Recentre after a pan or pinch (hidden while the map
+                // follows the rider).
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+                    if (hasLocation && !riding) {
+                        FloatingActionButton(onClick = { onLocateTap() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_my_location),
+                                contentDescription = stringResource(R.string.my_location),
+                            )
+                        }
+                    } else if (hasLocation && riding && ridePanned) {
+                        FloatingActionButton(onClick = { ridePanned = false }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_my_location),
+                                contentDescription = stringResource(R.string.ride_recentre),
+                            )
+                        }
                     }
-                }
-                // Record: a red dot. While recording: a stop square with a
-                // red arc running round the button, the same size as the
-                // others; the distance is in the notification.
-                // Riding to a route's start records nothing yet: Record is
-                // still there, to record the way there too.
-                val active = (recording as? Recording.State.Active)?.takeIf { it.trackId != null }
-                if (active != null) {
-                    RecordingButton(
-                        onStop = { RecordingService.stop(context) },
-                        description = stringResource(R.string.record_stop_description, sectionKm(active.distanceM)),
-                    )
-                } else {
-                    FloatingActionButton(onClick = { recordPermissions.launch(recordingPermissions()) }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_record_dot),
-                            contentDescription = stringResource(R.string.record_start),
-                            tint = RECORD_RED,
-                        )
-                    }
-                }
-                if (hasLocation && !riding) {
-                    FloatingActionButton(onClick = { onLocateTap() }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_my_location),
-                            contentDescription = stringResource(R.string.my_location),
-                        )
+                    // Record: a red dot. While recording: a stop square with
+                    // a red arc running round the button, the same size as
+                    // the others; the distance is in the notification.
+                    // Riding to a route's start records nothing yet: Record
+                    // is still there, to record the way there too.
+                    // Maps fit left of this column (the position button
+                    // beside Record sits low, where little is fitted).
+                    val active = (recording as? Recording.State.Active)?.takeIf { it.trackId != null }
+                    Box(Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() }) {
+                        if (active != null) {
+                            RecordingButton(
+                                onStop = { RecordingService.stop(context) },
+                                description = stringResource(R.string.record_stop_description, sectionKm(active.distanceM)),
+                            )
+                        } else {
+                            FloatingActionButton(onClick = { recordPermissions.launch(recordingPermissions()) }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_record_dot),
+                                    contentDescription = stringResource(R.string.record_start),
+                                    tint = RECORD_RED,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -3109,6 +3119,9 @@ private val SCALE_BOTTOM: Dp = 10.dp
 
 /** MapLibre's default attribution offset from the left, which keeps it clear of the logo. */
 private val ATTRIBUTION_OFFSET: Dp = 92.dp
+
+/** The scale bar starts this far from the left: past the attribution. */
+private val SCALE_START: Dp = ATTRIBUTION_OFFSET + 32.dp
 
 /** The bottom-right buttons' distance from the safe edges. */
 private val FAB_PADDING: Dp = 16.dp
