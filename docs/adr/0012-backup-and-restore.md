@@ -1,6 +1,6 @@
 # ADR-0012: Backup and restore — one zip of standard files (GPX, GeoJSON, JSON), merged back in by the core
 
-**Status:** Proposed · **Date:** 2026-10-03 · **Deciders:** Stefan · **Repo path:** `docs/adr/0012-backup-and-restore.md`
+**Status:** Accepted · **Date:** 2026-10-03 · **Deciders:** Stefan · **Repo path:** `docs/adr/0012-backup-and-restore.md`
 
 ## Context
 
@@ -19,30 +19,31 @@ Forces:
 ## Decision
 
 - **One zip file**, `moto-backup-YYYY-MM-DD.zip`, saved through Android's file picker (`ACTION_CREATE_DOCUMENT`) wherever the rider chooses (Downloads, a USB stick, a cloud drive of their own). No new permission. It contains only known names:
-  - `manifest.json`: the backup format version, the app version and schema version that wrote it, when it was made, how many of each thing it holds, the map regions installed when it was made, and the SHA-256 and size of every other entry.
-  - `favourites.geojson`: the favourite sections, exactly as the Sections page exports them today (the same file and the same tested importer, R10: name, rating, direction, OSM way spans and the section's own line). A second format for sections would be one more parser to keep safe.
-  - `rides/NNNNN.gpx`: one GPX 1.1 file per ride, as Share writes it today: `<trk><name>`, a `<trkseg>` for each stretch recorded without a gap (the segment breaks, ADR-0011), `<time>` to the millisecond, and accuracy, speed and bearing in the existing `moto` extension. Unnamed rides have no `<name>`.
-  - `routes/NNNNN.gpx`: one GPX file per saved route or loop: `<trk><name>` and the line as found. Its kind (route or loop), length, time and when it was saved go in the manifest's entry for the file.
-  - `tags.gpx`: the quick-tags as GPX waypoints (`<wpt>` with `<time>`; heading and speed in the `moto` extension; reviewed or not as `<type>`; the ride it belongs to in the `moto` extension, by its file name in the backup).
-  - `settings.json`: the app's settings (Ride settings, Map, sort orders, theme), with `"schema": 1` and a documented schema. Unknown keys are ignored, so an older or newer app can still read it.
+  - `manifest.json`: the backup format version, the app version and schema version that wrote it, when it was made, the map regions installed when it was made, the SHA-256 and size of every other entry, and what GPX has no field for: each ride's name, start and end (Record pressed and stopped), each route's name, kind (route or loop), length, time and when it was saved, and each tag's review state and ride. The manifest is the one place the restore reads metadata from (no XML text to unescape); the GPX files also carry names, for other apps.
+  - `favourites.geojson`: the favourite sections, exactly as the Sections page exports them today (the same file and the same tested importer, R10: name, rating, direction, OSM way spans and the section's own line). A second format for sections would be one more parser to keep safe. A restore also keeps each section's source and created and changed times, which the export already writes (an import ignores them).
+  - `rides/NNNNN.gpx`: one GPX 1.1 file per ride, as Share writes it today: `<trk><name>`, a `<trkseg>` for each stretch recorded without a gap (the segment breaks, ADR-0011), `<time>` to the millisecond, and accuracy, speed and bearing in the existing `moto` extension (to two decimals). Oldest first, so a restore adds them in the same order.
+  - `routes/NNNNN.gpx`: one GPX file per saved route or loop: `<trk><name>` and the line as found, without times.
+  - `tags.gpx`: the quick-tags as GPX waypoints (`<wpt>` with `<time>`; heading as the bearing and speed in the `moto` extension), in the manifest's order.
+  - `settings.json`: the app's settings (Ride settings, the map's zooms, sort orders, theme; not the map hints shown) as `{"schema": 1, "settings": {"key": value}}`: simple keys, and only booleans, whole numbers and text of at most 256 characters, at most 256 settings. They cross the FFI as typed pairs, and the core writes and reads the JSON (the app has no JSON parser); the app then applies only the keys it knows, of the right type and range, so an older or newer backup can still be read.
 - **Not in the backup:** map regions and tile caches (downloaded again), derived data rebuilt after a restore (the OSM ways a ride was matched to, ADR-0010; sections' match status), a ride still being recorded, and the route a ride in progress follows. Debug data stays out.
 - **Restore merges; it never deletes.** The rider picks a file (`ACTION_OPEN_DOCUMENT`). The core reads the manifest first and the app shows what is in it (dated, with counts) before anything is written. Restore adds what the phone doesn't have:
-  - sections through the existing import and its overlap rules;
-  - a ride is skipped when one with the same start time and the same first and last fix is already there;
+  - sections through the existing import and its overlap rules (so, as an import, a shorter favourite an added one covers is replaced);
+  - a ride is skipped when one with the same fixes is already there (as a GPX import checks: each within a second and about a metre); its tags then belong to that ride;
   - a route is skipped when one with the same name and the same line is already there;
   - a tag is skipped when one at the same time and place is already there;
   - each setting in the backup replaces the phone's, and a setting the backup doesn't have stays as it is (Stefan, 2026-10-03; the dialog says so).
 
-  Everything goes in one SQLite transaction: a restore lands whole or not at all. Restoring the same file twice changes nothing. Afterwards rides and sections are matched again in the background, as after an import (ADR-0006, ADR-0010), and if regions listed in the manifest aren't installed the app offers to download them.
+  Everything goes in one SQLite transaction: a restore lands whole or not at all. Restoring the same file twice changes nothing. Afterwards rides and sections are matched again in the background, as after an import (ADR-0006, ADR-0010). When settings were applied the activity is made again, so every screen reads them. If regions listed in the manifest aren't installed the app offers to download them: Download fetches the list of regions and downloads those, one after another, and opens Map region to show them coming.
 - **Hostile-input rules** for the reader in `moto-core`:
-  - The app copies the picked file into its own cache under a fixed name and hands the core that path; nothing from the file names a path. Entry names are looked up from a fixed list (`manifest.json`, `favourites.geojson`, `settings.json`, `tags.gpx`, `rides/` and `routes/` plus five digits and `.gpx`); any other name, a duplicate name or a name with `..`, `/` at the start or `\` is rejected.
-  - Caps: the file at most 1 GiB; at most 20 000 entries; each entry read through a counting reader capped at its kind's limit (GPX 64 MiB as today, GeoJSON 64 MiB as today, manifest 8 MiB, settings 64 KiB) and at the size the manifest gives; at most 4 GiB unpacked in all. Entries are read one at a time, so memory stays at one entry.
-  - Every entry's SHA-256 must match the manifest. A mismatch, a missing entry or an entry the manifest doesn't list fails the restore before anything is written.
-  - GPX is read by the existing scanner (no XML parser, no entities or DTDs, malformed points skipped) and JSON by `serde_json` into strict types (`deny_unknown_fields` for the manifest; settings ignore unknown keys by design); every value is range-checked as on import today.
+  - The app copies the picked file into its own cache under a fixed name (at most 1 GiB, counted while copying) and hands the core that path; nothing from the file names a path. Entry names are looked up from a fixed list (`manifest.json`, `favourites.geojson`, `settings.json`, `tags.gpx`, `rides/` and `routes/` plus five digits and `.gpx`); any other name, or a name twice, is rejected.
+  - Before the zip reader sees the file, the core checks the zip's end record: at the very end (backups have no comment), one disk, at most 20 000 entries and a directory of sane size, no zip64. So a crafted directory can't make the reader allocate without bound.
+  - Caps: the file at most 1 GiB; at most 20 000 entries (9 990 rides, 9 990 routes, 100 000 tags); each entry read through a counting reader capped at its kind's limit (GPX 64 MiB as today, GeoJSON 64 MiB as today, manifest 8 MiB, settings 64 KiB) and at the size the manifest gives; at most 4 GiB unpacked in all. Entries are read one at a time, so memory stays at one entry.
+  - Every entry's SHA-256 must match the manifest, and every value in the manifest is range-checked before anything is written. A mismatch, a missing entry or an entry the manifest doesn't list fails the restore, and the transaction leaves the database as it was.
+  - GPX is read by the existing scanner (no XML parser, no entities or DTDs) and JSON by `serde_json` into strict types (`deny_unknown_fields`); every value is range-checked as on import today.
   - A backup with a newer format version than the app knows is refused with "This backup is from a newer version of moto. Update the app first."
   - Errors cross the FFI as `MotoError`; corruption tests (truncated, bit-flipped, oversized, wrong hashes, zip bombs, path tricks) prove the reader never panics.
-- **FFI** (coarse, whole request in and whole result out): `backup_write(path, settings_json) -> BackupSummary`, `backup_read_summary(path) -> BackupSummary` and `backup_restore(path) -> RestoreResult` (counts added and skipped, the settings JSON to apply, the regions to offer). The app validates the settings JSON against its own keys and ranges before applying them.
-- **UI** (mockup [Backup and restore](https://claude.ai/artifact/RVnm7f6oKXDzEaBRwcwLQp), v2): a menu item "Backup" under Map region (Stefan, 2026-10-03), which opens a dialog titled Backup, explaining what a backup holds, with Backup, Restore and Cancel (Stefan: "Backup" on the button too). Busy pill while writing or reading; a toast with the counts when done. Restore shows the backup's date and contents and asks first.
+- **FFI** (coarse, whole request in and whole result out): `SectionStore.write_backup(path, app, regions, settings) -> BackupSummary`, `backup_summary(path) -> BackupSummary` and `SectionStore.restore_backup(path, engine) -> RestoreReport` (counts added and skipped, the settings to apply, the regions to offer).
+- **UI** (mockup [Backup and restore](https://claude.ai/artifact/RVnm7f6oKXDzEaBRwcwLQp), v2): a menu item "Backup" under Map region (Stefan, 2026-10-03), which opens a dialog titled Backup, explaining what a backup holds, with Backup, Restore and Cancel (Stefan: "Backup" on the button too). Busy pill while writing or reading; a toast with the counts when done; the dialog shows when the last backup was made. Restore shows the backup's date and contents and asks first. A file that isn't a backup or is damaged, and one from a newer app, each get one message, and nothing changes.
 - **No encryption in v1.** The file is plain, and the dialog says it holds where you've ridden so it belongs somewhere private. Encrypting with a password (Argon2id and an AEAD from a maintained crate) is a later option if Stefan wants backups in places he doesn't trust.
 
 ## Options Considered
@@ -94,8 +95,8 @@ A costs more than B to build but keeps the restore path inside readers we alread
 
 ## Action Items
 
-- [ ] Core: `backup` module: manifest and settings envelope types, writer (zip, deflate, streaming), reader (fixed entry names, caps, hashes), merge rules and dedupe; corruption tests.
-- [ ] Core: GPX writer for routes with no route points and for tags as waypoints; GPX reader for one ride with its segments (breaks) and name, and for tag waypoints.
-- [ ] FFI: `backup_write`, `backup_read_summary`, `backup_restore`.
-- [ ] App: settings to and from versioned JSON (`RoutePrefs`), validated; menu item, dialogs, busy pill, toasts, region download offer; how-to page.
+- [x] Core: `backup` module: manifest and settings types, writer (zip, deflate), reader (end record check, fixed entry names, caps, hashes), merge rules and dedupe in one transaction; corruption tests (c4af60b; settings typed e7dbdb8).
+- [x] Core: GPX writer for a line without times (routes) and for tags as waypoints; GPX reader for waypoints (c4af60b).
+- [x] FFI: `write_backup`, `backup_summary`, `restore_backup` (b6b8723, e7dbdb8).
+- [x] App: settings for a backup and from a restore (`RoutePrefs`, `BackupLogic`), validated; menu item, dialogs, busy pill, toasts, region download offer; the menu's line on the how-to page (d4ab751).
 - [ ] Phone test: back up, uninstall, install, restore; restore twice; a damaged file.
