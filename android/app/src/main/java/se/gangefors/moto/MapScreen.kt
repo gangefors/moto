@@ -2615,7 +2615,7 @@ fun MapScreen() {
                             .size(TAG_BUTTON_SIZE)
                             .semantics { contentDescription = resources.getString(R.string.tag_button_description) },
                     ) {
-                        Text(stringResource(R.string.tag_button), style = MaterialTheme.typography.titleLarge)
+                        Icon(painterResource(R.drawable.ic_add_road), contentDescription = null, modifier = Modifier.size(TAG_ICON_SIZE))
                     }
                 }
             }
@@ -3095,6 +3095,10 @@ private fun RiddenButton(on: Boolean, onChange: (Boolean) -> Unit, modifier: Mod
 
 /** Quick-tag button: large enough to hit with gloves on. */
 private val TAG_BUTTON_SIZE: Dp = 96.dp
+
+/** The add-favourite icon on the tag button, big enough to read at a glance. */
+private val TAG_ICON_SIZE: Dp = 48.dp
+
 internal val TAG_COLOR = Color(0xFFE8710A)
 
 /** The map layers the screen draws into, created once per style. */
