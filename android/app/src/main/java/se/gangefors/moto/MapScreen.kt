@@ -913,6 +913,23 @@ fun MapScreen() {
         mapZoom = m.cameraPosition.zoom.toFloat()
         onDispose { m.removeOnCameraIdleListener(idle) }
     }
+    // Metres a pixel shows at the map's middle, for the scale bar.
+    var metresPerPx by remember { mutableDoubleStateOf(0.0) }
+    DisposableEffect(map) {
+        val m = map ?: return@DisposableEffect onDispose {}
+        fun measure() {
+            metresPerPx = m.projection.getMetersPerPixelAtLatitude(m.cameraPosition.target?.latitude ?: 0.0)
+        }
+        val move = MapLibreMap.OnCameraMoveListener { measure() }
+        val idle = MapLibreMap.OnCameraIdleListener { measure() }
+        m.addOnCameraMoveListener(move)
+        m.addOnCameraIdleListener(idle)
+        measure()
+        onDispose {
+            m.removeOnCameraMoveListener(move)
+            m.removeOnCameraIdleListener(idle)
+        }
+    }
     LaunchedEffect(favourites) {
         val f = favourites
         hasRidden = f != null && withContext(Dispatchers.Default) { runCatching { f.riddenEdgeCount() > 0u }.getOrDefault(false) }
@@ -1964,6 +1981,20 @@ fun MapScreen() {
                     .onGloballyPositioned { rideCardBottom = it.boundsInRoot().bottom.roundToInt() },
             )
         }
+        // The scale (Stefan, 2026-10-03): bottom middle, a little above
+        // the navigation bar or the planning sheet, beside the map's logo
+        // and attribution; cards drawn later cover it.
+        val scaleAbove = with(density) {
+            val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
+            max(insets.bottom, sheet).toDp()
+        }
+        ScaleBar(
+            metresPerDp = metresPerPx * density.density,
+            darkMap = darkMap,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = scaleAbove + SCALE_BOTTOM),
+        )
         // Notices across the top, the whole width below the top buttons
         // when they show; on wide screens no wider than TOP_BOX_MAX_WIDTH.
         val belowTopButtons = if (topButtons) 8.dp + TOP_BUTTON_SIZE + 8.dp else 8.dp
@@ -3062,6 +3093,9 @@ private val TOP_BOX_MAX_WIDTH: Dp = 640.dp
 
 /** MapLibre's default control margin. */
 private val CONTROL_MARGIN: Dp = 4.dp
+
+/** The scale bar's space above the navigation bar or the sheet. */
+private val SCALE_BOTTOM: Dp = 10.dp
 
 /** MapLibre's default attribution offset from the left, which keeps it clear of the logo. */
 private val ATTRIBUTION_OFFSET: Dp = 92.dp
