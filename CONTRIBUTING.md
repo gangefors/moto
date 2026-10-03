@@ -34,4 +34,4 @@ Every `Cargo.toml` sets `license = "AGPL-3.0-only"` (directly or via `license.wo
 
 ## Development
 
-See [`CLAUDE.md`](CLAUDE.md) for the architecture, layout, rules and commands (`cargo test --workspace`, `cargo clippy`, `cargo fmt`).
+See [`CLAUDE.md`](CLAUDE.md) for the architecture, layout and rules, and [`.claude/skills/dev-commands`](.claude/skills/dev-commands/SKILL.md) for the commands (`cargo test --workspace`, `cargo clippy`, `cargo fmt`).
