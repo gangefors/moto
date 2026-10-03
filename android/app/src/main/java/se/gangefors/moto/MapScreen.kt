@@ -497,6 +497,8 @@ fun MapScreen() {
     var rideZoomStep by remember { mutableIntStateOf(RoutePrefs.rideZoomStep(context)) }
     // Zoom levels the rider added with + and − on this ride.
     var rideZoomNudge by remember { mutableDoubleStateOf(0.0) }
+    // When + or − was last tapped, so its zoom moves faster than speed's.
+    var rideZoomTappedAt by remember { mutableStateOf<Long?>(null) }
     var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
     // The ride card's X asked to leave the route: the confirmation shows.
     var leavingRoute by remember { mutableStateOf(false) }
@@ -1857,7 +1859,8 @@ fun MapScreen() {
     LaunchedEffect(map, rideMode, ridePanned, rideZoomTarget) {
         val m = map ?: return@LaunchedEffect
         if (!rideMode || ridePanned) return@LaunchedEffect
-        m.locationComponent.takeIf { it.isLocationComponentActivated }?.zoomWhileTracking(rideZoomTarget, 1_500)
+        m.locationComponent.takeIf { it.isLocationComponentActivated }
+            ?.zoomWhileTracking(rideZoomTarget, rideZoomDurationMs(SystemClock.elapsedRealtime(), rideZoomTappedAt))
     }
     /**
      * Runs [action] on the store off the main thread, then reloads the
@@ -2512,6 +2515,7 @@ fun MapScreen() {
                                     (recording as? Recording.State.Active)?.lastFix?.speedMps,
                                     rideZoomOffset(rideZoomStep),
                                 )
+                                rideZoomTappedAt = SystemClock.elapsedRealtime()
                                 rideZoomNudge = if (m != null) {
                                     nudgeFromShown(m.cameraPosition.zoom, base, by)
                                 } else {
