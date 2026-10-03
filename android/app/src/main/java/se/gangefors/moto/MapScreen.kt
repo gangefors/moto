@@ -2639,7 +2639,7 @@ fun MapScreen() {
                         val start = LatLng(line.first().lat, line.first().lon)
                         val end = if (saved.isLoop) null else LatLng(line.last().lat, line.last().lon)
                         overlays?.route?.show(start, end, line)
-                        showOnMap(listOf(line), always = true)
+                        showOnMap(listOf(line), always = true, minSpanM = SHOWN_FIT_SPAN_M)
                     }
                 }
             },
@@ -2656,7 +2656,7 @@ fun MapScreen() {
                     } else {
                         clearForShown()
                         shownRide = ShownRide(track, line, segments)
-                        showOnMap(listOf(line), always = true)
+                        showOnMap(listOf(line), always = true, minSpanM = SHOWN_FIT_SPAN_M)
                     }
                 }
             },

@@ -106,6 +106,11 @@ private const val METRES_PER_DEGREE = 111_195.0
 /** The smallest span a route is fitted to: about a small town across. */
 const val MIN_FIT_SPAN_M = 2_000.0
 
+/** The smallest span a saved route or ride opened from Routes & rides is
+ * fitted to: it fills the screen however short it is, but a ride of a few
+ * fixes doesn't zoom to street level (2026-10-03). */
+const val SHOWN_FIT_SPAN_M = 400.0
+
 /** Share of the map that stays free for the route however large the
  * panels are. */
 const val MIN_FREE_SHARE = 0.35
