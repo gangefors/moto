@@ -10,6 +10,8 @@ Things that change often live in Notion, not in the repo (use the Notion tools; 
 - **Milestones & status** ([Moto — Milestones & status](https://app.notion.com/p/3e414874ab0481a694dbcb4edd13fbcb)): M0–M4 progress, the next task, and small carry-over items. Read it at the start of a task; update it when work lands (tick items, add commit links, set **Next**).
 - **Handoff queue** ([Moto — Handoff to Claude Code](https://app.notion.com/p/3e314874ab0481bc9ca8f9e0d56acc52)): work decided in Cowork. Do the items under Pending and move them to Done with their commit links.
 
+The pages are large: read and update them through the `notion` agent (see Models and subagents), never in the main session.
+
 ## Decisions
 
 - **App:** native Android in Kotlin; iOS deferred ([decisions log](https://app.notion.com/p/3e314874ab0481ef90accad5adb6da90), [PRD](docs/prd.md)).
@@ -33,6 +35,8 @@ android/                Gradle project (AGP 9, Compose); app/ builds the core vi
 docs/prd.md             product requirements (v1)
 docs/adr/               architecture decision records (index in README.md)
 docs/mockups/           shared mockup kit (CSS, map backgrounds, template)
+docs/working-with-claude.md   models and session habits that save usage
+.claude/agents/         subagents, each pinning its model
 .claude/skills/         skills: commands, CI and merging, mockups
 ```
 
@@ -57,6 +61,23 @@ docs/mockups/           shared mockup kit (CSS, map backgrounds, template)
 - Debug-only tools (timings, memory, benchmark) live in `android/app/src/debug/` (package `se.gangefors.moto.debug`), reached from the menu → Debug tools; `src/release/` holds a do-nothing `DebugTools` with the same functions. Main code only calls `DebugTools`, so release builds carry none of it and it is easy to remove.
 - The rider's own data is personal: his sections, rides, routes, places, coordinates, screenshots and exports never go verbatim into code, tests, golden cases, commit messages, ADRs or other repo content. Reproduce what they show with your own examples that behave the same (random roads and starts elsewhere), and describe a report in general terms ("a section ending at a hamlet").
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
+
+## Models and subagents
+
+The rider's plan has usage limits, and every turn re-sends the whole conversation, so keep the main session's context small. The rider asks for these agents (`.claude/agents/`, each pins its model) to be used without asking each time:
+
+- `notion` (Haiku): every read and update of the Notion pages.
+- `ci` (Haiku): CI status, failed-job logs, whether the merge job merged; never read whole logs here.
+- `search` (Haiku): broad searches across the code when only the answer and `path:line` are needed.
+- `implement` (Sonnet): an agreed, precise change (an accepted ADR's action items, a signed-off mockup, a known-cause bug, strings, UI tweaks) with its tests and local checks. Brief it fully: it starts with no context. Review its diff before pushing.
+- `mockup` (Sonnet): new mockups from a brief, and revisions.
+
+Keep in the main session: architecture and ADRs, security-sensitive parsing, route scoring and golden routes, bugs whose cause is unknown, and reviewing what the agents did. The main session's model is the rider's choice; when a session's work clearly fits another one, say so once (`docs/working-with-claude.md` has the table).
+
+- Read only what is needed: Grep first, then the lines around a hit; never whole large files, build output or artifacts. Don't re-read a file you just wrote.
+- Pipe long command output through `tail` or `grep`.
+- Don't schedule wake-ups to wait for CI (the merge job merges); check CI with the `ci` agent only when the next step needs the result.
+- When a session has been summarised once, or the task changes, suggest the rider starts a fresh session.
 
 ## Security
 
