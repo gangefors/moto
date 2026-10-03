@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+mod backup;
 mod exchange;
 mod follow;
 mod regions;
