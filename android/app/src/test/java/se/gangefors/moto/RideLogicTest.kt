@@ -164,4 +164,22 @@ class RideLogicTest {
         assertEquals(3.0, nudgeRideZoom(3.0, ZOOM_BUTTON_STEP), 1e-9)
         assertEquals(-3.0, nudgeRideZoom(-3.0, -ZOOM_BUTTON_STEP), 1e-9)
     }
+
+    @Test
+    fun theRecordingCardCountsWholeMinutes() {
+        assertEquals(0L, recordingMinutes(1_000, 1_000))
+        assertEquals(1L, recordingMinutes(0, 119_999))
+        assertEquals(72L, recordingMinutes(0, 72 * 60_000L))
+        assertEquals(0L, recordingMinutes(5_000, 1_000))
+    }
+
+    @Test
+    fun arrowsPointTheWayOnATurnedMap() {
+        // North-up map: as the bearing.
+        assertEquals(90f, arrowOnMap(90.0, 0f), 1e-4f)
+        // Map turned so east is up: a favourite to the east is straight up.
+        assertEquals(0f, arrowOnMap(90.0, 90f), 1e-4f)
+        assertEquals(270f, arrowOnMap(0.0, 90f), 1e-4f)
+        assertEquals(350f, arrowOnMap(340.0, 350f), 1e-4f)
+    }
 }

@@ -198,3 +198,12 @@ fun rideAgainIsLoop(line: List<LatLon>): Boolean =
  * still going or its times are odd). */
 fun rideAgainDurationS(startedAt: Long, endedAt: Long?): Double =
     if (endedAt == null || endedAt < startedAt) 0.0 else (endedAt - startedAt).toDouble()
+
+/** Whole minutes a recording started at [startedAtMs] has run at [nowMs]
+ * (never below 0). */
+fun recordingMinutes(startedAtMs: Long, nowMs: Long): Long = ((nowMs - startedAtMs).coerceAtLeast(0L)) / 60_000L
+
+/** How far to turn an arrow pointing [bearingDeg] (from north) on a map
+ * turned [mapBearing] degrees, so it points that way on screen (0–360). */
+fun arrowOnMap(bearingDeg: Double, mapBearing: Float): Float =
+    ((bearingDeg - mapBearing) % 360.0 + 360.0).toFloat() % 360f
