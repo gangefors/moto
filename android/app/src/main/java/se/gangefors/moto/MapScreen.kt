@@ -1154,7 +1154,9 @@ fun MapScreen() {
     // While the shown section is edited: the direction the sheet's one-way
     // switch and turn-round toggle would give it (null: as saved).
     var editPreview by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
-    val shownForEdit = shownSectionId?.let { id -> sections.firstOrNull { it.id == id } }
+    // The shown section, or else the favourite whose facts are open, is
+    // drawn standing out, so the rider sees which one the card is about.
+    val shownForEdit = (shownSectionId ?: favouriteInfoId)?.let { id -> sections.firstOrNull { it.id == id } }
     LaunchedEffect(overlays, shownForEdit, editPreview, darkMap) {
         val s = shownForEdit
         if (s == null) {
