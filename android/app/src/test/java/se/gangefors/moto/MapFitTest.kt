@@ -35,6 +35,18 @@ class MapFitTest {
     }
 
     @Test
+    fun aShortRideOpenedFromTheListFillsTheScreen() {
+        // A loop round the block, about 500 m across: fitted as it is.
+        val block = GeoBounds(55.8, 13.6, 55.8045, 13.608)
+        val shown = block.withMinSpan(SHOWN_FIT_SPAN_M)
+        assertEquals(block.latSpan, shown.latSpan, 1e-9)
+        assertEquals(block.lonSpan, shown.lonSpan, 1e-9)
+        // A ride of a few fixes still shows about 400 m round it.
+        val point = GeoBounds(55.8, 13.6, 55.8, 13.6).withMinSpan(SHOWN_FIT_SPAN_M)
+        assertEquals(400.0 / 111_195.0, point.latSpan, 1e-9)
+    }
+
+    @Test
     fun paddingKeepsClearOfThePanels() {
         val pad = fitPadding(Panels(1080, 2200, left = 0, top = 500, right = 250, bottom = 400), margin = 40)
         assertEquals(FitPadding(40, 540, 290, 440), pad)
