@@ -250,7 +250,7 @@
     <string name="help_key_review_map">shown when tagged spots wait</string>
     <string name="help_key_review_what">how many tagged spots wait; tap to go through them</string>
     <string name="help_key_tag">TAG</string>
-    <string name="help_key_tag_what">saves the spot you are on</string>
+    <string name="help_key_tag_what">saves the spot you are on (while you ride)</string>
     <string name="help_key_settings">Ride settings</string>
     <string name="help_key_settings_what">gravel, favourites, loop length, zooms, screen</string>
     <string name="help_key_loop">Loop</string>
