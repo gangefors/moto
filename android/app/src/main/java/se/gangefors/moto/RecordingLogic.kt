@@ -308,3 +308,27 @@ const val KEEP_MAX_ACCURACY_M = 30.0
  * counts as enough). */
 fun accurateEnough(fix: TrackPoint): Boolean =
     fix.accuracyM?.let { it.isFinite() && it <= KEEP_MAX_ACCURACY_M } ?: true
+
+/** A ride that never got farther than this from where it started (metres)
+ * isn't saved. */
+const val MIN_RIDE_REACH_M = 100.0
+
+/** How far a ride got from its first kept fix, so one that went nowhere
+ * isn't saved; a ride carried on after Android stopped the app ([carriedOn])
+ * always counts as gone somewhere. */
+class RideReach(private val carriedOn: Boolean = false) {
+    private var first: LatLon? = null
+    var farthestM = 0.0
+        private set
+
+    fun add(p: LatLon) {
+        val start = first ?: run {
+            first = p
+            return
+        }
+        farthestM = maxOf(farthestM, approxDistanceM(start, p))
+    }
+
+    /** Whether the ride got more than [MIN_RIDE_REACH_M] from its start. */
+    fun went(): Boolean = carriedOn || farthestM > MIN_RIDE_REACH_M
+}

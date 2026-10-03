@@ -394,6 +394,7 @@
     <string name="recording_started">Recording…</string>
     <string name="recording_saved">Ride saved</string>
     <string name="recording_saved_later">Some fixes couldn’t be saved yet; they will be on the next start.</string>
+    <string name="recording_not_saved">Ride not saved: you didn’t move.</string>
     <string name="recording_failed">Recording stopped: %1$s</string>
     <string name="recording_no_permission">Recording needs precise location.</string>
     <string name="recording_no_store">the ride database can’t be opened</string>
