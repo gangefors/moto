@@ -6,38 +6,40 @@ package se.gangefors.moto
 import android.content.Context
 import androidx.core.content.edit
 import se.gangefors.moto.core.Avoid
+import se.gangefors.moto.core.BackupSetting
 import se.gangefors.moto.core.FavouritesMode
 import se.gangefors.moto.core.Gravel
 import se.gangefors.moto.core.UnriddenMode
 
 /**
  * The route settings the rider last chose, in app-private preferences
- * (never backed up; see the data extraction rules).
+ * (never in Android's backup, see the data extraction rules; in the app's
+ * own backup file, see [BACKUP_SETTINGS]).
  */
 object RoutePrefs {
     private const val FILE = "route"
     /** The old Allow gravel switch (a boolean), read once as a fallback. */
     private const val ALLOW_GRAVEL = "allow_gravel"
-    private const val GRAVEL = "gravel"
-    private const val FAVOURITES = "favourites"
-    private const val UNRIDDEN = "unridden"
+    internal const val GRAVEL = "gravel"
+    internal const val FAVOURITES = "favourites"
+    internal const val UNRIDDEN = "unridden"
     /** The kinds of road allowed (motorways, ferries, tolls); unset: all
      * avoided. */
-    private const val ALLOWED_ROADS = "allowed_roads"
-    private const val LOOP = "loop_length"
-    private const val LOOP_DIRECTION = "loop_direction"
-    private const val AREA_ZOOM = "locate_area_zoom"
-    private const val CLOSE_ZOOM = "locate_close_zoom"
-    private const val KEEP_SCREEN_ON = "keep_screen_on_recording"
-    private const val SHOW_RIDDEN = "show_ridden_roads"
-    private const val TURN_MAP = "ride_turn_map"
-    private const val RIDE_ZOOM_STEP = "ride_zoom_step"
-    private const val OFF_ROUTE_ALERT = "ride_off_route_alert"
+    internal const val ALLOWED_ROADS = "allowed_roads"
+    internal const val LOOP = "loop_length"
+    internal const val LOOP_DIRECTION = "loop_direction"
+    internal const val AREA_ZOOM = "locate_area_zoom"
+    internal const val CLOSE_ZOOM = "locate_close_zoom"
+    internal const val KEEP_SCREEN_ON = "keep_screen_on_recording"
+    internal const val SHOW_RIDDEN = "show_ridden_roads"
+    internal const val TURN_MAP = "ride_turn_map"
+    internal const val RIDE_ZOOM_STEP = "ride_zoom_step"
+    internal const val OFF_ROUTE_ALERT = "ride_off_route_alert"
     private const val MAP_HINTS = "map_hints_shown"
-    private const val SECTIONS_SORT = "sections_sort"
-    private const val LIBRARY_FILTER = "library_filter"
-    private const val LIBRARY_SORT = "library_sort"
-    private const val DARK_THEME = "dark_theme"
+    internal const val SECTIONS_SORT = "sections_sort"
+    internal const val LIBRARY_FILTER = "library_filter"
+    internal const val LIBRARY_SORT = "library_sort"
+    internal const val DARK_THEME = "dark_theme"
 
     /** How many starts show how to use the map. */
     private const val MAP_HINT_STARTS = 3
@@ -213,5 +215,29 @@ object RoutePrefs {
 
     fun setDarkTheme(context: Context, dark: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit { putString(DARK_THEME, if (dark) "dark" else "light") }
+    }
+
+    /** The settings a backup carries (ADR-0012), as they are stored now. */
+    fun forBackup(context: Context): List<BackupSetting> =
+        settingsForBackup(runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE).all }.getOrDefault(emptyMap()))
+
+    /**
+     * Applies a restored backup's settings: each one this app knows, of
+     * the right type and range, replaces the phone's; the rest stay.
+     */
+    fun restore(context: Context, settings: List<BackupSetting>) {
+        val apply = settingsFromBackup(settings)
+        if (apply.isEmpty()) return
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit {
+            apply.forEach { (key, value) ->
+                when (value) {
+                    is Boolean -> putBoolean(key, value)
+                    is Int -> putInt(key, value)
+                    is String -> putString(key, value)
+                }
+            }
+            // The new gravel setting replaces the old switch.
+            if (GRAVEL in apply) remove(ALLOW_GRAVEL)
+        }
     }
 }

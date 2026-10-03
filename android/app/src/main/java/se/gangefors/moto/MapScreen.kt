@@ -456,6 +456,7 @@ fun MapScreen() {
     // The menu, and the page it opened.
     var menuOpen by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showBackup by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showDebug by remember { mutableStateOf(false) }
     // Ride settings, one tap from the map.
@@ -2636,6 +2637,7 @@ fun MapScreen() {
                     MenuTopic.SECTIONS -> dataPage = DataPage.SECTIONS
                     MenuTopic.REGION -> dataPage = DataPage.REGION
                     MenuTopic.HELP -> showHelp = true
+                    MenuTopic.BACKUP -> showBackup = true
                     MenuTopic.ABOUT -> showAbout = true
                     MenuTopic.DEBUG -> showDebug = true
                 }
@@ -2644,6 +2646,25 @@ fun MapScreen() {
     }
     if (showHelp) HelpPage(onDismiss = { showHelp = false })
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+    // Backup and restore (ADR-0012): its dialogs, and after a restore the
+    // favourites and rides read again.
+    BackupFlow(
+        open = showBackup,
+        onClose = { showBackup = false },
+        store = (store as? StoreState.Ready)?.store,
+        engine = (region as? RegionState.Ready)?.engine,
+        busy = busy,
+        onRestored = {
+            val s = (store as? StoreState.Ready)?.store
+            if (s != null) {
+                scope.launch {
+                    withContext(Dispatchers.IO) { runCatching { s.list(null) } }.onSuccess { sections = it }
+                }
+            }
+            RideChanges.changed()
+        },
+        onOpenRegions = { dataPage = DataPage.REGION },
+    )
     if (showDebug) DebugTools.Page(onDismiss = { showDebug = false })
 
     // Rate and save the proposed section, and name it if the rider likes
