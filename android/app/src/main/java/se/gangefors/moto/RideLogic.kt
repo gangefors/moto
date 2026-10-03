@@ -110,6 +110,24 @@ private const val MAX_RIDE_ZOOM_NUDGE = 3.0
 fun nudgeRideZoom(nudge: Double, by: Double): Double =
     (nudge + by).coerceIn(-MAX_RIDE_ZOOM_NUDGE, MAX_RIDE_ZOOM_NUDGE)
 
+/**
+ * The nudge after a tap on + (positive [by]) or − while the map shows
+ * [shownZoom] and the ride's own zoom is [baseZoom]: one step from what is
+ * shown, so a tap always zooms the way it says, even while the map is
+ * still on its way to the ride's zoom (2026-10-03).
+ */
+fun nudgeFromShown(shownZoom: Double, baseZoom: Double, by: Double): Double {
+    if (!shownZoom.isFinite() || !baseZoom.isFinite()) return 0.0
+    val nudge = (shownZoom + by - baseZoom).coerceIn(-MAX_RIDE_ZOOM_NUDGE, MAX_RIDE_ZOOM_NUDGE)
+    // Past the limit the other way already: stay where it is rather than
+    // zoom against the button.
+    val against = if (by < 0) baseZoom + nudge > shownZoom else baseZoom + nudge < shownZoom
+    return if (against) shownZoom - baseZoom else nudge
+}
+
+/** How long the map takes to start following the rider in ride mode. */
+const val RIDE_CAMERA_TRANSITION_MS = 750L
+
 /** How many zoom levels step [step] moves the zoom while riding: half a
  * level a step, from one closer (half as wide) to two wider (four times as
  * wide). Steps out of range count as the nearest. */

@@ -1801,8 +1801,18 @@ fun MapScreen() {
         lc.renderMode = RenderMode.GPS
         if (!ridePanned) {
             m.moveCamera(CameraUpdateFactory.paddingTo(0.0, riderTopPadding(mapSize.height).toDouble(), 0.0, 0.0))
-            lc.cameraMode = if (turnMap) CameraMode.TRACKING_GPS else CameraMode.TRACKING
-            if (!turnMap) m.animateCamera(CameraUpdateFactory.bearingTo(0.0))
+            // Straight to the ride's zoom as it starts following, so +
+            // and − step from there, not from wherever the map was.
+            val speed = (recording as? Recording.State.Active)?.lastFix?.speedMps
+            val zoom = rideZoom(speed, rideZoomOffset(rideZoomStep) + rideZoomNudge)
+            lc.setCameraMode(
+                if (turnMap) CameraMode.TRACKING_GPS else CameraMode.TRACKING,
+                RIDE_CAMERA_TRANSITION_MS,
+                zoom,
+                if (turnMap) null else 0.0,
+                null,
+                null,
+            )
         }
         val dismissed = object : OnCameraTrackingChangedListener {
             override fun onCameraTrackingDismissed() {
@@ -2488,7 +2498,18 @@ fun MapScreen() {
                     ZoomButtons(
                         onZoom = { by ->
                             if (rideMode && !ridePanned) {
-                                rideZoomNudge = nudgeRideZoom(rideZoomNudge, by)
+                                // One step from the zoom the map shows now,
+                                // whatever the speed zoom was doing.
+                                val m = map
+                                val base = rideZoom(
+                                    (recording as? Recording.State.Active)?.lastFix?.speedMps,
+                                    rideZoomOffset(rideZoomStep),
+                                )
+                                rideZoomNudge = if (m != null) {
+                                    nudgeFromShown(m.cameraPosition.zoom, base, by)
+                                } else {
+                                    nudgeRideZoom(rideZoomNudge, by)
+                                }
                             } else {
                                 map?.animateCamera(CameraUpdateFactory.zoomBy(by))
                             }
