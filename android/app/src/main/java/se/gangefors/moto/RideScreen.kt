@@ -453,6 +453,7 @@ fun ZoomButtons(onZoom: (Double) -> Unit, modifier: Modifier = Modifier) {
 fun RecordingCard(
     distanceM: Double,
     startedAtMs: Long,
+    pausedMs: Long,
     near: List<FavouriteNearby>,
     mapBearing: Float,
     darkMap: Boolean,
@@ -464,7 +465,7 @@ fun RecordingCard(
             delay(5_000)
         }
     }
-    val minutes = (recordingMinutes(startedAtMs, now)).toInt()
+    val minutes = recordingMinutes(startedAtMs, now, pausedMs).toInt()
     val km = stringResource(R.string.route_km, rideKm(distanceM))
     val time = durationText(minutes)
     val said = stringResource(R.string.recording_card_description, rideKm(distanceM), time)

@@ -159,10 +159,14 @@ class RideProgress(private val stepM: Double = 10.0) {
 
     val line: List<LatLon> get() = points.toList()
 
+    /** The next point starts after a gap: no distance is counted to it. */
+    private var gap = false
+
     fun add(p: LatLon) {
         val last = points.lastOrNull()
-        if (last == null) {
+        if (last == null || gap) {
             points += p
+            gap = false
             return
         }
         val d = approxDistanceM(last, p)
@@ -171,7 +175,23 @@ class RideProgress(private val stepM: Double = 10.0) {
             points += p
         }
     }
+
+    /** Recording carries on after a gap (a pause where the rider moved
+     * away): the distance doesn't bridge it. */
+    fun breakLine() {
+        if (points.isNotEmpty()) gap = true
+    }
 }
+
+/** Moving farther than this while recording was paused starts a new
+ * segment when it carries on; nearer, the line just continues. */
+const val PAUSE_JOIN_M = 50.0
+
+/** Whether a recording paused at [pausedAt] starts a new segment when it
+ * carries on at [now]: the rider moved more than [PAUSE_JOIN_M] away.
+ * Without both positions it carries on as one line. */
+fun breaksAfterPause(pausedAt: LatLon?, now: LatLon?): Boolean =
+    pausedAt != null && now != null && approxDistanceM(pausedAt, now) > PAUSE_JOIN_M
 
 /** "1:05" for 65 minutes. */
 fun formatDuration(ms: Long): String {

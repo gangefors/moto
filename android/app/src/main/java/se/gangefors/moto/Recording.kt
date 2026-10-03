@@ -33,6 +33,10 @@ object Recording {
             val lastFix: TrackPoint?,
             /** The route being ridden, if any (ADR-0011). */
             val following: Following? = null,
+            /** Paused while the rider plans: no fixes are kept. */
+            val paused: Boolean = false,
+            /** Time paused so far, ms, the current pause included. */
+            val pausedMs: Long = 0,
         ) : State
         /** The last ride just ended; [batteryPerHour] in percent, if known. */
         data class Finished(val track: Track, val batteryPerHour: Double?) : State

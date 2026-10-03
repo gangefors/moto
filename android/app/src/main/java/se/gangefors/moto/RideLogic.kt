@@ -202,7 +202,8 @@ fun rideAgainDurationS(startedAt: Long, endedAt: Long?): Double =
 
 /** Whole minutes a recording started at [startedAtMs] has run at [nowMs]
  * (never below 0). */
-fun recordingMinutes(startedAtMs: Long, nowMs: Long): Long = ((nowMs - startedAtMs).coerceAtLeast(0L)) / 60_000L
+fun recordingMinutes(startedAtMs: Long, nowMs: Long, pausedMs: Long = 0L): Long =
+    ((nowMs - startedAtMs - pausedMs.coerceAtLeast(0L)).coerceAtLeast(0L)) / 60_000L
 
 /** How far to turn an arrow pointing [bearingDeg] (from north) on a map
  * turned [mapBearing] degrees, so it points that way on screen (0–360). */
