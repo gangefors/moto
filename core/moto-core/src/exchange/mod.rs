@@ -112,6 +112,13 @@ struct PropsIn {
     direction: Option<String>,
     #[serde(default)]
     ways: Option<Vec<[i64; 3]>>,
+    // Kept by a backup restore (ADR-0012); an import ignores them.
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    created_at: Option<i64>,
+    #[serde(default)]
+    updated_at: Option<i64>,
 }
 
 fn rating_name(r: Rating) -> &'static str {
@@ -181,6 +188,24 @@ fn bad(msg: impl Into<String>) -> CoreError {
 /// Sections from GeoJSON text, validated; rated `good` and good both ways
 /// unless the file says otherwise. Any invalid feature rejects the file.
 pub fn from_geojson(json: &[u8]) -> Result<Vec<NewSection>, CoreError> {
+    Ok(read_features(json)?
+        .into_iter()
+        .map(|f| f.section)
+        .collect())
+}
+
+/// A section read from a file, with what a backup restore keeps besides.
+pub(crate) struct ReadSection {
+    pub section: NewSection,
+    /// The source the file gives, if it names a known one.
+    pub source: Option<Source>,
+    pub created_at: Option<i64>,
+    pub updated_at: Option<i64>,
+}
+
+/// As [`from_geojson`], with each section's source and times as the file
+/// gives them (an export writes them), for a backup restore.
+pub(crate) fn read_features(json: &[u8]) -> Result<Vec<ReadSection>, CoreError> {
     let json = json.strip_prefix(b"\xef\xbb\xbf").unwrap_or(json);
     let doc: CollectionIn = serde_json::from_slice(json)
         .map_err(|e| bad(format!("not a GeoJSON file of favourite sections: {e}")))?;
@@ -200,7 +225,7 @@ pub fn from_geojson(json: &[u8]) -> Result<Vec<NewSection>, CoreError> {
         .collect()
 }
 
-fn feature(f: FeatureIn) -> Result<NewSection, String> {
+fn feature(f: FeatureIn) -> Result<ReadSection, String> {
     if f.kind != "Feature" {
         return Err("not a Feature".into());
     }
@@ -261,24 +286,35 @@ fn feature(f: FeatureIn) -> Result<NewSection, String> {
         geometry,
     };
     s.validate().map_err(|e| e.to_string())?;
-    Ok(s)
+    Ok(ReadSection {
+        section: s,
+        source: match props.source.as_deref() {
+            Some("map") => Some(Source::Map),
+            Some("tag") => Some(Source::Tag),
+            Some("track") => Some(Source::Track),
+            Some("import") => Some(Source::Import),
+            _ => None,
+        },
+        created_at: props.created_at,
+        updated_at: props.updated_at,
+    })
 }
 
 /// What an import does, before touching the store.
 #[derive(Debug, Default, PartialEq)]
-struct Plan {
+pub(crate) struct Plan {
     /// Imported sections to add (indices into the import).
-    add: Vec<usize>,
+    pub add: Vec<usize>,
     /// Saved sections the import replaces.
-    remove: Vec<i64>,
+    pub remove: Vec<i64>,
     /// Imported sections skipped as already covered (indices into the
     /// import, in file order).
-    skipped: Vec<usize>,
+    pub skipped: Vec<usize>,
 }
 
 /// Applies the overlap rules to `imported` against `saved`, one imported
 /// section at a time, so the file's own duplicates are handled too.
-fn plan(saved: &[Section], imported: &[NewSection]) -> Plan {
+pub(crate) fn plan(saved: &[Section], imported: &[NewSection]) -> Plan {
     let mut plan = Plan::default();
     let mut saved: Vec<(i64, Shape)> = saved.iter().map(|s| (s.id, Shape::of_section(s))).collect();
     // Imported sections accepted so far: (index into `imported`, shape).

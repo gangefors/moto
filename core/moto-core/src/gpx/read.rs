@@ -65,6 +65,31 @@ pub fn read_tracks(text: &str, now_ms: i64) -> Result<Vec<Vec<TrackPoint>>, Core
     Ok(rides)
 }
 
+/// The waypoints (`<wpt>`) of a GPX file, in file order, as fixes: each
+/// needs a valid `<time>` (a waypoint without one is an error, not a
+/// guess); accuracy, speed and bearing come from the `moto` extension when
+/// present and valid. Malformed waypoints (no position) are skipped. At
+/// most [`MAX_TRACK_POINTS`].
+pub fn read_waypoints(text: &str) -> Result<Vec<TrackPoint>, CoreError> {
+    check_size(text)?;
+    points(text, "wpt")?
+        .into_iter()
+        .map(|r| {
+            let p = TrackPoint {
+                time_ms: r.time_ms.ok_or_else(|| {
+                    CoreError::InvalidArgument("a waypoint has no valid time".into())
+                })?,
+                position: r.position,
+                accuracy_m: r.accuracy_m,
+                speed_mps: r.speed_mps,
+                bearing_deg: r.bearing_deg,
+            };
+            p.validate()?;
+            Ok(p)
+        })
+        .collect()
+}
+
 fn check_size(text: &str) -> Result<(), CoreError> {
     if text.len() > MAX_GPX_BYTES {
         return Err(CoreError::InvalidArgument(format!(
