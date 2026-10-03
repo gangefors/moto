@@ -245,7 +245,7 @@
     <!-- The keys of the how-to page: a button's name, then what it does. -->
     <string name="help_see">see %1$s</string>
     <string name="help_key_menu">Menu</string>
-    <string name="help_key_menu_what">routes and rides, favourite sections, map regions (the countries on the phone, each switched on or off; those on are one map, joined at the borders), this page, About; the sun or moon at its top switches light and dark</string>
+    <string name="help_key_menu_what">routes and rides, favourite sections, map regions (the countries on the phone, each switched on or off; those on are one map, joined at the borders), a backup of everything you made, this page, About; the sun or moon at its top switches light and dark</string>
     <string name="help_key_review">Review</string>
     <string name="help_key_review_map">shown when tagged spots wait</string>
     <string name="help_key_review_what">how many tagged spots wait; tap to go through them</string>
@@ -631,4 +631,58 @@
     <string name="format_geojson">GeoJSON</string>
     <string name="format_zip">.ZIP</string>
     <string name="format_gzip">.GZ</string>
+
+    <!-- Backup and restore (ADR-0012). -->
+    <string name="backup_title">Backup</string>
+    <string name="backup_text">A backup is one file with your favourite sections, rides, saved routes, tags and settings, so you can reinstall the app or move to a new phone. Map regions aren’t in it: download them again after restoring.</string>
+    <string name="backup_private">The file shows where you’ve ridden: keep it somewhere private.</string>
+    <string name="backup_last">Last backup: %1$s</string>
+    <string name="backup_do">Backup</string>
+    <string name="backup_restore">Restore</string>
+    <string name="backup_file_name">moto-backup-%1$s.zip</string>
+    <string name="busy_backup">Backing up…</string>
+    <string name="busy_backup_read">Reading the backup…</string>
+    <string name="busy_restore">Restoring…</string>
+    <string name="backup_saved">Backup saved: %1$s.</string>
+    <string name="backup_failed">Backup failed: %1$s</string>
+    <string name="backup_nothing">nothing yet</string>
+    <plurals name="backup_count_favourites">
+        <item quantity="one">%1$d favourite</item>
+        <item quantity="other">%1$d favourites</item>
+    </plurals>
+    <plurals name="backup_count_rides">
+        <item quantity="one">%1$d ride</item>
+        <item quantity="other">%1$d rides</item>
+    </plurals>
+    <plurals name="backup_count_routes">
+        <item quantity="one">%1$d route</item>
+        <item quantity="other">%1$d routes</item>
+    </plurals>
+    <plurals name="backup_count_tags">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+    <string name="backup_and">%1$s and %2$s</string>
+    <string name="restore_title">Restore this backup?</string>
+    <string name="restore_made">Made %1$s, by %2$s.</string>
+    <string name="restore_favourites">Favourite sections</string>
+    <string name="restore_rides">Rides</string>
+    <string name="restore_routes">Saved routes</string>
+    <string name="restore_tags">Tags</string>
+    <string name="restore_settings">Settings</string>
+    <string name="restore_text">It is added to what’s on the phone: nothing is deleted, and anything already here is skipped. Settings in the backup replace yours; any it doesn’t have stay as they are.</string>
+    <string name="restored">Restored %1$s.</string>
+    <string name="restored_nothing">Nothing to restore: everything in the backup is already here.</string>
+    <plurals name="restored_already">
+        <item quantity="one">%1$d was already here.</item>
+        <item quantity="other">%1$d were already here.</item>
+    </plurals>
+    <string name="restore_failed_title">Can’t restore</string>
+    <string name="restore_failed">This file isn’t a moto backup, or it’s damaged. Nothing was changed.</string>
+    <string name="restore_newer">This backup is from a newer version of moto. Update the app first. Nothing was changed.</string>
+    <string name="restore_too_large">The file is larger than 1 GB, so it isn’t a moto backup. Nothing was changed.</string>
+    <string name="restore_regions_title">Download map regions?</string>
+    <string name="restore_regions_text">The backup was made with %1$s on the phone. Download them now to see your favourites and plan routes?</string>
+    <string name="restore_regions_download">Download</string>
+    <string name="restore_regions_later">Not now</string>
 </resources>

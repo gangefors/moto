@@ -234,6 +234,27 @@ object Regions {
         }
     }
 
+    /** The ids of the regions on the phone, on or off (for a backup). */
+    fun installedRegionIds(context: Context): Set<String> = installedIds(context.applicationContext)
+
+    /**
+     * After a restore: fetches the list of regions (unless it is already
+     * here), then downloads those of [ids] it offers that aren't on the
+     * phone, one after another, as Update all does.
+     */
+    fun downloadMissing(context: Context, ids: Collection<String>) {
+        val app = context.applicationContext
+        val want = missingRegions(ids.toList(), installedIds(app)).toSet()
+        if (want.isEmpty()) return
+        if (download.value !is DownloadState.Offers) check(app)
+        scope.launch {
+            // The check just started, or whatever was running.
+            job?.join()
+            val offers = (download.value as? DownloadState.Offers)?.offers ?: return@launch
+            start(app, offers.filter { it.id in want })
+        }
+    }
+
     /** Downloads and installs [offer] (enabled), then opens the network with it. */
     fun start(context: Context, offer: RegionOffer) = start(context, listOf(offer))
 

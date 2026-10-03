@@ -103,7 +103,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
 }
 
 /** The installed version name, e.g. "0.1.0". */
-private fun appVersion(context: Context): String = runCatching {
+internal fun appVersion(context: Context): String = runCatching {
     val pm = context.packageManager
     val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         pm.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
