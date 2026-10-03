@@ -12,13 +12,13 @@ class ScaleBarTest {
     @Test
     fun theScaleIsTheLongestRoundLengthThatFits() {
         // 2 m a dp: up to 240 m fits, so 200 m, 100 dp.
-        assertEquals(ScaleLength(200.0, 100.0), scaleLength(2.0))
+        assertEquals(ScaleLength(200.0, 100.0), scaleLength(2.0, 120.0))
         // 10 m a dp: up to 1200 m, so 1 km, 100 dp.
-        assertEquals(ScaleLength(1000.0, 100.0), scaleLength(10.0))
+        assertEquals(ScaleLength(1000.0, 100.0), scaleLength(10.0, 120.0))
         // 4 m a dp: up to 480 m, so 200 m, 50 dp.
-        assertEquals(ScaleLength(200.0, 50.0), scaleLength(4.0))
+        assertEquals(ScaleLength(200.0, 50.0), scaleLength(4.0, 120.0))
         // 50 m a dp: up to 6 km, so 5 km.
-        assertEquals(5000.0, scaleLength(50.0)!!.metres, 1e-9)
+        assertEquals(5000.0, scaleLength(50.0, 120.0)!!.metres, 1e-9)
     }
 
     @Test

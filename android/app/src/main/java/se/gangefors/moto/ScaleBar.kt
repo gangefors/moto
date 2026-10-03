@@ -25,8 +25,9 @@ import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
 
-/** The scale bar is at most this long, dp. */
-const val SCALE_MAX_DP = 120.0
+/** The scale bar is at most this long, dp: it fits between the map's
+ * attribution and the position button on a 360 dp screen. */
+const val SCALE_MAX_DP = 88.0
 
 /** A scale bar: [metres] long (a round number), drawn [dp] long. */
 data class ScaleLength(val metres: Double, val dp: Double)
