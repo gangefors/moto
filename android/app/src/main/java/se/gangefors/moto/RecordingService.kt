@@ -86,6 +86,12 @@ class RecordingService : Service() {
         var gotFix = false
         var lastFix: TrackPoint? = null
         var follow: Follow? = null
+        /** Paused while the rider plans (2026-10-03): where it
+         * paused, since when (elapsed), and earlier pauses' total. */
+        var pausedAt: LatLon? = null
+        var pausedSince: Long? = null
+        var pausedTotalMs = 0L
+        fun pausedMs(now: Long): Long = pausedTotalMs + (pausedSince?.let { now - it } ?: 0L)
     }
 
     /** A route being ridden in a [Session]. */
@@ -122,6 +128,8 @@ class RecordingService : Service() {
             ACTION_RESUME -> start(resume = intent.getLongExtra(EXTRA_TRACK, -1).takeIf { it >= 0 }, record = true)
             ACTION_FOLLOW -> handler.post { Recording.takeRequest()?.let { r -> session?.let { follow(it, r) } } }
             ACTION_UNFOLLOW -> handler.post { session?.let { unfollow(it) } }
+            ACTION_PAUSE -> handler.post { session?.let { pause(it) } }
+            ACTION_UNPAUSE -> handler.post { session?.let { unpause(it) } }
             ACTION_STOP -> handler.post { stop() }
             else -> stopSelf() // e.g. a restart with no intent
         }
@@ -216,7 +224,7 @@ class RecordingService : Service() {
         // Following first: reaching the route's start may start recording,
         // with this fix as its first.
         val followed = s.follow?.let { onFollowFix(s, it, fix) } == true
-        if (s.trackId != null) {
+        if (s.trackId != null && s.pausedSince == null) {
             try {
                 s.buffer?.append(fix)
             } catch (e: Exception) {
@@ -257,6 +265,31 @@ class RecordingService : Service() {
         endFollow(s, f)
         s.follow = null
         runCatching { s.store.clearFollowedRoute(id) }
+        publish(s, force = true)
+    }
+
+    /** Stops keeping fixes while the rider plans; GPS and following carry
+     * on. */
+    private fun pause(s: Session) {
+        if (s.trackId == null || s.pausedSince != null) return
+        flush(s)
+        s.pausedSince = SystemClock.elapsedRealtime()
+        s.pausedAt = s.lastFix?.position
+        publish(s, force = true)
+    }
+
+    /** Keeps fixes again after planning: the line carries on, or starts a
+     * new segment when the rider moved away meanwhile. */
+    private fun unpause(s: Session) {
+        val since = s.pausedSince ?: return
+        val id = s.trackId
+        if (id != null && breaksAfterPause(s.pausedAt, s.lastFix?.position)) {
+            runCatching { s.store.breakTrack(id) }
+            s.progress.breakLine()
+        }
+        s.pausedTotalMs += SystemClock.elapsedRealtime() - since
+        s.pausedSince = null
+        s.pausedAt = null
         publish(s, force = true)
     }
 
@@ -499,6 +532,8 @@ class RecordingService : Service() {
                 waitingForGps = !s.gotFix,
                 lastFix = s.lastFix,
                 following = following,
+                paused = s.pausedSince != null,
+                pausedMs = s.pausedMs(now),
             ),
         )
         val text = if (following != null && s.trackId == null) {
@@ -508,7 +543,7 @@ class RecordingService : Service() {
                 .format(java.util.Date(System.currentTimeMillis() + (following.state.leftS * 1000).toLong()))
             getString(R.string.ride_progress, following.route.name, rideKm(following.state.leftM), arrive)
         } else if (s.gotFix) {
-            getString(R.string.recording_progress, sectionKm(s.progress.distanceM), formatDuration(now - s.startedElapsed))
+            getString(R.string.recording_progress, sectionKm(s.progress.distanceM), formatDuration(now - s.startedElapsed - s.pausedMs(now)))
         } else {
             getString(R.string.recording_waiting)
         }
@@ -573,6 +608,8 @@ class RecordingService : Service() {
         private const val ACTION_RIDE = "se.gangefors.moto.action.RIDE_ROUTE"
         private const val ACTION_FOLLOW = "se.gangefors.moto.action.FOLLOW_ROUTE"
         private const val ACTION_UNFOLLOW = "se.gangefors.moto.action.UNFOLLOW_ROUTE"
+        private const val ACTION_PAUSE = "se.gangefors.moto.action.PAUSE_RECORDING"
+        private const val ACTION_UNPAUSE = "se.gangefors.moto.action.UNPAUSE_RECORDING"
         private const val EXTRA_TRACK = "track"
         private const val CHANNEL = "recording"
         private const val ALERT_CHANNEL = "off_route"
@@ -615,6 +652,13 @@ class RecordingService : Service() {
         /** Stops following the route; the ride records on. */
         fun unfollow(context: Context) {
             context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_UNFOLLOW))
+        }
+
+        /** Pauses or carries on the recording ([on]) while the rider
+         * plans: no fixes are kept meanwhile. */
+        fun pause(context: Context, on: Boolean) {
+            if (Recording.state.value !is Recording.State.Active) return
+            context.startService(Intent(context, RecordingService::class.java).setAction(if (on) ACTION_PAUSE else ACTION_UNPAUSE))
         }
 
         fun stop(context: Context) {

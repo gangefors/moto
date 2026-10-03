@@ -1035,6 +1035,11 @@ fun MapScreen() {
             rideZoomNudge = 0.0
         }
     }
+    // Recording pauses while the rider plans and carries on after
+    // (2026-10-03): no standing still and GPS jitter in the ride.
+    val pauseWanted = (recording as? Recording.State.Active)?.trackId != null && !riding &&
+        (planning || startPicked != null)
+    LaunchedEffect(pauseWanted) { RecordingService.pause(context, pauseWanted) }
     // The recording card's favourites near the rider, at each fix.
     var nearby by remember { mutableStateOf<List<FavouriteNearby>>(emptyList()) }
     val lastFix = (recording as? Recording.State.Active)?.lastFix
@@ -2039,6 +2044,7 @@ fun MapScreen() {
                 RecordingCard(
                     distanceM = active.distanceM,
                     startedAtMs = active.startedAtMs,
+                    pausedMs = active.pausedMs,
                     near = nearby,
                     mapBearing = mapBearing,
                     darkMap = darkMap,

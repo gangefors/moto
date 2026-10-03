@@ -195,4 +195,29 @@ class RideLogicTest {
         assertTrue(canPlan(fix(1_000, 20.0), 1_000 + PLAN_FIX_MAX_AGE_MS + 1))
         assertTrue(canPlan(fix(1_000, Double.NaN), 2_000))
     }
+
+    @Test
+    fun pausesDontCountAsRiding() {
+        assertEquals(10L, recordingMinutes(0, 15 * 60_000L, 5 * 60_000L))
+        assertEquals(0L, recordingMinutes(0, 60_000L, 5 * 60_000L))
+    }
+
+    @Test
+    fun aPauseJoinsUpUnlessTheRiderMovedAway() {
+        val here = LatLon(55.70, 13.20)
+        assertFalse(breaksAfterPause(here, LatLon(55.7003, 13.20))) // ~33 m
+        assertTrue(breaksAfterPause(here, LatLon(55.7010, 13.20))) // ~111 m
+        assertFalse(breaksAfterPause(null, here))
+        assertFalse(breaksAfterPause(here, null))
+        // The distance doesn't bridge a break.
+        val p = RideProgress()
+        p.add(here)
+        p.add(LatLon(55.7010, 13.20))
+        val before = p.distanceM
+        p.breakLine()
+        p.add(LatLon(55.7100, 13.20))
+        assertEquals(before, p.distanceM, 1e-9)
+        p.add(LatLon(55.7110, 13.20))
+        assertTrue(p.distanceM > before + 100)
+    }
 }
