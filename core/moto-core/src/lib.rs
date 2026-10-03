@@ -25,6 +25,7 @@ pub mod geo;
 pub mod gpx;
 pub mod handoff;
 pub mod matching;
+pub mod near;
 pub mod net;
 pub mod overlap;
 mod par;
