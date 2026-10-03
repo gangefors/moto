@@ -16,11 +16,14 @@
 #   and unit tests. No APK carries a region; the rider downloads one.
 # - skane-region: main's Skåne region becomes the `skane-region` release
 #   when it was built again, for Claude's sessions to download instead of
-#   building it from the 900 MB extract (CLAUDE.md, Commands).
+#   building it from the 900 MB extract (the dev-commands skill).
 # - publish: the debug APK becomes a rolling pre-release for the phone,
 #   once core and build pass: `debug-latest` from main, `debug-branch`
 #   from a Claude work branch (`ccr-*`, `claude/*`), so a fix can be
 #   tested about 6 minutes after a push while the benchmark still runs.
+# - merge: once core, bench and build pass on a Claude work branch,
+#   fast-forwards main to it (.github/scripts/fast_forward.py) and starts
+#   main's CI, so no session waits to merge by hand.
 #
 # Only the newest push is built: a newer push cancels core, bench and
 # build of the one before on the same branch (on main too). Publishing is never cancelled halfway,
@@ -441,6 +444,54 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "$title" \
             --notes "$notes"
+
+  # Merges a green Claude work branch into main (CLAUDE.md, Rules), so no
+  # session has to wait for CI to do it (Stefan, 2026-10-03). Fast-forward
+  # only, and only what fast_forward.py allows; otherwise the reason is a
+  # warning on the run and the session merges by hand. Main is moved
+  # through the API (never forced, so a main that moved on meanwhile
+  # fails the update); a change made with this job's token starts no
+  # workflows, so the job starts main's CI and CodeQL itself.
+  merge:
+    name: Merge into main
+    needs: [core, bench, build]
+    if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/ccr-') || startsWith(github.ref, 'refs/heads/claude/'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to fast-forward main
+      actions: write # to start CI and CodeQL on main
+    concurrency:
+      group: merge-main
+      cancel-in-progress: false
+    steps:
+      # All branches, for the branch tip and main as they are now.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Fast-forward main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          plan=$(python3 .github/scripts/fast_forward.py "$GITHUB_SHA" "origin/$BRANCH" origin/main 2> "$RUNNER_TEMP/reason")
+          reason=$(cat "$RUNNER_TEMP/reason")
+          echo "Merge into main: $reason" >> "$GITHUB_STEP_SUMMARY"
+          target=$(sed -n 's/^target=//p' <<< "$plan")
+          if [ -z "$target" ]; then
+            case "$reason" in
+              "main has moved on"*|"workflow files"*) echo "::warning::Not merged: $reason" ;;
+              *) echo "::notice::Not merged: $reason" ;;
+            esac
+            exit 0
+          fi
+          gh api --method PATCH "repos/$GH_REPO/git/refs/heads/main" \
+            -f sha="$target" -F force=false > /dev/null
+          for workflow in $(sed -n 's/^dispatch=//p' <<< "$plan"); do
+            gh workflow run "$workflow" --ref main
+          done
 
   # Main's Skåne region as a release, so a session can download it (about
   # 40 MB gzipped) instead of fetching the 900 MB extract and building it
