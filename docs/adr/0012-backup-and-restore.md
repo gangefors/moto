@@ -24,14 +24,14 @@ Forces:
   - `rides/NNNNN.gpx`: one GPX 1.1 file per ride, as Share writes it today: `<trk><name>`, a `<trkseg>` for each stretch recorded without a gap (the segment breaks, ADR-0011), `<time>` to the millisecond, and accuracy, speed and bearing in the existing `moto` extension. Unnamed rides have no `<name>`.
   - `routes/NNNNN.gpx`: one GPX file per saved route or loop: `<trk><name>` and the line as found. Its kind (route or loop), length, time and when it was saved go in the manifest's entry for the file.
   - `tags.gpx`: the quick-tags as GPX waypoints (`<wpt>` with `<time>`; heading and speed in the `moto` extension; reviewed or not as `<type>`; the ride it belongs to in the `moto` extension, by its file name in the backup).
-  - `settings.json`: the app's settings (Ride settings, Map, sort orders, theme), with `"schema": 1` and a documented schema. Unknown keys are ignored and a missing key keeps its default, so an older or newer app can still read it.
+  - `settings.json`: the app's settings (Ride settings, Map, sort orders, theme), with `"schema": 1` and a documented schema. Unknown keys are ignored, so an older or newer app can still read it.
 - **Not in the backup:** map regions and tile caches (downloaded again), derived data rebuilt after a restore (the OSM ways a ride was matched to, ADR-0010; sections' match status), a ride still being recorded, and the route a ride in progress follows. Debug data stays out.
 - **Restore merges; it never deletes.** The rider picks a file (`ACTION_OPEN_DOCUMENT`). The core reads the manifest first and the app shows what is in it (dated, with counts) before anything is written. Restore adds what the phone doesn't have:
   - sections through the existing import and its overlap rules;
   - a ride is skipped when one with the same start time and the same first and last fix is already there;
   - a route is skipped when one with the same name and the same line is already there;
   - a tag is skipped when one at the same time and place is already there;
-  - settings are replaced by the backup's (the dialog says so).
+  - each setting in the backup replaces the phone's, and a setting the backup doesn't have stays as it is (2026-10-03; the dialog says so).
 
   Everything goes in one SQLite transaction: a restore lands whole or not at all. Restoring the same file twice changes nothing. Afterwards rides and sections are matched again in the background, as after an import (ADR-0006, ADR-0010), and if regions listed in the manifest aren't installed the app offers to download them.
 - **Hostile-input rules** for the reader in `moto-core`:
