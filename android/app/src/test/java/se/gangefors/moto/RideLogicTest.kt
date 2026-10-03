@@ -154,4 +154,12 @@ class RideLogicTest {
         assertEquals(RIDE_ZOOM_FAST - 2.0, rideZoom(30.0, -2.0), 1e-9)
         assertEquals(RIDE_ZOOM_SLOW, rideZoom(null, Double.NaN), 1e-9)
     }
+
+    @Test
+    fun zoomButtonsNudgeTheRideZoomWithinLimits() {
+        assertEquals(0.5, nudgeRideZoom(0.0, ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(-1.0, nudgeRideZoom(-0.5, -ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(3.0, nudgeRideZoom(3.0, ZOOM_BUTTON_STEP), 1e-9)
+        assertEquals(-3.0, nudgeRideZoom(-3.0, -ZOOM_BUTTON_STEP), 1e-9)
+    }
 }

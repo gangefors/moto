@@ -98,6 +98,16 @@ fun rideZoom(speedMps: Double?, offset: Double = 0.0): Double {
 const val RIDE_ZOOM_STEPS = 7
 const val RIDE_ZOOM_DEFAULT_STEP = 2
 
+/** One tap on + or − changes the zoom this much. */
+const val ZOOM_BUTTON_STEP = 0.5
+
+/** Zoom levels + and − may add to the zoom while riding, each way. */
+private const val MAX_RIDE_ZOOM_NUDGE = 3.0
+
+/** [nudge] after a tap on + (positive [by]) or − on a ride. */
+fun nudgeRideZoom(nudge: Double, by: Double): Double =
+    (nudge + by).coerceIn(-MAX_RIDE_ZOOM_NUDGE, MAX_RIDE_ZOOM_NUDGE)
+
 /** How many zoom levels step [step] moves the zoom while riding: half a
  * level a step, from one closer (half as wide) to two wider (four times as
  * wide). Steps out of range count as the nearest. */

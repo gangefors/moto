@@ -22,6 +22,8 @@
     <string name="locate_zoom_value">%1$s: %2$s across</string>
     <string name="locate_zoom_wider">Wider</string>
     <string name="locate_zoom_closer">Closer</string>
+    <string name="zoom_in">Zoom in</string>
+    <string name="zoom_out">Zoom out</string>
     <string name="settings_ride_zoom">Zoom while riding</string>
     <string name="settings_ride_zoom_hint">How much of the map you see while riding a route; it still zooms out as you go faster. Widths are across this screen in southern Sweden.</string>
     <string name="ride_zoom_slow">Slow: %1$s across</string>
@@ -219,6 +221,7 @@
     <string name="say_clock">the clock</string>
     <string name="say_pin">the pin</string>
     <string name="say_compass">the compass needle</string>
+    <string name="say_zoom_in">the zoom in button</string>
     <string name="say_star_off">the crossed-out star</string>
     <string name="say_unridden">the road with a sparkle</string>
     <string name="say_settings">the settings button</string>
@@ -276,6 +279,8 @@
     <string name="help_key_recentre">Recentre</string>
     <string name="help_key_recentre_what">after you move the map: follows you again</string>
     <string name="help_key_ride_compass">Compass</string>
+    <string name="help_key_zoom">Zoom in and out</string>
+    <string name="help_key_zoom_what">while riding or recording, without pinching; on a route, for the rest of the ride</string>
     <string name="help_key_ride_compass_what">shows where north is while the map turns with you; a tap fixes north up for the rest of the ride</string>
     <string name="help_key_stop_following">X on the card</string>
     <string name="help_key_stop_following_what">stops following the route and keeps recording</string>
