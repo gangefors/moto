@@ -125,6 +125,25 @@ fun nudgeFromShown(shownZoom: Double, baseZoom: Double, by: Double): Double {
     return if (against) shownZoom - baseZoom else nudge
 }
 
+/** How long the zoom takes to follow a change of speed while riding. */
+const val RIDE_ZOOM_SPEED_MS = 1_500L
+
+/** How long the zoom takes after a tap on + or − while riding: twice as
+ * fast as for speed, so the map answers the button (Stefan, 2026-10-03). */
+const val RIDE_ZOOM_BUTTON_MS = 750L
+
+/** A zoom change this soon after a tap on + or − comes from the tap. */
+private const val RIDE_ZOOM_TAP_WINDOW_MS = 1_000L
+
+/**
+ * How long the ride zoom takes to reach its new level at [nowMs], when + or
+ * − was last tapped at [tappedAtMs] (null if never).
+ */
+fun rideZoomDurationMs(nowMs: Long, tappedAtMs: Long?): Long {
+    val since = tappedAtMs?.let { nowMs - it } ?: return RIDE_ZOOM_SPEED_MS
+    return if (since in 0..RIDE_ZOOM_TAP_WINDOW_MS) RIDE_ZOOM_BUTTON_MS else RIDE_ZOOM_SPEED_MS
+}
+
 /** How long the map takes to start following the rider in ride mode. */
 const val RIDE_CAMERA_TRANSITION_MS = 750L
 

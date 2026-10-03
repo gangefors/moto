@@ -237,4 +237,15 @@ class RideLogicTest {
         assertEquals(-1.0, nudgeFromShown(15.5, 15.5, -ZOOM_BUTTON_STEP), 1e-9)
         assertEquals(0.0, nudgeFromShown(Double.NaN, 15.5, 1.0), 1e-9)
     }
+
+    @Test
+    fun zoomAfterATapIsTwiceAsFastAsForSpeed() {
+        assertEquals(RIDE_ZOOM_SPEED_MS, rideZoomDurationMs(10_000, null))
+        assertEquals(RIDE_ZOOM_BUTTON_MS, rideZoomDurationMs(10_000, 10_000))
+        assertEquals(RIDE_ZOOM_BUTTON_MS, rideZoomDurationMs(10_500, 10_000))
+        assertEquals(RIDE_ZOOM_SPEED_MS, rideZoomDurationMs(12_000, 10_000))
+        // A clock that went back is not a tap.
+        assertEquals(RIDE_ZOOM_SPEED_MS, rideZoomDurationMs(9_000, 10_000))
+        assertEquals(RIDE_ZOOM_SPEED_MS, 2 * RIDE_ZOOM_BUTTON_MS)
+    }
 }
