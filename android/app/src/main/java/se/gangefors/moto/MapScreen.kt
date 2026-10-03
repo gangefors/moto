@@ -1686,6 +1686,12 @@ fun MapScreen() {
         val onLongClick = MapLibreMap.OnMapLongClickListener { point ->
             if (ridingNow.value) return@OnMapLongClickListener false
             if (marking) return@OnMapLongClickListener false
+            // No planning on the move (2026-10-03): stop first.
+            val fix = (recording as? Recording.State.Active)?.lastFix ?: mapFix(map)
+            if (!canPlan(fix, System.currentTimeMillis())) {
+                notify(resources.getString(R.string.plan_stop_first))
+                return@OnMapLongClickListener true
+            }
             if (ready == null) {
                 notify(regionStatus(resources, region), long = true)
                 return@OnMapLongClickListener true

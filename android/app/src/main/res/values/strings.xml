@@ -26,6 +26,7 @@
     <string name="zoom_out">Zoom out</string>
     <string name="settings_ride_zoom">Zoom while riding</string>
     <string name="settings_ride_zoom_hint">How much of the map you see while riding a route; it still zooms out as you go faster. Widths are across this screen in southern Sweden.</string>
+    <string name="plan_stop_first">Stop to plan a route or loop.</string>
     <string name="ride_zoom_slow">Slow: %1$s across</string>
     <string name="ride_zoom_fast">At 90 km/h: %1$s across</string>
     <string name="span_km">%1$d km</string>

@@ -13,6 +13,7 @@ import se.gangefors.moto.core.FollowedRoute
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.Route
+import se.gangefors.moto.core.TrackPoint
 
 /**
  * Riding a route (ADR-0011): what is ridden, and the small decisions the
@@ -207,3 +208,19 @@ fun recordingMinutes(startedAtMs: Long, nowMs: Long): Long = ((nowMs - startedAt
  * turned [mapBearing] degrees, so it points that way on screen (0–360). */
 fun arrowOnMap(bearingDeg: Double, mapBearing: Float): Float =
     ((bearingDeg - mapBearing) % 360.0 + 360.0).toFloat() % 360f
+
+/** Faster than this (slow walking pace, m/s) counts as on the move. */
+const val PLAN_MAX_MPS = 5 / 3.6
+
+/** A fix older than this says nothing about moving now. */
+const val PLAN_FIX_MAX_AGE_MS = 10_000L
+
+/** Whether planning may start at [nowMs] with the rider's latest [fix]:
+ * not when it says they move faster than [PLAN_MAX_MPS]. Without a fix,
+ * a speed or a recent one, planning is allowed, so poor GPS never locks
+ * the rider out. */
+fun canPlan(fix: TrackPoint?, nowMs: Long): Boolean {
+    val speed = fix?.speedMps?.takeIf { it.isFinite() } ?: return true
+    if (nowMs - fix.timeMs > PLAN_FIX_MAX_AGE_MS) return true
+    return speed <= PLAN_MAX_MPS
+}

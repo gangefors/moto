@@ -182,4 +182,17 @@ class RideLogicTest {
         assertEquals(270f, arrowOnMap(0.0, 90f), 1e-4f)
         assertEquals(350f, arrowOnMap(340.0, 350f), 1e-4f)
     }
+
+    @Test
+    fun noPlanningOnTheMove() {
+        fun fix(t: Long, mps: Double?) = se.gangefors.moto.core.TrackPoint(t, LatLon(55.7, 13.2), 5.0, mps, null)
+        assertTrue(canPlan(null, 0))
+        assertTrue(canPlan(fix(1_000, null), 2_000))
+        assertTrue(canPlan(fix(1_000, 0.5), 2_000))
+        assertTrue(canPlan(fix(1_000, PLAN_MAX_MPS), 2_000))
+        assertFalse(canPlan(fix(1_000, 3.0), 2_000))
+        // An old fix says nothing about now.
+        assertTrue(canPlan(fix(1_000, 20.0), 1_000 + PLAN_FIX_MAX_AGE_MS + 1))
+        assertTrue(canPlan(fix(1_000, Double.NaN), 2_000))
+    }
 }
