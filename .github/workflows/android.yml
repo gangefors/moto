@@ -21,8 +21,8 @@
 #   once core and build pass: `debug-latest` from main, `debug-branch`
 #   from a Claude work branch (`ccr-*`, `claude/*`), so a fix can be
 #   tested about 6 minutes after a push while the benchmark still runs.
-# - merge: once core, bench and build pass on a Claude work branch,
-#   fast-forwards main to it (.github/scripts/fast_forward.py) and starts
+# - merge: once core and build pass on a Claude work branch (not waiting
+#   for the benchmark), fast-forwards main to it (.github/scripts/fast_forward.py) and starts
 #   main's CI, so no session waits to merge by hand.
 #
 # Only the newest push is built: a newer push cancels core, bench and
@@ -454,7 +454,7 @@ jobs:
   # workflows, so the job starts main's CI and CodeQL itself.
   merge:
     name: Merge into main
-    needs: [core, bench, build]
+    needs: [core, build]
     if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/ccr-') || startsWith(github.ref, 'refs/heads/claude/'))
     runs-on: ubuntu-latest
     permissions:
