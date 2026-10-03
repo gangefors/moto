@@ -272,7 +272,7 @@
     <string name="help_key_recentre">Recentre</string>
     <string name="help_key_recentre_what">after you move the map: follows you again</string>
     <string name="help_key_ride_compass">Compass</string>
-    <string name="help_key_ride_compass_what">fixes north up; tap again to turn the map with you</string>
+    <string name="help_key_ride_compass_what">shows where north is while the map turns with you; a tap fixes north up for the rest of the ride</string>
     <string name="help_key_stop_following">X on the card</string>
     <string name="help_key_stop_following_what">stops following the route and keeps recording</string>
     <string name="help_key_stop_ride">Stop</string>
@@ -405,7 +405,7 @@
     <string name="settings_keep_screen_on_hint">For the phone on a handlebar mount. Uses more battery.</string>
     <string name="settings_group_riding">Riding a route</string>
     <string name="settings_turn_map">Turn the map with your direction</string>
-    <string name="settings_turn_map_hint">While you ride a route, the way you’re going is up. Tap the compass to fix north up, and again to turn the map with you.</string>
+    <string name="settings_turn_map_hint">While you ride a route, the way you’re going is up. Tap the compass to fix north up for the rest of the ride.</string>
     <string name="settings_off_alert">Alert when off the route</string>
     <string name="settings_off_alert_hint">A sound when you leave the route, also with the screen off. Change the sound in the phone’s notification settings.</string>
     <string name="ride_start">Ride</string>
@@ -431,8 +431,6 @@
     <string name="ride_fav_in_description">%1$s favourite in %2$.1f km</string>
     <string name="ride_fav_on_description">On a favourite rated %1$s, %2$.1f km of it left</string>
     <string name="ride_recentre">Follow my position again</string>
-    <string name="ride_north_fix">Fix north up</string>
-    <string name="ride_north_free">Turn the map with my direction</string>
     <string name="ride_resume_title">Carry on riding?</string>
     <string name="ride_resume_text">Moto stopped during your ride on %1$s. Carry on to follow the route again and add to the same recording.</string>
     <string name="ride_resume_carry_on">Carry on</string>

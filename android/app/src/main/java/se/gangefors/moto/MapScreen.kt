@@ -490,9 +490,11 @@ fun MapScreen() {
     // Ride settings: the map turns with the rider; an alert off the route.
     var turnMap by remember { mutableStateOf(RoutePrefs.turnMap(context)) }
     var offRouteAlert by remember { mutableStateOf(RoutePrefs.offRouteAlert(context)) }
-    // The rider fixed north up with the compass, or moved the map: until
-    // Recentre (or another tap on the compass).
+    // The rider fixed north up with the map's compass (for the rest of
+    // the ride), or moved the map (until Recentre).
     var northFixed by remember { mutableStateOf(false) }
+    // Where the ride card ends (px from the top), so the compass sits under it.
+    var rideCardBottom by remember { mutableIntStateOf(0) }
     var ridePanned by remember { mutableStateOf(false) }
     LaunchedEffect(riding) {
         if (!riding) {
@@ -1065,17 +1067,23 @@ fun MapScreen() {
     // The compass at the top right, under Ride settings' button when that
     // shows, else in the corner: clear of the cards and the sheet at the
     // bottom (Stefan, 2026-10-02).
-    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize) {
+    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, riding, rideCardBottom) {
         val m = map ?: return@LaunchedEffect
         val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
         with(density) {
+            // While riding, under the ride card.
+            val compassTop = if (riding && rideCardBottom > 0) {
+                rideCardBottom - insets.top + 8.dp.roundToPx()
+            } else {
+                compassTopDp(settingsButtonShown = !marking && !planning).dp.roundToPx()
+            }
             applyControlMargins(
                 m,
                 insets.copy(bottom = max(insets.bottom, sheet)),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
                 compassRight = TOP_BUTTON_MARGIN.roundToPx(),
-                compassTop = compassTopDp(settingsButtonShown = !marking && !planning).dp.roundToPx(),
+                compassTop = compassTop,
             )
         }
     }
@@ -1709,18 +1717,14 @@ fun MapScreen() {
 
     // Riding a route (ADR-0011): the map follows the rider, the way they
     // are going up (or north up), the rider low on the screen; a pan or
-    // pinch stops it until Recentre. Our compass takes MapLibre's place,
-    // which hides itself when north is up.
+    // pinch stops it until Recentre. MapLibre's compass shows while the map
+    // is turned; a tap on it fixes north up for the rest of the ride.
     DisposableEffect(map, style, hasLocation, riding, northFixed, turnMap, ridePanned, mapSize) {
         val m = map
         val s = style
-        if (m == null || s == null || !hasLocation || !riding) {
-            m?.uiSettings?.isCompassEnabled = true
-            return@DisposableEffect onDispose {}
-        }
+        if (m == null || s == null || !hasLocation || !riding) return@DisposableEffect onDispose {}
         enableLocation(context, m, s)
         val lc = m.locationComponent
-        m.uiSettings.isCompassEnabled = false
         lc.renderMode = RenderMode.GPS
         if (!ridePanned) {
             m.moveCamera(CameraUpdateFactory.paddingTo(0.0, riderTopPadding(mapSize.height).toDouble(), 0.0, 0.0))
@@ -1733,7 +1737,11 @@ fun MapScreen() {
                 if (ridingNow.value) ridePanned = true
             }
 
-            override fun onCameraTrackingChanged(currentMode: Int) = Unit
+            // The compass tapped: the location component stops turning
+            // the map; keep north up rather than turning it back.
+            override fun onCameraTrackingChanged(currentMode: Int) {
+                if (ridingNow.value && currentMode == CameraMode.TRACKING && turnMap && !northFixed) northFixed = true
+            }
         }
         lc.addOnCameraTrackingChangedListener(dismissed)
         onDispose { lc.removeOnCameraTrackingChangedListener(dismissed) }
@@ -1752,17 +1760,6 @@ fun MapScreen() {
         if (!riding || ridePanned) return@LaunchedEffect
         m.locationComponent.takeIf { it.isLocationComponentActivated }?.zoomWhileTracking(rideZoomStep, 1_500)
     }
-    // Where north is, for our compass.
-    var mapBearing by remember { mutableFloatStateOf(0f) }
-    DisposableEffect(map, riding) {
-        val m = map
-        if (m == null || !riding) return@DisposableEffect onDispose {}
-        val move = MapLibreMap.OnCameraMoveListener { mapBearing = m.cameraPosition.bearing.toFloat() }
-        m.addOnCameraMoveListener(move)
-        mapBearing = m.cameraPosition.bearing.toFloat()
-        onDispose { m.removeOnCameraMoveListener(move) }
-    }
-
     /**
      * Runs [action] on the store off the main thread, then reloads the
      * sections and shows the message [action] returns.
@@ -1940,10 +1937,9 @@ fun MapScreen() {
                 modifier = Modifier.align(Alignment.TopEnd),
             )
         }
-        // Riding a route: the card at the top, our compass below it on the
-        // right (ADR-0011).
+        // Riding a route: the card at the top, the map's compass below it
+        // on the right (ADR-0011).
         if (following != null) {
-            var cardBottom by remember { mutableIntStateOf(0) }
             RideCard(
                 following = following,
                 darkMap = darkMap,
@@ -1955,20 +1951,7 @@ fun MapScreen() {
                     .padding(top = 8.dp, start = 8.dp, end = 8.dp)
                     .widthIn(max = TOP_BOX_MAX_WIDTH)
                     .fillMaxWidth()
-                    .onGloballyPositioned { cardBottom = it.boundsInRoot().bottom.roundToInt() },
-            )
-            RideCompass(
-                bearing = mapBearing,
-                northFixed = northFixed || !turnMap,
-                onClick = {
-                    if (turnMap) northFixed = !northFixed
-                    ridePanned = false
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, cardBottom + 8.dp.roundToPx()) }
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                    .padding(end = TOP_BUTTON_MARGIN),
+                    .onGloballyPositioned { rideCardBottom = it.boundsInRoot().bottom.roundToInt() },
             )
         }
         // Notices across the top, the whole width below the top buttons
