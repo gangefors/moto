@@ -9,6 +9,8 @@ import se.gangefors.moto.debug.DebugTools
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.location.Location
+import android.location.LocationManager
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Rect
@@ -1257,6 +1259,8 @@ fun MapScreen() {
     // The location button's zoom levels (Ride settings).
     var locateZooms by remember { mutableStateOf(RoutePrefs.locateZooms(context)) }
     var zoomBeforeOverview by remember { mutableStateOf<Double?>(null) }
+    // The map has gone to the rider once at the start, or the rider moved it first.
+    var startSettled by remember { mutableStateOf(false) }
 
     fun mapWidthDp(): Double = (mapSize.width / density.density).toDouble().coerceAtLeast(1.0)
 
@@ -1781,12 +1785,44 @@ fun MapScreen() {
         if (m == null || s == null || !hasLocation) return@DisposableEffect onDispose {}
         enableLocation(context, m, s)
         // Start at the area's zoom, on the rider.
+        if (m.locationComponent.lastKnownLocation != null) startSettled = true
         followRider(m, locateZooms.area.toDouble())
         val moved = MapLibreMap.OnCameraMoveStartedListener { reason ->
-            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) overviewShown = false
+            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                overviewShown = false
+                startSettled = true
+            }
         }
         m.addOnCameraMoveStartedListener(moved)
         onDispose { m.removeOnCameraMoveStartedListener(moved) }
+    }
+    // Without a position yet, following alone never centred the map when
+    // the first fix came (the rider's video, 2026-10-04). So wait for the
+    // first fix and go to it at the area's zoom, unless the rider has
+    // moved the map meanwhile or is already riding.
+    LaunchedEffect(map, style, hasLocation) {
+        val m = map
+        if (m == null || style == null || !hasLocation) return@LaunchedEffect
+        // The phone's last known position is there at once: go to it now,
+        // and the first real fix then makes it exact.
+        if (!startSettled && m.locationComponent.takeIf { it.isLocationComponentActivated }?.lastKnownLocation == null) {
+            lastKnownPosition(context)?.let { rough ->
+                if (!startSettled && !rideModeNow.value) {
+                    m.moveCamera(
+                        CameraUpdateFactory.newLatLngZoom(LatLng(rough.latitude, rough.longitude), locateZooms.area.toDouble()),
+                    )
+                }
+            }
+        }
+        while (!startSettled) {
+            val fix = m.locationComponent.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
+            if (fix != null) {
+                if (!rideModeNow.value) followRider(m, locateZooms.area.toDouble())
+                startSettled = true
+            } else {
+                delay(START_FIX_POLL_MS)
+            }
+        }
     }
 
     // Riding a route (ADR-0011): the map follows the rider, the way they
@@ -3280,6 +3316,19 @@ private val SCALE_START: Dp = ATTRIBUTION_OFFSET + 32.dp
 
 /** The bottom-right buttons' distance from the safe edges. */
 private val FAB_PADDING: Dp = 16.dp
+
+/** The phone's most recent known position from any provider, if any
+ * (the permission is already granted where this is called). */
+@SuppressLint("MissingPermission")
+private fun lastKnownPosition(context: Context): Location? {
+    val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+    return runCatching {
+        manager.getProviders(true).mapNotNull { manager.getLastKnownLocation(it) }.maxByOrNull { it.time }
+    }.getOrNull()
+}
+
+/** How often the start waits for the first position fix. */
+private const val START_FIX_POLL_MS = 500L
 
 /** Moves the compass, logo and attribution inside the safe area; px
  * arguments. The compass is placed from the top right corner. */
