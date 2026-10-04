@@ -37,7 +37,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
@@ -53,8 +53,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Badge
@@ -296,14 +294,12 @@ fun MapScreen() {
     )
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
-    // A phone on its side plans in a side panel at the left instead of a
-    // sheet at the bottom (usesPlanningPanel); its width follows the window.
+    // On its side (landscape) the cards (the planning sheet, the info and
+    // start cards) are the same as upright but sit in a column at the
+    // bottom left, no wider than columnWidthDp.
     val windowConfig = LocalConfiguration.current
-    val panelWindow = usesPlanningPanel(windowConfig.screenWidthDp, windowConfig.screenHeightDp)
-    val panelWidthDp = planningPanelWidthDp(windowConfig.screenWidthDp)
-    // Whether the panel shows now; set once planning is known, read where
-    // routes are fitted.
-    val panelShownNow = remember { mutableStateOf(false) }
+    val landscape = isLandscape(windowConfig.screenWidthDp, windowConfig.screenHeightDp)
+    val columnWidthDp = leftColumnWidthDp(windowConfig.screenWidthDp)
 
     // Where the panels over the map end, in pixels, measured as they are
     // laid out: the card at the top, the buttons at the right, the tag
@@ -314,6 +310,11 @@ fun MapScreen() {
     var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var sheetTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var cardsTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    // The right edges of the sheet and the cards (0 while not shown): in
+    // landscape the map's controls and fitted routes keep right of them.
+    var sheetRight by remember { mutableIntStateOf(0) }
+    var cardsRight by remember { mutableIntStateOf(0) }
+    val columnRight = if (landscape) max(sheetRight, cardsRight) else 0
     // The section edit sheet's top edge while it is open.
     var editTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     fun fitPaddingNow(): FitPadding {
@@ -321,15 +322,15 @@ fun MapScreen() {
         val panels = Panels(
             width = w,
             height = h,
-            // With the planning side panel, routes are fitted right of it.
-            left = if (panelShownNow.value) {
-                with(density) { panelFitLeft(insets.left, panelWidthDp.dp.roundToPx(), PANEL_GAP_DP.dp.roundToPx()) }
-            } else {
-                insets.left
-            },
+            // In landscape the cards are at the left: routes are fitted right of them.
+            left = leftClearance(landscape, insets.left, columnRight),
             top = max(topPanelBottom, insets.top),
             right = max(w - buttonsLeft, insets.right),
-            bottom = maxOf(h - tagTop, h - sheetTop, h - cardsTop, h - editTop, insets.bottom),
+            bottom = if (landscape) {
+                maxOf(h - tagTop, h - editTop, insets.bottom)
+            } else {
+                maxOf(h - tagTop, h - sheetTop, h - cardsTop, h - editTop, insets.bottom)
+            },
         )
         return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
     }
@@ -1073,9 +1074,6 @@ fun MapScreen() {
     // Planning a route or loop: the sheet shows at the bottom, and the tag
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
-    // Planning in the side panel at the left (landscape on a low window).
-    val panelMode = planning && panelWindow
-    SideEffect { panelShownNow.value = panelMode }
     // Recording without a route, with nothing else in hand: ride mode too,
     // with the recording card (2026-10-03). Planning, a picked
     // start or marking pause it; riding a plan swaps in the ride card.
@@ -1151,8 +1149,8 @@ fun MapScreen() {
     // The planning sheet reaches down behind the navigation bar: its
     // buttons then contrast with the sheet, not the system theme.
     NavigationBarIconsFollow(
-        // (Not in the side panel: it stops above the bar.)
-        if (planning && !panelMode) MaterialTheme.colorScheme.surfaceColorAtElevation(PLAN_SHEET_ELEVATION) else null,
+        // (Not in landscape: the sheet is at the left, the map shows behind the rest of the bar.)
+        if (planning && !landscape) MaterialTheme.colorScheme.surfaceColorAtElevation(PLAN_SHEET_ELEVATION) else null,
     )
     // A new start or new route ends: the sheet starts at rest, so the map
     // shows what was found.
@@ -1163,18 +1161,18 @@ fun MapScreen() {
     LaunchedEffect(routeEnds != null) { if (routeEnds != null) cardExpanded = false }
     // The map's own controls (compass, logo, attribution) stay clear of
     // the system bars, the buttons and the sheet.
-    val riddenButton = riddenButtonShown(planning, cardExpanded && !panelMode, hasRidden)
+    val riddenButton = riddenButtonShown(planning, cardExpanded && !landscape, hasRidden)
     // Planning over: the ridden roads follow the setting again.
     LaunchedEffect(planning) { if (!planning) riddenWhilePlanning = null }
     // The compass at the top right, left of Ride settings' button when
     // that shows, else in the corner: clear of the cards and the sheet at the
     // bottom (2026-10-02).
-    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, panelMode, panelWidthDp) {
+    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, landscape, columnRight) {
         val m = map ?: return@LaunchedEffect
-        val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
+        // Upright the sheet is at the bottom; in landscape at the left, where
+        // the logo and attribution start right of it.
+        val sheet = if (planning && !landscape && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
         with(density) {
-            // The logo and attribution start right of the side panel.
-            val shift = if (panelMode) panelControlsShift(panelWidthDp.dp.roundToPx(), PANEL_GAP_DP.dp.roundToPx()) else 0
             // In ride mode, under the ride or recording card.
             // With Ride settings' button showing, the compass sits in
             // the top row, left of it, in both orientations.
@@ -1187,7 +1185,7 @@ fun MapScreen() {
             val compassRight = placement.rightDp.dp.roundToPx()
             applyControlMargins(
                 m,
-                insets.copy(left = insets.left + shift, bottom = max(insets.bottom, sheet)),
+                insets.copy(left = leftClearance(landscape, insets.left, columnRight), bottom = max(insets.bottom, sheet)),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
                 compassRight = compassRight,
@@ -1692,7 +1690,7 @@ fun MapScreen() {
     }
     // When the card grows or shrinks (expanded, collapsed, a message), the
     // route or loops shown stay in view.
-    LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize, panelMode, panelWidthDp) {
+    LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize, landscape, columnRight) {
         // Once the sheet has settled: a fit while it still grows would
         // aim for the space above it as it was, not as it ends up.
         delay(SETTLE_MS)
@@ -2217,7 +2215,7 @@ fun MapScreen() {
         // logo and attribution and below the tag button, clear of the
         // position button; cards drawn later cover it.
         val scaleAbove = with(density) {
-            val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
+            val sheet = if (planning && !landscape && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
             max(insets.bottom, sheet).toDp()
         }
         ScaleBar(
@@ -2227,7 +2225,7 @@ fun MapScreen() {
                 .align(Alignment.BottomStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(
-                    start = SCALE_START + if (panelMode) (panelWidthDp + PANEL_GAP_DP).dp else 0.dp,
+                    start = SCALE_START + with(density) { (leftClearance(landscape, insets.left, columnRight) - insets.left).toDp() },
                     bottom = scaleAbove + SCALE_BOTTOM,
                 ),
         )
@@ -2252,16 +2250,19 @@ fun MapScreen() {
         val via = selectedVia?.takeIf { it in vias.indices }
         val taskCard = message != null || marking || offerLoop || via != null
         // The buttons at the bottom step aside for them, as for planning.
-        val cardsShown = taskCard || shownRide != null || shownSaved != null || shownSection != null || roadInfo != null ||
+        val infoCardOpen = shownRide != null || shownSaved != null || shownSection != null || roadInfo != null ||
             (favouriteInfo != null && !rideMode)
+        // Landscape with the sheet pulled up has no room for info cards.
+        val infoCardsShown = !planning || showInfoCardsWithPlan(landscape, cardExpanded)
+        val cardsShown = taskCard || (infoCardOpen && infoCardsShown)
         // The ridden roads button, above the sheet on the right: switches
         // the layer, and Ride settings' switch with it. Cards above the
         // sheet take its place.
-        // In the side panel the cards are at the left, so it stays; it is
-        // offset by all the safe insets, as nothing covers the bar there.
-        if (riddenButton && (!cardsShown || panelMode)) {
+        // In landscape the cards are at the left, so it stays; it is offset
+        // by all the safe insets, as nothing covers the bar there.
+        if (riddenButton && (!cardsShown || landscape)) {
             val aboveSheet = with(density) {
-                if (sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
+                if (!landscape && sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
             }
             RiddenButton(
                 on = riddenOn,
@@ -2270,28 +2271,16 @@ fun MapScreen() {
                     .align(Alignment.BottomEnd)
                     .windowInsetsPadding(
                         WindowInsets.safeDrawing.only(
-                            if (panelMode) WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom else WindowInsetsSides.Horizontal,
+                            if (landscape) WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom else WindowInsetsSides.Horizontal,
                         ),
                     )
                     .padding(end = FAB_PADDING, bottom = aboveSheet + FAB_PADDING),
             )
         }
-        // Planning in the side panel: + and − at the right edge, stacked
-        // above the ridden roads button (or in its place without one).
-        if (panelMode) {
-            ZoomButtons(
-                onZoom = { by -> map?.animateCamera(CameraUpdateFactory.zoomBy(by)) },
-                cellHeight = PANEL_ZOOM_CELL,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                    .padding(end = FAB_PADDING, bottom = FAB_PADDING + if (riddenButton) TOP_BUTTON_SIZE + FAB_PADDING else 0.dp),
-            )
-        }
         // The cards: info cards (a favourite, a ride, a saved route, a
         // favourite section, a road; at most one) sit on top; whatever is
         // in hand (the start card, a task, a message) stays below them,
-        // nearest the sheet. In the side panel they are its first cards.
+        // nearest the sheet.
         val infoCards: @Composable () -> Unit = {
             if (!rideMode) favouriteInfo?.let { f ->
                 FavouriteInfoCard(
@@ -2459,22 +2448,37 @@ fun MapScreen() {
                 }
             }
         }
-        if (cardsShown && !panelMode) {
-            DisposableEffect(Unit) { onDispose { cardsTop = Int.MAX_VALUE } }
+        if (cardsShown) {
+            DisposableEffect(Unit) {
+                onDispose {
+                    cardsTop = Int.MAX_VALUE
+                    cardsRight = 0
+                }
+            }
             val aboveSheet = with(density) {
                 if (planning && sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
             }
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .then(if (planning) Modifier else Modifier.safeDrawingPadding())
+                    .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
+                    .then(
+                        when {
+                            !planning -> Modifier.safeDrawingPadding()
+                            // The sheet covers the bar below; the cutout at the left is still clear.
+                            landscape -> Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Left))
+                            else -> Modifier
+                        },
+                    )
                     .padding(start = 8.dp, end = 8.dp, bottom = aboveSheet + 8.dp)
-                    .widthIn(max = TOP_BOX_MAX_WIDTH)
+                    .widthIn(max = if (landscape) columnWidthDp.dp - 16.dp else TOP_BOX_MAX_WIDTH)
                     .fillMaxWidth()
-                    .onGloballyPositioned { cardsTop = it.boundsInRoot().top.roundToInt() },
+                    .onGloballyPositioned {
+                        cardsTop = it.boundsInRoot().top.roundToInt()
+                        cardsRight = it.boundsInRoot().right.roundToInt()
+                    },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                infoCards()
+                if (infoCardsShown) infoCards()
                 taskCardContent()
             }
         }
@@ -2510,17 +2514,14 @@ fun MapScreen() {
                 shownRide != null -> shownRide = null
             }
         }
-        // Planning a route or loop: a sheet at the bottom, or on a low
-        // landscape window a panel at the left; the map fits what it plans
-        // in the space left. The route and loop cards are the same in both.
-        val planCards: @Composable (Boolean, Dp, Modifier) -> Unit = { panel, maxHeight, cardModifier ->
+        // Planning a route or loop: a sheet at the bottom, in landscape at
+        // the bottom left; the map fits what it plans in the space left.
+        val planCards: @Composable (Dp) -> Unit = { maxHeight ->
                 routeEnds?.let {
                     RouteCard(
                         expanded = cardExpanded,
                         onExpandedChange = { cardExpanded = it },
                         maxHeight = maxHeight,
-                        modifier = cardModifier,
-                        panel = panel,
                         summary = routeSummary,
                         gravel = gravel,
                         onGravel = { g ->
@@ -2586,8 +2587,6 @@ fun MapScreen() {
                         expanded = cardExpanded,
                         onExpandedChange = { cardExpanded = it },
                         maxHeight = maxHeight,
-                        modifier = cardModifier,
-                        panel = panel,
                         summary = shown?.let { r ->
                             summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM, r.unriddenShare)
                         },
@@ -2626,47 +2625,33 @@ fun MapScreen() {
                     )
                 }
         }
-        if (planning && !panelMode) {
-            DisposableEffect(Unit) { onDispose { sheetTop = Int.MAX_VALUE } }
-            val sheetMaxHeight = with(density) {
-                if (mapSize.height > 0) (mapSize.height * SHEET_MAX_SHARE).toDp() else 600.dp
-            }
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .widthIn(max = TOP_BOX_MAX_WIDTH)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { sheetTop = it.boundsInRoot().top.roundToInt() },
-            ) {
-                planCards(false, sheetMaxHeight, Modifier)
-            }
-        }
-        if (planning && panelMode) {
-            // One column at the left, from below the status bar to above
-            // the navigation bar and past a cutout: the info card, the
-            // start card, then the route or loop card. At rest it scrolls
-            // when it is taller; expanded, the info card is hidden and the
-            // route or loop card fills the height (its choices scroll).
-            val panelMaxHeight = with(density) {
-                if (mapSize.height > 0) {
-                    (mapSize.height - insets.top - insets.bottom).toDp() - PANEL_GAP_DP.dp * 2
-                } else {
-                    300.dp
+        if (planning) {
+            DisposableEffect(Unit) {
+                onDispose {
+                    sheetTop = Int.MAX_VALUE
+                    sheetRight = 0
                 }
             }
-            val panelScroll = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Left + WindowInsetsSides.Vertical))
-                    .padding(start = PANEL_GAP_DP.dp, top = PANEL_GAP_DP.dp, bottom = PANEL_GAP_DP.dp)
-                    .width(panelWidthDp.dp)
-                    .then(if (cardExpanded) Modifier.fillMaxHeight() else Modifier.verticalScroll(panelScroll)),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            val sheetMaxHeight = with(density) {
+                if (mapSize.height > 0) (mapSize.height * sheetMaxShare(landscape, cardExpanded)).toDp() else 600.dp
+            }
+            // Landscape: the column at the left, its content columnWidthDp
+            // wide (the sheet reaches under a cutout, padded inside), and the
+            // bar's inset at the right is not its to pad.
+            Box(
+                Modifier
+                    .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
+                    .widthIn(max = if (landscape) columnWidthDp.dp + with(density) { insets.left.toDp() } else TOP_BOX_MAX_WIDTH)
+                    .then(
+                        if (landscape) Modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Right)) else Modifier,
+                    )
+                    .fillMaxWidth()
+                    .onGloballyPositioned {
+                        sheetTop = it.boundsInRoot().top.roundToInt()
+                        sheetRight = it.boundsInRoot().right.roundToInt()
+                    },
             ) {
-                if (!cardExpanded) infoCards()
-                taskCardContent()
-                planCards(true, panelMaxHeight, if (cardExpanded) Modifier.weight(1f) else Modifier)
+                planCards(sheetMaxHeight)
             }
         }
         val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
@@ -3512,9 +3497,6 @@ private const val SAMPLE_INTERVAL_MS = 500L
 /** System-bar and cutout insets in pixels. */
 private data class SafeInsets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
-/** The planning sheet pulled up covers at most this share of the map. */
-private const val SHEET_MAX_SHARE = 0.55f
-
 /** How long the panels must stay still before the map fits to them. */
 private const val SETTLE_MS = 150L
 
@@ -3546,9 +3528,6 @@ private val ATTRIBUTION_OFFSET: Dp = 92.dp
 
 /** The scale bar starts this far from the left: past the attribution. */
 private val SCALE_START: Dp = ATTRIBUTION_OFFSET + 32.dp
-
-/** Each zoom button's height beside the planning side panel (two cells, 96 dp). */
-private val PANEL_ZOOM_CELL: Dp = 48.dp
 
 /** The bottom-right buttons' distance from the safe edges. */
 private val FAB_PADDING: Dp = 16.dp

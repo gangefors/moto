@@ -8,54 +8,57 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class PlanPanelLogicTest {
+class CardLayoutTest {
     @Test
-    fun landscapeBelow600DpUsesThePanel() {
-        assertTrue(usesPlanningPanel(891, 411))
-        assertTrue(usesPlanningPanel(640, 360))
+    fun landscapeIsWiderThanHigh() {
+        assertTrue(isLandscape(891, 411))
+        assertTrue(isLandscape(1280, 800))
+        assertFalse(isLandscape(500, 500))
+        assertFalse(isLandscape(411, 891))
     }
 
     @Test
-    fun heightBoundaryIs600() {
-        assertTrue(usesPlanningPanel(1000, 599))
-        assertFalse(usesPlanningPanel(1000, 600))
-        assertFalse(usesPlanningPanel(1280, 800))
+    fun columnIsHalfTheWidth() {
+        assertEquals(320f, leftColumnWidthDp(640), 0.01f)
+        assertEquals(350f, leftColumnWidthDp(700), 0.01f)
     }
 
     @Test
-    fun equalSidesAndPortraitKeepTheSheet() {
-        assertFalse(usesPlanningPanel(500, 500))
-        assertFalse(usesPlanningPanel(411, 891))
-        assertFalse(usesPlanningPanel(360, 500))
+    fun columnIsAtMost400Dp() {
+        assertEquals(400f, leftColumnWidthDp(800), 0.01f)
+        assertEquals(400f, leftColumnWidthDp(1280), 0.01f)
+        assertEquals(0f, leftColumnWidthDp(-5), 0.01f)
     }
 
     @Test
-    fun panelIs40PercentOfTheWidth() {
-        assertEquals(356.4f, planningPanelWidthDp(891), 0.01f)
-        assertEquals(256f, planningPanelWidthDp(640), 0.01f)
+    fun expandedSheetHidesInfoCardsOnlyInLandscape() {
+        assertFalse(showInfoCardsWithPlan(landscape = true, expanded = true))
+        assertTrue(showInfoCardsWithPlan(landscape = true, expanded = false))
+        assertTrue(showInfoCardsWithPlan(landscape = false, expanded = true))
+        assertTrue(showInfoCardsWithPlan(landscape = false, expanded = false))
     }
 
     @Test
-    fun panelIsAtMost360Dp() {
-        assertEquals(360f, planningPanelWidthDp(900), 0.01f)
-        assertEquals(360f, planningPanelWidthDp(1200), 0.01f)
-        assertEquals(0f, planningPanelWidthDp(-5), 0.01f)
+    fun sheetGrowsHigherOnlyWhenExpandedInLandscape() {
+        assertEquals(0.85f, sheetMaxShare(landscape = true, expanded = true), 0f)
+        assertEquals(0.55f, sheetMaxShare(landscape = true, expanded = false), 0f)
+        assertEquals(0.55f, sheetMaxShare(landscape = false, expanded = true), 0f)
     }
 
     @Test
-    fun panelStartsAGapPastTheCutout() {
-        assertEquals(8 + 356, panelRightEdge(insetLeft = 0, panelWidth = 356, gap = 8))
-        assertEquals(48 + 8 + 356, panelRightEdge(insetLeft = 48, panelWidth = 356, gap = 8))
+    fun landscapeControlsAndRoutesClearTheColumn() {
+        assertEquals(408, leftClearance(landscape = true, insetLeft = 0, columnRight = 408))
+        assertEquals(408, leftClearance(landscape = true, insetLeft = 48, columnRight = 408))
     }
 
     @Test
-    fun routesAreFittedRightOfThePanel() {
-        assertEquals(48 + 8 + 356 + 8, panelFitLeft(insetLeft = 48, panelWidth = 356, gap = 8))
+    fun landscapeWithNoColumnKeepsTheInset() {
+        assertEquals(48, leftClearance(landscape = true, insetLeft = 48, columnRight = 0))
     }
 
     @Test
-    fun controlsShiftByTheWidthAndAGap() {
-        assertEquals(364, panelControlsShift(panelWidth = 356, gap = 8))
+    fun portraitIgnoresTheColumn() {
+        assertEquals(0, leftClearance(landscape = false, insetLeft = 0, columnRight = 1080))
     }
 
     @Test

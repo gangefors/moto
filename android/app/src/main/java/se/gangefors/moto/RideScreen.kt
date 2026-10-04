@@ -427,16 +427,16 @@ fun ResumeRideDialog(name: String, onCarryOn: () -> Unit, onSave: () -> Unit) {
 
 /** + and − on one surface, like the map's other buttons: a pinch is hard
  * with gloves while riding or recording (2026-10-03). [onZoom]
- * gets the zoom levels to add; [cellHeight] is each button's height. */
+ * gets the zoom levels to add. */
 @Composable
-fun ZoomButtons(onZoom: (Double) -> Unit, modifier: Modifier = Modifier, cellHeight: Dp = 52.dp) {
+fun ZoomButtons(onZoom: (Double) -> Unit, modifier: Modifier = Modifier) {
     Surface(shape = RoundedCornerShape(24.dp), shadowElevation = 3.dp, tonalElevation = 3.dp, modifier = modifier.width(48.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            IconButton(onClick = { onZoom(ZOOM_BUTTON_STEP) }, modifier = Modifier.size(48.dp, cellHeight)) {
+            IconButton(onClick = { onZoom(ZOOM_BUTTON_STEP) }, modifier = Modifier.size(48.dp, 52.dp)) {
                 Icon(painterResource(R.drawable.ic_zoom_in), stringResource(R.string.zoom_in))
             }
             HorizontalDivider(Modifier.width(28.dp))
-            IconButton(onClick = { onZoom(-ZOOM_BUTTON_STEP) }, modifier = Modifier.size(48.dp, cellHeight)) {
+            IconButton(onClick = { onZoom(-ZOOM_BUTTON_STEP) }, modifier = Modifier.size(48.dp, 52.dp)) {
                 Icon(painterResource(R.drawable.ic_zoom_out), stringResource(R.string.zoom_out))
             }
         }
