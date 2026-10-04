@@ -105,6 +105,10 @@ import androidx.compose.ui.unit.Velocity
  * the sheet instead, like Android's own sheets: up opens it, down from
  * the top puts it to rest. The handle and a fixed header always drag it;
  * Back puts it to rest.
+ *
+ * As a [panel] (landscape on a low window, a card in the side column) it
+ * has no handle and no drag: the arrows in the header open and close it,
+ * Back too, and all four corners are rounded.
  */
 @Composable
 fun PlanSheet(
@@ -112,6 +116,7 @@ fun PlanSheet(
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
     modifier: Modifier = Modifier,
+    panel: Boolean = false,
     header: @Composable ColumnScope.() -> Unit,
     details: @Composable ColumnScope.() -> Unit,
 ) {
@@ -121,39 +126,50 @@ fun PlanSheet(
     BackHandler(enabled = expanded) { onExpandedChange(false) }
     Surface(
         modifier = modifier.fillMaxWidth().heightIn(max = maxHeight),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = if (panel) MaterialTheme.shapes.large else RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         tonalElevation = PLAN_SHEET_ELEVATION,
-        shadowElevation = 6.dp,
+        shadowElevation = if (panel) 3.dp else 6.dp,
     ) {
         Column(
-            Modifier
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
-        ) {
-            val handleDrag = Modifier.draggable(
-                state = drag,
-                orientation = Orientation.Vertical,
-                onDragStarted = { dragged = 0f },
-                onDragStopped = {
-                    if (dragged < -threshold) onExpandedChange(true)
-                    if (dragged > threshold) onExpandedChange(false)
-                },
-            )
-            val handleLabel = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand)
-            Box(
+            if (panel) {
+                Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+            } else {
                 Modifier
-                    .fillMaxWidth()
-                    .height(SHEET_HANDLE_HEIGHT)
-                    .then(handleDrag)
-                    .clickable(onClickLabel = handleLabel) { onExpandedChange(!expanded) }
-                    .semantics { contentDescription = handleLabel },
-                contentAlignment = Alignment.Center,
-            ) {
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .padding(start = 16.dp, end = 8.dp, bottom = 8.dp)
+            },
+        ) {
+            val handleDrag = if (panel) {
+                Modifier
+            } else {
+                Modifier.draggable(
+                    state = drag,
+                    orientation = Orientation.Vertical,
+                    onDragStarted = { dragged = 0f },
+                    onDragStopped = {
+                        if (dragged < -threshold) onExpandedChange(true)
+                        if (dragged > threshold) onExpandedChange(false)
+                    },
+                )
+            }
+            val handleHeight = if (panel) 0.dp else SHEET_HANDLE_HEIGHT
+            if (!panel) {
+                val handleLabel = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand)
                 Box(
                     Modifier
-                        .size(width = 36.dp, height = 4.dp)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
-                )
+                        .fillMaxWidth()
+                        .height(handleHeight)
+                        .then(handleDrag)
+                        .clickable(onClickLabel = handleLabel) { onExpandedChange(!expanded) }
+                        .semantics { contentDescription = handleLabel },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 36.dp, height = 4.dp)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(2.dp)),
+                    )
+                }
             }
             // What the content can't scroll any further moves the sheet;
             // the gesture's end (its fling) decides, like the handle's.
@@ -179,7 +195,7 @@ fun PlanSheet(
             // take more than half the sheet (very large fonts), when it all
             // scrolls as one, as at rest, so the choices keep room.
             var headerPx by remember { mutableIntStateOf(0) }
-            val roomPx = with(LocalDensity.current) { (maxHeight - SHEET_HANDLE_HEIGHT).toPx() }
+            val roomPx = with(LocalDensity.current) { (maxHeight - handleHeight).toPx() }
             val fixedTop = expanded && fixesTop(headerPx, roomPx)
             val measured = Modifier.onSizeChanged { headerPx = it.height }
             val divider = @Composable { HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp)) }
@@ -194,7 +210,7 @@ fun PlanSheet(
                 Modifier
                     .weight(1f, fill = false)
                     .scrollHints(scroll)
-                    .nestedScroll(overscroll)
+                    .then(if (panel) Modifier else Modifier.nestedScroll(overscroll))
                     .verticalScroll(scroll),
             ) {
                 if (!fixedTop) {
@@ -257,12 +273,14 @@ fun RouteCard(
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
     modifier: Modifier = Modifier,
+    panel: Boolean = false,
 ) {
     PlanSheet(
         expanded = expanded,
         onExpandedChange = onExpandedChange,
         maxHeight = maxHeight,
         modifier = modifier,
+        panel = panel,
         header = {
             SheetTop(
                 summary = summary,
@@ -275,6 +293,7 @@ fun RouteCard(
                 onClose = onClose,
                 closeDescription = stringResource(R.string.route_close),
                 kept = kept,
+                arrow = if (panel && expanded) ({ CardArrow(true) { onExpandedChange(false) } }) else null,
             )
             ChoiceSwitcher(
                 found = summary != null,
@@ -289,7 +308,7 @@ fun RouteCard(
                 onRide = onRide,
             )
             if (!expanded) {
-                OptionChips(routeSummaryItems(arrival, viaCount, gravel, favourites, unridden), allowedKinds(avoid)) { onExpandedChange(true) }
+                OptionChips(routeSummaryItems(arrival, viaCount, gravel, favourites, unridden), allowedKinds(avoid), panel) { onExpandedChange(true) }
             }
         },
         details = {
@@ -442,6 +461,7 @@ fun LoopCard(
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
     modifier: Modifier = Modifier,
+    panel: Boolean = false,
 ) {
     val found = summary != null
     PlanSheet(
@@ -449,6 +469,7 @@ fun LoopCard(
         onExpandedChange = onExpandedChange,
         maxHeight = maxHeight,
         modifier = modifier,
+        panel = panel,
         header = {
             SheetTop(
                 summary = summary,
@@ -461,6 +482,7 @@ fun LoopCard(
                 onClose = onClose,
                 closeDescription = stringResource(R.string.loop_close),
                 kept = kept,
+                arrow = if (panel && expanded) ({ CardArrow(true) { onExpandedChange(false) } }) else null,
             )
             ChoiceSwitcher(
                 found = found,
@@ -476,7 +498,7 @@ fun LoopCard(
                 onRide = onRide,
             )
             if (!expanded) {
-                OptionChips(loopSummaryItems(choice, direction, gravel, favourites, unridden), allowedKinds(avoid)) {
+                OptionChips(loopSummaryItems(choice, direction, gravel, favourites, unridden), allowedKinds(avoid), panel) {
                     onExpandedChange(true)
                 }
             }
@@ -627,6 +649,7 @@ private fun SheetTop(
     kept: Int,
     problem: String? = null,
     problemTitle: String = "",
+    arrow: (@Composable () -> Unit)? = null,
 ) {
     val shown = summary
     val finding = shown == null && problem == null
@@ -666,29 +689,58 @@ private fun SheetTop(
             Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
     }
+    // In the side panel the arrow that compacts the card ends the figures
+    // line (or, with no figures, a line of its own).
     if (problem != null) {
-        Text(
-            problem,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(end = 8.dp),
-        )
+        LineEndingWithArrow(arrow, Modifier.padding(end = 8.dp)) {
+            Text(
+                problem,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         return
     }
     if (shown == null) {
-        if (kept > 0) FindingFigures()
+        if (kept > 0 || arrow != null) LineEndingWithArrow(arrow) { if (kept > 0) FindingFigures() }
         return
     }
     // What the route is worth, as icons and figures on one quiet line.
     // At rest the sheet grows from the bottom, so should the line ever
     // wrap (large fonts) it pushes the figures up, never the switcher down.
-    FlowRow(
-        modifier = Modifier.padding(top = 6.dp, end = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
-    ) {
-        routeStats(shown).forEach { StatFigure(it, shown) }
+    LineEndingWithArrow(arrow, Modifier.padding(top = 6.dp, end = 8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            routeStats(shown).forEach { StatFigure(it, shown) }
+        }
+    }
+}
+
+/** [content] with [arrow] (if any) right-aligned at the end of its line. */
+@Composable
+private fun LineEndingWithArrow(arrow: (@Composable () -> Unit)?, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    if (arrow == null) {
+        Box(modifier) { content() }
+        return
+    }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) { content() }
+        arrow()
+    }
+}
+
+/** The side panel's card arrow: down at rest (open the choices), up when
+ * open (back to rest). */
+@Composable
+private fun CardArrow(expanded: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painterResource(if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
+            contentDescription = stringResource(if (expanded) R.string.card_collapse else R.string.card_expand),
+        )
     }
 }
 
@@ -786,16 +838,32 @@ private fun StatFigure(stat: RouteStat, s: RouteSummary) {
  * all are avoided, the default), then an arrow; tapping any pulls the
  * sheet up to change them. A screen reader says each in words. */
 @Composable
-private fun OptionChips(items: List<SummaryItem>, allowed: List<AvoidKind>, onClick: () -> Unit) {
+private fun OptionChips(items: List<SummaryItem>, allowed: List<AvoidKind>, panel: Boolean = false, onClick: () -> Unit) {
+    val chips = @Composable {
+        items.forEach { SummaryChip(it, onClick) }
+        allowed.forEach { kind ->
+            IconChip(avoidIcon(kind), null, stringResource(R.string.avoid_allowed, avoidLabel(kind)), onClick = onClick)
+        }
+    }
+    if (panel) {
+        // The down arrow ends the chips' line, right-aligned; the chips
+        // open the card too.
+        Row(Modifier.padding(top = 4.dp, end = 8.dp), verticalAlignment = Alignment.Bottom) {
+            FlowRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) { chips() }
+            CardArrow(false, onClick)
+        }
+        return
+    }
     FlowRow(
         modifier = Modifier.padding(top = 4.dp, end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        items.forEach { SummaryChip(it, onClick) }
-        allowed.forEach { kind ->
-            IconChip(avoidIcon(kind), null, stringResource(R.string.avoid_allowed, avoidLabel(kind)), onClick = onClick)
-        }
+        chips()
         IconButton(onClick = onClick) {
             Icon(painterResource(R.drawable.ic_expand_less), contentDescription = stringResource(R.string.card_expand))
         }

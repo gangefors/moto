@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
@@ -47,7 +48,10 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Badge
@@ -82,12 +86,14 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -287,6 +293,14 @@ fun MapScreen() {
     )
     // Status bar icons follow the brightness of the map behind them.
     StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
+    // A phone on its side plans in a side panel at the left instead of a
+    // sheet at the bottom (usesPlanningPanel); its width follows the window.
+    val windowConfig = LocalConfiguration.current
+    val panelWindow = usesPlanningPanel(windowConfig.screenWidthDp, windowConfig.screenHeightDp)
+    val panelWidthDp = planningPanelWidthDp(windowConfig.screenWidthDp)
+    // Whether the panel shows now; set once planning is known, read where
+    // routes are fitted.
+    val panelShownNow = remember { mutableStateOf(false) }
 
     // Where the panels over the map end, in pixels, measured as they are
     // laid out: the card at the top, the buttons at the right, the tag
@@ -304,7 +318,12 @@ fun MapScreen() {
         val panels = Panels(
             width = w,
             height = h,
-            left = insets.left,
+            // With the planning side panel, routes are fitted right of it.
+            left = if (panelShownNow.value) {
+                with(density) { panelFitLeft(insets.left, panelWidthDp.dp.roundToPx(), PANEL_GAP_DP.dp.roundToPx()) }
+            } else {
+                insets.left
+            },
             top = max(topPanelBottom, insets.top),
             right = max(w - buttonsLeft, insets.right),
             bottom = maxOf(h - tagTop, h - sheetTop, h - cardsTop, h - editTop, insets.bottom),
@@ -1051,6 +1070,9 @@ fun MapScreen() {
     // Planning a route or loop: the sheet shows at the bottom, and the tag
     // and map buttons step aside (nobody tags while planning).
     val planning = routeEnds != null || loopStart != null
+    // Planning in the side panel at the left (landscape on a low window).
+    val panelMode = planning && panelWindow
+    SideEffect { panelShownNow.value = panelMode }
     // Recording without a route, with nothing else in hand: ride mode too,
     // with the recording card (2026-10-03). Planning, a picked
     // start or marking pause it; riding a plan swaps in the ride card.
@@ -1138,7 +1160,8 @@ fun MapScreen() {
     // The planning sheet reaches down behind the navigation bar: its
     // buttons then contrast with the sheet, not the system theme.
     NavigationBarIconsFollow(
-        if (planning) MaterialTheme.colorScheme.surfaceColorAtElevation(PLAN_SHEET_ELEVATION) else null,
+        // (Not in the side panel: it stops above the bar.)
+        if (planning && !panelMode) MaterialTheme.colorScheme.surfaceColorAtElevation(PLAN_SHEET_ELEVATION) else null,
     )
     // A new start or new route ends: the sheet starts at rest, so the map
     // shows what was found.
@@ -1149,16 +1172,18 @@ fun MapScreen() {
     LaunchedEffect(routeEnds != null) { if (routeEnds != null) cardExpanded = false }
     // The map's own controls (compass, logo, attribution) stay clear of
     // the system bars, the buttons and the sheet.
-    val riddenButton = riddenButtonShown(planning, cardExpanded, hasRidden)
+    val riddenButton = riddenButtonShown(planning, cardExpanded && !panelMode, hasRidden)
     // Planning over: the ridden roads follow the setting again.
     LaunchedEffect(planning) { if (!planning) riddenWhilePlanning = null }
     // The compass at the top right, under Ride settings' button when that
     // shows, else in the corner: clear of the cards and the sheet at the
     // bottom (2026-10-02).
-    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom) {
+    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, panelMode, panelWidthDp) {
         val m = map ?: return@LaunchedEffect
         val sheet = if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
         with(density) {
+            // The logo and attribution start right of the side panel.
+            val shift = if (panelMode) panelControlsShift(panelWidthDp.dp.roundToPx(), PANEL_GAP_DP.dp.roundToPx()) else 0
             // In ride mode, under the ride or recording card.
             val compassTop = if (rideMode && rideCardBottom > 0) {
                 rideCardBottom - insets.top + 8.dp.roundToPx()
@@ -1167,7 +1192,7 @@ fun MapScreen() {
             }
             applyControlMargins(
                 m,
-                insets.copy(bottom = max(insets.bottom, sheet)),
+                insets.copy(left = insets.left + shift, bottom = max(insets.bottom, sheet)),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
                 compassRight = TOP_BUTTON_MARGIN.roundToPx(),
@@ -1226,6 +1251,30 @@ fun MapScreen() {
         overlays?.route?.show(null, null, null)
     }
     /**
+     * One info card at a time (2026-10-04): opening one closes the others
+     * (a road's, a favourite's, a favourite section's, a ride's, a saved
+     * route's), the newest wins. The plan's card and the start card are
+     * not info cards. Closing a saved route also takes it off the map,
+     * unless a plan is using the layer.
+     */
+    fun closeInfoCardsFor(opening: InfoCard) {
+        infoCardsToClose(opening).forEach { card ->
+            when (card) {
+                InfoCard.ROAD -> if (roadInfo != null) {
+                    roadInfo = null
+                    overlays?.snap?.clear()
+                }
+                InfoCard.FAVOURITE -> favouriteInfoId = null
+                InfoCard.SECTION -> if (routeEnds == null && loopStart == null) hideSection() else shownSectionId = null
+                InfoCard.RIDE -> shownRide = null
+                InfoCard.SAVED_ROUTE -> if (shownSaved != null) {
+                    shownSaved = null
+                    if (routeEnds == null && loopStart == null) overlays?.route?.show(null, null, null)
+                }
+            }
+        }
+    }
+    /**
      * Shows saved section [s] with its card (the same whether picked on
      * the map or in Menu > Sections): in its rating's colour, wider and
      * edged, so it stands out from the other sections (faded meanwhile)
@@ -1238,11 +1287,9 @@ fun MapScreen() {
         loopStart = null
         startPicked = null
         picker.reset()
-        shownSaved = null
-        roadInfo = null
+        closeInfoCardsFor(InfoCard.SECTION)
         overlays?.snap?.clear()
         shownSectionId = s.id
-        favouriteInfoId = null
         // What was on the route layer (a saved route or ride) goes.
         overlays?.route?.show(null, null, null)
         if (fit) showOnMap(listOf(s.geometry), always = true)
@@ -1633,7 +1680,7 @@ fun MapScreen() {
     }
     // When the card grows or shrinks (expanded, collapsed, a message), the
     // route or loops shown stay in view.
-    LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize) {
+    LaunchedEffect(cardExpanded, topPanelBottom, sheetTop, mapSize, panelMode, panelWidthDp) {
         // Once the sheet has settled: a fit while it still grows would
         // aim for the space above it as it was, not as it ends up.
         delay(SETTLE_MS)
@@ -1694,9 +1741,9 @@ fun MapScreen() {
             if (hit != null && tapped == FavouriteTap.OPEN) {
                 showSection(hit, fit = false)
             } else if (hit != null) {
-                // Beside what is open, which stays as it is; it replaces
-                // a road's card, as one tapped thing's card does another's.
-                roadInfo = null
+                // The plan or the start step stays as it is; the info card
+                // that was open closes (one at a time).
+                closeInfoCardsFor(InfoCard.FAVOURITE)
                 o.snap.clear()
                 favouriteInfoId = hit.id
             } else if (ready == null) {
@@ -1705,9 +1752,9 @@ fun MapScreen() {
                 try {
                     val info = DebugTools.query("road info") { ready.engine.roadAt(tap.toLatLon()) }
                     o.snap.show(tap, LatLng(info.point.position.lat, info.point.position.lon))
-                    // One card for what was tapped: the road's replaces a section's.
-                    hideSection()
-                    favouriteInfoId = null
+                    // One info card for what was tapped: the road's replaces
+                    // the others.
+                    closeInfoCardsFor(InfoCard.ROAD)
                     roadInfo = info
                     message = null
                 } catch (e: MotoException) {
@@ -2161,7 +2208,10 @@ fun MapScreen() {
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .padding(start = SCALE_START, bottom = scaleAbove + SCALE_BOTTOM),
+                .padding(
+                    start = SCALE_START + if (panelMode) (panelWidthDp + PANEL_GAP_DP).dp else 0.dp,
+                    bottom = scaleAbove + SCALE_BOTTOM,
+                ),
         )
         // Notices across the top, the whole width below the top buttons
         // when they show; on wide screens no wider than TOP_BOX_MAX_WIDTH.
@@ -2189,7 +2239,9 @@ fun MapScreen() {
         // The ridden roads button, above the sheet on the right: switches
         // the layer, and Ride settings' switch with it. Cards above the
         // sheet take its place.
-        if (riddenButton && !cardsShown) {
+        // In the side panel the cards are at the left, so it stays; it is
+        // offset by all the safe insets, as nothing covers the bar there.
+        if (riddenButton && (!cardsShown || panelMode)) {
             val aboveSheet = with(density) {
                 if (sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
             }
@@ -2198,11 +2250,196 @@ fun MapScreen() {
                 onChange = { riddenWhilePlanning = it },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            if (panelMode) WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom else WindowInsetsSides.Horizontal,
+                        ),
+                    )
                     .padding(end = FAB_PADDING, bottom = aboveSheet + FAB_PADDING),
             )
         }
-        if (cardsShown) {
+        // Planning in the side panel: + and − at the right edge, stacked
+        // above the ridden roads button (or in its place without one).
+        if (panelMode) {
+            ZoomButtons(
+                onZoom = { by -> map?.animateCamera(CameraUpdateFactory.zoomBy(by)) },
+                cellHeight = PANEL_ZOOM_CELL,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .padding(end = FAB_PADDING, bottom = FAB_PADDING + if (riddenButton) TOP_BUTTON_SIZE + FAB_PADDING else 0.dp),
+            )
+        }
+        // The cards: info cards (a favourite, a ride, a saved route, a
+        // favourite section, a road; at most one) sit on top; whatever is
+        // in hand (the start card, a task, a message) stays below them,
+        // nearest the sheet. In the side panel they are its first cards.
+        val infoCards: @Composable () -> Unit = {
+            if (!rideMode) favouriteInfo?.let { f ->
+                FavouriteInfoCard(
+                    f,
+                    engine = (region as? RegionState.Ready)?.engine,
+                    darkMap = darkMap,
+                    onClose = { favouriteInfoId = null },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            shownRide?.let {
+                ShownRideCard(
+                    it,
+                    onClose = { shownRide = null },
+                    onRename = { renamingRide = it.track },
+                    onShare = { shareRide(it.track) },
+                    onDelete = { deleteShownRide(it.track) },
+                    modifier = Modifier.fillMaxWidth(),
+                    onRide = if (it.track.endedAt != null) ({ rideAgain(it) }) else null,
+                )
+            }
+            shownSaved?.let { s ->
+                SavedRouteCard(
+                    s,
+                    onShare = {
+                        shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
+                    },
+                    onRename = { renamingSaved = s.route },
+                    onDelete = { deleteShownSaved(s.route) },
+                    onClose = {
+                        shownSaved = null
+                        overlays?.route?.show(null, null, null)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    onRide = {
+                        beginRide(
+                            RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, s.favouriteParts, s.favouriteRatings),
+                        )
+                    },
+                )
+            }
+            shownSection?.let { s ->
+                ShownSectionCard(
+                    s,
+                    engine = (region as? RegionState.Ready)?.engine,
+                    onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
+                    onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
+                    onEdit = { editing = s },
+                    onClose = { hideSection() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            roadInfo?.let {
+                RoadInfoCard(
+                    it,
+                    onClose = {
+                        roadInfo = null
+                        overlays?.snap?.clear()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        val taskCardContent: @Composable () -> Unit = {
+            if (taskCard) Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+            ) {
+                Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
+                    // What to do next, with the X at the top right (like
+                    // the route and loop cards): it leaves the task.
+                    Row(verticalAlignment = Alignment.Top) {
+                        IconText(
+                            message ?: via?.let { stringResource(R.string.route_via_selected, it + 1) } ?: "",
+                            modifier = Modifier.weight(1f).padding(top = 12.dp, end = 4.dp),
+                        )
+                        if (via != null && message == null) {
+                            // The bin removes the waypoint; X (or a tap
+                            // elsewhere on the map) lets it go.
+                            IconButton(
+                                onClick = {
+                                    selectedVia = null
+                                    vias = removeVia(vias, via)
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
+                            ) {
+                                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.route_via_remove))
+                            }
+                        }
+                        IconButton(onClick = { cancelTask() }) {
+                            Icon(painterResource(R.drawable.ic_close), stringResource(R.string.task_close))
+                        }
+                    }
+                    if (offerLoop) {
+                        FlowRow(
+                            Modifier.padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            // Loop first (the rider), then route from the
+                            // rider's position.
+                            IconTextButton(R.drawable.ic_loop, stringResource(R.string.loop_from_here)) {
+                                val start = picker.takeStart() ?: return@IconTextButton
+                                message = null
+                                startLoop(start)
+                            }
+                            if (hasLocation) {
+                                // The long-pressed point becomes the end; the
+                                // rider's position the start. A later
+                                // long-press moves the end, as usual.
+                                IconTextButton(R.drawable.ic_directions, stringResource(R.string.route_from_me)) {
+                                    val from = riderStart() ?: return@IconTextButton
+                                    val to = picker.takeStart() ?: return@IconTextButton
+                                    picker.startAt(from)
+                                    startPicked = null
+                                    message = null
+                                    overlays?.route?.show(from, to, null)
+                                    vias = emptyList()
+                                    arriveBy = null
+                                    if (routeEnds == null) clearRoutes()
+                                    routeEnds = from to to
+                                }
+                            }
+                        }
+                    }
+                    if (marking) {
+                        val tag = reviewTag
+                        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (tag != null) {
+                                // Discards this tag (second tap) and moves on;
+                                // X or Back ends the review, leaving the tags
+                                // not yet handled pending.
+                                var confirming by remember(tag.id) { mutableStateOf(false) }
+                                DeleteButton(
+                                    confirming = confirming,
+                                    onArm = { confirming = true },
+                                    onDelete = { finishTag(TagStatus.DISCARDED) },
+                                    enabled = !proposing,
+                                )
+                            }
+                            // The buttons wrap onto a second line when there is
+                            // no room, instead of squeezing each other.
+                            FlowRow(
+                                Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                if (tag != null) {
+                                    // Leaves this one pending and moves on.
+                                    OutlinedButton(onClick = { skipTag() }) {
+                                        OneLine(stringResource(R.string.tag_review_skip))
+                                    }
+                                }
+                                Button(
+                                    onClick = { savingDraft = true },
+                                    enabled = draft != null && !proposing,
+                                ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (cardsShown && !panelMode) {
             DisposableEffect(Unit) { onDispose { cardsTop = Int.MAX_VALUE } }
             val aboveSheet = with(density) {
                 if (planning && sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
@@ -2217,171 +2454,8 @@ fun MapScreen() {
                     .onGloballyPositioned { cardsTop = it.boundsInRoot().top.roundToInt() },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Info cards (a favourite, a ride, a saved route, a favourite
-                // section, a road) sit on top; whatever is in hand (the start
-                // card, a task, a message) stays below them, nearest the
-                // sheet.
-                if (!rideMode) favouriteInfo?.let { f ->
-                    FavouriteInfoCard(
-                        f,
-                        engine = (region as? RegionState.Ready)?.engine,
-                        darkMap = darkMap,
-                        onClose = { favouriteInfoId = null },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                shownRide?.let {
-                    ShownRideCard(
-                        it,
-                        onClose = { shownRide = null },
-                        onRename = { renamingRide = it.track },
-                        onShare = { shareRide(it.track) },
-                        onDelete = { deleteShownRide(it.track) },
-                        modifier = Modifier.fillMaxWidth(),
-                        onRide = if (it.track.endedAt != null) ({ rideAgain(it) }) else null,
-                    )
-                }
-                shownSaved?.let { s ->
-                    SavedRouteCard(
-                        s,
-                        onShare = {
-                            shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
-                        },
-                        onRename = { renamingSaved = s.route },
-                        onDelete = { deleteShownSaved(s.route) },
-                        onClose = {
-                            shownSaved = null
-                            overlays?.route?.show(null, null, null)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        onRide = {
-                            beginRide(
-                                RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, s.favouriteParts, s.favouriteRatings),
-                            )
-                        },
-                    )
-                }
-                shownSection?.let { s ->
-                    ShownSectionCard(
-                        s,
-                        engine = (region as? RegionState.Ready)?.engine,
-                        onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
-                        onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
-                        onEdit = { editing = s },
-                        onClose = { hideSection() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                roadInfo?.let {
-                    RoadInfoCard(
-                        it,
-                        onClose = {
-                            roadInfo = null
-                            overlays?.snap?.clear()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (taskCard) Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large,
-                    tonalElevation = 3.dp,
-                    shadowElevation = 3.dp,
-                ) {
-                    Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
-                        // What to do next, with the X at the top right (like
-                        // the route and loop cards): it leaves the task.
-                        Row(verticalAlignment = Alignment.Top) {
-                            IconText(
-                                message ?: via?.let { stringResource(R.string.route_via_selected, it + 1) } ?: "",
-                                modifier = Modifier.weight(1f).padding(top = 12.dp, end = 4.dp),
-                            )
-                            if (via != null && message == null) {
-                                // The bin removes the waypoint; X (or a tap
-                                // elsewhere on the map) lets it go.
-                                IconButton(
-                                    onClick = {
-                                        selectedVia = null
-                                        vias = removeVia(vias, via)
-                                    },
-                                    colors = IconButtonDefaults.iconButtonColors(contentColor = DELETE_COLOR),
-                                ) {
-                                    Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.route_via_remove))
-                                }
-                            }
-                            IconButton(onClick = { cancelTask() }) {
-                                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.task_close))
-                            }
-                        }
-                        if (offerLoop) {
-                            FlowRow(
-                                Modifier.padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                // Loop first (the rider), then route from the
-                                // rider's position.
-                                IconTextButton(R.drawable.ic_loop, stringResource(R.string.loop_from_here)) {
-                                    val start = picker.takeStart() ?: return@IconTextButton
-                                    message = null
-                                    startLoop(start)
-                                }
-                                if (hasLocation) {
-                                    // The long-pressed point becomes the end; the
-                                    // rider's position the start. A later
-                                    // long-press moves the end, as usual.
-                                    IconTextButton(R.drawable.ic_directions, stringResource(R.string.route_from_me)) {
-                                        val from = riderStart() ?: return@IconTextButton
-                                        val to = picker.takeStart() ?: return@IconTextButton
-                                        picker.startAt(from)
-                                        startPicked = null
-                                        message = null
-                                        overlays?.route?.show(from, to, null)
-                                        vias = emptyList()
-                                        arriveBy = null
-                                        if (routeEnds == null) clearRoutes()
-                                        routeEnds = from to to
-                                    }
-                                }
-                            }
-                        }
-                        if (marking) {
-                            val tag = reviewTag
-                            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (tag != null) {
-                                    // Discards this tag (second tap) and moves on;
-                                    // X or Back ends the review, leaving the tags
-                                    // not yet handled pending.
-                                    var confirming by remember(tag.id) { mutableStateOf(false) }
-                                    DeleteButton(
-                                        confirming = confirming,
-                                        onArm = { confirming = true },
-                                        onDelete = { finishTag(TagStatus.DISCARDED) },
-                                        enabled = !proposing,
-                                    )
-                                }
-                                // The buttons wrap onto a second line when there is
-                                // no room, instead of squeezing each other.
-                                FlowRow(
-                                    Modifier.weight(1f),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    if (tag != null) {
-                                        // Leaves this one pending and moves on.
-                                        OutlinedButton(onClick = { skipTag() }) {
-                                            OneLine(stringResource(R.string.tag_review_skip))
-                                        }
-                                    }
-                                    Button(
-                                        onClick = { savingDraft = true },
-                                        enabled = draft != null && !proposing,
-                                    ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
-                                }
-                            }
-                        }
-                    }
-                }
+                infoCards()
+                taskCardContent()
             }
         }
         // Back steps back through what is on the map before it leaves the
@@ -2416,9 +2490,123 @@ fun MapScreen() {
                 shownRide != null -> shownRide = null
             }
         }
-        // Planning a route or loop: the sheet at the bottom; the map fits
-        // what it plans in the space above it.
-        if (planning) {
+        // Planning a route or loop: a sheet at the bottom, or on a low
+        // landscape window a panel at the left; the map fits what it plans
+        // in the space left. The route and loop cards are the same in both.
+        val planCards: @Composable (Boolean, Dp, Modifier) -> Unit = { panel, maxHeight, cardModifier ->
+                routeEnds?.let {
+                    RouteCard(
+                        expanded = cardExpanded,
+                        onExpandedChange = { cardExpanded = it },
+                        maxHeight = maxHeight,
+                        modifier = cardModifier,
+                        panel = panel,
+                        summary = routeSummary,
+                        gravel = gravel,
+                        onGravel = { g ->
+                            gravel = g
+                            RoutePrefs.setGravel(context, g)
+                        },
+                        favourites = favouritesMode,
+                        onFavourites = { changeFavourites(it) },
+                        unridden = unriddenMode,
+                        onUnridden = { changeUnridden(it) },
+                        avoid = avoid,
+                        onAvoid = { changeAvoid(it) },
+                        onClose = { closeRoute() },
+                        onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
+                        onSave = { shownRoute?.let { (r, _) -> savingRoute = r to (routeThrough != null) } },
+                        onRide = { shownRoute?.let { (r, _) -> startRide(r, routeThrough != null) } },
+                        viaCount = vias.size,
+                        onAddVia = {
+                            addingVia = true
+                            message = resources.getString(R.string.route_pick_via)
+                        },
+                        onClearVia = {
+                            vias = emptyList()
+                            addingVia = false
+                        },
+                        arriveBy = arriveBy,
+                        arrivalNote = arriveBy?.let { by ->
+                            shownRoute?.let { (r, _) ->
+                                val zone = ZoneId.systemDefault()
+                                val a = arrival(routeFoundAt, r.durationS, by)
+                                if (a.late) {
+                                    stringResource(R.string.route_arrives_late, clockTime(by, zone), clockTime(a.atSec, zone))
+                                } else {
+                                    stringResource(R.string.route_arrives, clockTime(a.atSec, zone))
+                                }
+                            }
+                        },
+                        arrival = arriveBy?.let { by ->
+                            shownRoute?.let { (r, _) -> SummaryItem.ArrivesAt(arrival(routeFoundAt, r.durationS, by), by) }
+                        },
+                        onArriveBy = { arriveBy = it },
+                        position = routeIndex,
+                        count = routeChoices.size,
+                        onPrevious = {
+                            val opts = shownRoute?.second
+                            if (opts != null) {
+                                showRouteChoice(it.first, it.second, routeChoices, previousLoop(routeIndex, routeChoices.size), opts)
+                            }
+                        },
+                        onNext = {
+                            val opts = shownRoute?.second
+                            if (opts != null) {
+                                showRouteChoice(it.first, it.second, routeChoices, nextLoop(routeIndex, routeChoices.size), opts)
+                            }
+                        },
+                        kept = routeKept,
+                        problem = routeProblem,
+                    )
+                }
+                loopStart?.let {
+                    val shown = loops.getOrNull(loopIndex)
+                    LoopCard(
+                        expanded = cardExpanded,
+                        onExpandedChange = { cardExpanded = it },
+                        maxHeight = maxHeight,
+                        modifier = cardModifier,
+                        panel = panel,
+                        summary = shown?.let { r ->
+                            summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM, r.unriddenShare)
+                        },
+                        problem = loopProblem,
+                        position = loopIndex,
+                        count = loops.size,
+                        onShuffle = { loopSeed = nextSeed },
+                        kept = loopKept,
+                        direction = loopDirection,
+                        onDirection = { loopDirection = it },
+                        onPrevious = {
+                            loopIndex = previousLoop(loopIndex, loops.size)
+                            showLoop(it, loops, loopIndex)
+                        },
+                        onNext = {
+                            loopIndex = nextLoop(loopIndex, loops.size)
+                            showLoop(it, loops, loopIndex)
+                        },
+                        choice = loopChoice,
+                        onChoice = { c -> loopLength.pick(c) },
+                        gravel = gravel,
+                        onGravel = { g ->
+                            gravel = g
+                            RoutePrefs.setGravel(context, g)
+                        },
+                        favourites = favouritesMode,
+                        onFavourites = { changeFavourites(it) },
+                        unridden = unriddenMode,
+                        onUnridden = { changeUnridden(it) },
+                        avoid = avoid,
+                        onAvoid = { changeAvoid(it) },
+                        onClose = { closeLoop() },
+                        onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
+                        onSave = { shown?.let { savingRoute = it to true } },
+                        onRide = { shown?.let { startRide(it, true) } },
+                    )
+                }
+        }
+        if (planning && !panelMode) {
             DisposableEffect(Unit) { onDispose { sheetTop = Int.MAX_VALUE } }
             val sheetMaxHeight = with(density) {
                 if (mapSize.height > 0) (mapSize.height * SHEET_MAX_SHARE).toDp() else 600.dp
@@ -2430,113 +2618,35 @@ fun MapScreen() {
                     .fillMaxWidth()
                     .onGloballyPositioned { sheetTop = it.boundsInRoot().top.roundToInt() },
             ) {
-                    routeEnds?.let {
-                        RouteCard(
-                            expanded = cardExpanded,
-                            onExpandedChange = { cardExpanded = it },
-                            maxHeight = sheetMaxHeight,
-                            summary = routeSummary,
-                            gravel = gravel,
-                            onGravel = { g ->
-                                gravel = g
-                                RoutePrefs.setGravel(context, g)
-                            },
-                            favourites = favouritesMode,
-                            onFavourites = { changeFavourites(it) },
-                            unridden = unriddenMode,
-                            onUnridden = { changeUnridden(it) },
-                            avoid = avoid,
-                            onAvoid = { changeAvoid(it) },
-                            onClose = { closeRoute() },
-                            onShare = { shownRoute?.let { (r, opts) -> shareRoute(r, opts) } },
-                            onSave = { shownRoute?.let { (r, _) -> savingRoute = r to (routeThrough != null) } },
-                            onRide = { shownRoute?.let { (r, _) -> startRide(r, routeThrough != null) } },
-                            viaCount = vias.size,
-                            onAddVia = {
-                                addingVia = true
-                                message = resources.getString(R.string.route_pick_via)
-                            },
-                            onClearVia = {
-                                vias = emptyList()
-                                addingVia = false
-                            },
-                            arriveBy = arriveBy,
-                            arrivalNote = arriveBy?.let { by ->
-                                shownRoute?.let { (r, _) ->
-                                    val zone = ZoneId.systemDefault()
-                                    val a = arrival(routeFoundAt, r.durationS, by)
-                                    if (a.late) {
-                                        stringResource(R.string.route_arrives_late, clockTime(by, zone), clockTime(a.atSec, zone))
-                                    } else {
-                                        stringResource(R.string.route_arrives, clockTime(a.atSec, zone))
-                                    }
-                                }
-                            },
-                            arrival = arriveBy?.let { by ->
-                                shownRoute?.let { (r, _) -> SummaryItem.ArrivesAt(arrival(routeFoundAt, r.durationS, by), by) }
-                            },
-                            onArriveBy = { arriveBy = it },
-                            position = routeIndex,
-                            count = routeChoices.size,
-                            onPrevious = {
-                                val opts = shownRoute?.second
-                                if (opts != null) {
-                                    showRouteChoice(it.first, it.second, routeChoices, previousLoop(routeIndex, routeChoices.size), opts)
-                                }
-                            },
-                            onNext = {
-                                val opts = shownRoute?.second
-                                if (opts != null) {
-                                    showRouteChoice(it.first, it.second, routeChoices, nextLoop(routeIndex, routeChoices.size), opts)
-                                }
-                            },
-                            kept = routeKept,
-                            problem = routeProblem,
-                        )
-                    }
-                    loopStart?.let {
-                        val shown = loops.getOrNull(loopIndex)
-                        LoopCard(
-                            expanded = cardExpanded,
-                            onExpandedChange = { cardExpanded = it },
-                            maxHeight = sheetMaxHeight,
-                            summary = shown?.let { r ->
-                                summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM, r.unriddenShare)
-                            },
-                            problem = loopProblem,
-                            position = loopIndex,
-                            count = loops.size,
-                            onShuffle = { loopSeed = nextSeed },
-                            kept = loopKept,
-                            direction = loopDirection,
-                            onDirection = { loopDirection = it },
-                            onPrevious = {
-                                loopIndex = previousLoop(loopIndex, loops.size)
-                                showLoop(it, loops, loopIndex)
-                            },
-                            onNext = {
-                                loopIndex = nextLoop(loopIndex, loops.size)
-                                showLoop(it, loops, loopIndex)
-                            },
-                            choice = loopChoice,
-                            onChoice = { c -> loopLength.pick(c) },
-                            gravel = gravel,
-                            onGravel = { g ->
-                                gravel = g
-                                RoutePrefs.setGravel(context, g)
-                            },
-                            favourites = favouritesMode,
-                            onFavourites = { changeFavourites(it) },
-                            unridden = unriddenMode,
-                            onUnridden = { changeUnridden(it) },
-                            avoid = avoid,
-                            onAvoid = { changeAvoid(it) },
-                            onClose = { closeLoop() },
-                            onShare = { if (shown != null) loopOpts?.let { opts -> shareRoute(shown, opts) } },
-                            onSave = { shown?.let { savingRoute = it to true } },
-                            onRide = { shown?.let { startRide(it, true) } },
-                        )
-                    }
+                planCards(false, sheetMaxHeight, Modifier)
+            }
+        }
+        if (planning && panelMode) {
+            // One column at the left, from below the status bar to above
+            // the navigation bar and past a cutout: the info card, the
+            // start card, then the route or loop card. At rest it scrolls
+            // when it is taller; expanded, the info card is hidden and the
+            // route or loop card fills the height (its choices scroll).
+            val panelMaxHeight = with(density) {
+                if (mapSize.height > 0) {
+                    (mapSize.height - insets.top - insets.bottom).toDp() - PANEL_GAP_DP.dp * 2
+                } else {
+                    300.dp
+                }
+            }
+            val panelScroll = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Left + WindowInsetsSides.Vertical))
+                    .padding(start = PANEL_GAP_DP.dp, top = PANEL_GAP_DP.dp, bottom = PANEL_GAP_DP.dp)
+                    .width(panelWidthDp.dp)
+                    .then(if (cardExpanded) Modifier.fillMaxHeight() else Modifier.verticalScroll(panelScroll)),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (!cardExpanded) infoCards()
+                taskCardContent()
+                planCards(true, panelMaxHeight, if (cardExpanded) Modifier.weight(1f) else Modifier)
             }
         }
         val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
@@ -3347,6 +3457,9 @@ private val ATTRIBUTION_OFFSET: Dp = 92.dp
 
 /** The scale bar starts this far from the left: past the attribution. */
 private val SCALE_START: Dp = ATTRIBUTION_OFFSET + 32.dp
+
+/** Each zoom button's height beside the planning side panel (two cells, 96 dp). */
+private val PANEL_ZOOM_CELL: Dp = 48.dp
 
 /** The bottom-right buttons' distance from the safe edges. */
 private val FAB_PADDING: Dp = 16.dp
