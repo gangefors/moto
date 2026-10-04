@@ -1261,8 +1261,8 @@ fun MapScreen() {
     /**
      * One info card at a time (2026-10-04): opening one closes the others
      * (a road's, a favourite's, a favourite section's, a ride's, a saved
-     * route's), the newest wins, and a plan starting closes them but a
-     * saved route's ([startLoop], a route's first end, [rideSection]). The
+     * route's), the newest wins, and a plan starting closes them all
+     * ([startLoop], a route's first end, [rideSection]). The
      * plan's card and the start card are not info cards. Closing a saved
      * route also takes it off the map, unless a plan is using the layer.
      */

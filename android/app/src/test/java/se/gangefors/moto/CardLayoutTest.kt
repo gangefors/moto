@@ -189,11 +189,11 @@ class CardLayoutTest {
     }
 
     @Test
-    fun aPlanStartingClosesTheInfoCardsButASavedRoutes() {
-        // A favourite, a favourite section's, a road's and a ride's card alike.
+    fun aPlanStartingClosesAllTheInfoCards() {
+        // A favourite, a favourite section's, a road's, a ride's and a saved route's alike.
         val closed = infoCardsToCloseOnPlanStart(planOpen = false)
-        assertEquals(InfoCard.entries.toSet() - InfoCard.SAVED_ROUTE, closed)
-        assertFalse(InfoCard.SAVED_ROUTE in closed)
+        assertEquals(InfoCard.entries.toSet(), closed)
+        assertTrue(InfoCard.SAVED_ROUTE in closed)
     }
 
     @Test

@@ -185,13 +185,14 @@ fun infoCardsToClose(opening: InfoCard): Set<InfoCard> = when (opening) {
 }
 
 /**
- * The info cards to close when a plan (a route or a loop) starts: all
- * but a saved route's, which stays above the start card (the plan is not
- * an info card). None while a plan is already [planOpen], as when its end
- * moves or its loops are shuffled: what the rider opened meanwhile stays.
+ * The info cards to close when a plan (a route or a loop) starts: all of
+ * them, a saved route's too (never a saved route and a new plan on screen
+ * together; the plan is not an info card). None while a plan is already
+ * [planOpen], as when its end moves or its loops are shuffled: what the
+ * rider opened meanwhile stays.
  */
 fun infoCardsToCloseOnPlanStart(planOpen: Boolean): Set<InfoCard> =
-    if (planOpen) emptySet() else InfoCard.entries.toSet() - InfoCard.SAVED_ROUTE
+    if (planOpen) emptySet() else InfoCard.entries.toSet()
 
 /** The info cards open after [opening] opens while [open] were: only it. */
 fun infoCardsAfterOpening(open: Set<InfoCard>, opening: InfoCard): Set<InfoCard> =
