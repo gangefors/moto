@@ -53,9 +53,20 @@ fun infoColumnWidthDp(windowWidthDp: Int, insetLeftDp: Float, insetRightDp: Floa
 fun rightCardCover(mapHeight: Int, rightCardsTop: Int): Int =
     if (rightCardsTop < mapHeight) mapHeight - rightCardsTop else 0
 
-/** How high the planning sheet may grow, as a share of the window's height. */
-fun sheetMaxShare(landscape: Boolean, expanded: Boolean): Float =
-    if (landscape && expanded) 0.85f else 0.55f
+/** How high the planning sheet may grow at rest or upright, as a share of the window's height. */
+const val SHEET_MAX_SHARE = 0.55f
+
+/**
+ * How high the planning sheet may grow, in pixels: in landscape, pulled
+ * up, up to the status bar ([insetTop]) so more of the settings show;
+ * otherwise [SHEET_MAX_SHARE] of the window's [mapHeight].
+ */
+fun sheetMaxHeightPx(landscape: Boolean, expanded: Boolean, mapHeight: Int, insetTop: Int): Int =
+    if (landscape && expanded) {
+        (mapHeight - insetTop).coerceAtLeast(0)
+    } else {
+        (mapHeight.coerceAtLeast(0) * SHEET_MAX_SHARE).toInt()
+    }
 
 /**
  * Where the map's controls and fitted routes start from the left edge, in

@@ -2660,7 +2660,7 @@ fun MapScreen() {
                 }
             }
             val sheetMaxHeight = with(density) {
-                if (mapSize.height > 0) (mapSize.height * sheetMaxShare(landscape, cardExpanded)).toDp() else 600.dp
+                if (mapSize.height > 0) sheetMaxHeightPx(landscape, cardExpanded, mapSize.height, insets.top).toDp() else 600.dp
             }
             // Landscape: the column at the left, its content columnWidthDp
             // wide (the sheet reaches under a cutout, padded inside), and the

@@ -61,10 +61,18 @@ class CardLayoutTest {
     }
 
     @Test
-    fun sheetGrowsHigherOnlyWhenExpandedInLandscape() {
-        assertEquals(0.85f, sheetMaxShare(landscape = true, expanded = true), 0f)
-        assertEquals(0.55f, sheetMaxShare(landscape = true, expanded = false), 0f)
-        assertEquals(0.55f, sheetMaxShare(landscape = false, expanded = true), 0f)
+    fun expandedSheetInLandscapeFillsUpToTheStatusBar() {
+        assertEquals(1000, sheetMaxHeightPx(landscape = true, expanded = true, mapHeight = 1080, insetTop = 80))
+        assertEquals(1080, sheetMaxHeightPx(landscape = true, expanded = true, mapHeight = 1080, insetTop = 0))
+        assertEquals(0, sheetMaxHeightPx(landscape = true, expanded = true, mapHeight = 50, insetTop = 80))
+    }
+
+    @Test
+    fun otherSheetsKeepTheShareOfTheHeight() {
+        assertEquals(594, sheetMaxHeightPx(landscape = true, expanded = false, mapHeight = 1080, insetTop = 80))
+        assertEquals(1320, sheetMaxHeightPx(landscape = false, expanded = true, mapHeight = 2400, insetTop = 100))
+        assertEquals(1320, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = 2400, insetTop = 100))
+        assertEquals(0, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = -5, insetTop = 0))
     }
 
     @Test
