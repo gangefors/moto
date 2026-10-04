@@ -1228,6 +1228,25 @@ fun MapScreen() {
             }
         }
     }
+    /** Draws the shown saved route (with [start] as its start when given,
+     * as a picked start while it stays shown), or clears the route layer
+     * when none is shown and puts just [start] on it. */
+    fun drawShownSaved(start: LatLng? = null) {
+        val shown = shownSaved
+        if (shown == null) {
+            overlays?.route?.show(start, null, null)
+            return
+        }
+        val first = LatLng(shown.line.first().lat, shown.line.first().lon)
+        val last = if (shown.route.isLoop) null else LatLng(shown.line.last().lat, shown.line.last().lon)
+        overlays?.route?.show(
+            start ?: first,
+            if (start != null) null else last,
+            shown.line,
+            favourites = shown.favouriteParts,
+            favouriteRatings = shown.favouriteRatings,
+        )
+    }
     // A saved route keeps only its line: its favourite stretches are
     // worked out from the favourites as they are now, when it shows and
     // whenever they change, and glow on it as on a new route (ADR-0011).
@@ -1242,9 +1261,8 @@ fun MapScreen() {
         val now = shownSaved
         if (now == null || now.route.id != shown.route.id) return@LaunchedEffect
         shownSaved = now.copy(favouriteParts = found.parts, favouriteRatings = found.ratings)
-        val start = LatLng(now.line.first().lat, now.line.first().lon)
-        val end = if (now.route.isLoop) null else LatLng(now.line.last().lat, now.line.last().lon)
-        overlays?.route?.show(start, end, now.line, favourites = found.parts, favouriteRatings = found.ratings)
+        // A plan or a picked start on the layer is not replaced.
+        if (routeEnds == null && loopStart == null && startPicked == null) drawShownSaved()
     }
     // A saved section the rider asked to see (Menu > Sections, a row): by
     // id, so a change of its rating shows at once.
@@ -1818,7 +1836,6 @@ fun MapScreen() {
                     routeEnds = null
                     routeThrough = null
                     loopStart = null
-                    shownSaved = null
                     startPicked = null
                     // New start: check it lies on a road before keeping it.
                     val problem = runCatching { DebugTools.query("snap") { ready.engine.snap(point.toLatLon()) } }.exceptionOrNull()
@@ -1829,7 +1846,8 @@ fun MapScreen() {
                     } else {
                         // The start card replaces any info card.
                         closeInfoCards(infoCardsToCloseOnPlanStart(planOpen = false))
-                        o.route.show(point, null, null)
+                        // A shown saved route stays drawn and keeps its card.
+                        drawShownSaved(start = point)
                         startPicked = point
                         message = resources.getString(if (hasLocation) R.string.route_pick_end_or_me else R.string.route_pick_end)
                     }
@@ -2137,7 +2155,7 @@ fun MapScreen() {
             startPicked != null -> {
                 startPicked = null
                 picker.reset()
-                overlays?.route?.show(null, null, null)
+                drawShownSaved()
                 message = null
             }
             else -> message = null
@@ -2571,7 +2589,7 @@ fun MapScreen() {
                 startPicked != null -> {
                     startPicked = null
                     picker.reset()
-                    overlays?.route?.show(null, null, null)
+                    drawShownSaved()
                     message = null
                 }
                 shownSaved != null -> {
