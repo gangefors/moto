@@ -69,6 +69,28 @@ fun sheetMaxHeightPx(landscape: Boolean, expanded: Boolean, mapHeight: Int, inse
     }
 
 /**
+ * How far up from the window's bottom, in pixels, the map's buttons at the
+ * bottom right sit so no card hides them: right above the highest thing
+ * under them, or the bottom bar ([insetBottom]) when nothing is. Upright
+ * that is the planning sheet ([sheetTop]) or the cards above it
+ * ([cardsTop]); in landscape the sheet and the other cards are at the
+ * left, so only the info cards at the right ([rightCardsTop]) count.
+ * Tops are measured, [Int.MAX_VALUE] when not shown. The caller adds the
+ * usual gap.
+ */
+fun buttonsBottomPx(
+    landscape: Boolean,
+    insetBottom: Int,
+    mapHeight: Int,
+    sheetTop: Int,
+    cardsTop: Int,
+    rightCardsTop: Int,
+): Int {
+    val cover = if (landscape) rightCardCover(mapHeight, rightCardsTop) else rightCardCover(mapHeight, minOf(sheetTop, cardsTop))
+    return maxOf(insetBottom, cover)
+}
+
+/**
  * Where the map's controls and fitted routes start from the left edge, in
  * pixels: past the cards' column ([columnRight], its measured right edge,
  * 0 when none shows) in landscape, else just the left inset. In portrait

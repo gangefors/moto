@@ -2262,26 +2262,19 @@ fun MapScreen() {
         val infoAtRight = infoCardsAtRight(landscape, planning)
         val cardsShown = taskCard || infoCardOpen
         val leftCardsShown = taskCard || (infoCardOpen && !infoAtRight)
-        // The ridden roads button, above the sheet on the right: switches
-        // the layer, and Ride settings' switch with it. Cards above the
-        // sheet take its place.
-        // In landscape the cards are at the left, so it stays; it is offset
-        // by all the safe insets, as nothing covers the bar there.
-        if (riddenButton && (!cardsShown || landscape)) {
-            val aboveSheet = with(density) {
-                if (!landscape && sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
-            }
+        // The ridden roads button, bottom right: switches the layer, and
+        // Ride settings' switch with it. Never hidden by a card: it sits
+        // right above the sheet and the cards (upright), or above the info
+        // cards at the right (landscape), and drops back when they close.
+        if (riddenButton) {
+            val bottomPx = buttonsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
             RiddenButton(
                 on = riddenOn,
                 onChange = { riddenWhilePlanning = it },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(
-                            if (landscape) WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom else WindowInsetsSides.Horizontal,
-                        ),
-                    )
-                    .padding(end = FAB_PADDING, bottom = aboveSheet + FAB_PADDING),
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(end = FAB_PADDING, bottom = with(density) { bottomPx.toDp() } + FAB_PADDING),
             )
         }
         // The cards: info cards (a favourite, a ride, a saved route, a

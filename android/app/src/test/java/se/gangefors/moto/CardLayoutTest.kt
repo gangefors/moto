@@ -75,6 +75,34 @@ class CardLayoutTest {
         assertEquals(0, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = -5, insetTop = 0))
     }
 
+    private val none = Int.MAX_VALUE
+
+    @Test
+    fun buttonsSitAboveTheSheetUpright() {
+        assertEquals(400, buttonsBottomPx(false, 48, 2000, sheetTop = 1600, cardsTop = none, rightCardsTop = none))
+    }
+
+    @Test
+    fun buttonsSitAboveTheCardsAboveTheSheetUpright() {
+        assertEquals(700, buttonsBottomPx(false, 48, 2000, sheetTop = 1600, cardsTop = 1300, rightCardsTop = none))
+    }
+
+    @Test
+    fun buttonsDropBackWhenTheCardsClose() {
+        assertEquals(400, buttonsBottomPx(false, 48, 2000, sheetTop = 1600, cardsTop = none, rightCardsTop = none))
+        assertEquals(48, buttonsBottomPx(false, 48, 2000, sheetTop = none, cardsTop = none, rightCardsTop = none))
+    }
+
+    @Test
+    fun buttonsInLandscapeSitAboveTheRightCards() {
+        assertEquals(500, buttonsBottomPx(true, 0, 1000, sheetTop = 600, cardsTop = 300, rightCardsTop = 500))
+    }
+
+    @Test
+    fun buttonsInLandscapeIgnoreTheLeftColumn() {
+        assertEquals(24, buttonsBottomPx(true, 24, 1000, sheetTop = 600, cardsTop = 300, rightCardsTop = none))
+    }
+
     @Test
     fun landscapeControlsAndRoutesClearTheColumn() {
         assertEquals(408, leftClearance(landscape = true, insetLeft = 0, columnRight = 408))
