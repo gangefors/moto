@@ -72,6 +72,7 @@ internal val BUTTON_ICONS = mapOf(
     "unridden" to ButtonIcon(R.drawable.ic_unridden, R.string.say_unridden),
     "ridden" to ButtonIcon(R.drawable.ic_ridden, R.string.say_ridden),
     "ridden_button" to ButtonIcon(R.drawable.ic_ridden, R.string.say_ridden_button),
+    "fit" to ButtonIcon(R.drawable.ic_fit_route, R.string.say_fit),
     "navigation" to ButtonIcon(R.drawable.ic_navigation, R.string.say_navigation),
     "close" to ButtonIcon(R.drawable.ic_close, R.string.say_close),
     "stop" to ButtonIcon(R.drawable.ic_stop, R.string.say_stop),

@@ -269,6 +269,9 @@
     <string name="say_ridden">the dashed line</string>
     <string name="help_key_ridden_button">Ridden roads</string>
     <string name="help_key_ridden_button_what">above the sheet: shows or hides the roads your rides have been on while you plan; Show ridden roads in Ride settings stays as it is</string>
+    <string name="help_key_fit">Whole route</string>
+    <string name="help_key_fit_what">beside the ridden roads button: zooms the map out or in to show all the routes or loops, clear of the sheet and cards</string>
+    <string name="say_fit">the whole route button</string>
     <string name="say_ridden_button">the ridden roads button</string>
     <string name="fit_route">Show the whole route</string>
     <string name="say_navigation">the Ride button</string>
