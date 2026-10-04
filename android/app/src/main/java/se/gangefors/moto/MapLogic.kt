@@ -240,8 +240,8 @@ val UNRIDDEN_CHOICES: List<UnriddenMode> = listOf(UnriddenMode.ANY, UnriddenMode
 /**
  * Whether the ridden roads button shows above the planning sheet (the rider,
  * 2026-10-01, mockup Ridden roads toggle, spot A): while a route or loop
- * is planned ([planning]) with the sheet not pulled up ([sheetExpanded]),
- * and when the rider's rides have been on roads of this map ([hasRidden]).
+ * is planned ([planning]), also with the sheet pulled up (it then sits
+ * right above the sheet's measured top, [controlsBottomPx]), and when the rider's rides have been on roads of this map ([hasRidden]).
  * At any zoom: the lines are shown or hidden by this button alone. On or
  * off, so it can switch the layer either way, for the plan only
  * ([riddenShown]).
@@ -252,8 +252,8 @@ val UNRIDDEN_CHOICES: List<UnriddenMode> = listOf(UnriddenMode.ANY, UnriddenMode
  * its choice ends with the plan (2026-10-02). */
 fun riddenShown(setting: Boolean, whilePlanning: Boolean?): Boolean = whilePlanning ?: setting
 
-fun riddenButtonShown(planning: Boolean, sheetExpanded: Boolean, hasRidden: Boolean): Boolean =
-    planning && !sheetExpanded && hasRidden
+fun riddenButtonShown(planning: Boolean, hasRidden: Boolean): Boolean =
+    planning && hasRidden
 
 /** How an unridden roads choice is stored in preferences. */
 fun unriddenKey(u: UnriddenMode): String = u.name.lowercase()

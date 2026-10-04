@@ -358,12 +358,11 @@ class MapLogicTest {
 
     @Test
     fun theRiddenRoadsButtonShowsWhilePlanningAtAnyZoom() {
-        assertTrue(riddenButtonShown(planning = true, sheetExpanded = false, hasRidden = true))
-        // Not without a route or loop, with the sheet pulled up, or before
+        assertTrue(riddenButtonShown(planning = true, hasRidden = true))
+        // Not without a route or loop, or before
         // any ride has been on this map's roads. Zooming never hides it.
-        assertFalse(riddenButtonShown(false, false, true))
-        assertFalse(riddenButtonShown(true, true, true))
-        assertFalse(riddenButtonShown(true, false, false))
+        assertFalse(riddenButtonShown(false, true))
+        assertFalse(riddenButtonShown(true, false))
     }
 
     @Test
@@ -594,5 +593,13 @@ class MapLogicTest {
         assertFalse(themeIsDark(chosen = null, phoneDark = false))
         assertTrue(themeIsDark(chosen = true, phoneDark = false))
         assertFalse(themeIsDark(chosen = false, phoneDark = true))
+    }
+
+    @Test
+    fun buttonsStayAboveAPulledUpSheetInPortrait() {
+        val none = Int.MAX_VALUE
+        // Sheet at rest, then pulled up to 1300 px of 2000: the buttons follow its top.
+        assertEquals(400, controlsBottomPx(false, 48, 2000, sheetTop = 1600, cardsTop = none, rightCardsTop = none))
+        assertEquals(1300, controlsBottomPx(false, 48, 2000, sheetTop = 700, cardsTop = none, rightCardsTop = none))
     }
 }
