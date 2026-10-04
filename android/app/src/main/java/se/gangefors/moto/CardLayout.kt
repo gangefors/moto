@@ -53,16 +53,18 @@ fun infoColumnWidthDp(windowWidthDp: Int, insetLeftDp: Float, insetRightDp: Floa
 fun rightCardCover(mapHeight: Int, rightCardsTop: Int): Int =
     if (rightCardsTop < mapHeight) mapHeight - rightCardsTop else 0
 
-/** How high the planning sheet may grow at rest or upright, as a share of the window's height. */
+/** How high the planning sheet may grow upright and pulled up, as a share of the window's height. */
 const val SHEET_MAX_SHARE = 0.55f
 
 /**
- * How high the planning sheet may grow, in pixels: in landscape, pulled
- * up, up to the status bar ([insetTop]) so more of the settings show;
- * otherwise [SHEET_MAX_SHARE] of the window's [mapHeight].
+ * How high the planning sheet may grow, in pixels. At rest it wraps its
+ * whole content (figures, stats, switcher, chips), capped only by the room
+ * below the status bar ([insetTop]); only if even that does not fit does
+ * it scroll. Pulled up it grows the same way in landscape, and upright
+ * to [SHEET_MAX_SHARE] of the window's [mapHeight].
  */
 fun sheetMaxHeightPx(landscape: Boolean, expanded: Boolean, mapHeight: Int, insetTop: Int): Int =
-    if (landscape && expanded) {
+    if (landscape || !expanded) {
         (mapHeight - insetTop).coerceAtLeast(0)
     } else {
         (mapHeight.coerceAtLeast(0) * SHEET_MAX_SHARE).toInt()

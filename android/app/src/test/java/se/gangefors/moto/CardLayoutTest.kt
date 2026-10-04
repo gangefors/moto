@@ -68,10 +68,10 @@ class CardLayoutTest {
     }
 
     @Test
-    fun otherSheetsKeepTheShareOfTheHeight() {
-        assertEquals(594, sheetMaxHeightPx(landscape = true, expanded = false, mapHeight = 1080, insetTop = 80))
+    fun restingSheetWrapsContentUpToTheRoomAndUprightPulledUpKeepsTheShare() {
+        assertEquals(1000, sheetMaxHeightPx(landscape = true, expanded = false, mapHeight = 1080, insetTop = 80))
         assertEquals(1320, sheetMaxHeightPx(landscape = false, expanded = true, mapHeight = 2400, insetTop = 100))
-        assertEquals(1320, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = 2400, insetTop = 100))
+        assertEquals(2300, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = 2400, insetTop = 100))
         assertEquals(0, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = -5, insetTop = 0))
     }
 
