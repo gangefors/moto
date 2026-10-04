@@ -72,6 +72,7 @@ The rider's plan has usage limits, and every turn re-sends the whole conversatio
 - `search` (Haiku): broad searches across the code when only the answer and `path:line` are needed.
 - `implement` (Sonnet): an agreed, precise change (an accepted ADR's action items, a signed-off mockup, a known-cause bug, strings, UI tweaks) with its tests and local checks. Brief it fully: it starts with no context. Review its diff before pushing.
 - `mockup` (Sonnet): new mockups from a brief, and revisions.
+- `verify` (Sonnet): the local checks (fmt, clippy, tests, deny, Gradle build, lint, unit tests; golden routes and benchmark when routing code changed) before every push, so broken code never reaches the repo. Reports pass or fail, and any change in golden routes or performance.
 
 Keep in the main session: architecture and ADRs, security-sensitive parsing, route scoring and golden routes, bugs whose cause is unknown, and reviewing what the agents did. The main session's model is the rider's choice; when a session's work clearly fits another one, say so once (`docs/working-with-claude.md` has the table).
 
