@@ -321,17 +321,13 @@ class MapLogicTest {
     }
 
     @Test
-    fun theRiddenRoadsButtonShowsWhilePlanningNearEnough() {
-        val min = 7.8f
-        assertTrue(riddenButtonShown(planning = true, sheetExpanded = false, hasRidden = true, zoom = 10f, minZoom = min))
-        assertTrue(riddenButtonShown(true, false, true, min, min))
-        // Not without a route or loop, with the sheet pulled up, before
-        // any ride has been on this map's roads, or zoomed too far out
-        // for the layer.
-        assertFalse(riddenButtonShown(false, false, true, 10f, min))
-        assertFalse(riddenButtonShown(true, true, true, 10f, min))
-        assertFalse(riddenButtonShown(true, false, false, 10f, min))
-        assertFalse(riddenButtonShown(true, false, true, 7f, min))
+    fun theRiddenRoadsButtonShowsWhilePlanningAtAnyZoom() {
+        assertTrue(riddenButtonShown(planning = true, sheetExpanded = false, hasRidden = true))
+        // Not without a route or loop, with the sheet pulled up, or before
+        // any ride has been on this map's roads. Zooming never hides it.
+        assertFalse(riddenButtonShown(false, false, true))
+        assertFalse(riddenButtonShown(true, true, true))
+        assertFalse(riddenButtonShown(true, false, false))
     }
 
     @Test

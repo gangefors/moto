@@ -1141,7 +1141,7 @@ fun MapScreen() {
     LaunchedEffect(routeEnds != null) { if (routeEnds != null) cardExpanded = false }
     // The map's own controls (compass, logo, attribution) stay clear of
     // the system bars, the buttons and the sheet.
-    val riddenButton = riddenButtonShown(planning, cardExpanded, hasRidden, mapZoom, riddenMinZoom)
+    val riddenButton = riddenButtonShown(planning, cardExpanded, hasRidden)
     // Planning over: the ridden roads follow the setting again.
     LaunchedEffect(planning) { if (!planning) riddenWhilePlanning = null }
     // The compass at the top right, under Ride settings' button when that

@@ -252,8 +252,8 @@ val UNRIDDEN_CHOICES: List<UnriddenMode> = listOf(UnriddenMode.ANY, UnriddenMode
  * its choice ends with the plan (2026-10-02). */
 fun riddenShown(setting: Boolean, whilePlanning: Boolean?): Boolean = whilePlanning ?: setting
 
-fun riddenButtonShown(planning: Boolean, sheetExpanded: Boolean, hasRidden: Boolean, zoom: Float, minZoom: Float): Boolean =
-    planning && !sheetExpanded && hasRidden && zoom >= minZoom
+fun riddenButtonShown(planning: Boolean, sheetExpanded: Boolean, hasRidden: Boolean): Boolean =
+    planning && !sheetExpanded && hasRidden
 
 /** How an unridden roads choice is stored in preferences. */
 fun unriddenKey(u: UnriddenMode): String = u.name.lowercase()

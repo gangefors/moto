@@ -634,6 +634,7 @@
 
     <!-- Backup and restore (ADR-0012). -->
     <string name="backup_title">Backup</string>
+    <string name="backup_menu">Backup &amp; Restore</string>
     <string name="backup_text">A backup is one file with your favourite sections, rides, saved routes, tags and settings, so you can reinstall the app or move to a new phone. Map regions aren’t in it: download them again after restoring.</string>
     <string name="backup_private">The file shows where you’ve ridden: keep it somewhere private.</string>
     <string name="backup_last">Last backup: %1$s</string>

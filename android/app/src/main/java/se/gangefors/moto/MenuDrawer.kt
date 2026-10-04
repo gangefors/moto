@@ -102,7 +102,7 @@ fun MenuDrawer(
                 Item(R.drawable.ic_bookmark, R.string.library_title) { pick(MenuTopic.LIBRARY) }
                 Item(R.drawable.ic_star, R.string.sections_title) { pick(MenuTopic.SECTIONS) }
                 Item(R.drawable.ic_map, R.string.region_title) { pick(MenuTopic.REGION) }
-                Item(R.drawable.ic_backup, R.string.backup_title) { pick(MenuTopic.BACKUP) }
+                Item(R.drawable.ic_backup, R.string.backup_menu) { pick(MenuTopic.BACKUP) }
                 HorizontalDivider(Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
                 Item(R.drawable.ic_help, R.string.help_open) { pick(MenuTopic.HELP) }
                 Item(R.drawable.ic_info, R.string.about_open) { pick(MenuTopic.ABOUT) }
