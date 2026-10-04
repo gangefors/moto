@@ -245,7 +245,17 @@ fun MapScreen() {
         mapView.getMapAsync { m ->
             m.uiSettings.isAttributionEnabled = true
             m.uiSettings.isLogoEnabled = true
-            m.cameraPosition = initialCamera(resources)
+            // Open on the rider when the phone knows where they are, so the
+            // first frame is already right; the whole region otherwise.
+            val rough = if (hasLocationPermission(context)) lastKnownPosition(context) else null
+            m.cameraPosition = if (rough != null) {
+                CameraPosition.Builder()
+                    .target(LatLng(rough.latitude, rough.longitude))
+                    .zoom(RoutePrefs.locateZooms(context).area.toDouble())
+                    .build()
+            } else {
+                initialCamera(resources)
+            }
             m.setStyle(mapStyleUrl(resources, darkMap)) { s ->
                 map = m
                 style = s
