@@ -330,20 +330,26 @@ class MapLogicTest {
     }
 
     @Test
-    fun theButtonsWrapOnlyWhenMeasuredHeightIsShortInLandscape() {
+    fun theFlagLeavesTheRightColumnOnlyWhenItDoesNotFitInLandscape() {
         val four = List(4) { MAP_BUTTON_DP }
-        // Exactly fits: no wrap. One dp short: wrap.
-        assertEquals(true, buttonsFit(272f, four))
-        assertEquals(false, buttonsFit(271f, four))
-        assertEquals(false, wrapButtons(landscape = true, availableDp = 272f, itemHeightsDp = four, hasLeftColumn = true))
-        assertEquals(true, wrapButtons(landscape = true, availableDp = 271f, itemHeightsDp = four, hasLeftColumn = true))
-        // Nothing for a second column: no wrap.
-        assertEquals(false, wrapButtons(landscape = true, availableDp = 100f, itemHeightsDp = four, hasLeftColumn = false))
-        // Portrait never wraps.
-        assertEquals(false, wrapButtons(landscape = false, availableDp = 100f, itemHeightsDp = four, hasLeftColumn = true))
+        // Exactly fits: stays on top. One dp short: moves left.
+        assertEquals(true, flagInRightColumn(landscape = true, availableDp = 272f, itemHeightsDp = four))
+        assertEquals(false, flagInRightColumn(landscape = true, availableDp = 271f, itemHeightsDp = four))
+        // Upright it is always on top, whatever the height.
+        assertEquals(true, flagInRightColumn(landscape = false, availableDp = 100f, itemHeightsDp = four))
         // The common landscape case: 411 dp high, 24 dp status bar, 16 dp gesture bar.
-        val available = 411f - 24f - buttonsTopLimitDp(settingsButtonShown = true) - MAP_MARGIN_DP - 16f
-        assertEquals(false, wrapButtons(landscape = true, availableDp = available, itemHeightsDp = four, hasLeftColumn = true))
+        val common = 411f - 24f - buttonsTopLimitDp(settingsButtonShown = true) - MAP_MARGIN_DP - 16f
+        assertEquals(true, flagInRightColumn(landscape = true, availableDp = common, itemHeightsDp = four))
+        // Small 360 dp high landscape: flag, add, loop, record do not fit.
+        val small = 360f - 24f - buttonsTopLimitDp(settingsButtonShown = true) - MAP_MARGIN_DP - 16f
+        assertEquals(false, flagInRightColumn(landscape = true, availableDp = small, itemHeightsDp = four))
+        // With the zoom buttons (recording) the column is taller still.
+        val withZoom = listOf(MAP_BUTTON_DP, MAP_BUTTON_DP, MAP_BUTTON_DP, 105f, MAP_BUTTON_DP)
+        assertEquals(false, flagInRightColumn(landscape = true, availableDp = common, itemHeightsDp = withZoom))
+        // Without Add and Loop (ride mode): flag and Record fit even small.
+        assertEquals(true, flagInRightColumn(landscape = true, availableDp = small, itemHeightsDp = listOf(MAP_BUTTON_DP, MAP_BUTTON_DP)))
+        // Large display size: fewer dp of height, so the flag moves left sooner.
+        assertEquals(false, flagInRightColumn(landscape = true, availableDp = 200f, itemHeightsDp = four))
     }
 
     @Test

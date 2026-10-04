@@ -2710,7 +2710,7 @@ fun MapScreen() {
             val showLocate = hasLocation && (!rideMode || ridePanned)
             val showZoom = recording is Recording.State.Active
             val showFlag = store is StoreState.Ready && reviewShown
-            val singleColumn = buildList {
+            val rightColumn = buildList {
                 if (showFlag) add(MAP_BUTTON_DP)
                 if (showAdd) add(MAP_BUTTON_DP)
                 if (showAddLoop) add(MAP_BUTTON_DP)
@@ -2837,12 +2837,13 @@ fun MapScreen() {
                 }
             }
             // The buttons stay below the top row (the compass sits beside
-            // Ride settings' button) and clear of the system
-            // bars. Maps fit left of this column (the position button
-            // beside Record sits low, where little is fitted). Where one
-            // column does not fit the measured height in landscape, they
-            // wrap into a second column to the left: Add favourite beside
-            // Loop, the position button beside Record (option E/A).
+            // Ride settings' button) and clear of the system bars. Right
+            // column: the flag when it fits (landscape; always upright),
+            // Add favourite, Loop, Record, which never move. Left column:
+            // the position button beside Record, with the flag right above
+            // it where the right column has no room for it. Maps fit left
+            // of the right column (the position button sits low, where
+            // little is fitted).
             BoxWithConstraints(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -2854,39 +2855,35 @@ fun MapScreen() {
                         top = buttonsTopLimitDp(settingsButtonShown = !rideMode).dp,
                     ),
             ) {
-                val wrapped = wrapButtons(landscape, maxHeight.value, singleColumn, hasLeftColumn = showAdd || showLocate)
-                if (!wrapped) {
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        flagButton()
-                        addButton()
-                        loopButton()
-                        zoomButtons()
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
-                            locateButton()
-                            recordButton(Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() })
-                        }
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+                val flagLeft = showFlag && !flagInRightColumn(landscape, maxHeight.value, rightColumn)
+                val leftColumn = flagLeft || showLocate
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+                    if (leftColumn) {
                         Column(
-                            modifier = Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() },
+                            modifier = if (flagLeft) {
+                                Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() }
+                            } else {
+                                Modifier
+                            },
                             horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
-                            addButton()
-                            // Keeps the position button level with Record.
-                            if (showZoom && showAdd) Spacer(Modifier.height(ZOOM_BUTTONS_DP.dp))
+                            if (flagLeft) flagButton()
                             locateButton()
                         }
-                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            flagButton()
-                            loopButton()
-                            zoomButtons()
-                            recordButton(Modifier)
-                        }
+                    }
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (!flagLeft) flagButton()
+                        addButton()
+                        loopButton()
+                        zoomButtons()
+                        recordButton(
+                            if (flagLeft) {
+                                Modifier
+                            } else {
+                                Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() }
+                            },
+                        )
                     }
                 }
             }

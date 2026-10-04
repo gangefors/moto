@@ -592,9 +592,11 @@ fun buttonsFit(availableDp: Float, itemHeightsDp: List<Float>): Boolean =
     buttonStackHeightDp(itemHeightsDp) <= availableDp
 
 /**
- * Whether the buttons wrap into a second column to the left: in landscape
- * only, when one column does not fit the measured height and there is
- * something for the second column ([hasLeftColumn]). Portrait never wraps.
+ * Whether the review flag sits at the top of the right-hand column, above
+ * Add favourite: always upright, and in landscape when the column with it
+ * ([itemHeightsDp], flag first) fits the measured height [availableDp]
+ * below the top row. Otherwise it sits in a second column to the left,
+ * right above the position button, and nothing in the right column moves.
  */
-fun wrapButtons(landscape: Boolean, availableDp: Float, itemHeightsDp: List<Float>, hasLeftColumn: Boolean): Boolean =
-    landscape && hasLeftColumn && !buttonsFit(availableDp, itemHeightsDp)
+fun flagInRightColumn(landscape: Boolean, availableDp: Float, itemHeightsDp: List<Float>): Boolean =
+    !landscape || buttonsFit(availableDp, itemHeightsDp)
