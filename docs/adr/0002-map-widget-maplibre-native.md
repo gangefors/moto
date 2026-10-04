@@ -62,7 +62,7 @@ Use **MapLibre Native for Android** as the only map widget. It renders vector ti
 
 ## Trade-off Analysis
 
-The key trade-off is **polish and place search (Google)** against **data consistency, offline use, styling and portability (MapLibre)**. For a route planner whose output is OSM-derived lines, a map that renders the same data wins. Place search was a P1 to add separately (Nominatim or Photon); it was dropped on 2026-10-03 (the rider), and points are picked on the map. Google's ToS uncertainty alone would be reason enough to avoid building the core experience on it.
+The key trade-off is **polish and place search (Google)** against **data consistency, offline use, styling and portability (MapLibre)**. For a route planner whose output is OSM-derived lines, a map that renders the same data wins. Place search was a P1 to add separately (Nominatim or Photon); it was dropped on 2026-10-03, and points are picked on the map. Google's ToS uncertainty alone would be reason enough to avoid building the core experience on it.
 
 ## Consequences
 
