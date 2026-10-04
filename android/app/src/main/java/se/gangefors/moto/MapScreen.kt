@@ -116,6 +116,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -1795,41 +1797,45 @@ fun MapScreen() {
         m.addOnCameraMoveStartedListener(moved)
         onDispose { m.removeOnCameraMoveStartedListener(moved) }
     }
-    // The start (the rider's videos, 2026-10-04): following alone, and one move
-    // to the first fix, both left the map on the whole region, so something
-    // puts the camera back. For the first seconds the map is therefore put
-    // on the rider at the area's zoom, from the phone's last known position
-    // until the first fix, and again whenever it is found elsewhere; each
-    // correction is marked for Debug tools. A pan or pinch, or riding, ends it.
+    // The start (seen on a phone, 2026-10-04): a follow asked for as soon as
+    // the style was loaded was undone by the map, which was not ready for
+    // it. So wait until the map has drawn, then put it on the rider at the
+    // area's zoom (the phone's last known position stands in until the first
+    // fix) and let it follow from there, with one recheck a moment later.
+    // Nothing is forced after that. A pan or pinch before it, or riding,
+    // cancels it. Each step is marked for Debug tools.
     LaunchedEffect(map, style, hasLocation) {
         val m = map
         if (m == null || style == null || !hasLocation) return@LaunchedEffect
         val rough = lastKnownPosition(context)
-        DebugTools.mark("start: rough position " + (if (rough != null) "found" else "none"))
-        val deadline = SystemClock.elapsedRealtime() + START_GUARD_MS
-        while (!startSettled && SystemClock.elapsedRealtime() < deadline) {
-            if (rideModeNow.value) break
-            val component = m.locationComponent.takeIf { it.isLocationComponentActivated }
-            val fix = component?.lastKnownLocation
-            val here = fix?.let { LatLng(it.latitude, it.longitude) } ?: rough?.let { LatLng(it.latitude, it.longitude) }
-            if (here != null) {
-                val camera = m.cameraPosition
-                val target = camera.target
-                val off = target == null || kotlin.math.abs(target.latitude - here.latitude) > START_OFF_DEGREES ||
-                    kotlin.math.abs(target.longitude - here.longitude) > START_OFF_DEGREES
-                val wrongZoom = kotlin.math.abs(camera.zoom - locateZooms.area) > START_ZOOM_TOLERANCE
-                if (off || wrongZoom) {
-                    DebugTools.mark("start: camera at zoom " + camera.zoom + ", moved to the rider")
-                    m.moveCamera(CameraUpdateFactory.newLatLngZoom(here, locateZooms.area.toDouble()))
-                } else if (fix != null) {
-                    // On the rider at the right zoom with a real fix: follow it from here.
-                    component.cameraMode = CameraMode.TRACKING
-                    startSettled = true
-                    DebugTools.mark("start: following the rider")
-                }
-            }
-            delay(START_FIX_POLL_MS)
+        val ready = CompletableDeferred<Unit>()
+        val onIdle = MapView.OnDidBecomeIdleListener { ready.complete(Unit) }
+        mapView.addOnDidBecomeIdleListener(onIdle)
+        val drawn = try {
+            withTimeoutOrNull(START_READY_TIMEOUT_MS) { ready.await() } != null
+        } finally {
+            mapView.removeOnDidBecomeIdleListener(onIdle)
         }
+        DebugTools.mark("start: map " + (if (drawn) "drawn" else "not drawn in time") + ", rough position " + (if (rough != null) "found" else "none"))
+        fun goToRider(step: String) {
+            if (startSettled || rideModeNow.value) return
+            val component = m.locationComponent.takeIf { it.isLocationComponentActivated } ?: return
+            val fix = component.lastKnownLocation
+            val here = fix?.let { LatLng(it.latitude, it.longitude) } ?: rough?.let { LatLng(it.latitude, it.longitude) } ?: return
+            val camera = m.cameraPosition
+            val target = camera.target
+            val off = target == null || kotlin.math.abs(target.latitude - here.latitude) > START_OFF_DEGREES ||
+                kotlin.math.abs(target.longitude - here.longitude) > START_OFF_DEGREES
+            if (off || kotlin.math.abs(camera.zoom - locateZooms.area) > START_ZOOM_TOLERANCE) {
+                DebugTools.mark("start: " + step + ", camera at zoom " + camera.zoom + ", moved to the rider")
+                m.moveCamera(CameraUpdateFactory.newLatLngZoom(here, locateZooms.area.toDouble()))
+            }
+            component.cameraMode = CameraMode.TRACKING
+        }
+        goToRider("first")
+        delay(START_RECHECK_MS)
+        goToRider("recheck")
+        startSettled = true
     }
 
     // Riding a route (ADR-0011): the map follows the rider, the way they
@@ -3334,11 +3340,11 @@ private fun lastKnownPosition(context: Context): Location? {
     }.getOrNull()
 }
 
-/** How often the start waits for the first position fix. */
-private const val START_FIX_POLL_MS = 500L
+/** How long the start waits for the map to have drawn. */
+private const val START_READY_TIMEOUT_MS = 3_000L
 
-/** How long the start keeps putting the map on the rider. */
-private const val START_GUARD_MS = 20_000L
+/** How long after the first move the start checks the map once more. */
+private const val START_RECHECK_MS = 1_500L
 
 /** How far off the rider the map's centre may be, in degrees (about 200 m), before the start moves it. */
 private const val START_OFF_DEGREES = 0.002
