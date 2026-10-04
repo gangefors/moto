@@ -146,12 +146,46 @@ class CardLayoutTest {
     }
 
     @Test
-    fun openingAnInfoCardClosesTheOthers() {
-        InfoCard.entries.forEach { opening ->
-            val others = InfoCard.entries.toSet() - opening
-            assertEquals(others, infoCardsToClose(opening))
-            assertFalse(opening in infoCardsToClose(opening))
+    fun showingARouteOrRideClearsTheMapOfTheOtherCards() {
+        listOf(InfoCard.RIDE, InfoCard.SAVED_ROUTE, InfoCard.SECTION).forEach { opening ->
+            assertEquals(InfoCard.entries.toSet() - opening, infoCardsToClose(opening))
         }
+    }
+
+    @Test
+    fun tappingNeverClosesAShownRouteOrRide() {
+        listOf(InfoCard.ROAD, InfoCard.FAVOURITE).forEach { opening ->
+            assertTrue(infoCardsToClose(opening).none { it in SHOWN_CARDS })
+            assertFalse(opening in infoCardsToClose(opening))
+            // A saved route's card and a tapped one stack.
+            assertEquals(
+                setOf(InfoCard.SAVED_ROUTE, opening),
+                infoCardsAfterOpening(setOf(InfoCard.SAVED_ROUTE), opening),
+            )
+            assertEquals(setOf(InfoCard.RIDE, opening), infoCardsAfterOpening(setOf(InfoCard.RIDE), opening))
+        }
+    }
+
+    @Test
+    fun aTappedCardReplacesTheOtherTappedOne() {
+        TAPPED_CARDS.forEach { open ->
+            listOf(InfoCard.ROAD, InfoCard.FAVOURITE).forEach { opening ->
+                assertEquals(
+                    setOf(InfoCard.RIDE, opening),
+                    infoCardsAfterOpening(setOf(InfoCard.RIDE, open), opening),
+                )
+            }
+        }
+        assertEquals(
+            setOf(InfoCard.FAVOURITE, InfoCard.SAVED_ROUTE),
+            infoCardsAfterOpening(setOf(InfoCard.ROAD, InfoCard.SAVED_ROUTE), InfoCard.FAVOURITE),
+        )
+    }
+
+    @Test
+    fun theGroupsAreSeparate() {
+        assertEquals(emptySet<InfoCard>(), TAPPED_CARDS.intersect(SHOWN_CARDS))
+        assertEquals(InfoCard.entries.toSet(), TAPPED_CARDS + SHOWN_CARDS)
     }
 
     @Test
@@ -168,14 +202,21 @@ class CardLayoutTest {
     }
 
     @Test
-    fun theNewestInfoCardReplacesAnyOpenOne() {
+    fun aShownRouteOrRideReplacesAnyOpenCard() {
         InfoCard.entries.forEach { open ->
-            InfoCard.entries.forEach { opening ->
+            listOf(InfoCard.RIDE, InfoCard.SAVED_ROUTE).forEach { opening ->
                 assertEquals(setOf(opening), infoCardsAfterOpening(setOf(open), opening))
             }
         }
         assertEquals(setOf(InfoCard.ROAD), infoCardsAfterOpening(emptySet(), InfoCard.ROAD))
         assertEquals(setOf(InfoCard.RIDE), infoCardsAfterOpening(InfoCard.entries.toSet(), InfoCard.RIDE))
+    }
+
+    @Test
+    fun theCardStackIsCappedToTheRoomBetweenTheLimits() {
+        assertEquals(2400 - 100 - 200 - 32, cardStackMaxHeightPx(2400, 100, 200, 16))
+        assertEquals(0, cardStackMaxHeightPx(300, 200, 200, 16))
+        assertEquals(1000 - 32, cardStackMaxHeightPx(1000, -5, -5, 16))
     }
 
     @Test

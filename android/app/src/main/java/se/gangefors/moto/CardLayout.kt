@@ -162,11 +162,27 @@ fun fitPanels(
     ),
 )
 
-/** The cards that tell about one thing on the map; at most one is open. */
+/** The cards that tell about one thing on the map. */
 enum class InfoCard { ROAD, FAVOURITE, SECTION, RIDE, SAVED_ROUTE }
 
-/** The info cards to close when [opening] opens: all the others (the newest wins). */
-fun infoCardsToClose(opening: InfoCard): Set<InfoCard> = InfoCard.entries.toSet() - opening
+/** What was tapped on the map: at most one of these cards is open, above the shown ones. */
+val TAPPED_CARDS: Set<InfoCard> = setOf(InfoCard.ROAD, InfoCard.FAVOURITE, InfoCard.SECTION)
+
+/** What is shown on the map (a ride or a saved route): at most one of these cards is open. */
+val SHOWN_CARDS: Set<InfoCard> = setOf(InfoCard.RIDE, InfoCard.SAVED_ROUTE)
+
+/**
+ * The info cards to close when [opening] opens. A shown ride or saved
+ * route (opened from a list or the map) clears the map first: all the
+ * others close. A favourite section shown on its own does the same, as it
+ * takes the map's route layer. A tapped road or favourite only replaces
+ * another tapped card: tapping never closes a shown route or ride, whose
+ * card stays below.
+ */
+fun infoCardsToClose(opening: InfoCard): Set<InfoCard> = when (opening) {
+    InfoCard.ROAD, InfoCard.FAVOURITE -> TAPPED_CARDS - opening
+    InfoCard.SECTION, InfoCard.RIDE, InfoCard.SAVED_ROUTE -> InfoCard.entries.toSet() - opening
+}
 
 /**
  * The info cards to close when a plan (a route or a loop) starts: all
@@ -180,3 +196,14 @@ fun infoCardsToCloseOnPlanStart(planOpen: Boolean): Set<InfoCard> =
 /** The info cards open after [opening] opens while [open] were: only it. */
 fun infoCardsAfterOpening(open: Set<InfoCard>, opening: InfoCard): Set<InfoCard> =
     (open - infoCardsToClose(opening)) + opening
+
+
+/**
+ * The tallest the stack of cards may be, in pixels: the window's
+ * [mapHeight] less the [topLimit] (the status bar or the notices, whichever
+ * reaches lower) and the [bottomLimit] (the sheet, or the bottom bar),
+ * less the gaps around the stack ([gapPx], twice). Taller, the info
+ * cards in it scroll.
+ */
+fun cardStackMaxHeightPx(mapHeight: Int, topLimit: Int, bottomLimit: Int, gapPx: Int): Int =
+    (mapHeight - topLimit.coerceAtLeast(0) - bottomLimit.coerceAtLeast(0) - 2 * gapPx.coerceAtLeast(0)).coerceAtLeast(0)

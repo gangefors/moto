@@ -36,6 +36,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -2301,10 +2304,10 @@ fun MapScreen() {
                 if (riddenButton) RiddenButton(on = riddenOn, onChange = { riddenWhilePlanning = it })
             }
         }
-        // The cards: info cards (a favourite, a ride, a saved route, a
-        // favourite section, a road; at most one) sit on top; whatever is
-        // in hand (the start card, a task, a message) stays below them,
-        // nearest the sheet.
+        // The cards: what was tapped (a favourite, a favourite section or a
+        // road; at most one) sits on top of what is shown (a ride or a saved
+        // route; at most one); whatever is in hand (the start card, a task,
+        // a message) stays below them, nearest the sheet.
         val infoCards: @Composable () -> Unit = {
             if (!rideMode) favouriteInfo?.let { f ->
                 FavouriteInfoCard(
@@ -2312,6 +2315,27 @@ fun MapScreen() {
                     engine = (region as? RegionState.Ready)?.engine,
                     darkMap = darkMap,
                     onClose = { favouriteInfoId = null },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            shownSection?.let { s ->
+                ShownSectionCard(
+                    s,
+                    engine = (region as? RegionState.Ready)?.engine,
+                    onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
+                    onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
+                    onEdit = { editing = s },
+                    onClose = { hideSection() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            roadInfo?.let {
+                RoadInfoCard(
+                    it,
+                    onClose = {
+                        roadInfo = null
+                        overlays?.snap?.clear()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -2344,27 +2368,6 @@ fun MapScreen() {
                             RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, s.favouriteParts, s.favouriteRatings),
                         )
                     },
-                )
-            }
-            shownSection?.let { s ->
-                ShownSectionCard(
-                    s,
-                    engine = (region as? RegionState.Ready)?.engine,
-                    onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
-                    onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
-                    onEdit = { editing = s },
-                    onClose = { hideSection() },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            roadInfo?.let {
-                RoadInfoCard(
-                    it,
-                    onClose = {
-                        roadInfo = null
-                        overlays?.snap?.clear()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -2482,6 +2485,14 @@ fun MapScreen() {
             val aboveSheet = with(density) {
                 if (planning && sheetTop < mapSize.height) (mapSize.height - sheetTop).toDp() else 0.dp
             }
+            // Two cards stacked (what was tapped above what is shown) may be
+            // taller than the room: the info cards then scroll.
+            val stackMaxPx = cardStackMaxHeightPx(
+                mapSize.height,
+                maxOf(topPanelBottom, insets.top),
+                if (planning && sheetTop < mapSize.height) mapSize.height - sheetTop else insets.bottom,
+                with(density) { 8.dp.roundToPx() },
+            )
             Column(
                 modifier = Modifier
                     .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
@@ -2495,6 +2506,7 @@ fun MapScreen() {
                     )
                     .padding(start = 8.dp, end = 8.dp, bottom = aboveSheet + 8.dp)
                     .widthIn(max = if (landscape) columnWidthDp.dp - 16.dp else TOP_BOX_MAX_WIDTH)
+                    .heightIn(max = with(density) { stackMaxPx.toDp() })
                     .fillMaxWidth()
                     .onGloballyPositioned {
                         cardsTop = it.boundsInRoot().top.roundToInt()
@@ -2502,7 +2514,12 @@ fun MapScreen() {
                     },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (!infoAtRight) infoCards()
+                if (!infoAtRight && infoCardOpen) {
+                    Column(
+                        Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) { infoCards() }
+                }
                 taskCardContent()
             }
         }
@@ -2519,11 +2536,18 @@ fun MapScreen() {
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Right + WindowInsetsSides.Bottom))
                     .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                     .widthIn(max = (columnDp - 16f).coerceAtLeast(0f).dp)
+                    .heightIn(
+                        max = with(density) {
+                            cardStackMaxHeightPx(mapSize.height, maxOf(topPanelBottom, insets.top), insets.bottom, 8.dp.roundToPx()).toDp()
+                        },
+                    )
                     .fillMaxWidth()
                     .onGloballyPositioned { infoRightTop = it.boundsInRoot().top.roundToInt() },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                infoCards()
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    infoCards()
+                }
             }
         }
         // Back steps back through what is on the map before it leaves the
