@@ -69,16 +69,17 @@ fun sheetMaxHeightPx(landscape: Boolean, expanded: Boolean, mapHeight: Int, inse
     }
 
 /**
- * How far up from the window's bottom, in pixels, the map's buttons at the
- * bottom right sit so no card hides them: right above the highest thing
- * under them, or the bottom bar ([insetBottom]) when nothing is. Upright
+ * How far up from the window's bottom, in pixels, the map's controls at the
+ * bottom (the logo and attribution, the scale bar and the buttons at the
+ * right) sit so no card hides them, in either orientation: right above
+ * the highest thing under them, or the bottom bar ([insetBottom]) when nothing is. Upright
  * that is the planning sheet ([sheetTop]) or the cards above it
  * ([cardsTop]); in landscape the sheet and the other cards are at the
  * left, so only the info cards at the right ([rightCardsTop]) count.
  * Tops are measured, [Int.MAX_VALUE] when not shown. The caller adds the
  * usual gap.
  */
-fun buttonsBottomPx(
+fun controlsBottomPx(
     landscape: Boolean,
     insetBottom: Int,
     mapHeight: Int,

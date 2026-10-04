@@ -1169,11 +1169,12 @@ fun MapScreen() {
     // The compass at the top right, left of Ride settings' button when
     // that shows, else in the corner: clear of the cards and the sheet at the
     // bottom (2026-10-02).
-    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, landscape, columnRight, infoRightTop) {
+    LaunchedEffect(map, insets, planning, marking, sheetTop, cardsTop, mapSize, rideMode, rideCardBottom, landscape, columnRight, infoRightTop) {
         val m = map ?: return@LaunchedEffect
-        // Upright the sheet is at the bottom; in landscape at the left, where
-        // the logo and attribution start right of it.
-        val sheet = if (planning && !landscape && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
+        // Rise above whatever card or sheet is at the bottom (the same rule
+        // as the scale and the buttons); in landscape the left column is
+        // cleared sideways instead.
+        val coverPx = controlsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
         with(density) {
             // In ride mode, under the ride or recording card.
             // With Ride settings' button showing, the compass sits in
@@ -1189,7 +1190,7 @@ fun MapScreen() {
                 m,
                 insets.copy(
                     left = leftClearance(landscape, insets.left, columnRight),
-                    bottom = max(max(insets.bottom, sheet), rightCardCover(mapSize.height, infoRightTop)),
+                    bottom = coverPx,
                 ),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
@@ -2218,10 +2219,9 @@ fun MapScreen() {
         // The scale (2026-10-03): at the bottom, a little above
         // the navigation bar or the planning sheet, just right of the map's
         // logo and attribution and below the tag button, clear of the
-        // position button; cards drawn later cover it.
+        // position button; sits above the cards, as the logo does.
         val scaleAbove = with(density) {
-            val sheet = if (planning && !landscape && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
-            max(max(insets.bottom, sheet), rightCardCover(mapSize.height, infoRightTop)).toDp()
+            controlsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop).toDp()
         }
         ScaleBar(
             metresPerDp = metresPerDp,
@@ -2267,7 +2267,7 @@ fun MapScreen() {
         // right above the sheet and the cards (upright), or above the info
         // cards at the right (landscape), and drops back when they close.
         if (riddenButton) {
-            val bottomPx = buttonsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
+            val bottomPx = controlsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
             RiddenButton(
                 on = riddenOn,
                 onChange = { riddenWhilePlanning = it },
