@@ -187,6 +187,16 @@ fun MapScreen() {
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
     var hasLocation by remember { mutableStateOf(hasLocationPermission(context)) }
+    // The permission can be given in the phone's settings while the app is
+    // open: look again whenever the app comes back to the front.
+    val permissionOwner = LocalLifecycleOwner.current
+    DisposableEffect(permissionOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) hasLocation = hasLocationPermission(context)
+        }
+        permissionOwner.lifecycle.addObserver(observer)
+        onDispose { permissionOwner.lifecycle.removeObserver(observer) }
+    }
     // The routing region: the downloaded one, if any (ADR-0008).
     val activeRegion by Regions.active.collectAsState()
     val regionDownload by Regions.download.collectAsState()
