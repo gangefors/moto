@@ -30,9 +30,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1185,17 +1188,25 @@ fun MapScreen() {
             // The logo and attribution start right of the side panel.
             val shift = if (panelMode) panelControlsShift(panelWidthDp.dp.roundToPx(), PANEL_GAP_DP.dp.roundToPx()) else 0
             // In ride mode, under the ride or recording card.
+            // In landscape, with Ride settings' button showing, the
+            // compass sits in the top row, left of it (option E).
+            val landscape = mapSize.width > mapSize.height
+            val topRow = landscape && !marking && !planning && !rideMode
+            val placement = compassPlacement(landscape, settingsButtonShown = topRow)
             val compassTop = if (rideMode && rideCardBottom > 0) {
                 rideCardBottom - insets.top + 8.dp.roundToPx()
+            } else if (topRow) {
+                placement.topDp.dp.roundToPx()
             } else {
                 compassTopDp(settingsButtonShown = !marking && !planning).dp.roundToPx()
             }
+            val compassRight = if (topRow) placement.rightDp.dp.roundToPx() else TOP_BUTTON_MARGIN.roundToPx()
             applyControlMargins(
                 m,
                 insets.copy(left = insets.left + shift, bottom = max(insets.bottom, sheet)),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
-                compassRight = TOP_BUTTON_MARGIN.roundToPx(),
+                compassRight = compassRight,
                 compassTop = compassTop,
             )
         }
@@ -2652,17 +2663,24 @@ fun MapScreen() {
         val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
         if (!marking && !planning && !cardsShown) {
             DisposableEffect(Unit) { onDispose { buttonsLeft = Int.MAX_VALUE } }
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .safeDrawingPadding()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                // The flag (the spots tagged on rides) with how many wait,
-                // the count on the button's corner, clear of the flag; on
-                // top, above Add favourite (2026-10-04).
+            val landscape = mapSize.width > mapSize.height
+            // What shows, for the measured fit (heights in dp).
+            val showAddLoop = region is RegionState.Ready && hasLocation && !rideMode
+            val showAdd = showAddLoop && store is StoreState.Ready
+            val showLocate = hasLocation && (!rideMode || ridePanned)
+            val showZoom = recording is Recording.State.Active
+            val showFlag = store is StoreState.Ready && reviewShown
+            val singleColumn = buildList {
+                if (showFlag) add(MAP_BUTTON_DP)
+                if (showAdd) add(MAP_BUTTON_DP)
+                if (showAddLoop) add(MAP_BUTTON_DP)
+                if (showZoom) add(ZOOM_BUTTONS_DP)
+                add(MAP_BUTTON_DP)
+            }
+            // The flag (the spots tagged on rides) with how many wait,
+            // the count on the button's corner, clear of the flag; on
+            // top, above Add favourite (2026-10-04).
+            val flagButton: @Composable () -> Unit = {
                 if (store is StoreState.Ready && reviewShown) {
                     BadgedBox(badge = { Badge { Text(badgeCount(pendingTags)) } }) {
                         FloatingActionButton(onClick = { startReview() }) {
@@ -2673,24 +2691,28 @@ fun MapScreen() {
                         }
                     }
                 }
-                // Not in ride mode (riding a route or recording). Add
-                // favourite on top, Loop below it, right above Record
-                // (2026-10-03).
-                if (region is RegionState.Ready && hasLocation && !rideMode) {
-                    if (store is StoreState.Ready) {
-                        FloatingActionButton(onClick = {
-                            marker.begin()
-                            markSession++
-                            marking = true
-                            draft = null
-                            showDraft()
-                            message = resources.getString(R.string.section_pick_start)
-                        }) {
-                            Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
-                        }
+            }
+            // Not in ride mode (riding a route or recording). Add
+            // favourite on top, Loop below it, right above Record
+            // (2026-10-03).
+            val addButton: @Composable () -> Unit = {
+                if (showAdd) {
+                    FloatingActionButton(onClick = {
+                        marker.begin()
+                        markSession++
+                        marking = true
+                        draft = null
+                        showDraft()
+                        message = resources.getString(R.string.section_pick_start)
+                    }) {
+                        Icon(painterResource(R.drawable.ic_add_road), contentDescription = stringResource(R.string.section_mark))
                     }
-                    // Loops from where the rider is, in one tap: a new set
-                    // each time.
+                }
+            }
+            // Loops from where the rider is, in one tap: a new set
+            // each time.
+            val loopButton: @Composable () -> Unit = {
+                if (showAddLoop) {
                     FloatingActionButton(onClick = {
                         val start = riderStart() ?: return@FloatingActionButton
                         picker.reset()
@@ -2699,9 +2721,11 @@ fun MapScreen() {
                         Icon(painterResource(R.drawable.ic_loop), contentDescription = stringResource(R.string.loop_from_me))
                     }
                 }
-                // While riding or recording: + and −, as a pinch is hard
-                // with gloves. Followed on a route they change its zoom for
-                // the rest of the ride; otherwise they zoom the map.
+            }
+            // While riding or recording: + and −, as a pinch is hard
+            // with gloves. Followed on a route they change its zoom for
+            // the rest of the ride; otherwise they zoom the map.
+            val zoomButtons: @Composable () -> Unit = {
                 if (recording is Recording.State.Active) {
                     ZoomButtons(
                         onZoom = { by ->
@@ -2726,49 +2750,102 @@ fun MapScreen() {
                         modifier = Modifier.padding(end = 4.dp),
                     )
                 }
-                // The bottom row: the position button left of Record (or
-                // Stop), so neither moves when the position button hides
-                // (2026-10-03). It is the location button, or while
-                // riding Recentre after a pan or pinch (hidden while the map
-                // follows the rider).
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
-                    if (hasLocation && !rideMode) {
-                        FloatingActionButton(onClick = { onLocateTap() }) {
+            }
+            // The position button, left of Record (or Stop), so neither
+            // moves when the position button hides (2026-10-03). It is the
+            // location button, or while riding Recentre after a pan or
+            // pinch (hidden while the map follows the rider).
+            val locateButton: @Composable () -> Unit = {
+                if (hasLocation && !rideMode) {
+                    FloatingActionButton(onClick = { onLocateTap() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_my_location),
+                            contentDescription = stringResource(R.string.my_location),
+                        )
+                    }
+                } else if (hasLocation && rideMode && ridePanned) {
+                    FloatingActionButton(onClick = { ridePanned = false }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_my_location),
+                            contentDescription = stringResource(R.string.ride_recentre),
+                        )
+                    }
+                }
+            }
+            // Record: a red dot. While recording: a stop square with
+            // a red arc running round the button, the same size as
+            // the others; the distance is in the notification.
+            // Riding to a route's start records nothing yet: Record
+            // is still there, to record the way there too.
+            val recordButton: @Composable (Modifier) -> Unit = { modifier ->
+                val active = (recording as? Recording.State.Active)?.takeIf { it.trackId != null }
+                Box(modifier) {
+                    if (active != null) {
+                        RecordingButton(
+                            onStop = { RecordingService.stop(context) },
+                            description = stringResource(R.string.record_stop_description, sectionKm(active.distanceM)),
+                        )
+                    } else {
+                        FloatingActionButton(onClick = { recordPermissions.launch(recordingPermissions()) }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_my_location),
-                                contentDescription = stringResource(R.string.my_location),
-                            )
-                        }
-                    } else if (hasLocation && rideMode && ridePanned) {
-                        FloatingActionButton(onClick = { ridePanned = false }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_my_location),
-                                contentDescription = stringResource(R.string.ride_recentre),
+                                painter = painterResource(R.drawable.ic_record_dot),
+                                contentDescription = stringResource(R.string.record_start),
+                                tint = RECORD_RED,
                             )
                         }
                     }
-                    // Record: a red dot. While recording: a stop square with
-                    // a red arc running round the button, the same size as
-                    // the others; the distance is in the notification.
-                    // Riding to a route's start records nothing yet: Record
-                    // is still there, to record the way there too.
-                    // Maps fit left of this column (the position button
-                    // beside Record sits low, where little is fitted).
-                    val active = (recording as? Recording.State.Active)?.takeIf { it.trackId != null }
-                    Box(Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() }) {
-                        if (active != null) {
-                            RecordingButton(
-                                onStop = { RecordingService.stop(context) },
-                                description = stringResource(R.string.record_stop_description, sectionKm(active.distanceM)),
-                            )
-                        } else {
-                            FloatingActionButton(onClick = { recordPermissions.launch(recordingPermissions()) }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_record_dot),
-                                    contentDescription = stringResource(R.string.record_start),
-                                    tint = RECORD_RED,
-                                )
-                            }
+                }
+            }
+            // The buttons stay below the top row (the compass sits beside
+            // Ride settings' button in landscape) and clear of the system
+            // bars. Maps fit left of this column (the position button
+            // beside Record sits low, where little is fitted). Where one
+            // column does not fit the measured height in landscape, they
+            // wrap into a second column to the left: Add favourite beside
+            // Loop, the position button beside Record (option E/A).
+            BoxWithConstraints(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .safeDrawingPadding()
+                    .padding(
+                        start = MAP_MARGIN_DP.dp,
+                        end = MAP_MARGIN_DP.dp,
+                        bottom = MAP_MARGIN_DP.dp,
+                        top = buttonsTopLimitDp(landscape, settingsButtonShown = !rideMode).dp,
+                    ),
+            ) {
+                val wrapped = wrapButtons(landscape, maxHeight.value, singleColumn, hasLeftColumn = showAdd || showLocate)
+                if (!wrapped) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        flagButton()
+                        addButton()
+                        loopButton()
+                        zoomButtons()
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+                            locateButton()
+                            recordButton(Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() })
+                        }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+                        Column(
+                            modifier = Modifier.onGloballyPositioned { buttonsLeft = it.boundsInRoot().left.roundToInt() },
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            addButton()
+                            // Keeps the position button level with Record.
+                            if (showZoom && showAdd) Spacer(Modifier.height(ZOOM_BUTTONS_DP.dp))
+                            locateButton()
+                        }
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            flagButton()
+                            loopButton()
+                            zoomButtons()
+                            recordButton(Modifier)
                         }
                     }
                 }
@@ -3246,6 +3323,9 @@ private fun mapFix(map: MapLibreMap?): TrackPoint? {
 /** The round buttons at the top of the map. */
 private val TOP_BUTTON_SIZE = 48.dp
 private val TOP_BUTTON_MARGIN = 16.dp
+
+/** The zoom buttons' height, dp: two 52 dp cells and the 1 dp divider (see [ZoomButtons]). */
+private const val ZOOM_BUTTONS_DP = 105f
 
 /** A round button at the top of the map (menu, ride settings). */
 @Composable

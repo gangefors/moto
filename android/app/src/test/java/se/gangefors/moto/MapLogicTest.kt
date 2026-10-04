@@ -311,6 +311,52 @@ class MapLogicTest {
     }
 
     @Test
+    fun theCompassMovesBesideRideSettingsInLandscapeOnly() {
+        // Landscape, button shown: 16 + 48 + 8 from the right, centred on the button.
+        val beside = compassPlacement(landscape = true, settingsButtonShown = true)
+        assertEquals(72f, beside.rightDp, 0f)
+        assertEquals(8f, beside.topDp, 0f)
+        // Landscape without the button: the corner, as today.
+        assertEquals(CompassPlacement(16f, 8f), compassPlacement(landscape = true, settingsButtonShown = false))
+        // Portrait never changes.
+        assertEquals(CompassPlacement(16f, 64f), compassPlacement(landscape = false, settingsButtonShown = true))
+        assertEquals(CompassPlacement(16f, 8f), compassPlacement(landscape = false, settingsButtonShown = false))
+    }
+
+    @Test
+    fun theButtonColumnKeepsBelowTheSettingsRowInLandscape() {
+        assertEquals(72f, buttonsTopLimitDp(landscape = true, settingsButtonShown = true), 0f)
+        assertEquals(16f, buttonsTopLimitDp(landscape = true, settingsButtonShown = false), 0f)
+        assertEquals(16f, buttonsTopLimitDp(landscape = false, settingsButtonShown = true), 0f)
+        assertEquals(16f, buttonsTopLimitDp(landscape = false, settingsButtonShown = false), 0f)
+    }
+
+    @Test
+    fun theButtonStackIsItsItemsAndGaps() {
+        assertEquals(0f, buttonStackHeightDp(emptyList()), 0f)
+        assertEquals(56f, buttonStackHeightDp(listOf(56f)), 0f)
+        // Flag, Add favourite, Loop, Record: 4 * 56 + 3 * 16.
+        assertEquals(272f, buttonStackHeightDp(List(4) { MAP_BUTTON_DP }), 0f)
+    }
+
+    @Test
+    fun theButtonsWrapOnlyWhenMeasuredHeightIsShortInLandscape() {
+        val four = List(4) { MAP_BUTTON_DP }
+        // Exactly fits: no wrap. One dp short: wrap.
+        assertEquals(true, buttonsFit(272f, four))
+        assertEquals(false, buttonsFit(271f, four))
+        assertEquals(false, wrapButtons(landscape = true, availableDp = 272f, itemHeightsDp = four, hasLeftColumn = true))
+        assertEquals(true, wrapButtons(landscape = true, availableDp = 271f, itemHeightsDp = four, hasLeftColumn = true))
+        // Nothing for a second column: no wrap.
+        assertEquals(false, wrapButtons(landscape = true, availableDp = 100f, itemHeightsDp = four, hasLeftColumn = false))
+        // Portrait never wraps.
+        assertEquals(false, wrapButtons(landscape = false, availableDp = 100f, itemHeightsDp = four, hasLeftColumn = true))
+        // The common landscape case: 411 dp high, 24 dp status bar, 16 dp gesture bar.
+        val available = 411f - 24f - buttonsTopLimitDp(true, true) - MAP_MARGIN_DP - 16f
+        assertEquals(false, wrapButtons(landscape = true, availableDp = available, itemHeightsDp = four, hasLeftColumn = true))
+    }
+
+    @Test
     fun theRiddenRoadsButtonChoosesForThePlanOnly() {
         // Not pressed: the setting.
         assertTrue(riddenShown(setting = true, whilePlanning = null))

@@ -545,3 +545,64 @@ fun dropsMapCaches(level: Int): Boolean = level >= android.content.ComponentCall
  * 8 dp gap the notices keep) when it shows ([settingsButtonShown]),
  * else 8 dp from the top, in its place. */
 fun compassTopDp(settingsButtonShown: Boolean): Float = if (settingsButtonShown) 8f + 48f + 8f else 8f
+
+/** The side margin of the map's buttons, dp. */
+const val MAP_MARGIN_DP = 16f
+
+/** The round top buttons (menu, ride settings): size and distance from the safe area's top, dp. */
+const val TOP_BUTTON_DP = 48f
+const val TOP_BUTTON_TOP_DP = 8f
+
+/** The map's compass, dp, and its gap to Ride settings' button when beside it. */
+const val COMPASS_DP = 48f
+const val COMPASS_GAP_DP = 8f
+
+/** The floating buttons in the right-hand column, dp: their size and the gap between them. */
+const val MAP_BUTTON_DP = 56f
+const val MAP_BUTTON_GAP_DP = 16f
+
+/** The compass's distance from the safe area's right and top edges, dp. */
+data class CompassPlacement(val rightDp: Float, val topDp: Float)
+
+/**
+ * Where the compass sits. In portrait it is as it always was: at the right
+ * margin, under Ride settings' button when that shows. In landscape, with
+ * that button showing, it moves to the top row, left of the button with a
+ * gap of [COMPASS_GAP_DP] and the same vertical centre, which frees the
+ * column below for the map's buttons. Without the button (planning,
+ * marking) it is in the corner in both orientations.
+ */
+fun compassPlacement(landscape: Boolean, settingsButtonShown: Boolean): CompassPlacement =
+    if (landscape && settingsButtonShown) {
+        CompassPlacement(
+            rightDp = MAP_MARGIN_DP + TOP_BUTTON_DP + COMPASS_GAP_DP,
+            topDp = TOP_BUTTON_TOP_DP + (TOP_BUTTON_DP - COMPASS_DP) / 2f,
+        )
+    } else {
+        CompassPlacement(rightDp = MAP_MARGIN_DP, topDp = compassTopDp(settingsButtonShown))
+    }
+
+/**
+ * How far below the safe area's top the right-hand column of buttons may
+ * reach, dp. In landscape with Ride settings' button showing the compass
+ * is beside it, so the column only keeps [MAP_MARGIN_DP] clear of that
+ * button's bottom edge; otherwise it keeps the margin from the top.
+ */
+fun buttonsTopLimitDp(landscape: Boolean, settingsButtonShown: Boolean): Float =
+    if (landscape && settingsButtonShown) TOP_BUTTON_TOP_DP + TOP_BUTTON_DP + MAP_MARGIN_DP else MAP_MARGIN_DP
+
+/** The height of a column of items of the given heights with [gapDp] between them, dp. */
+fun buttonStackHeightDp(itemHeightsDp: List<Float>, gapDp: Float = MAP_BUTTON_GAP_DP): Float =
+    if (itemHeightsDp.isEmpty()) 0f else itemHeightsDp.sum() + gapDp * (itemHeightsDp.size - 1)
+
+/** Whether a column of the given items fits [availableDp] of height. */
+fun buttonsFit(availableDp: Float, itemHeightsDp: List<Float>): Boolean =
+    buttonStackHeightDp(itemHeightsDp) <= availableDp
+
+/**
+ * Whether the buttons wrap into a second column to the left: in landscape
+ * only, when one column does not fit the measured height and there is
+ * something for the second column ([hasLeftColumn]). Portrait never wraps.
+ */
+fun wrapButtons(landscape: Boolean, availableDp: Float, itemHeightsDp: List<Float>, hasLeftColumn: Boolean): Boolean =
+    landscape && hasLeftColumn && !buttonsFit(availableDp, itemHeightsDp)
