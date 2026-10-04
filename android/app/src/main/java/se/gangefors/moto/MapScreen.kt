@@ -2208,14 +2208,68 @@ fun MapScreen() {
                     .onGloballyPositioned { cardsTop = it.boundsInRoot().top.roundToInt() },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // A favourite's facts sit on top: it was looked at beside
-                // whatever is in hand, which stays nearest the sheet.
+                // Info cards (a favourite, a ride, a saved route, a favourite
+                // section, a road) sit on top; whatever is in hand (the start
+                // card, a task, a message) stays below them, nearest the
+                // sheet.
                 if (!rideMode) favouriteInfo?.let { f ->
                     FavouriteInfoCard(
                         f,
                         engine = (region as? RegionState.Ready)?.engine,
                         darkMap = darkMap,
                         onClose = { favouriteInfoId = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                shownRide?.let {
+                    ShownRideCard(
+                        it,
+                        onClose = { shownRide = null },
+                        onRename = { renamingRide = it.track },
+                        onShare = { shareRide(it.track) },
+                        onDelete = { deleteShownRide(it.track) },
+                        modifier = Modifier.fillMaxWidth(),
+                        onRide = if (it.track.endedAt != null) ({ rideAgain(it) }) else null,
+                    )
+                }
+                shownSaved?.let { s ->
+                    SavedRouteCard(
+                        s,
+                        onShare = {
+                            shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
+                        },
+                        onRename = { renamingSaved = s.route },
+                        onDelete = { deleteShownSaved(s.route) },
+                        onClose = {
+                            shownSaved = null
+                            overlays?.route?.show(null, null, null)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        onRide = {
+                            beginRide(
+                                RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, s.favouriteParts, s.favouriteRatings),
+                            )
+                        },
+                    )
+                }
+                shownSection?.let { s ->
+                    ShownSectionCard(
+                        s,
+                        engine = (region as? RegionState.Ready)?.engine,
+                        onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
+                        onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
+                        onEdit = { editing = s },
+                        onClose = { hideSection() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                roadInfo?.let {
+                    RoadInfoCard(
+                        it,
+                        onClose = {
+                            roadInfo = null
+                            overlays?.snap?.clear()
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -2318,58 +2372,6 @@ fun MapScreen() {
                             }
                         }
                     }
-                }
-                shownRide?.let {
-                    ShownRideCard(
-                        it,
-                        onClose = { shownRide = null },
-                        onRename = { renamingRide = it.track },
-                        onShare = { shareRide(it.track) },
-                        onDelete = { deleteShownRide(it.track) },
-                        modifier = Modifier.fillMaxWidth(),
-                        onRide = if (it.track.endedAt != null) ({ rideAgain(it) }) else null,
-                    )
-                }
-                shownSaved?.let { s ->
-                    SavedRouteCard(
-                        s,
-                        onShare = {
-                            shareLine(s.line, s.route.name, routeOptions(defaultRouteOptions(), ROUTE_EXTRA_PERCENT, gravel, avoid))
-                        },
-                        onRename = { renamingSaved = s.route },
-                        onDelete = { deleteShownSaved(s.route) },
-                        onClose = {
-                            shownSaved = null
-                            overlays?.route?.show(null, null, null)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        onRide = {
-                            beginRide(
-                                RideRoute(s.route.name, s.route.isLoop, s.route.durationS, s.line, s.favouriteParts, s.favouriteRatings),
-                            )
-                        },
-                    )
-                }
-                shownSection?.let { s ->
-                    ShownSectionCard(
-                        s,
-                        engine = (region as? RegionState.Ready)?.engine,
-                        onLoop = if (hasLocation) ({ rideSection(s, loop = true) }) else null,
-                        onRide = if (hasLocation) ({ rideSection(s, loop = false) }) else null,
-                        onEdit = { editing = s },
-                        onClose = { hideSection() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                roadInfo?.let {
-                    RoadInfoCard(
-                        it,
-                        onClose = {
-                            roadInfo = null
-                            overlays?.snap?.clear()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
             }
         }
