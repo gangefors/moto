@@ -2469,6 +2469,7 @@ fun MapScreen() {
                     }
             }
         }
+        val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
         if (!marking && !planning && !cardsShown) {
             DisposableEffect(Unit) { onDispose { buttonsLeft = Int.MAX_VALUE } }
             Column(
@@ -2479,6 +2480,19 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // The flag (the spots tagged on rides) with how many wait,
+                // the count on the button's corner, clear of the flag; on
+                // top, above Add favourite (2026-10-04).
+                if (store is StoreState.Ready && reviewShown) {
+                    BadgedBox(badge = { Badge { Text(badgeCount(pendingTags)) } }) {
+                        FloatingActionButton(onClick = { startReview() }) {
+                            Icon(
+                                painterResource(R.drawable.ic_flag),
+                                contentDescription = pluralStringResource(R.plurals.tags_review, pendingTags, pendingTags),
+                            )
+                        }
+                    }
+                }
                 // Not in ride mode (riding a route or recording). Add
                 // favourite on top, Loop below it, right above Record
                 // (2026-10-03).
@@ -2582,11 +2596,9 @@ fun MapScreen() {
         }
         // Quick-tag (PRD R3): one big button, usable with gloves, in ride
         // mode only (2026-10-03). Bottom left, above the map's logo
-        // and attribution; the tags waiting for review above it when not
-        // recording (the right-hand column has no room to spare in
-        // landscape).
-        val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
-        if (store is StoreState.Ready && !marking && !planning && !cardsShown && (rideMode || reviewShown)) {
+        // and attribution. The flag for the tags waiting for review is in
+        // the right-hand column, above Add favourite (2026-10-04).
+        if (store is StoreState.Ready && !marking && !planning && !cardsShown && rideMode) {
             DisposableEffect(Unit) { onDispose { tagTop = Int.MAX_VALUE } }
             Column(
                 modifier = Modifier
@@ -2597,18 +2609,6 @@ fun MapScreen() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (reviewShown) {
-                    // A flag (the spots tagged on rides) with how many wait,
-                    // the count on the button's corner, clear of the flag.
-                    BadgedBox(badge = { Badge { Text(badgeCount(pendingTags)) } }) {
-                        FloatingActionButton(onClick = { startReview() }) {
-                            Icon(
-                                painterResource(R.drawable.ic_flag),
-                                contentDescription = pluralStringResource(R.plurals.tags_review, pendingTags, pendingTags),
-                            )
-                        }
-                    }
-                }
                 if (rideMode) {
                     LargeFloatingActionButton(
                         onClick = { quickTag() },

@@ -44,16 +44,16 @@ data class HelpTopic(
  * The buttons on the map, in the order they sit there: the left column
  * top to bottom, then the right.
  */
-val MAP_BUTTON_ORDER = listOf("menu", "flag", "tag", "settings", "mark", "loop", "record", "location")
+val MAP_BUTTON_ORDER = listOf("menu", "tag", "settings", "flag", "mark", "loop", "record", "location")
 
 val HELP_TOPICS = listOf(
     HelpTopic(
         HelpTopicId.MAP, R.string.help_map_title, R.string.help_map,
         keys = listOf(
             HelpKey("menu", R.string.help_key_menu, R.string.help_key_menu_what),
-            HelpKey("flag", R.string.help_key_review, R.string.help_key_review_map, HelpTopicId.RIDE),
             HelpKey("tag", R.string.help_key_tag, R.string.help_key_tag_what, HelpTopicId.RIDE),
             HelpKey("settings", R.string.help_key_settings, R.string.help_key_settings_what, HelpTopicId.SETTINGS),
+            HelpKey("flag", R.string.help_key_review, R.string.help_key_review_map, HelpTopicId.RIDE),
             HelpKey("mark", R.string.help_key_mark, R.string.help_key_mark_map, HelpTopicId.FAVOURITES),
             HelpKey("loop", R.string.help_key_loop, R.string.help_key_loop_what, HelpTopicId.PLAN),
             HelpKey("record", R.string.help_key_record, R.string.help_key_record_map, HelpTopicId.RIDE),
