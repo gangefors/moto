@@ -9,7 +9,8 @@ import kotlin.math.min
  * Pure rules for where the cards sit (the planning sheet and the info and
  * start cards) and for the one-info-card rule (2026-10-04), so they can be
  * unit tested. In portrait they span the width at the bottom; in landscape
- * they are the same cards in a column at the bottom left.
+ * they are the same cards in a column at the bottom left, the info cards
+ * moving to a column at the bottom right while a plan is open.
  */
 
 /** In landscape the cards' column is at most this share of the window's width... */
@@ -26,11 +27,31 @@ fun leftColumnWidthDp(windowWidthDp: Int): Float =
     min(windowWidthDp.coerceAtLeast(0) * LEFT_COLUMN_MAX_SHARE, LEFT_COLUMN_MAX_WIDTH_DP)
 
 /**
- * Whether the info cards show while a plan is open: always, except in
- * landscape with the planning sheet pulled up, where the window is too
- * low for both (the one difference from portrait).
+ * Whether the info cards go in their own column at the bottom right: in
+ * landscape while a plan is open, as the left column is the planning
+ * sheet's. Otherwise they stack with the other cards.
  */
-fun showInfoCardsWithPlan(landscape: Boolean, expanded: Boolean): Boolean = !(landscape && expanded)
+fun infoCardsAtRight(landscape: Boolean, planning: Boolean): Boolean = landscape && planning
+
+/**
+ * The width in dp of the info cards' column at the right in landscape: the
+ * same cap as the left column ([leftColumnWidthDp]), less what the left
+ * column (and its [insetLeftDp] cutout) and the [insetRightDp] bar leave,
+ * so the two never overlap.
+ */
+fun infoColumnWidthDp(windowWidthDp: Int, insetLeftDp: Float, insetRightDp: Float): Float {
+    val cap = leftColumnWidthDp(windowWidthDp)
+    val room = windowWidthDp - cap - insetLeftDp - insetRightDp
+    return min(cap, room.coerceAtLeast(0f))
+}
+
+/**
+ * How far up from the window's bottom, in pixels, the info cards at the
+ * right reach ([rightCardsTop], their measured top, [Int.MAX_VALUE] when
+ * none show): the map's scale and attribution rise above them.
+ */
+fun rightCardCover(mapHeight: Int, rightCardsTop: Int): Int =
+    if (rightCardsTop < mapHeight) mapHeight - rightCardsTop else 0
 
 /** How high the planning sheet may grow, as a share of the window's height. */
 fun sheetMaxShare(landscape: Boolean, expanded: Boolean): Float =

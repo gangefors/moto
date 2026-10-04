@@ -31,11 +31,33 @@ class CardLayoutTest {
     }
 
     @Test
-    fun expandedSheetHidesInfoCardsOnlyInLandscape() {
-        assertFalse(showInfoCardsWithPlan(landscape = true, expanded = true))
-        assertTrue(showInfoCardsWithPlan(landscape = true, expanded = false))
-        assertTrue(showInfoCardsWithPlan(landscape = false, expanded = true))
-        assertTrue(showInfoCardsWithPlan(landscape = false, expanded = false))
+    fun infoCardsMoveRightOnlyInLandscapeWithAPlan() {
+        assertTrue(infoCardsAtRight(landscape = true, planning = true))
+        assertFalse(infoCardsAtRight(landscape = true, planning = false))
+        assertFalse(infoCardsAtRight(landscape = false, planning = true))
+        assertFalse(infoCardsAtRight(landscape = false, planning = false))
+    }
+
+    @Test
+    fun infoColumnUsesTheLeftColumnsCap() {
+        assertEquals(400f, infoColumnWidthDp(1280, 0f, 0f), 0.01f)
+        assertEquals(320f, infoColumnWidthDp(640, 0f, 0f), 0.01f)
+    }
+
+    @Test
+    fun infoColumnLeavesTheSheetsColumnAndTheBars() {
+        // 800 dp: the sheet's column is 400 + a 48 dp cutout; the bar is 24 dp.
+        val w = infoColumnWidthDp(800, 48f, 24f)
+        assertEquals(328f, w, 0.01f)
+        assertTrue(48f + 400f + w + 24f <= 800f)
+        assertEquals(0f, infoColumnWidthDp(300, 400f, 400f), 0f)
+    }
+
+    @Test
+    fun rightCardsCoverFromTheirTop() {
+        assertEquals(300, rightCardCover(1000, 700))
+        assertEquals(0, rightCardCover(1000, Int.MAX_VALUE))
+        assertEquals(0, rightCardCover(1000, 1000))
     }
 
     @Test

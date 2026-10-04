@@ -310,6 +310,8 @@ fun MapScreen() {
     var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var sheetTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var cardsTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    // The top of the info cards' column at the right (landscape, planning).
+    var infoRightTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     // The right edges of the sheet and the cards (0 while not shown): in
     // landscape the map's controls and fitted routes keep right of them.
     var sheetRight by remember { mutableIntStateOf(0) }
@@ -1167,7 +1169,7 @@ fun MapScreen() {
     // The compass at the top right, left of Ride settings' button when
     // that shows, else in the corner: clear of the cards and the sheet at the
     // bottom (2026-10-02).
-    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, landscape, columnRight) {
+    LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, landscape, columnRight, infoRightTop) {
         val m = map ?: return@LaunchedEffect
         // Upright the sheet is at the bottom; in landscape at the left, where
         // the logo and attribution start right of it.
@@ -1185,7 +1187,10 @@ fun MapScreen() {
             val compassRight = placement.rightDp.dp.roundToPx()
             applyControlMargins(
                 m,
-                insets.copy(left = leftClearance(landscape, insets.left, columnRight), bottom = max(insets.bottom, sheet)),
+                insets.copy(
+                    left = leftClearance(landscape, insets.left, columnRight),
+                    bottom = max(max(insets.bottom, sheet), rightCardCover(mapSize.height, infoRightTop)),
+                ),
                 CONTROL_MARGIN.roundToPx(),
                 ATTRIBUTION_OFFSET.roundToPx(),
                 compassRight = compassRight,
@@ -2216,7 +2221,7 @@ fun MapScreen() {
         // position button; cards drawn later cover it.
         val scaleAbove = with(density) {
             val sheet = if (planning && !landscape && sheetTop < mapSize.height) mapSize.height - sheetTop else 0
-            max(insets.bottom, sheet).toDp()
+            max(max(insets.bottom, sheet), rightCardCover(mapSize.height, infoRightTop)).toDp()
         }
         ScaleBar(
             metresPerDp = metresPerDp,
@@ -2252,9 +2257,11 @@ fun MapScreen() {
         // The buttons at the bottom step aside for them, as for planning.
         val infoCardOpen = shownRide != null || shownSaved != null || shownSection != null || roadInfo != null ||
             (favouriteInfo != null && !rideMode)
-        // Landscape with the sheet pulled up has no room for info cards.
-        val infoCardsShown = !planning || showInfoCardsWithPlan(landscape, cardExpanded)
-        val cardsShown = taskCard || (infoCardOpen && infoCardsShown)
+        // In landscape with a plan open the info cards are in a column at the
+        // right; the left one is the sheet's, with the task cards.
+        val infoAtRight = infoCardsAtRight(landscape, planning)
+        val cardsShown = taskCard || infoCardOpen
+        val leftCardsShown = taskCard || (infoCardOpen && !infoAtRight)
         // The ridden roads button, above the sheet on the right: switches
         // the layer, and Ride settings' switch with it. Cards above the
         // sheet take its place.
@@ -2448,7 +2455,7 @@ fun MapScreen() {
                 }
             }
         }
-        if (cardsShown) {
+        if (leftCardsShown) {
             DisposableEffect(Unit) {
                 onDispose {
                     cardsTop = Int.MAX_VALUE
@@ -2478,8 +2485,28 @@ fun MapScreen() {
                     },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (infoCardsShown) infoCards()
+                if (!infoAtRight) infoCards()
                 taskCardContent()
+            }
+        }
+        // Landscape with a plan open: the info cards at the bottom right,
+        // clear of the bar and cutout, and of the sheet's column.
+        if (infoAtRight && infoCardOpen) {
+            DisposableEffect(Unit) { onDispose { infoRightTop = Int.MAX_VALUE } }
+            val columnDp = with(density) {
+                infoColumnWidthDp(windowConfig.screenWidthDp, insets.left.toDp().value, insets.right.toDp().value)
+            }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Right + WindowInsetsSides.Bottom))
+                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+                    .widthIn(max = (columnDp - 16f).coerceAtLeast(0f).dp)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { infoRightTop = it.boundsInRoot().top.roundToInt() },
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                infoCards()
             }
         }
         // Back steps back through what is on the map before it leaves the
