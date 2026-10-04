@@ -1178,8 +1178,8 @@ fun MapScreen() {
     val riddenButton = riddenButtonShown(planning, cardExpanded && !panelMode, hasRidden)
     // Planning over: the ridden roads follow the setting again.
     LaunchedEffect(planning) { if (!planning) riddenWhilePlanning = null }
-    // The compass at the top right, under Ride settings' button when that
-    // shows, else in the corner: clear of the cards and the sheet at the
+    // The compass at the top right, left of Ride settings' button when
+    // that shows, else in the corner: clear of the cards and the sheet at the
     // bottom (2026-10-02).
     LaunchedEffect(map, insets, planning, marking, sheetTop, mapSize, rideMode, rideCardBottom, panelMode, panelWidthDp) {
         val m = map ?: return@LaunchedEffect
@@ -1188,19 +1188,15 @@ fun MapScreen() {
             // The logo and attribution start right of the side panel.
             val shift = if (panelMode) panelControlsShift(panelWidthDp.dp.roundToPx(), PANEL_GAP_DP.dp.roundToPx()) else 0
             // In ride mode, under the ride or recording card.
-            // In landscape, with Ride settings' button showing, the
-            // compass sits in the top row, left of it (option E).
-            val landscape = mapSize.width > mapSize.height
-            val topRow = landscape && !marking && !planning && !rideMode
-            val placement = compassPlacement(landscape, settingsButtonShown = topRow)
+            // With Ride settings' button showing, the compass sits in
+            // the top row, left of it, in both orientations.
+            val placement = compassPlacement(settingsButtonShown = !marking && !planning && !rideMode)
             val compassTop = if (rideMode && rideCardBottom > 0) {
                 rideCardBottom - insets.top + 8.dp.roundToPx()
-            } else if (topRow) {
-                placement.topDp.dp.roundToPx()
             } else {
-                compassTopDp(settingsButtonShown = !marking && !planning).dp.roundToPx()
+                placement.topDp.dp.roundToPx()
             }
-            val compassRight = if (topRow) placement.rightDp.dp.roundToPx() else TOP_BUTTON_MARGIN.roundToPx()
+            val compassRight = placement.rightDp.dp.roundToPx()
             applyControlMargins(
                 m,
                 insets.copy(left = insets.left + shift, bottom = max(insets.bottom, sheet)),
@@ -2797,7 +2793,7 @@ fun MapScreen() {
                 }
             }
             // The buttons stay below the top row (the compass sits beside
-            // Ride settings' button in landscape) and clear of the system
+            // Ride settings' button) and clear of the system
             // bars. Maps fit left of this column (the position button
             // beside Record sits low, where little is fitted). Where one
             // column does not fit the measured height in landscape, they
@@ -2811,7 +2807,7 @@ fun MapScreen() {
                         start = MAP_MARGIN_DP.dp,
                         end = MAP_MARGIN_DP.dp,
                         bottom = MAP_MARGIN_DP.dp,
-                        top = buttonsTopLimitDp(landscape, settingsButtonShown = !rideMode).dp,
+                        top = buttonsTopLimitDp(settingsButtonShown = !rideMode).dp,
                     ),
             ) {
                 val wrapped = wrapButtons(landscape, maxHeight.value, singleColumn, hasLeftColumn = showAdd || showLocate)

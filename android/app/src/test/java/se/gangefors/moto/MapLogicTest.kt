@@ -305,30 +305,20 @@ class MapLogicTest {
     }
 
     @Test
-    fun theCompassSitsUnderRideSettingsOrInItsPlace() {
-        assertEquals(64f, compassTopDp(settingsButtonShown = true), 0f)
-        assertEquals(8f, compassTopDp(settingsButtonShown = false), 0f)
-    }
-
-    @Test
-    fun theCompassMovesBesideRideSettingsInLandscapeOnly() {
-        // Landscape, button shown: 16 + 48 + 8 from the right, centred on the button.
-        val beside = compassPlacement(landscape = true, settingsButtonShown = true)
+    fun theCompassSitsBesideRideSettingsOrInTheCorner() {
+        // Button shown: 16 + 48 + 8 from the right, centred on the button
+        // (both 48 dp, 8 dp from the top), in either orientation.
+        val beside = compassPlacement(settingsButtonShown = true)
         assertEquals(72f, beside.rightDp, 0f)
         assertEquals(8f, beside.topDp, 0f)
-        // Landscape without the button: the corner, as today.
-        assertEquals(CompassPlacement(16f, 8f), compassPlacement(landscape = true, settingsButtonShown = false))
-        // Portrait never changes.
-        assertEquals(CompassPlacement(16f, 64f), compassPlacement(landscape = false, settingsButtonShown = true))
-        assertEquals(CompassPlacement(16f, 8f), compassPlacement(landscape = false, settingsButtonShown = false))
+        // Without the button (planning, marking): the corner.
+        assertEquals(CompassPlacement(16f, 8f), compassPlacement(settingsButtonShown = false))
     }
 
     @Test
-    fun theButtonColumnKeepsBelowTheSettingsRowInLandscape() {
-        assertEquals(72f, buttonsTopLimitDp(landscape = true, settingsButtonShown = true), 0f)
-        assertEquals(16f, buttonsTopLimitDp(landscape = true, settingsButtonShown = false), 0f)
-        assertEquals(16f, buttonsTopLimitDp(landscape = false, settingsButtonShown = true), 0f)
-        assertEquals(16f, buttonsTopLimitDp(landscape = false, settingsButtonShown = false), 0f)
+    fun theButtonColumnKeepsBelowTheSettingsRow() {
+        assertEquals(72f, buttonsTopLimitDp(settingsButtonShown = true), 0f)
+        assertEquals(16f, buttonsTopLimitDp(settingsButtonShown = false), 0f)
     }
 
     @Test
@@ -352,7 +342,7 @@ class MapLogicTest {
         // Portrait never wraps.
         assertEquals(false, wrapButtons(landscape = false, availableDp = 100f, itemHeightsDp = four, hasLeftColumn = true))
         // The common landscape case: 411 dp high, 24 dp status bar, 16 dp gesture bar.
-        val available = 411f - 24f - buttonsTopLimitDp(true, true) - MAP_MARGIN_DP - 16f
+        val available = 411f - 24f - buttonsTopLimitDp(settingsButtonShown = true) - MAP_MARGIN_DP - 16f
         assertEquals(false, wrapButtons(landscape = true, availableDp = available, itemHeightsDp = four, hasLeftColumn = true))
     }
 

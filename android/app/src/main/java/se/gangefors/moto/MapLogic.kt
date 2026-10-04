@@ -540,12 +540,6 @@ private fun settingItems(gravel: Gravel, favourites: FavouritesMode, unridden: U
  * system wants memory back, never while the rider looks at the map. */
 fun dropsMapCaches(level: Int): Boolean = level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
 
-/** How far below the safe area's top the map's compass sits, dp: under
- * Ride settings' round button (8 dp from the top, 48 dp, then the same
- * 8 dp gap the notices keep) when it shows ([settingsButtonShown]),
- * else 8 dp from the top, in its place. */
-fun compassTopDp(settingsButtonShown: Boolean): Float = if (settingsButtonShown) 8f + 48f + 8f else 8f
-
 /** The side margin of the map's buttons, dp. */
 const val MAP_MARGIN_DP = 16f
 
@@ -565,31 +559,29 @@ const val MAP_BUTTON_GAP_DP = 16f
 data class CompassPlacement(val rightDp: Float, val topDp: Float)
 
 /**
- * Where the compass sits. In portrait it is as it always was: at the right
- * margin, under Ride settings' button when that shows. In landscape, with
- * that button showing, it moves to the top row, left of the button with a
- * gap of [COMPASS_GAP_DP] and the same vertical centre, which frees the
- * column below for the map's buttons. Without the button (planning,
- * marking) it is in the corner in both orientations.
+ * Where the compass sits. With Ride settings' button showing
+ * ([settingsButtonShown]) it is in the top row, left of the button with a
+ * gap of [COMPASS_GAP_DP] and the same vertical centre, in portrait and
+ * landscape alike, which keeps the column below free for the map's
+ * buttons. Without the button (planning, marking) it is in the corner.
  */
-fun compassPlacement(landscape: Boolean, settingsButtonShown: Boolean): CompassPlacement =
-    if (landscape && settingsButtonShown) {
+fun compassPlacement(settingsButtonShown: Boolean): CompassPlacement =
+    if (settingsButtonShown) {
         CompassPlacement(
             rightDp = MAP_MARGIN_DP + TOP_BUTTON_DP + COMPASS_GAP_DP,
             topDp = TOP_BUTTON_TOP_DP + (TOP_BUTTON_DP - COMPASS_DP) / 2f,
         )
     } else {
-        CompassPlacement(rightDp = MAP_MARGIN_DP, topDp = compassTopDp(settingsButtonShown))
+        CompassPlacement(rightDp = MAP_MARGIN_DP, topDp = TOP_BUTTON_TOP_DP)
     }
 
 /**
  * How far below the safe area's top the right-hand column of buttons may
- * reach, dp. In landscape with Ride settings' button showing the compass
- * is beside it, so the column only keeps [MAP_MARGIN_DP] clear of that
- * button's bottom edge; otherwise it keeps the margin from the top.
+ * reach, dp: [MAP_MARGIN_DP] clear of Ride settings' button's bottom edge
+ * when it shows ([settingsButtonShown]), else [MAP_MARGIN_DP] from the top.
  */
-fun buttonsTopLimitDp(landscape: Boolean, settingsButtonShown: Boolean): Float =
-    if (landscape && settingsButtonShown) TOP_BUTTON_TOP_DP + TOP_BUTTON_DP + MAP_MARGIN_DP else MAP_MARGIN_DP
+fun buttonsTopLimitDp(settingsButtonShown: Boolean): Float =
+    if (settingsButtonShown) TOP_BUTTON_TOP_DP + TOP_BUTTON_DP + MAP_MARGIN_DP else MAP_MARGIN_DP
 
 /** The height of a column of items of the given heights with [gapDp] between them, dp. */
 fun buttonStackHeightDp(itemHeightsDp: List<Float>, gapDp: Float = MAP_BUTTON_GAP_DP): Float =
