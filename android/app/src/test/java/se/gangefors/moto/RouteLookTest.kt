@@ -159,7 +159,6 @@ class RouteLookTest {
         assertEquals("#e8eaed", riddenColor(darkMap = true))
         // Thin, a little wider zoomed in.
         assertEquals(listOf(1.8f, 2.4f, 3.2f), RIDDEN_WIDTHS.map { it.second })
-        assertEquals(70_000.0, RIDDEN_MAX_SPAN_M, 0.0)
     }
 
     @Test

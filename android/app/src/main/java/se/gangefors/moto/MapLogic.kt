@@ -241,10 +241,10 @@ val UNRIDDEN_CHOICES: List<UnriddenMode> = listOf(UnriddenMode.ANY, UnriddenMode
  * Whether the ridden roads button shows above the planning sheet (the rider,
  * 2026-10-01, mockup Ridden roads toggle, spot A): while a route or loop
  * is planned ([planning]) with the sheet not pulled up ([sheetExpanded]),
- * when the rider's rides have been on roads of this map ([hasRidden]),
- * and the map is near enough for the layer to show ([zoom] from
- * [minZoom]). On or off, so it can switch the layer either way, for the
- * plan only ([riddenShown]).
+ * and when the rider's rides have been on roads of this map ([hasRidden]).
+ * At any zoom: the lines are shown or hidden by this button alone. On or
+ * off, so it can switch the layer either way, for the plan only
+ * ([riddenShown]).
  */
 /** Whether the ridden roads show: the ridden roads button's choice while a
  * route or loop is planned ([whilePlanning], null until pressed), else the

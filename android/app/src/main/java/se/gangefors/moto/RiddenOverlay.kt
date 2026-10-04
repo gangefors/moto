@@ -42,9 +42,8 @@ class RiddenOverlay(style: Style, darkMap: Boolean) {
         if (style.getLayer(ROUTE_BOTTOM) != null) style.addLayerBelow(l, ROUTE_BOTTOM) else style.addLayer(l)
     }
 
-    /** Shows [lines] (none hides the layer's content); not below [minZoom]. */
-    fun show(lines: List<List<LatLon>>, minZoom: Float) {
-        layer.minZoom = minZoom
+    /** Shows [lines] at every zoom (none hides the layer's content). */
+    fun show(lines: List<List<LatLon>>) {
         val features = lines.filter { it.size >= 2 }.map { line ->
             Feature.fromGeometry(LineString.fromLngLats(line.map { Point.fromLngLat(it.lon, it.lat) }))
         }

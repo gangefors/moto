@@ -923,8 +923,6 @@ fun MapScreen() {
     // The ridden roads, when shown: from the routing overlay, less the
     // favourites drawn (those hidden for gravel don't cut the dashes),
     // and not when the map shows more than 70 km across.
-    val screenWidthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toDouble() }
-    val riddenMinZoom = zoomForSpan(RIDDEN_MAX_SPAN_M, screenWidthDp, SETTINGS_LATITUDE).toFloat()
     // Whether any ride has been on this map's roads: the ridden roads
     // button shows only then.
     var hasRidden by remember { mutableStateOf(false) }
@@ -964,7 +962,7 @@ fun MapScreen() {
         val engine = (region as? RegionState.Ready)?.engine
         val f = favourites
         if (!riddenOn || engine == null || f == null) {
-            o.ridden.show(emptyList(), 0f)
+            o.ridden.show(emptyList())
             return@LaunchedEffect
         }
         val hidden = hiddenForGravel(sectionGravel, gravel)
@@ -973,7 +971,7 @@ fun MapScreen() {
         val lines = withContext(Dispatchers.Default) { runCatching {
                 DebugTools.query("ridden roads", ::linesSummary) { f.riddenLines(engine, hiddenIds) }
             }.getOrDefault(emptyList()) }
-        o.ridden.show(lines, riddenMinZoom)
+        o.ridden.show(lines)
     }
     // A start picked and waiting for an end, or for "Loop from here".
     var startPicked by remember { mutableStateOf<LatLng?>(null) }

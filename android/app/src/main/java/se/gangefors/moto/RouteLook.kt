@@ -210,10 +210,6 @@ const val GRAVEL_DASH_WIDTH = 2f
 /** The gravel dashes' dash array at [zoom]: as long as the ridden roads'. */
 fun gravelDashes(zoom: Int): Array<Float> = dashArray(zoom, GRAVEL_DASH_WIDTH)
 
-/** Above this many metres across the screen the ridden roads are hidden
- * (the rider: 70 km). */
-const val RIDDEN_MAX_SPAN_M = 70_000.0
-
 /** The sections the map leaves out of [all]: those not in [shown]. The
  * ridden roads run on under them. */
 fun hiddenSectionIds(all: List<Long>, shown: List<Long>): List<Long> {
