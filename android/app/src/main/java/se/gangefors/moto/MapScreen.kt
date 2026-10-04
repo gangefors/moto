@@ -1129,18 +1129,6 @@ fun MapScreen() {
         loopKept = 0
     }
 
-    /** Loops from [start], heading the default way: the standard set
-     * (seed 0), or the set of [seed]. */
-    fun startLoop(start: LatLng, seed: UInt = 0u) {
-        startPicked = null
-        // A plan replaces the step that led to it ("Point set…").
-        message = null
-        loopSeed = seed
-        loopDirection = defaultDirection
-        clearLoops()
-        loopStart = start
-    }
-
     /**
      * Where the rider is, to plan from: their newest fix, with a note when
      * it is an older one; null, saying it waits for GPS, without one.
@@ -1260,12 +1248,13 @@ fun MapScreen() {
     /**
      * One info card at a time (2026-10-04): opening one closes the others
      * (a road's, a favourite's, a favourite section's, a ride's, a saved
-     * route's), the newest wins. The plan's card and the start card are
-     * not info cards. Closing a saved route also takes it off the map,
-     * unless a plan is using the layer.
+     * route's), the newest wins, and a plan starting closes them but a
+     * saved route's ([startLoop], a route's first end, [rideSection]). The
+     * plan's card and the start card are not info cards. Closing a saved
+     * route also takes it off the map, unless a plan is using the layer.
      */
-    fun closeInfoCardsFor(opening: InfoCard) {
-        infoCardsToClose(opening).forEach { card ->
+    fun closeInfoCards(cards: Set<InfoCard>) {
+        cards.forEach { card ->
             when (card) {
                 InfoCard.ROAD -> if (roadInfo != null) {
                     roadInfo = null
@@ -1281,6 +1270,22 @@ fun MapScreen() {
             }
         }
     }
+    /** Opening [opening]: closes the other info cards. */
+    fun closeInfoCardsFor(opening: InfoCard) = closeInfoCards(infoCardsToClose(opening))
+    /** Loops from [start], heading the default way: the standard set
+     * (seed 0), or the set of [seed]. A new plan closes the info cards. */
+    fun startLoop(start: LatLng, seed: UInt = 0u) {
+        val planWasOpen = routeEnds != null || loopStart != null
+        startPicked = null
+        // A plan replaces the step that led to it ("Point set…").
+        message = null
+        loopSeed = seed
+        loopDirection = defaultDirection
+        clearLoops()
+        loopStart = start
+        closeInfoCards(infoCardsToCloseOnPlanStart(planWasOpen))
+    }
+
     /**
      * Shows saved section [s] with its card (the same whether picked on
      * the map or in Menu > Sections): in its rating's colour, wider and
@@ -1809,6 +1814,8 @@ fun MapScreen() {
                         message = null
                         notify(coreErrorMessage(resources, problem), long = true)
                     } else {
+                        // The start card replaces any info card.
+                        closeInfoCards(infoCardsToCloseOnPlanStart(planOpen = false))
                         o.route.show(point, null, null)
                         startPicked = point
                         message = resources.getString(if (hasLocation) R.string.route_pick_end_or_me else R.string.route_pick_end)
@@ -1836,8 +1843,10 @@ fun MapScreen() {
                     }
                     // A new route starts its sheet empty; when the end moves
                     // the rows stay, dimmed, as for a setting (the rider).
+                    val planWasOpen = routeEnds != null || loopStart != null
                     if (routeEnds == null) clearRoutes()
                     routeEnds = step.start to step.end
+                    closeInfoCards(infoCardsToCloseOnPlanStart(planWasOpen))
                 }
             }
             true
@@ -2059,6 +2068,7 @@ fun MapScreen() {
         val from = riderStart() ?: return
         val oneWay = isOneWay(s.direction)
         val (near, far) = sectionEnds(s.geometry, oneWay, from.toLatLon()) ?: return
+        val planWasOpen = routeEnds != null || loopStart != null
         dataPage = null
         sectionFilter = SectionFilter()
         hideSection()
@@ -2084,6 +2094,7 @@ fun MapScreen() {
             overlays?.route?.show(from, ends.second, null)
             routeEnds = from to ends.second
         }
+        closeInfoCards(infoCardsToCloseOnPlanStart(planWasOpen))
     }
 
     /** Saves [r] (a loop when [isLoop]) as [name] in Routes & rides. */
@@ -2402,8 +2413,10 @@ fun MapScreen() {
                                     overlays?.route?.show(from, to, null)
                                     vias = emptyList()
                                     arriveBy = null
+                                    val planWasOpen = routeEnds != null || loopStart != null
                                     if (routeEnds == null) clearRoutes()
                                     routeEnds = from to to
+                                    closeInfoCards(infoCardsToCloseOnPlanStart(planWasOpen))
                                 }
                             }
                         }

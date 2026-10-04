@@ -68,6 +68,19 @@ class PlanPanelLogicTest {
     }
 
     @Test
+    fun aPlanStartingClosesTheInfoCardsButASavedRoutes() {
+        // A favourite, a favourite section's, a road's and a ride's card alike.
+        val closed = infoCardsToCloseOnPlanStart(planOpen = false)
+        assertEquals(InfoCard.entries.toSet() - InfoCard.SAVED_ROUTE, closed)
+        assertFalse(InfoCard.SAVED_ROUTE in closed)
+    }
+
+    @Test
+    fun aPlanAlreadyOpenLeavesTheInfoCardsAlone() {
+        assertEquals(emptySet<InfoCard>(), infoCardsToCloseOnPlanStart(planOpen = true))
+    }
+
+    @Test
     fun theNewestInfoCardReplacesAnyOpenOne() {
         InfoCard.entries.forEach { open ->
             InfoCard.entries.forEach { opening ->

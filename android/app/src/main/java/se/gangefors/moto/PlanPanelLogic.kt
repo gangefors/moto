@@ -50,6 +50,15 @@ enum class InfoCard { ROAD, FAVOURITE, SECTION, RIDE, SAVED_ROUTE }
 /** The info cards to close when [opening] opens: all the others (the newest wins). */
 fun infoCardsToClose(opening: InfoCard): Set<InfoCard> = InfoCard.entries.toSet() - opening
 
+/**
+ * The info cards to close when a plan (a route or a loop) starts: all
+ * but a saved route's, which stays above the start card (the plan is not
+ * an info card). None while a plan is already [planOpen], as when its end
+ * moves or its loops are shuffled: what the rider opened meanwhile stays.
+ */
+fun infoCardsToCloseOnPlanStart(planOpen: Boolean): Set<InfoCard> =
+    if (planOpen) emptySet() else InfoCard.entries.toSet() - InfoCard.SAVED_ROUTE
+
 /** The info cards open after [opening] opens while [open] were: only it. */
 fun infoCardsAfterOpening(open: Set<InfoCard>, opening: InfoCard): Set<InfoCard> =
     (open - infoCardsToClose(opening)) + opening
