@@ -1797,7 +1797,8 @@ fun MapScreen() {
         if (m == null || s == null || !hasLocation) return@DisposableEffect onDispose {}
         enableLocation(context, m, s)
         // Start at the area's zoom, on the rider.
-        followRider(m, locateZooms.area.toDouble())
+        // Only at the start: a new style (the theme changed) must not move the map.
+        if (!startSettled) followRider(m, locateZooms.area.toDouble())
         val moved = MapLibreMap.OnCameraMoveStartedListener { reason ->
             if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
                 overviewShown = false
