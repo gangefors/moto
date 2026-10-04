@@ -119,6 +119,49 @@ fun controlsBottomPx(
 fun leftClearance(landscape: Boolean, insetLeft: Int, columnRight: Int): Int =
     if (landscape) maxOf(insetLeft, columnRight) else insetLeft
 
+/**
+ * What the panels cover of a [width] × [height] map, for fitting routes
+ * clear of them (all measured tops and edges in pixels, [Int.MAX_VALUE] /
+ * 0 when not shown): the status bar and the card at the top, the cards'
+ * column at the left in landscape ([columnRight]), the buttons at the right
+ * ([buttonsLeft]) or above the sheet while planning ([buttonsTop]), the tag
+ * and edit panels, and at the bottom the sheet and cards upright or the
+ * info cards at the right in landscape ([rightCardsTop]).
+ */
+fun fitPanels(
+    landscape: Boolean,
+    width: Int,
+    height: Int,
+    insetLeft: Int,
+    insetTop: Int,
+    insetRight: Int,
+    insetBottom: Int,
+    topPanelBottom: Int = 0,
+    columnRight: Int = 0,
+    buttonsLeft: Int = Int.MAX_VALUE,
+    buttonsTop: Int = Int.MAX_VALUE,
+    tagTop: Int = Int.MAX_VALUE,
+    editTop: Int = Int.MAX_VALUE,
+    sheetTop: Int = Int.MAX_VALUE,
+    cardsTop: Int = Int.MAX_VALUE,
+    rightCardsTop: Int = Int.MAX_VALUE,
+): Panels = Panels(
+    width = width,
+    height = height,
+    left = leftClearance(landscape, insetLeft, columnRight),
+    top = maxOf(topPanelBottom, insetTop),
+    right = maxOf(width - buttonsLeft, insetRight),
+    bottom = maxOf(
+        height - tagTop,
+        height - editTop,
+        height - buttonsTop,
+        insetBottom,
+        // Upright the sheet and the cards span the width; in landscape the
+        // sheet is at the left, so only the info cards at the right count.
+        if (landscape) rightCardCover(height, rightCardsTop) else height - minOf(sheetTop, cardsTop),
+    ),
+)
+
 /** The cards that tell about one thing on the map; at most one is open. */
 enum class InfoCard { ROAD, FAVOURITE, SECTION, RIDE, SAVED_ROUTE }
 

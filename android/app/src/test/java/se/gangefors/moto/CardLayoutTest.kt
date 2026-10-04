@@ -182,4 +182,31 @@ class CardLayoutTest {
     fun reopeningTheSameCardKeepsIt() {
         assertEquals(setOf(InfoCard.SECTION), infoCardsAfterOpening(setOf(InfoCard.SECTION), InfoCard.SECTION))
     }
+
+    private fun panels(landscape: Boolean, rightCardsTop: Int = Int.MAX_VALUE, sheetTop: Int = Int.MAX_VALUE, buttonsTop: Int = Int.MAX_VALUE) =
+        fitPanels(
+            landscape, 1000, 2000, insetLeft = 10, insetTop = 80, insetRight = 20, insetBottom = 50,
+            topPanelBottom = 0, columnRight = if (landscape) 400 else 0, buttonsTop = buttonsTop,
+            sheetTop = sheetTop, cardsTop = Int.MAX_VALUE, rightCardsTop = rightCardsTop,
+        )
+
+    @Test
+    fun portraitFitKeepsClearOfTheSheetAndButtons() {
+        val none = panels(false)
+        assertEquals(Panels(1000, 2000, left = 10, top = 80, right = 20, bottom = 50), none)
+        val sheet = panels(false, sheetTop = 1500, buttonsTop = 1350)
+        assertEquals(650, sheet.bottom)
+        assertEquals(0 + 10, sheet.left)
+    }
+
+    @Test
+    fun landscapeFitKeepsRightOfTheColumnAndAboveTheRightCard() {
+        val none = panels(true)
+        assertEquals(400, none.left)
+        assertEquals(50, none.bottom)
+        val card = panels(true, rightCardsTop = 1400, buttonsTop = 1300)
+        assertEquals(700, card.bottom)
+        assertEquals(80, card.top)
+        assertEquals(400, card.left)
+    }
 }

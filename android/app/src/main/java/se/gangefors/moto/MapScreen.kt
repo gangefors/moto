@@ -308,6 +308,8 @@ fun MapScreen() {
     var topPanelBottom by remember { mutableIntStateOf(0) }
     var buttonsLeft by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var tagTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    // The top of the round buttons above the sheet while planning.
+    var planButtonsTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var sheetTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     var cardsTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     // The top of the info cards' column at the right (landscape, planning).
@@ -320,19 +322,23 @@ fun MapScreen() {
     // The section edit sheet's top edge while it is open.
     var editTop by remember { mutableIntStateOf(Int.MAX_VALUE) }
     fun fitPaddingNow(): FitPadding {
-        val (w, h) = mapSize.width to mapSize.height
-        val panels = Panels(
-            width = w,
-            height = h,
-            // In landscape the cards are at the left: routes are fitted right of them.
-            left = leftClearance(landscape, insets.left, columnRight),
-            top = max(topPanelBottom, insets.top),
-            right = max(w - buttonsLeft, insets.right),
-            bottom = if (landscape) {
-                maxOf(h - tagTop, h - editTop, insets.bottom)
-            } else {
-                maxOf(h - tagTop, h - sheetTop, h - cardsTop, h - editTop, insets.bottom)
-            },
+        val panels = fitPanels(
+            landscape = landscape,
+            width = mapSize.width,
+            height = mapSize.height,
+            insetLeft = insets.left,
+            insetTop = insets.top,
+            insetRight = insets.right,
+            insetBottom = insets.bottom,
+            topPanelBottom = topPanelBottom,
+            columnRight = columnRight,
+            buttonsLeft = buttonsLeft,
+            buttonsTop = planButtonsTop,
+            tagTop = tagTop,
+            editTop = editTop,
+            sheetTop = sheetTop,
+            cardsTop = cardsTop,
+            rightCardsTop = infoRightTop,
         )
         return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
     }
@@ -2266,16 +2272,34 @@ fun MapScreen() {
         // Ride settings' switch with it. Never hidden by a card: it sits
         // right above the sheet and the cards (upright), or above the info
         // cards at the right (landscape), and drops back when they close.
-        if (riddenButton) {
+        // Both buttons stay over a pulled-up sheet, right above its top.
+        val fitButton = planning
+        if (fitButton || riddenButton) {
             val bottomPx = controlsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
-            RiddenButton(
-                on = riddenOn,
-                onChange = { riddenWhilePlanning = it },
+            DisposableEffect(Unit) { onDispose { planButtonsTop = Int.MAX_VALUE } }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                    .padding(end = FAB_PADDING, bottom = with(density) { bottomPx.toDp() } + FAB_PADDING),
-            )
+                    .padding(end = FAB_PADDING, bottom = with(density) { bottomPx.toDp() } + FAB_PADDING)
+                    .onGloballyPositioned { planButtonsTop = it.boundsInRoot().top.roundToInt() },
+            ) {
+                // Frames all the routes or loops of the plan, as when they
+                // were found.
+                if (fitButton) {
+                    FitRouteButton(onClick = {
+                        val ends = listOfNotNull(
+                            loopStart?.toLatLon(),
+                            routeEnds?.first?.toLatLon(),
+                            routeEnds?.second?.toLatLon(),
+                        ).map { listOf(it) }
+                        val lines = if (loopStart != null) loops.map { it.geometry } else routeChoices.map { it.geometry }
+                        showOnMap(lines + ends, always = true)
+                    })
+                }
+                if (riddenButton) RiddenButton(on = riddenOn, onChange = { riddenWhilePlanning = it })
+            }
         }
         // The cards: info cards (a favourite, a ride, a saved route, a
         // favourite section, a road; at most one) sit on top; whatever is
@@ -3362,6 +3386,27 @@ private fun TopMapButton(icon: Int, description: String, onClick: () -> Unit, mo
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(painterResource(icon), contentDescription = null)
+        }
+    }
+}
+
+/** Frames the whole route or loop: the size of the top buttons, on the plain surface. */
+@Composable
+private fun FitRouteButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.fit_route)
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .size(TOP_BUTTON_SIZE)
+            .semantics { contentDescription = description },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_fit_route), contentDescription = null)
         }
     }
 }
