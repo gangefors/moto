@@ -75,6 +75,25 @@ class CardLayoutTest {
         assertEquals(0, sheetMaxHeightPx(landscape = false, expanded = false, mapHeight = -5, insetTop = 0))
     }
 
+    @Test
+    fun landscapePinsOnlyTheTitleWhenPulledUp() {
+        assertEquals(SheetPinned.TITLE, sheetPinned(true, true, headerPx = 100, roomPx = 1000f))
+        // Even a tall header scrolls: the settings get the whole height.
+        assertEquals(SheetPinned.TITLE, sheetPinned(true, true, headerPx = 900, roomPx = 1000f))
+    }
+
+    @Test
+    fun uprightPinsTheHeaderOnlyWhenItFitsHalfTheRoom() {
+        assertEquals(SheetPinned.HEADER, sheetPinned(false, true, headerPx = 500, roomPx = 1000f))
+        assertEquals(SheetPinned.NONE, sheetPinned(false, true, headerPx = 501, roomPx = 1000f))
+    }
+
+    @Test
+    fun nothingIsPinnedAtRest() {
+        assertEquals(SheetPinned.NONE, sheetPinned(true, false, 100, 1000f))
+        assertEquals(SheetPinned.NONE, sheetPinned(false, false, 100, 1000f))
+    }
+
     private val none = Int.MAX_VALUE
 
     @Test

@@ -70,6 +70,23 @@ fun sheetMaxHeightPx(landscape: Boolean, expanded: Boolean, mapHeight: Int, inse
         (mapHeight.coerceAtLeast(0) * SHEET_MAX_SHARE).toInt()
     }
 
+/** What stays fixed at the top of a pulled-up planning sheet while the rest scrolls. */
+enum class SheetPinned { NONE, TITLE, HEADER }
+
+/**
+ * What the pulled-up planning sheet keeps fixed below its handle: in
+ * landscape only the title row (figures and the close button), so the
+ * settings get the sheet's height; upright the whole header when it
+ * takes at most half the room ([fixesTop]); at rest nothing (everything
+ * scrolls, if it must).
+ */
+fun sheetPinned(landscape: Boolean, expanded: Boolean, headerPx: Int, roomPx: Float): SheetPinned = when {
+    !expanded -> SheetPinned.NONE
+    landscape -> SheetPinned.TITLE
+    fixesTop(headerPx, roomPx) -> SheetPinned.HEADER
+    else -> SheetPinned.NONE
+}
+
 /**
  * How far up from the window's bottom, in pixels, the map's controls at the
  * bottom (the logo and attribution, the scale bar and the buttons at the

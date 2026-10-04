@@ -94,12 +94,15 @@ import androidx.compose.ui.unit.Velocity
 
 /**
  * A sheet at the bottom of the map for planning a route or a loop (the
- * map shows what it plans above it). At rest it shows [header] only: the
- * figures, the actions and a line that sums up the choices. Pulled up
+ * map shows what it plans above it). At rest it shows [title] (the figures
+ * and the actions) and [header] (stats, switcher and a line that sums up
+ * the choices) only. Pulled up
  * (drag the handle or the header up, or tap the handle or the summary
  * line), it shows [details] too, the choices themselves, below a line;
  * the header stays fixed above it and only the choices scroll, unless the
- * header alone takes more than half the sheet (very large fonts). At rest,
+ * header alone takes more than half the sheet (very large fonts). In
+ * landscape only the title stays fixed (its close button), and the
+ * rest scrolls as one column, so the choices get the sheet's height. At rest,
  * or in that case, everything below the handle scrolls when it doesn't
  * fit in [maxHeight]. A drag the content can't scroll any further moves
  * the sheet instead, like Android's own sheets: up opens it, down from
@@ -111,7 +114,9 @@ fun PlanSheet(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
+    landscape: Boolean,
     modifier: Modifier = Modifier,
+    title: @Composable ColumnScope.() -> Unit,
     header: @Composable ColumnScope.() -> Unit,
     details: @Composable ColumnScope.() -> Unit,
 ) {
@@ -180,15 +185,20 @@ fun PlanSheet(
             // scrolls as one, as at rest, so the choices keep room.
             var headerPx by remember { mutableIntStateOf(0) }
             val roomPx = with(LocalDensity.current) { (maxHeight - SHEET_HANDLE_HEIGHT).toPx() }
-            val fixedTop = expanded && fixesTop(headerPx, roomPx)
+            val pinned = sheetPinned(landscape, expanded, headerPx, roomPx)
             val measured = Modifier.onSizeChanged { headerPx = it.height }
             val divider = @Composable { HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp, bottom = 8.dp)) }
-            if (fixedTop) {
-                // The fixed top drags the sheet as the handle does.
-                Column(handleDrag) {
-                    Column(measured) { header() }
+            // What is fixed drags the sheet as the handle does.
+            when (pinned) {
+                SheetPinned.HEADER -> Column(handleDrag) {
+                    Column(measured) {
+                        title()
+                        header()
+                    }
                     divider()
                 }
+                SheetPinned.TITLE -> Column(handleDrag) { title() }
+                SheetPinned.NONE -> Unit
             }
             Column(
                 Modifier
@@ -197,8 +207,15 @@ fun PlanSheet(
                     .nestedScroll(overscroll)
                     .verticalScroll(scroll),
             ) {
-                if (!fixedTop) {
-                    Column(measured) { header() }
+                if (pinned != SheetPinned.HEADER) {
+                    if (pinned == SheetPinned.NONE) {
+                        Column(measured) {
+                            title()
+                            header()
+                        }
+                    } else {
+                        header()
+                    }
                     if (expanded) divider()
                 }
                 if (expanded) details()
@@ -256,15 +273,17 @@ fun RouteCard(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
+    landscape: Boolean,
     modifier: Modifier = Modifier,
 ) {
     PlanSheet(
         expanded = expanded,
         onExpandedChange = onExpandedChange,
         maxHeight = maxHeight,
+        landscape = landscape,
         modifier = modifier,
-        header = {
-            SheetTop(
+        title = {
+            SheetTitle(
                 summary = summary,
                 computing = stringResource(R.string.route_computing),
                 problem = problem,
@@ -274,8 +293,10 @@ fun RouteCard(
                 onShare = onShare,
                 onClose = onClose,
                 closeDescription = stringResource(R.string.route_close),
-                kept = kept,
             )
+        },
+        header = {
+            SheetStats(summary = summary, problem = problem, kept = kept)
             ChoiceSwitcher(
                 found = summary != null,
                 failed = problem != null,
@@ -441,6 +462,7 @@ fun LoopCard(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     maxHeight: Dp,
+    landscape: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val found = summary != null
@@ -448,9 +470,10 @@ fun LoopCard(
         expanded = expanded,
         onExpandedChange = onExpandedChange,
         maxHeight = maxHeight,
+        landscape = landscape,
         modifier = modifier,
-        header = {
-            SheetTop(
+        title = {
+            SheetTitle(
                 summary = summary,
                 computing = stringResource(R.string.loop_computing),
                 problem = problem,
@@ -460,8 +483,10 @@ fun LoopCard(
                 onShare = onShare,
                 onClose = onClose,
                 closeDescription = stringResource(R.string.loop_close),
-                kept = kept,
             )
+        },
+        header = {
+            SheetStats(summary = summary, problem = problem, kept = kept)
             ChoiceSwitcher(
                 found = found,
                 failed = problem != null,
@@ -616,7 +641,7 @@ private fun LoopCardDetails(
  * stays with dashes, so nothing moves (the rider).
  */
 @Composable
-private fun SheetTop(
+private fun SheetTitle(
     summary: RouteSummary?,
     computing: String,
     found: Boolean,
@@ -624,7 +649,6 @@ private fun SheetTop(
     onShare: () -> Unit,
     onClose: () -> Unit,
     closeDescription: String,
-    kept: Int,
     problem: String? = null,
     problemTitle: String = "",
 ) {
@@ -666,6 +690,13 @@ private fun SheetTop(
             Icon(painterResource(R.drawable.ic_close), contentDescription = closeDescription)
         }
     }
+}
+
+/** What follows the sheet's title: the problem, the dimmed figures while
+ * new ones are found ([kept] results before), or the route's stats. */
+@Composable
+private fun SheetStats(summary: RouteSummary?, problem: String?, kept: Int) {
+    val shown = summary
     if (problem != null) {
         Text(
             problem,

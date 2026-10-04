@@ -2542,6 +2542,7 @@ fun MapScreen() {
                         expanded = cardExpanded,
                         onExpandedChange = { cardExpanded = it },
                         maxHeight = maxHeight,
+                        landscape = landscape,
                         summary = routeSummary,
                         gravel = gravel,
                         onGravel = { g ->
@@ -2607,6 +2608,7 @@ fun MapScreen() {
                         expanded = cardExpanded,
                         onExpandedChange = { cardExpanded = it },
                         maxHeight = maxHeight,
+                        landscape = landscape,
                         summary = shown?.let { r ->
                             summarize(r.distanceM, r.durationS, r.favouriteShare, r.durationS, r.curvyShare, r.unpavedM, r.tollM, r.unriddenShare)
                         },
