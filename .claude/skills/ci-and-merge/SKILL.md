@@ -50,9 +50,13 @@ concurrency group with the `merge` job, so they never race.
 
 Merge by hand (fast-forward, then push `main`) only where the jobs can't:
 
-- **Main moved on**: merge `origin/main` into the branch and push; the
-  merge job (or `merge-docs.yml`) merges it. The run shows a warning "Not
-  merged: main has moved on".
+- **Main moved on**: order of preference is fast-forward, rebase, merge.
+  Rebase the branch (`git fetch origin main && git rebase origin/main`),
+  re-run verify if code changed, then `git push --force-with-lease origin
+  <branch>`; CI then fast-forwards `main`. The run shows a warning "Not
+  merged: main has moved on". Merge `origin/main` into the branch only if
+  a rebase is impossible or unwise (shared history others have checked
+  out, conflicts that make a rebase unsafe).
 - **Workflow files** (`.github/workflows/`): the job's token can't push
   them (`merge-docs.yml` refuses them with a warning). Wait for CI to be
   green on the branch's newest commit if code changed too, then merge by

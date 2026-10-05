@@ -128,6 +128,6 @@ rules in `.githooks/` and `.claude/hooks/`: pushes only to `claude/*`; no
 code push without a passing `verify` stamp for exactly that code; commit
 title at most 50 characters and body wrapped at 72; no session link;
 rule files (`CLAUDE.md`, ADRs) in their own commits; SPDX headers; no
-skipping hooks; no force push. If a hook blocks, fix the cause.
+skipping hooks; no force push except `--force-with-lease` to `claude/*`. If a hook blocks, fix the cause.
 CI's merge job merges to `main`; don't wait for it unless the rider needs
 the build.
