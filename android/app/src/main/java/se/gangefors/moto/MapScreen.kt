@@ -956,7 +956,7 @@ fun MapScreen() {
     }
     // The ridden roads, when shown: from the routing overlay, less the
     // favourites drawn (those hidden for gravel don't cut the dashes),
-    // and not when the map shows more than 70 km across.
+    // at any zoom.
     // Whether any ride has been on this map's roads: the ridden roads
     // button shows only then.
     var hasRidden by remember { mutableStateOf(false) }

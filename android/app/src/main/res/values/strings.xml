@@ -467,7 +467,7 @@
     <string name="ride_to_start">To the start</string>
     <string name="ride_wrong_way">You’re on the route the wrong way: ride on to its start, where recording starts.</string>
     <string name="settings_show_ridden">Show ridden roads</string>
-    <string name="settings_show_ridden_hint">Draws the roads your rides have been on as a thin dashed line, so you can see where you haven’t been. Not on favourite sections or routes: favourites count as ridden, and a route covers its own roads. Hidden when the map shows more than 70 km across. While a route or loop is shown, the button above it shows or hides them for that route or loop only.</string>
+    <string name="settings_show_ridden_hint">Draws the roads your rides have been on as a thin dashed line, so you can see where you haven’t been. Not on favourite sections or routes: favourites count as ridden, and a route covers its own roads. Shown at any zoom. While a route or loop is shown, the button above it shows or hides them for that route or loop only.</string>
     <string name="settings_group_routing">Routes and loops</string>
     <string name="settings_group_map">Map</string>
     <string name="settings_group_recording">Recording</string>
