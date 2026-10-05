@@ -27,7 +27,8 @@ jobs:
     permissions:
       contents: write # to fast-forward main
       actions: write # to start CodeQL on main when scripts changed
-    # The same group as the merge job in android.yml, so they never race.
+    # The same group as the merge job in android.yml, so they never race (a
+    # queued merge there can be replaced by a newer docs push here).
     concurrency:
       group: merge-main
       cancel-in-progress: false
