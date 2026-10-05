@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# CLAUDE.md commit rules: rule and decision files (CLAUDE.md, ADRs) go in
+# their own commit; every new source file starts with the SPDX header.
+set -u
+fail() { echo "pre-commit: $1" >&2; exit 1; }
+
+staged=$(git diff --cached --name-only --diff-filter=ACMRD)
+rules=$(printf '%s\n' "$staged" | grep -E '^(CLAUDE\.md|docs/adr/)' || true)
+other=$(printf '%s\n' "$staged" | grep -vE '^(CLAUDE\.md|docs/adr/)' | grep -v '^$' || true)
+if [ -n "$rules" ] && [ -n "$other" ]; then
+  fail "CLAUDE.md and ADR changes go in their own commit; also staged: $(echo "$other" | head -3 | tr '\n' ' ')"
+fi
+
+for f in $(git diff --cached --name-only --diff-filter=A | grep -E '\.(rs|kt|kts|py|sh)$' || true); do
+  git show ":$f" | head -5 | grep -q 'SPDX-License-Identifier: AGPL-3.0-only' \
+    || fail "$f: missing the SPDX licence header"
+done

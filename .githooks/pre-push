@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Pushes go to claude/* branches only (CI's merge job moves main), and
+# code only goes up after the `verify` agent stamped its fingerprint.
+set -u
+zero=0000000000000000000000000000000000000000
+fail() { echo "pre-push: $1" >&2; exit 1; }
+cd "$(git rev-parse --show-toplevel)"
+stamp="$(git rev-parse --git-common-dir)/moto-verified"
+
+while read -r lref lsha rref rsha; do
+  [ "$lsha" = "$zero" ] && continue
+  case "$rref" in
+    refs/heads/claude/*) ;;
+    *) fail "$rref: work goes to claude/* branches; CI merges into main" ;;
+  esac
+  base=$rsha
+  if [ "$base" = "$zero" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+    base=$(git merge-base "$lsha" origin/main 2>/dev/null) || continue
+  fi
+  changed=$(git diff --name-only "$base" "$lsha" -- android core .github/scripts)
+  [ -n "$changed" ] || continue
+  want=$(.claude/hooks/fingerprint.sh "$lsha")
+  have=$(cat "$stamp" 2>/dev/null || true)
+  [ "$want" = "$have" ] || fail "code changed but the verify agent hasn't passed on it; run verify, then push"
+done

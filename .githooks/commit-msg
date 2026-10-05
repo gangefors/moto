@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# CLAUDE.md commit rules: title of at most 50 characters, a blank line,
+# a body wrapped at 72, and no session link.
+export LC_ALL=C.UTF-8
+msg=$1
+title=$(sed -n 1p "$msg")
+case "$title" in Merge*|Revert*|fixup!*|squash!*) exit 0 ;; esac
+fail() { echo "commit-msg: $1" >&2; exit 1; }
+
+[ "${#title}" -le 50 ] || fail "title is ${#title} characters; the limit is 50"
+[ -n "$title" ] || fail "empty title"
+second=$(sed -n 2p "$msg")
+[ -z "$second" ] || fail "the second line must be blank"
+if grep -qiE '^Claude-Session:|claude\.ai/code/session' "$msg"; then
+  fail "no Claude-Session trailer or session link in commits (CLAUDE.md)"
+fi
+long=$(grep -v '^#' "$msg" | sed 1d | grep -vE '^(Co-Authored-By|Perf-Accepted|Signed-off-by):|https?://' \
+  | awk 'length($0) > 72 { print NR": "$0; exit }')
+[ -z "$long" ] || fail "body lines must wrap at 72 characters ($long)"

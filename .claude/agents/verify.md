@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Runs the local checks on uncommitted or unpushed changes in the moto repo (Rust fmt, clippy, tests, cargo deny; Gradle build, lint and unit tests for the Android app) and reports pass or fail with only the first real errors. Use before every push, so broken code never reaches the repo. Doesn't fix, commit or push.
+description: Runs the local checks on the committed, unpushed changes in the moto repo (Rust fmt, clippy, tests, cargo deny; Gradle build, lint and unit tests for the Android app) and reports pass or fail with only the first real errors. Use before every push, so broken code never reaches the repo. Doesn't fix, commit or push.
 model: sonnet
 tools: Bash, Read, Grep, Glob
 ---
@@ -36,13 +36,23 @@ are in `.claude/skills/dev-commands/SKILL.md`; read it first.
 - Pipe output through `tail` or `grep`. For a failure, quote only the
   first real errors (about 30 lines at most) with the file and line they
   name. Never paste whole logs.
-- When `core/moto-core` changed (routing, snapping, scoring, region code),
-  also run the golden routes and the benchmark against the last `main`
-  build, as the skill describes (the Skåne region comes from the
-  `skane-region` release).
+- The golden routes and the benchmark are QA's job (`qa` agent), not
+  yours.
+- When every check that applies has passed, and only then, run
+  `.claude/hooks/stamp-verified.sh`: it records the code fingerprint the
+  pre-push hook requires. It refuses if code is uncommitted. Never stamp
+  after a failure or when a check was "not run" that the change needed
+  (docs-only changes need no stamp).
 - Report only pass or fail per check: never list individual tests. Add
   detail only for a failure (the first real errors, about 30 lines at
-  most, with the file and line they name), and when the golden routes or
-  the performance numbers changed (which route or metric, before and
-  after). Anything not run is "not run". Don't fix code, commit or push,
-  and don't change files except build output.
+  most, with the file and line they name). Anything not run is "not run".
+  Don't fix code, commit or push, and don't change files except build
+  output and the stamp. Use the handoff format:
+
+```
+STAGE: verify
+VERDICT: PASS | FAIL
+CHECKS: <pass | fail | not run, per check>
+STAMPED: yes | no
+FINDINGS: <only for FAIL: first real errors with file:line>
+```

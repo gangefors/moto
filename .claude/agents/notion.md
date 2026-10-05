@@ -17,6 +17,12 @@ are private to the rider:
 - Handoff to Claude Code: https://app.notion.com/p/3e314874ab0481bc9ca8f9e0d56acc52
   (Pending items to do, Done items with commit links)
 
+Specs for the change workflow (`.claude/skills/workflow/SKILL.md`) are
+child pages of the Handoff page titled `Spec: <slug>`, written by the
+`architect` agent. Pending and Done entries link to them. Read a spec
+page whole when asked (they are small); never edit one unless the prompt
+says so.
+
 Rules:
 
 - Do exactly what the prompt asks; change nothing else on the pages.

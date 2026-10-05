@@ -31,9 +31,12 @@ nothing.
 ## Which model for which task
 
 Pick the session's model when you start it (`/model`, or in the app).
-Within a session Claude hands some work to subagents that pin a cheaper
-model (`.claude/agents/`): Notion, CI logs and searches on Haiku,
-implementation from a spec and mockups on Sonnet.
+Within a session Claude hands work to subagents that pin a model
+(`.claude/agents/`): Notion, CI logs and searches on Haiku; design on Opus;
+implementation, mockups, checks and review on Sonnet; QA and docs on Haiku.
+With the change workflow (`/feature`, `/bugfix`, `/refactor`, ADR-0013) you
+talk to the main session and approve only the design and the result; it
+picks the models per change from the spec's risk tag.
 
 | Task (examples from this project) | Model | Effort |
 |---|---|---|
@@ -44,7 +47,10 @@ implementation from a spec and mockups on Sonnet.
 | Answering mockup comments (renames) | Sonnet or Haiku | low |
 | CI check, Notion ticks, "what can I validate with build X" | Haiku | low |
 
-**Plan with Opus, build with Sonnet.** For example, an Opus session writes
-the ADR and the mockup; once you accept them, a fresh Sonnet session
-implements the ADR. A good ADR is precise enough that Sonnet rarely needs
-Opus for the build.
+**Plan with Opus, build with Sonnet.** The workflow does this for you: the
+architect (Opus) writes the spec and ADR, Sonnet builds and reviews. For
+the main session itself, Sonnet at medium effort is enough for the
+orchestrating; it only routes short reports.
+
+**Use `/feature`, `/bugfix` or `/refactor`** to start a change; say "just
+discussing" for ideas, which stay a discussion until you say go.
