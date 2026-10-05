@@ -27,6 +27,10 @@ import subprocess
 import sys
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
+MOVED_ON = (
+    "main has moved on: merge main into the branch and push, "
+    "then CI merges it when green"
+)
 
 
 def builds_app(path: str) -> bool:
@@ -52,17 +56,14 @@ def scanned(path: str) -> bool:
 def decide(tested_on_branch, newer_files, main_behind, main_files):
     """Returns (may_merge, reason, workflows to start on main)."""
     if not tested_on_branch:
+        if not main_behind:
+            return False, MOVED_ON, []
         return False, "the tested commit is no longer on the branch", []
     newer_code = sorted(p for p in newer_files if builds_app(p))
     if newer_code:
         return False, "a newer commit changes code; its own CI run merges it", []
     if not main_behind:
-        return (
-            False,
-            "main has moved on: merge main into the branch and push, "
-            "then CI merges it when green",
-            [],
-        )
+        return False, MOVED_ON, []
     if not main_files:
         return False, "main already has these commits", []
     workflows = sorted(p for p in main_files if p.startswith(".github/workflows/"))
@@ -90,10 +91,12 @@ def is_ancestor(a: str, b: str) -> bool:
 
 
 def changed(a: str, b: str) -> list:
-    out = git("diff", "--name-only", "--no-renames", a, b)
+    # -z: NUL-separated, never C-quoted (non-ASCII, tab or quote in a path
+    # would otherwise start with a quote and slip past the prefix checks).
+    out = git("diff", "--name-only", "-z", "--no-renames", a, b)
     if out.returncode != 0:
         raise SystemExit("git diff failed: " + out.stderr.strip())
-    return [p for p in out.stdout.splitlines() if p]
+    return [p for p in out.stdout.split("\0") if p]
 
 
 def resolve(ref: str) -> str:

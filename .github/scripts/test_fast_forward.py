@@ -125,6 +125,80 @@ class Git(unittest.TestCase):
         tip = self.commit("core/b.rs")
         self.assertEqual(self.output(tested, tip, self.main), "")
 
+    def test_non_ascii_code_path_is_code(self):
+        for path in ("core/sk\u00e5ne.rs", "android/app/\u00e4.kt"):
+            with self.subTest(path=path):
+                self.run_git("checkout", "-q", "-B", "ccr-x", "main")
+                self.commit(path)
+                tip = self.run_git("rev-parse", "HEAD")
+                self.assertEqual(self.output(self.main, tip, self.main), "")
+                self.assertEqual(ff.changed(self.main, tip), [path])
+
+    def test_odd_workflow_path_is_refused(self):
+        self.run_git("checkout", "-q", "-b", "ccr-x")
+        self.commit(".github/workflows/\u00e5.yml")
+        tip = self.run_git("rev-parse", "HEAD")
+        self.assertEqual(self.output(self.main, tip, self.main), "")
+        may, reason, _ = ff.decide(
+            True, [], True, ff.changed(self.main, tip)
+        )
+        self.assertFalse(may)
+        self.assertIn("workflow files", reason)
+
+    def test_paths_with_space_tab_and_quote(self):
+        self.run_git("checkout", "-q", "-b", "ccr-x")
+        names = ["docs/a b.md", 'docs/q"uote.md', "docs/t\tab.md"]
+        for n in names:
+            self.commit(n)
+        tip = self.run_git("rev-parse", "HEAD")
+        self.assertEqual(sorted(ff.changed(self.main, tip)), sorted(names))
+        self.assertEqual(
+            self.output(self.main, tip, self.main),
+            f"target={tip}\ndispatch=\n",
+        )
+        self.commit('core/q"uote.rs')
+        tip = self.run_git("rev-parse", "HEAD")
+        self.assertEqual(self.output(self.main, tip, self.main), "")
+
+    def test_tested_main_docs_range_fast_forwards(self):
+        self.run_git("checkout", "-q", "-b", "ccr-x")
+        self.commit("docs/a.md")
+        tip = self.commit("CLAUDE.md")
+        self.assertEqual(
+            self.output(self.main, tip, self.main), f"target={tip}\ndispatch=\n"
+        )
+
+    def test_tested_main_code_in_range_is_left_to_build(self):
+        self.run_git("checkout", "-q", "-b", "ccr-x")
+        self.commit("docs/a.md")
+        tip = self.commit("core/a.rs")
+        self.assertEqual(self.output(self.main, tip, self.main), "")
+        _, reason, _ = ff.decide(True, ["core/a.rs"], True, ["core/a.rs"])
+        self.assertTrue(reason.startswith("a newer commit changes code"))
+
+    def test_tested_main_branch_behind_main_says_moved_on(self):
+        self.run_git("checkout", "-q", "-b", "ccr-x")
+        tip = self.commit("docs/a.md")
+        self.run_git("checkout", "-q", "main")
+        main = self.commit("docs/c.md")
+        self.assertEqual(self.output(main, tip, main), "")
+        self.assertTrue(ff.decide(False, [], False, [])[1].startswith("main has moved on"))
+
+    def test_tested_main_merge_commit_in_range(self):
+        self.run_git("checkout", "-q", "-b", "ccr-x")
+        self.commit("docs/a.md")
+        self.run_git("checkout", "-q", "main")
+        main = self.commit("docs/c.md")
+        self.run_git("checkout", "-q", "ccr-x")
+        self.run_git("merge", "-q", "--no-ff", "-m", "merge", "main")
+        tip = self.run_git("rev-parse", "HEAD")
+        self.assertEqual(
+            self.output(main, tip, main), f"target={tip}\ndispatch=\n"
+        )
+
+    def test_tested_main_equals_tip_is_up_to_date(self):
+        self.assertEqual(self.output(self.main, self.main, self.main), "")
+
     def test_bad_ref_fails(self):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
