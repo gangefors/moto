@@ -1,6 +1,6 @@
 # ADR-0014: Map screen structure — one state holder, a per-composition scope, pieces by concern
 
-**Status:** Proposed · **Date:** 2026-10-05 · **Deciders:** the owner · **Repo path:** `docs/adr/0014-map-screen-structure.md`
+**Status:** Accepted · **Date:** 2026-10-05 · **Deciders:** the owner · **Repo path:** `docs/adr/0014-map-screen-structure.md`
 
 ## Context
 
@@ -76,18 +76,20 @@ A gets most of C's readability at close to B's risk, because the code moves verb
 ## Consequences
 
 - **Easier:** finding and changing one concern, reviewing a change to it, and reading one file instead of a slice of 3,800 lines.
-- **Recomposition:** pieces recompose on their own state reads as well as with `MapScreen()`, so `MapScreen()` itself recomposes less often. Nothing visible depends on that except two values read during composition without snapshot state (the position given to Routes & rides, and a section's cached description in the edit sheet); both are still read when their sheet opens, as before.
-- **Callbacks** that capture the scope are new objects in each composition, so a few cards and buttons recompose a little more often; not measurable at the screen's update rates.
+- **Recomposition:** pieces recompose on their own state reads as well as with `MapScreen()`, so `MapScreen()` itself recomposes less often.
+  - Two non-snapshot reads used to refresh whenever any state in `MapScreen()` changed: `here = mapFix(map)` for the nearest sort in Routes & rides, and `SectionDescriptions.cached` in the edit sheet. Both now refresh only with their own sheet's state and with `recording`; while riding, the order follows the position as before. A latent issue, out of scope.
+  - Callbacks capture the `screen` scope (a plain class, new on each composition). With strong skipping, child composables receive new lambda objects on every `MapScreen()` recomposition, so they skip less often. Not a functional change; a risk to watch for jank while riding with recording on. A later optimisation can hoist callbacks or make the scope stable.
+- **Receiver order:** `MapDialogs` and pieces resolve implicit receivers as `with(state)` then `screen` (`BoxScope` for Box pieces). Safe only while `MapScreenState` and `MapScreenScope` share no member names; keep the two classes' members disjoint.
 - **Harder:** two receivers per function, and the scope class must list each per-composition value the moved code uses.
 
 ## Action Items
 
-- [ ] File-level helpers out of `MapScreen.kt` (system bars, buttons, map setup, camera and location, planning types).
-- [ ] Pure rules with tests: Back's precedence, cards shown, map buttons shown, ride mode.
-- [ ] `MapScreenState` holds the screen's state.
-- [ ] `MapScreenScope` gathers the composition's values; composable value calls and derived values come first.
-- [ ] Operations out as scope extensions, by concern.
-- [ ] Effect groups out, in composition order.
-- [ ] UI pieces out: buttons, cards, plan sheet.
-- [ ] Dialogs and sheets out.
-- [ ] Phone smoke test of the main flows in both orientations and both themes.
+- [x] File-level helpers out of `MapScreen.kt` (system bars, buttons, map setup, camera and location, planning types) — c46181b, 514dfac, a957d7b.
+- [x] Pure rules with tests: Back's precedence, cards shown, map buttons shown, ride mode — 07c3f5e, 93cb6d9, 9d58034.
+- [x] `MapScreenState` holds the screen's state — e43b0de, 1f58aa0.
+- [x] `MapScreenScope` gathers the composition's values; composable value calls and derived values come first — c580196.
+- [x] Operations out as scope extensions, by concern — 293d042, ab7e102.
+- [x] Effect groups out, in composition order — c99e564, 106f4b3, cf42abe.
+- [x] UI pieces out: buttons, cards, plan sheet — a819410.
+- [x] Dialogs and sheets out — 1507a18, 7dd10c5, f30b23d.
+- [x] Phone smoke test of the main flows in both orientations and both themes — e21d565, 40d27e3.
