@@ -203,7 +203,7 @@ fun startStep(
     zoom: Double,
     areaZoom: Int,
 ): StartStep {
-    // Today's decision: [riderMoved] is not looked at yet (the fix follows).
+    if (riderMoved) return StartStep.RIDER_MOVED
     if (riding || here == null) return StartStep.NOTHING
     val off = target == null || kotlin.math.abs(target.lat - here.lat) > START_OFF_DEGREES ||
         kotlin.math.abs(target.lon - here.lon) > START_OFF_DEGREES

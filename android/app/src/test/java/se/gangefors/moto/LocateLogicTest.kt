@@ -101,6 +101,14 @@ class LocateLogicTest {
     }
 
     @Test
+    fun startLeavesAMapTheRiderMoved() {
+        // The same inputs as the zoomed-in map above, once the rider has moved it.
+        assertEquals(StartStep.RIDER_MOVED, startStep(true, false, spot, spot, 14.0, 10))
+        assertEquals(StartStep.RIDER_MOVED, startStep(true, true, spot, spot, 14.0, 10))
+        assertEquals(StartStep.RIDER_MOVED, startStep(true, false, null, null, 10.0, 10))
+    }
+
+    @Test
     fun startDoesNothingWhileRidingOrWithoutAPosition() {
         assertEquals(StartStep.NOTHING, startStep(false, true, spot, spot, 10.0, 10))
         assertEquals(StartStep.NOTHING, startStep(false, false, null, spot, 10.0, 10))

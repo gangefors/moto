@@ -316,8 +316,16 @@ internal class MapScreenState(
     // The location button's zoom levels (Ride settings).
     var locateZooms by mutableStateOf(RoutePrefs.locateZooms(context))
     var zoomBeforeOverview by mutableStateOf<Double?>(null)
-    // The map has gone to the rider once at the start, or the rider moved it first.
+    // The map has gone to the rider once at the start, or the rider moved it
+    // first (a pan or pinch, a map button, or something shown on it).
     var startSettled by mutableStateOf(false)
+
+    /** The rider moved the map with a button or by showing something on it:
+     * the start must not put it back. Without location there is no start
+     * yet, and the one that runs when it is given still goes to the rider. */
+    fun riderMovedMap() {
+        if (hasLocation) startSettled = true
+    }
 
     var savingRoute by mutableStateOf<Pair<Route, Boolean>?>(null)
 

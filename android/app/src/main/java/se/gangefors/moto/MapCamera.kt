@@ -192,6 +192,7 @@ internal fun MapScreenScope.showOnMap(lines: List<List<LatLon>>, always: Boolean
         val target = boundsOf(lines)?.withMinSpan(minSpanM) ?: return
         val pad = fitPaddingNow()
         if (!always && !needsFit(visibleBounds(m, pad), target)) return
+        riderMovedMap()
         // Following the rider's position would pull the map straight back;
         // the location button turns it on again.
         m.locationComponent.takeIf { it.isLocationComponentActivated }?.cameraMode = CameraMode.NONE
@@ -234,6 +235,7 @@ internal fun MapScreenScope.locateView(m: MapLibreMap, here: android.location.Lo
 internal fun MapScreenScope.onLocateTap() {
     with(state) {
         val m = map ?: return
+        riderMovedMap()
         val here = m.locationComponent.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
         val plan = planLines().filter { it.isNotEmpty() }
         val zoom = m.cameraPosition.zoom
@@ -296,19 +298,30 @@ internal fun MapScreenScope.LocationEffects() {
             }
             DebugTools.mark("start: map " + (if (drawn) "drawn" else "not drawn in time") + ", rough position " + (if (rough != null) "found" else "none"))
             fun goToRider(step: String) {
-                if (startSettled || rideModeNow.value) return
                 val component = m.locationComponent.takeIf { it.isLocationComponentActivated } ?: return
                 val fix = component.lastKnownLocation
                 val here = fix?.let { LatLng(it.latitude, it.longitude) } ?: rough?.let { LatLng(it.latitude, it.longitude) } ?: return
                 val camera = m.cameraPosition
                 val target = camera.target
-                val off = target == null || kotlin.math.abs(target.latitude - here.latitude) > START_OFF_DEGREES ||
-                    kotlin.math.abs(target.longitude - here.longitude) > START_OFF_DEGREES
-                if (off || kotlin.math.abs(camera.zoom - locateZooms.area) > START_ZOOM_TOLERANCE) {
-                    DebugTools.mark("start: " + step + ", camera at zoom " + camera.zoom + ", moved to the rider")
-                    m.moveCamera(CameraUpdateFactory.newLatLngZoom(here, locateZooms.area.toDouble()))
+                when (
+                    startStep(
+                        riderMoved = startSettled,
+                        riding = rideModeNow.value,
+                        here = LatLon(here.latitude, here.longitude),
+                        target = target?.let { LatLon(it.latitude, it.longitude) },
+                        zoom = camera.zoom,
+                        areaZoom = locateZooms.area,
+                    )
+                ) {
+                    StartStep.RIDER_MOVED -> DebugTools.mark("start: " + step + " skipped, the rider moved the map")
+                    StartStep.NOTHING -> {}
+                    StartStep.FOLLOW -> component.cameraMode = CameraMode.TRACKING
+                    StartStep.MOVE_AND_FOLLOW -> {
+                        DebugTools.mark("start: " + step + ", camera at zoom " + camera.zoom + ", moved to the rider")
+                        m.moveCamera(CameraUpdateFactory.newLatLngZoom(here, locateZooms.area.toDouble()))
+                        component.cameraMode = CameraMode.TRACKING
+                    }
                 }
-                component.cameraMode = CameraMode.TRACKING
             }
             goToRider("first")
             delay(START_RECHECK_MS)

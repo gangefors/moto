@@ -279,6 +279,7 @@ internal fun BoxScope.MapButtonColumn(screen: MapScreenScope, cardsShown: Boolea
                                         nudgeRideZoom(rideZoomNudge, by)
                                     }
                                 } else {
+                                    riderMovedMap()
                                     map?.animateCamera(CameraUpdateFactory.zoomBy(by))
                                 }
                             },
