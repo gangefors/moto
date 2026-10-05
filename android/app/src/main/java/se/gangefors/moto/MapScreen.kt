@@ -3,44 +3,16 @@
 
 package se.gangefors.moto
 
-import android.content.res.Configuration
-import android.content.ComponentCallbacks2
-import se.gangefors.moto.debug.DebugTools
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Context
-import android.location.Location
-import android.location.LocationManager
-import android.content.pm.PackageManager
-import android.content.res.Resources
-import android.graphics.Rect
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
-import android.view.Gravity
-import android.view.PixelCopy
-import android.view.SurfaceView
-import android.view.View
-import android.view.ViewGroup
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
@@ -52,131 +24,35 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntSize
-import android.graphics.PointF
 import kotlin.math.max
 import kotlin.math.roundToInt
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.createBitmap
-import androidx.core.view.WindowCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import java.time.ZoneId
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.Mutex
-import org.maplibre.android.camera.CameraPosition
-import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.maps.widgets.CompassView
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
-import org.maplibre.android.location.LocationComponentActivationOptions
-import org.maplibre.android.location.modes.CameraMode
-import org.maplibre.android.location.modes.RenderMode
-import org.maplibre.android.location.OnCameraTrackingChangedListener
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
-import se.gangefors.moto.core.Avoid
-import se.gangefors.moto.core.Description
-import se.gangefors.moto.core.FavouriteNearby
-import se.gangefors.moto.core.FollowPhase
-import se.gangefors.moto.core.Favourites
-import se.gangefors.moto.core.SavedRoute
-import se.gangefors.moto.core.Track
-import se.gangefors.moto.core.FavouritesMode
-import se.gangefors.moto.core.LatLon
-import se.gangefors.moto.core.MotoException
-import se.gangefors.moto.core.NewSection
-import se.gangefors.moto.core.Rating
-import se.gangefors.moto.core.RoadInfo
-import se.gangefors.moto.core.RouteOptions
-import se.gangefors.moto.core.LoopOptions
-import se.gangefors.moto.core.Route
-import se.gangefors.moto.core.Section
-import se.gangefors.moto.core.SectionDraft
-import se.gangefors.moto.core.SectionGravel
-import se.gangefors.moto.core.SectionSource
-import se.gangefors.moto.core.SectionStatus
-import se.gangefors.moto.core.SectionStore
-import se.gangefors.moto.core.SectionUpdate
-import se.gangefors.moto.core.Tag
-import se.gangefors.moto.core.TagStatus
-import se.gangefors.moto.core.TrackPoint
-import se.gangefors.moto.core.UnriddenMode
-import se.gangefors.moto.core.defaultRouteOptions
 
 /**
  * The single map screen (ADR-0002): OpenFreeMap tiles (ADR-0003), attribution
@@ -188,6 +64,22 @@ import se.gangefors.moto.core.defaultRouteOptions
  * and draw the route between them, over favourite sections where the
  * detour budget allows. The map only picks, draws and hit-tests; routing,
  * snapping and proposing sections belong to the Rust core.
+ *
+ * This is the composition root (ADR-0014): it makes the state and the
+ * per-composition scope, runs the effects in order and lays out the root
+ * Box. The rest lives beside it, in the same package:
+ * - MapScreenState.kt: `MapScreenState`, `MapScreenScope`, `notify`.
+ * - MapSetup.kt: the map view, style, controls and region status.
+ * - SystemBars.kt: status and navigation bar icons that follow the map.
+ * - MapCamera.kt: position, permissions, fitting and the locate button.
+ * - MapStore.kt: the section store and the favourite layers.
+ * - MapMarking.kt: marking new sections and reviewing tags.
+ * - MapPlanning.kt: routes, loops, route settings, sharing and saving.
+ * - MapShown.kt: shown rides, saved routes and sections.
+ * - MapRide.kt: riding and recording, ride mode and the ride camera.
+ * - MapGestures.kt: the tap and long-press listeners.
+ * - MapButtons.kt, MapCards.kt, PlanSheet.kt: the pieces of the Box.
+ * - MapDialogs.kt: the dialogs, sheets and pages over the map.
  */
 @Composable
 fun MapScreen() {
