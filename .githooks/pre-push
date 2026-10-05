@@ -11,11 +11,11 @@ cd "$(git rev-parse --show-toplevel)"
 stamp="$(git rev-parse --git-common-dir)/moto-verified"
 
 while read -r lref lsha rref rsha; do
-  [ "$lsha" = "$zero" ] && continue
   case "$rref" in
     refs/heads/claude/*) ;;
     *) fail "$rref: work goes to claude/* branches; CI merges into main" ;;
   esac
+  [ "$lsha" = "$zero" ] && fail "$rref: deleting remote refs is not done from a session"
   base=$rsha
   if [ "$base" = "$zero" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
     base=$(git merge-base "$lsha" origin/main 2>/dev/null) || continue

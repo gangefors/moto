@@ -2,198 +2,121 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
 #
-# Force-push policy for guard-bash.sh. Reads the Bash command on stdin,
-# the working directory is argv[1]. Exit 0 = allow, 2 = block (reason on
-# stderr). Allowed: `git push` with --force-with-lease (optionally =ref[:sha])
-# and --force-if-includes where every pushed ref is a claude/* branch on
-# origin. Everything else that forces, mirrors or deletes is blocked, and
-# whenever the command can't be understood for sure the answer is block.
-import os
+# Push and remote-rewrite policy for guard-bash.sh. Reads the Bash command
+# on stdin. Exit 0 = allow, 2 = block (reason on stderr).
+#
+# Strict whitelist: a command line that involves `push` must be exactly one
+# of
+#   git push [-u|--set-upstream] origin claude/NAME[:claude/NAME]
+#   git push [-u|--set-upstream] origin HEAD
+#   git push [-u|--set-upstream] [--force-with-lease[=claude/NAME[:SHA]]]
+#            [--force-if-includes] origin claude/NAME[:claude/NAME]
+# (options in any order, each once, exact spellings, plain characters
+# only). Anything else, including a push sharing a line with `;`, `&&`,
+# `|`, `$(...)` or backticks, is blocked. A few other ways to move main or
+# rewrite the remote (git config, git remote, the GitHub ref APIs) are
+# blocked as well.
 import re
-import shlex
-import subprocess
 import sys
 
-CLAUDE_REF = re.compile(r"^(refs/heads/)?claude/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
-SAFE_SRC = re.compile(r"^[A-Za-z0-9._/-]+$")
+PLAIN = re.compile(r"^[A-Za-z0-9 ._/@:=-]+$")
 SHA = re.compile(r"^[0-9a-f]{7,64}$")
-PLAIN_OPTS = {"-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose", "--progress"}
-SEPARATORS = set("\n;&|(){}`")
+INTERPRETER = re.compile(r"\b(bash|sh|zsh|dash|ksh|python3?|perl|ruby|node|eval|source|exec|xargs|env)\b")
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
 
 
 class Block(Exception):
     pass
 
 
-def valid_claude(ref):
-    return bool(CLAUDE_REF.match(ref)) and ".." not in ref and not ref.endswith((".", ".lock"))
+def name_ok(n):
+    if not n.startswith("claude/") or not re.fullmatch(r"[A-Za-z0-9._/-]+", n):
+        return False
+    return all(p and not p.startswith(("-", ".")) and ".." not in p and not p.endswith((".", ".lock"))
+               for p in n.split("/"))
 
 
-def split_segments(cmd):
-    segs, buf, quote, i = [], [], None, 0
-    while i < len(cmd):
-        c = cmd[i]
-        if quote:
-            buf.append(c)
-            if c == "\\" and quote == '"' and i + 1 < len(cmd):
-                i += 1
-                buf.append(cmd[i])
-            elif c == quote:
-                quote = None
-        elif c == "\\" and i + 1 < len(cmd):
-            buf.append(c)
-            i += 1
-            buf.append(cmd[i])
-        elif c in "'\"":
-            quote = c
-            buf.append(c)
-        elif c in SEPARATORS:
-            segs.append("".join(buf))
-            buf = []
-        else:
-            buf.append(c)
-        i += 1
-    if quote:
-        raise Block("unbalanced quotes")
-    segs.append("".join(buf))
-    return segs
+def code_of(cmd):
+    """The command without heredoc bodies (message text), unless an
+    interpreter might run that text as code."""
+    out, tags = [], []
+    for line in cmd.split("\n"):
+        if tags:
+            if line.strip() == tags[0]:
+                tags.pop(0)
+            continue
+        out.append(line)
+        tags.extend(m.group(2) for m in HEREDOC.finditer(line))
+    code = "\n".join(out)
+    return cmd if INTERPRETER.search(code) else code
 
 
-def git_out(cdir, *args):
-    try:
-        r = subprocess.run(["git", "-C", cdir, *args], capture_output=True, text=True, timeout=10)
-    except Exception:
-        return None
-    return r.stdout.strip() if r.returncode == 0 else None
-
-
-def current_branch(cdir):
-    b = git_out(cdir, "symbolic-ref", "--short", "-q", "HEAD")
-    if not b or not valid_claude(b) or b.startswith("refs/"):
-        raise Block("current branch is not a claude/* branch")
-    return b
-
-
-def check_push(args, cdir, clean_prefix):
-    lease = [a for a in args if a.startswith(("--force-with-lease", "--force-if-includes"))]
-    danger = False
-    for a in args:
-        if a.startswith("--force") and not a.startswith(("--force-with-lease", "--force-if-includes")):
-            danger = True
-        elif a in ("--mirror", "--delete", "--prune", "--no-force-with-lease") or a.startswith("--delete="):
-            danger = True
-        elif re.match(r"^-[A-Za-z]*[fd]", a):
-            danger = True
-        elif a.startswith(("+", ":")) or ":+" in a:
-            danger = True
-    if danger:
-        raise Block("no --force, -f, +refspec, --mirror or deletions; --force-with-lease to claude/* only")
-    if not lease:
-        return
-    if not clean_prefix:
-        raise Block("a lease push needs a plain `git [-C path] push` (no env, wrappers or git options)")
-    pos = []
-    for a in args:
+def check_push(line):
+    if re.search(r"[;&|`$()<>{}\n]", line):
+        raise Block("run git push as its own command")
+    if not PLAIN.match(line):
+        raise Block("a push line may only use letters, digits and ._/@:=- (no quotes, backslashes or expansions)")
+    t = line.split()
+    if t[:2] != ["git", "push"]:
+        raise Block("only a plain `git push ...` is allowed")
+    seen, lease, pos = set(), False, []
+    for a in t[2:]:
+        key = {"--set-upstream": "-u"}.get(a, a)
         if a.startswith("--force-with-lease="):
+            key, lease = "--force-with-lease", True
             ref, colon, sha = a.split("=", 1)[1].partition(":")
-            if not valid_claude(ref) or (colon and not SHA.match(sha)):
+            if not name_ok(ref) or (colon and not SHA.match(sha)):
                 raise Block("--force-with-lease=<ref>[:<sha>] must name a claude/* branch")
-        elif a in ("--force-with-lease", "--force-if-includes") or a in PLAIN_OPTS:
+        elif a == "--force-with-lease":
+            lease = True
+        elif a in ("-u", "--set-upstream", "--force-if-includes"):
             pass
         elif a.startswith("-"):
-            raise Block("option %s not allowed on a lease push" % a)
+            raise Block("option %s is not allowed" % a)
         else:
             pos.append(a)
-    if pos and pos[0] != "origin":
-        raise Block("lease pushes go to origin only")
-    specs = pos[1:]
-    if not specs:
-        b = current_branch(cdir)
-        if git_out(cdir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}") != "origin/" + b:
-            raise Block("upstream is not origin/%s; name the branch explicitly" % b)
-        if (git_out(cdir, "config", "--get", "push.default") or "simple") not in ("simple", "current", "upstream"):
-            raise Block("push.default would push more than the current branch")
-        if git_out(cdir, "config", "--get-all", "remote.origin.push"):
-            raise Block("remote.origin.push is configured; name the branch explicitly")
-        for key in ("branch.%s.pushRemote" % b, "remote.pushDefault"):
-            v = git_out(cdir, "config", "--get", key)
-            if v and v != "origin":
-                raise Block("%s redirects the push" % key)
+            continue
+        if key in seen:
+            raise Block("option %s given twice" % a)
+        seen.add(key)
+    if len(pos) != 2 or pos[0] != "origin":
+        raise Block("push to `origin` with exactly one refspec")
+    spec = pos[1]
+    if spec == "HEAD" and not lease and "--force-if-includes" not in seen:
         return
-    for p in specs:
-        if ":" in p:
-            src, dst = p.split(":", 1)
-            if not src or not SAFE_SRC.match(src) or not valid_claude(dst):
-                raise Block("refspec %s must end in a claude/* branch" % p)
-        elif p == "HEAD":
-            current_branch(cdir)
-        elif not valid_claude(p):
-            raise Block("%s is not a claude/* branch" % p)
+    parts = spec.split(":")
+    if len(parts) > 2 or not all(name_ok(p) for p in parts):
+        raise Block("refspec must be claude/NAME or claude/NAME:claude/NAME (a lease push needs an explicit branch)")
 
 
-def analyze(cmd, cwd, depth=0):
-    if depth > 3:
-        raise Block("nested too deeply")
-    for seg in split_segments(cmd):
-        try:
-            toks = shlex.split(seg)
-        except ValueError:
-            if "git" in seg and "push" in seg:
-                raise Block("can't parse the command")
-            continue
-        out, skip = [], False
-        for t in toks:
-            if skip:
-                skip = False
-            elif re.match(r"^\d*(>>?|<)", t):
-                skip = re.fullmatch(r"\d*(>>?|<)&?", t) is not None
-            elif re.fullmatch(r"\d+", t) and False:
-                pass
-            else:
-                out.append(t)
-        toks = out
-        for t in toks:
-            if re.search(r"\s", t) and "git" in t:
-                analyze(t, cwd, depth + 1)
-        gi = next((i for i, t in enumerate(toks) if os.path.basename(t) == "git"), None)
-        if gi is None:
-            if "push" in toks and any(t.startswith("$") or "`" in t for t in toks):
-                raise Block("can't tell what runs `push`")
-            continue
-        pre, post = toks[:gi], toks[gi + 1:]
-        clean = all(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", p) and not p.startswith("GIT_") for p in pre)
-        cdir, i = cwd, 0
-        while i < len(post) and post[i].startswith("-"):
-            t = post[i]
-            if t == "-C" and i + 1 < len(post):
-                cdir = os.path.join(cdir, post[i + 1])
-                i += 1
-            elif t == "--no-pager":
-                pass
-            else:
-                clean = False
-                if t in ("-c", "--git-dir", "--work-tree", "--namespace") and i + 1 < len(post):
-                    if t == "-c" and post[i + 1].lower().startswith(("alias.", "core.hookspath", "remote.", "url.", "push.")):
-                        raise Block("git -c may not set aliases, remotes, hooks or push config")
-                    i += 1
-            i += 1
-        sub = post[i] if i < len(post) else None
-        if sub is None:
-            continue
-        if "$" in sub or "`" in sub:
-            raise Block("can't tell which git command runs")
-        if sub != "push":
-            continue
-        args = post[i + 1:]
-        if any("$" in a or "`" in a or "~" in a or any(ch in a for ch in "*?[") for a in args):
-            raise Block("no shell expansion in a push")
-        check_push(args, cdir, clean)
+def check_others(code, n):
+    low = n.lower()
+    if re.search(r"\bgit_(config|dir|work_tree|ssh|exec_path|alternate|proxy)", low):
+        raise Block("git environment overrides are not allowed")
+    if re.search(r"\bgit\b.*\bconfig\b.*(\b(alias|remote|url|push)\.|\bbranch\.\S*\.(remote|pushremote))", low) \
+            or re.search(r"\bgit\b.*\s-c\s*(alias|remote|url|push)\.", low):
+        raise Block("git config for aliases, remotes, urls or push is not changed from a session")
+    if re.search(r"\bgit\b.*\bremote\s+(add|set-url|rename|remove|rm)\b", low):
+        raise Block("git remotes are not changed from a session")
+    if re.search(r"\bgh\b.*\bapi\b.*(git/refs|/merges?\b)", low):
+        raise Block("no GitHub ref or merge API calls from a session")
+    if re.search(r"\b(curl|wget)\b.*api\.github\.com.*(git/refs|/merges?\b)", low):
+        raise Block("no GitHub ref or merge API calls from a session")
+
+
+def analyze(cmd):
+    code = code_of(cmd)
+    n = re.sub(r"[\\'\"]", "", code)
+    check_others(code, n)
+    if re.search(r"\bgit\b\s+\S*[$`]", n):
+        raise Block("can't tell which git command runs")
+    if re.search(r"\bpush\b", n) and ("git" in n or re.search(r"[?*\[$`{]", n)):
+        check_push(code.strip())
 
 
 def main():
-    cmd = sys.stdin.read()
     try:
-        analyze(cmd, sys.argv[1] if len(sys.argv) > 1 else os.getcwd())
+        analyze(sys.stdin.read())
     except Block as e:
         sys.stderr.write("Blocked: %s\n" % e)
         sys.exit(2)
