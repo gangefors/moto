@@ -13,7 +13,9 @@ description: When CI runs, how long it takes, how work branches reach main (the 
   `core/`, or `.github/scripts/third_party.py` (the app build runs it),
   never for Markdown alone. A commit that only touches docs, ADRs,
   `CLAUDE.md`, `.claude/` or other files in `.github/` gets no CI run and
-  no `debug-latest`, so there is nothing to wait for.
+  no `debug-latest`, so there is nothing to wait for. `merge-docs.yml` runs
+  for those pushes instead, with no build, test or lint, and fast-forwards
+  main within about a minute.
 - The CI scripts' tests run in their own workflow (`scripts.yml`, seconds)
   whenever a script changes, without building anything.
 - To test a change to `android.yml` before the next code change, start it
@@ -40,17 +42,21 @@ the branch tip and starts main's CI (`debug-latest`, the benchmark
 baseline) and CodeQL. `.github/scripts/fast_forward.py` decides. So after
 a code push, never wait, poll or schedule a check-in just to merge.
 
-Merge by hand (fast-forward, then push `main`) only where the job can't:
+`merge-docs.yml` does the same for pushes that change no code (docs, ADRs,
+`CLAUDE.md`, `.claude/`, CI scripts), within about a minute and without a
+build. If the branch range changes code it leaves the merge to the code's
+own CI run (a notice, "left to the build run"). It shares the `merge-main`
+concurrency group with the `merge` job, so they never race.
 
-- **No CI run** (docs, ADRs, `CLAUDE.md`, `.claude/`): merge right after
-  pushing, but only if `git diff --name-only origin/main..HEAD` changes no
-  code; otherwise the code's own CI run merges it all.
-- **Main moved on**: merge `origin/main` into the branch and push; CI
-  merges when green. The run shows a warning "Not merged: main has moved
-  on".
+Merge by hand (fast-forward, then push `main`) only where the jobs can't:
+
+- **Main moved on**: merge `origin/main` into the branch and push; the
+  merge job (or `merge-docs.yml`) merges it. The run shows a warning "Not
+  merged: main has moved on".
 - **Workflow files** (`.github/workflows/`): the job's token can't push
-  them. Wait for CI to be green on the branch's newest commit, then merge
-  by hand.
+  them (`merge-docs.yml` refuses them with a warning). Wait for CI to be
+  green on the branch's newest commit if code changed too, then merge by
+  hand.
 
 ## When CI is red
 
