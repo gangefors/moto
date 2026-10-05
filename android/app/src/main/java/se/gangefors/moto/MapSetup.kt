@@ -22,6 +22,13 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import se.gangefors.moto.core.LatLon
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.runtime.LaunchedEffect
+import se.gangefors.moto.debug.DebugTools
 
 /** The map layers the screen draws into, created once per style. */
 internal class Overlays(
@@ -152,3 +159,111 @@ internal fun initialCamera(res: Resources): CameraPosition =
 /** OpenFreeMap's light or dark map style (config.xml). */
 internal fun mapStyleUrl(resources: android.content.res.Resources, dark: Boolean): String =
     resources.getString(if (dark) R.string.map_style_url_dark else R.string.map_style_url)
+
+@Composable
+internal fun MapScreenScope.MapSetupEffects() {
+    with(state) {
+        // The permission can be given in the phone's settings while the app is
+        // open: look again whenever the app comes back to the front.
+        val permissionOwner = LocalLifecycleOwner.current
+        DisposableEffect(permissionOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) hasLocation = hasLocationPermission(context)
+            }
+            permissionOwner.lifecycle.addObserver(observer)
+            onDispose { permissionOwner.lifecycle.removeObserver(observer) }
+        }
+
+        // Open the downloaded region off the main thread.
+        LaunchedEffect(Unit) { Regions.load(context.applicationContext) }
+
+        val permissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { granted -> hasLocation = granted.values.any { it } }
+
+        LaunchedEffect(Unit) {
+            if (!hasLocation) {
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
+            }
+        }
+
+        // The map's own style follows the app's theme: OpenFreeMap's light or
+        // dark map. A change loads the other style; everything drawn on the map
+        // is redrawn on it (the overlays are made anew for each style).
+        LaunchedEffect(map, darkMap) {
+            val m = map ?: return@LaunchedEffect
+            val url = mapStyleUrl(resources, darkMap)
+            if (m.style?.uri != url) m.setStyle(url) { s -> style = s }
+        }
+        // Load the style once the map is ready.
+        LaunchedEffect(mapView) {
+            mapView.getMapAsync { m ->
+                m.uiSettings.isAttributionEnabled = true
+                m.uiSettings.isLogoEnabled = true
+                // Open on the rider when the phone knows where they are, so the
+                // first frame is already right; the whole region otherwise.
+                val rough = if (hasLocationPermission(context)) lastKnownPosition(context) else null
+                m.cameraPosition = if (rough != null) {
+                    CameraPosition.Builder()
+                        .target(LatLng(rough.latitude, rough.longitude))
+                        .zoom(RoutePrefs.locateZooms(context).area.toDouble())
+                        .build()
+                } else {
+                    initialCamera(resources)
+                }
+                m.setStyle(mapStyleUrl(resources, darkMap)) { s ->
+                    map = m
+                    style = s
+                    DebugTools.mark("map style loaded")
+                }
+            }
+        }
+
+        // Status bar icons follow the brightness of the map behind them.
+        StatusBarIconsFollowMap(mapView, map, WindowInsets.statusBars.getTop(density))
+    }
+}
+
+@Composable
+internal fun MapScreenScope.ControlsPlacementEffect() {
+    with(state) {
+        // The compass at the top right, left of Ride settings' button when
+        // that shows, else in the corner: clear of the cards and the sheet at the
+        // bottom (2026-10-02).
+        LaunchedEffect(map, insets, planning, marking, sheetTop, cardsTop, mapSize, rideMode, rideCardBottom, landscape, columnRight, infoRightTop) {
+            val m = map ?: return@LaunchedEffect
+            // Rise above whatever card or sheet is at the bottom (the same rule
+            // as the scale and the buttons); in landscape the left column is
+            // cleared sideways instead.
+            val coverPx = controlsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
+            with(density) {
+                // In ride mode, under the ride or recording card.
+                // With Ride settings' button showing, the compass sits in
+                // the top row, left of it, in both orientations.
+                val placement = compassPlacement(settingsButtonShown = !marking && !planning && !rideMode)
+                val compassTop = if (rideMode && rideCardBottom > 0) {
+                    rideCardBottom - insets.top + 8.dp.roundToPx()
+                } else {
+                    placement.topDp.dp.roundToPx()
+                }
+                val compassRight = placement.rightDp.dp.roundToPx()
+                applyControlMargins(
+                    m,
+                    insets.copy(
+                        left = leftClearance(landscape, insets.left, columnRight),
+                        bottom = coverPx,
+                    ),
+                    CONTROL_MARGIN.roundToPx(),
+                    ATTRIBUTION_OFFSET.roundToPx(),
+                    compassRight = compassRight,
+                    compassTop = compassTop,
+                )
+            }
+        }
+    }
+}
