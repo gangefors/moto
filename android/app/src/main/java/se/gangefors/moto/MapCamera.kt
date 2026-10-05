@@ -21,6 +21,9 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import se.gangefors.moto.core.TrackPoint
+import android.graphics.PointF
+import org.maplibre.android.geometry.LatLngBounds
+import se.gangefors.moto.core.LatLon
 
 /** The map's last known location as a fix, if it has one. */
 internal fun mapFix(map: MapLibreMap?): TrackPoint? {
@@ -137,3 +140,112 @@ private const val FOLLOW_GLIDE_MS = 500
 /** How long the section sheet's top edge must stay put before the map
  * fits the section above it, ms (the sheet slides up first). */
 internal const val EDIT_FIT_SETTLE_MS = 250L
+
+internal fun MapScreenScope.fitPaddingNow(): FitPadding {
+    with(state) {
+        val panels = fitPanels(
+            landscape = landscape,
+            width = mapSize.width,
+            height = mapSize.height,
+            insetLeft = insets.left,
+            insetTop = insets.top,
+            insetRight = insets.right,
+            insetBottom = insets.bottom,
+            topPanelBottom = topPanelBottom,
+            columnRight = columnRight,
+            buttonsLeft = buttonsLeft,
+            buttonsTop = planButtonsTop,
+            tagTop = tagTop,
+            editTop = editTop,
+            sheetTop = sheetTop,
+            cardsTop = cardsTop,
+            rightCardsTop = infoRightTop,
+        )
+        return fitPadding(panels, with(density) { FIT_MARGIN.roundToPx() })
+    }
+}
+
+/** What the map shows clear of the panels, or `null` before it is laid out. */
+internal fun MapScreenScope.visibleBounds(m: MapLibreMap, pad: FitPadding): GeoBounds? {
+    with(state) {
+        val (w, h) = mapSize.width.toFloat() to mapSize.height.toFloat()
+        val (l, t, r, b) = listOf(pad.left, pad.top, w - pad.right, h - pad.bottom).map { it.toFloat() }
+        if (r <= l || b <= t) return null
+        val corners = listOf(PointF(l, t), PointF(r, t), PointF(l, b), PointF(r, b))
+            .map { m.projection.fromScreenLocation(it) }
+            .map { LatLon(it.latitude, it.longitude) }
+        return boundsOf(listOf(corners))
+    }
+}
+
+/**
+ * Moves the map to show all of [lines] clear of the panels, zoomed in
+ * as far as they allow (never closer than [minSpanM] across). Unless
+ * [always], only when part of them is out of view or they are small in
+ * it, so recalculating doesn't make the map jump.
+ */
+internal fun MapScreenScope.showOnMap(lines: List<List<LatLon>>, always: Boolean, minSpanM: Double = MIN_FIT_SPAN_M) {
+    with(state) {
+        val m = map ?: return
+        val target = boundsOf(lines)?.withMinSpan(minSpanM) ?: return
+        val pad = fitPaddingNow()
+        if (!always && !needsFit(visibleBounds(m, pad), target)) return
+        // Following the rider's position would pull the map straight back;
+        // the location button turns it on again.
+        m.locationComponent.takeIf { it.isLocationComponentActivated }?.cameraMode = CameraMode.NONE
+        val bounds = LatLngBounds.Builder()
+            .include(LatLng(target.north, target.east))
+            .include(LatLng(target.south, target.west))
+            .build()
+        m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, pad.left, pad.top, pad.right, pad.bottom))
+    }
+}
+
+internal fun MapScreenScope.mapWidthDp(): Double = with(state) { (mapSize.width / density.density).toDouble().coerceAtLeast(1.0) }
+
+/** The route, loops, saved route or ride on the map, if any. */
+internal fun MapScreenScope.planLines(): List<List<LatLon>> = with(state) {
+    when {
+        loopStart != null -> loops.map { it.geometry }
+        routeEnds != null -> routeChoices.map { it.geometry }
+        else -> listOfNotNull(shownSaved?.line ?: shownRide?.line)
+    }
+}
+
+/** What the map shows now, for the location button. */
+internal fun MapScreenScope.locateView(m: MapLibreMap, here: android.location.Location?): LocateView {
+    with(state) {
+        if (overviewShown) return LocateView.OVERVIEW
+        val cam = m.cameraPosition
+        val target = cam.target ?: return LocateView.ELSEWHERE
+        if (here == null) {
+            val tracking = m.locationComponent.takeIf { it.isLocationComponentActivated }?.cameraMode
+            return if (tracking == CameraMode.TRACKING) LocateView.ON_RIDER else LocateView.ELSEWHERE
+        }
+        val offset = FloatArray(1)
+        android.location.Location.distanceBetween(target.latitude, target.longitude, here.latitude, here.longitude, offset)
+        val width = spanAtZoom(cam.zoom, mapWidthDp(), target.latitude)
+        return if (isCentredOnRider(offset[0].toDouble(), width)) LocateView.ON_RIDER else LocateView.ELSEWHERE
+    }
+}
+
+internal fun MapScreenScope.onLocateTap() {
+    with(state) {
+        val m = map ?: return
+        val here = m.locationComponent.takeIf { it.isLocationComponentActivated }?.lastKnownLocation
+        val plan = planLines().filter { it.isNotEmpty() }
+        val zoom = m.cameraPosition.zoom
+        when (val action = onLocateTap(locateView(m, here), zoom, plan.isNotEmpty(), zoomBeforeOverview, locateZooms)) {
+            is LocateAction.Follow -> {
+                overviewShown = false
+                followRider(m, action.zoom)
+            }
+            LocateAction.ShowPlan -> {
+                zoomBeforeOverview = zoom
+                val rider = here?.let { listOf(LatLon(it.latitude, it.longitude)) }
+                showOnMap(plan + listOfNotNull(rider), always = true)
+                overviewShown = true
+            }
+        }
+    }
+}

@@ -38,6 +38,8 @@ import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.SectionGravel
 import se.gangefors.moto.core.Tag
 import se.gangefors.moto.core.Track
+import androidx.compose.material3.SnackbarDuration
+import kotlinx.coroutines.launch
 
 /**
  * The map screen's remembered state (ADR-0014), made once by [MapScreen]:
@@ -366,4 +368,15 @@ internal class MapScreenScope(
 ) {
     val recording by recordingState
     val ridesVersion by ridesVersionState
+}
+
+internal fun MapScreenState.notify(text: String, long: Boolean = false) {
+    noticeScope.launch {
+        notices.currentSnackbarData?.dismiss()
+        notices.showSnackbar(
+            text,
+            withDismissAction = long,
+            duration = if (long) SnackbarDuration.Long else SnackbarDuration.Short,
+        )
+    }
 }
