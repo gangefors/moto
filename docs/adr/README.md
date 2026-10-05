@@ -16,3 +16,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0010](0010-unridden-roads.md) | Unridden roads — rides as a query-time overlay that makes ridden curvy roads pull less | Accepted | 2026-10-01 |
 | [0011](0011-ride-a-route.md) | Ride a route — follow a route in the app with progress and an off-route alert, no turn-by-turn | Accepted | 2026-10-02 |
 | [0012](0012-backup-and-restore.md) | Backup and restore — one zip of standard files (GPX, GeoJSON, JSON), merged back in by the core | Accepted | 2026-10-03 |
+| [0013](0013-agentic-change-workflow.md) | Change workflow — a pipeline of agents with two rider gates, routed by risk | Accepted | 2026-10-05 |
