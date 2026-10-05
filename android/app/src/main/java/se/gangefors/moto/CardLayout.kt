@@ -244,3 +244,33 @@ fun backStep(
     ride -> BackStep.RIDE
     else -> null
 }
+
+/** Which cards are open on the map screen: a [task] card, an [info] card,
+ * [any] card, and whether the [left] column (with the sheet's) has one. */
+data class CardsOpen(val task: Boolean, val info: Boolean, val any: Boolean, val left: Boolean)
+
+/**
+ * The cards open on the map screen. A task card is a message, a marking
+ * step, the start card (offering a loop) or a selected via; an info card
+ * is a shown ride, saved route or favourite section, a tapped road, or a
+ * tapped favourite (not in ride mode). Info cards at the right
+ * ([infoAtRight], landscape while planning) leave the left column to the
+ * task cards.
+ */
+fun cardsOpen(
+    message: Boolean,
+    marking: Boolean,
+    offerLoop: Boolean,
+    viaSelected: Boolean,
+    ride: Boolean,
+    savedRoute: Boolean,
+    section: Boolean,
+    road: Boolean,
+    favourite: Boolean,
+    rideMode: Boolean,
+    infoAtRight: Boolean,
+): CardsOpen {
+    val task = message || marking || offerLoop || viaSelected
+    val info = ride || savedRoute || section || road || (favourite && !rideMode)
+    return CardsOpen(task = task, info = info, any = task || info, left = task || (info && !infoAtRight))
+}

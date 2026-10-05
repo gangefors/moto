@@ -2253,15 +2253,14 @@ fun MapScreen() {
         // at the bottom, above the planning sheet when there is one.
         val offerLoop = startPicked != null && !marking
         val via = selectedVia?.takeIf { it in vias.indices }
-        val taskCard = message != null || marking || offerLoop || via != null
-        // The buttons at the bottom step aside for them, as for planning.
-        val infoCardOpen = shownRide != null || shownSaved != null || shownSection != null || roadInfo != null ||
-            (favouriteInfo != null && !rideMode)
         // In landscape with a plan open the info cards are in a column at the
         // right; the left one is the sheet's, with the task cards.
         val infoAtRight = infoCardsAtRight(landscape, planning)
-        val cardsShown = taskCard || infoCardOpen
-        val leftCardsShown = taskCard || (infoCardOpen && !infoAtRight)
+        // The buttons at the bottom step aside for them, as for planning.
+        val (taskCard, infoCardOpen, cardsShown, leftCardsShown) = cardsOpen(
+            message != null, marking, offerLoop, via != null, shownRide != null, shownSaved != null,
+            shownSection != null, roadInfo != null, favouriteInfo != null, rideMode, infoAtRight,
+        )
         // The ridden roads button, bottom right: switches the layer, and
         // Ride settings' switch with it. Never hidden by a card: it sits
         // right above the sheet and the cards (upright), or above the info
