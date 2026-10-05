@@ -8,7 +8,7 @@ Things that change often live in Notion, not in the repo (use the Notion tools; 
 
 - **Decisions log** ([Moto — Decisions log](https://app.notion.com/p/3e314874ab0481ef90accad5adb6da90)): every product, architecture and process decision, newest last. It is the only log; there is no copy in `docs/`.
 - **Milestones & status** ([Moto — Milestones & status](https://app.notion.com/p/3e414874ab0481a694dbcb4edd13fbcb)): M0–M4 progress, the next task, and small carry-over items. Read it at the start of a task; update it when work lands (tick items, add commit links, set **Next**).
-- **Handoff queue** ([Moto — Handoff to Claude Code](https://app.notion.com/p/3e314874ab0481bc9ca8f9e0d56acc52)): work decided in Cowork. Do the items under Pending and move them to Done with their commit links.
+- **Handoff queue** ([Moto — Handoff to Claude Code](https://app.notion.com/p/3e314874ab0481bc9ca8f9e0d56acc52)): work decided in Cowork, and the `Spec: <slug>` pages of the change workflow. Do the items under Pending (through the workflow) and move them to Done with their commit links.
 
 The pages are large: read and update them through the `notion` agent (see Models and subagents), never in the main session.
 
@@ -36,8 +36,10 @@ docs/prd.md             product requirements (v1)
 docs/adr/               architecture decision records (index in README.md)
 docs/mockups/           shared mockup kit (CSS, map backgrounds, template)
 docs/working-with-claude.md   models and session habits that save usage
-.claude/agents/         subagents, each pinning its model
-.claude/skills/         skills: commands, CI and merging, mockups
+.claude/agents/         subagents, each pinning its model and effort
+.claude/skills/         skills: workflow (/feature, /bugfix, /refactor), commands, CI and merging, mockups
+.claude/hooks/          Claude Code hooks (guards, verify stamp); settings in .claude/settings.json
+.githooks/              git hooks: commit-msg, pre-commit, pre-push
 ```
 
 ## Rules
@@ -51,7 +53,7 @@ docs/working-with-claude.md   models and session habits that save usage
 - Versions: use the newest stable release of every package, tool and SDK, but never one less than a week old (supply-chain safeguard). Check release dates before bumping. One exception: a release that fixes a published vulnerability (GitHub, RustSec or CVE advisory) in a version we use may be adopted once it is at least a day old and has been reviewed (changelog, scope of the diff, licence) and CI is green.
 - Commits: a descriptive title of at most 50 characters, a blank line, then a more detailed body wrapped at 72 characters. Changes to rules and decisions (`CLAUDE.md`, ADRs) go in their own commits, separate from code changes. One fix or feature per commit, so each can be reverted alone; changes go together only when one can't work without the other.
 - Mockups look as close to the real app as possible, never ASCII sketches: an HTML page published as an artifact, with phones at real size (360 dp wide), the app's own Material 3 colours (light and dark), Roboto, components at their real dp sizes, strings from `strings.xml` and icons from `res/drawable`, built from the kit in `docs/mockups/`. Mark what changes, and show the current screen beside the proposal when something moves. The `mockups` skill has the details.
-- Open questions and ideas from the rider start a discussion, not a change: propose options, agree on one, and implement only when he says so. Work beyond what he asked is suggested first and agreed before it is committed.
+- Open questions and ideas from the rider start a discussion, not a change (the pipeline starts only when he says so): propose options, agree on one, and implement only when he says so. Work beyond what he asked is suggested first and agreed before it is committed.
 - Never put personal information, including the owner's name, in code, comments or commit messages (the licence header is the one exception). Say "the rider" or describe the situation instead.
 - Keep replies short and to the point, but with enough context. Don't wait longer than needed on new features, and say as soon as a build is available to test, with its commit id and the direct APK link, given only once the build is published and the link works, never before (`https://github.com/gangefors/moto/releases/download/<tag>/moto-debug-<short sha>.apk`, tag `debug-branch` or `debug-latest`).
 - Make changes on branches named `claude/*`, and merge to `main` as soon as the build passes, without waiting for the benchmark.
@@ -64,18 +66,27 @@ docs/working-with-claude.md   models and session habits that save usage
 - The rider's own data is personal: his sections, rides, routes, places, coordinates, screenshots and exports never go verbatim into code, tests, golden cases, commit messages, ADRs or other repo content. Reproduce what they show with your own examples that behave the same (random roads and starts elsewhere), and describe a report in general terms ("a section ending at a hamlet").
 - Never add a `Claude-Session:` trailer (or any other session link) to commits, PRs or other repo content; this overrides default attribution. `Co-Authored-By` stays.
 
-## Models and subagents
+## Workflow and subagents
 
-The rider's plan has usage limits, and every turn re-sends the whole conversation, so keep the main session's context small. The rider asks for these agents (`.claude/agents/`, each pins its model) to be used without asking each time:
+Every change (feature, bug fix, refactor) runs through the agent pipeline in [ADR-0013](docs/adr/0013-agentic-change-workflow.md); the details (tiers, loop limits, report format) are in the `workflow` skill, started with `/feature`, `/bugfix` or `/refactor`. The main session is the **orchestrator**: it talks to the rider, picks the tier, calls the agents, routes their reports and pushes. It designs, builds and reviews nothing itself.
 
-- `notion` (Haiku): every read and update of the Notion pages.
-- `ci` (Haiku): CI status, failed-job logs, whether the merge job merged; never read whole logs here.
-- `search` (Haiku): broad searches across the code when only the answer and `path:line` are needed.
-- `implement` (Sonnet): an agreed, precise change (an accepted ADR's action items, a signed-off mockup, a known-cause bug, strings, UI tweaks) with its tests and local checks. Brief it fully: it starts with no context. Review its diff before pushing.
-- `mockup` (Sonnet): new mockups from a brief, and revisions.
-- `verify` (Sonnet): the local checks (fmt, clippy, tests, deny, Gradle build, lint, unit tests; golden routes and benchmark when routing code changed) before every push, so broken code never reaches the repo. Reports pass or fail, and any change in golden routes or performance.
+```
+request → architect ◀▶ mockup (UI only) → [Gate 1: rider approves the design]
+  → implement ◀▶ verify → reviewer ◀▶ implement → qa → documenter
+  → push → CI → [Gate 2: rider tests the build]
+```
 
-Keep in the main session: architecture and ADRs, security-sensitive parsing, route scoring and golden routes, bugs whose cause is unknown, and reviewing what the agents did. The main session's model is the rider's choice; when a session's work clearly fits another one, say so once (`docs/working-with-claude.md` has the table).
+- **Two gates only.** The rider approves the design (spec summary and criteria, plus the mockup for any UI change) and then the result. Build nothing before Gate 1 is passed; between the gates nothing waits for him except a `BLOCKED` question that needs his decision. Ideas and open questions are still a discussion first (see Rules).
+- **Specs live in Notion** as child pages `Spec: <slug>` of the Handoff queue; ADRs live in the repo. Pass agents the spec's URL and let them fetch it; never pull a spec into the main session.
+- **Route by risk.** The architect tags the spec `low`, `normal` or `high`: `low` (strings, renames, copy) skips the architect and uses Haiku to implement; `normal` is Opus designing, Sonnet building and reviewing; `high` (route scoring, untrusted-input parsing, FFI, schema, security, performance-sensitive code) is Opus throughout, with an ADR. Unsure means the higher tier.
+- **Agents** (`.claude/agents/`, each pins its model and effort): `architect` (Opus, xhigh), `mockup` (Sonnet), `implement` (Sonnet), `verify` (Sonnet), `reviewer` (Sonnet, high), `qa` (Haiku), `documenter` (Haiku); helpers `notion`, `ci` and `search` (Haiku). `notion` is the only reader of the big Notion pages, `ci` the only reader of CI logs.
+- **Structured handover.** Each agent ends with a report block (`STAGE`, `VERDICT` PASS, FAIL or BLOCKED, `SPEC`, findings with `path:line`). Pass the next agent the spec URL, the commit range and the findings, not whole reports. Brief every agent fully: it starts with no context.
+- **Loops are capped.** architect◀▶mockup 2 rounds before the rider sees it; implement◀▶verify 2 retries; implement◀▶reviewer 3 rounds; implement◀▶qa 2 rounds. Then stop and bring the rider a short summary with a recommendation.
+- **Hooks enforce the hard rules** (`.githooks/`, `.claude/hooks/`, `.claude/settings.json`; a session-start hook switches the git hooks on): commit title at most 50 and body at 72, no session link, `CLAUDE.md` and ADRs in their own commits, SPDX headers, pushes to `claude/*` only, no code push without a `verify` pass for exactly that code, no skipping hooks, no force push. When a hook blocks, fix the cause.
+- The agents commit, only the orchestrator pushes. Review an agent's diff only through the `reviewer`'s report unless the report is unclear or risk is `high`.
+- The main session's model is the rider's choice; when a session's work clearly fits another one, say so once (`docs/working-with-claude.md` has the table).
+
+Keeping the main session small:
 
 - Read only what is needed: Grep first, then the lines around a hit; never whole large files, build output or artifacts. Don't re-read a file you just wrote.
 - Pipe long command output through `tail` or `grep`.
@@ -97,7 +108,7 @@ Security comes first: before performance, features and convenience. Never choose
 ## Testing and performance
 
 - **Tests come with every change.** Everything that can sensibly be tested is: all core logic in Rust unit tests, including error paths and malformed input; pure app logic in Kotlin unit tests (move logic out of Android classes so it can be tested); a bug fix starts with a test that reproduces it. Code that parses untrusted input also gets corruption tests that prove it never panics.
-- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally. Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints. The commands are in the `dev-commands` skill.
+- CI runs `cargo fmt --check`, clippy, `cargo test --workspace`, `cargo deny check`, the Gradle build, lint and unit tests on every push, and nothing is pushed that fails them locally (the `verify` agent runs them; the pre-push hook checks its stamp). Run the local checks with the Rust version CI uses (`RUST_VERSION` in `.github/workflows/android.yml`); newer clippy versions add lints. The commands are in the `dev-commands` skill.
 - **When CI builds.** Only for pushes that change code in `android/` or `core/` (or `.github/scripts/third_party.py`), never for Markdown alone. Push each fix as soon as the local checks pass; a newer push cancels the run still going. Timings and details: the `ci-and-merge` skill.
 - **Performance is measured on every build.** CI benchmarks each build (region open and verify, snapping, routing on the Skåne region) against the last `main` build's binary on the same machine, beside the app build so `debug-latest` doesn't wait. A failed benchmark turns CI red and is fixed next; a release is never made from a commit whose benchmark hasn't passed.
 - **Route quality is measured on every build.** CI runs the golden routes (`core/moto-core/tests/golden/`) against the last `main` build; a route that breaks its expectations fails CI. Change scoring weights only with a stated hypothesis and that before/after table, and add a golden case for every bad route found on a real ride instead of tuning weights to one route.
