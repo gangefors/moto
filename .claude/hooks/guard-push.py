@@ -2,27 +2,33 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Stefan Gangefors
 #
-# Push and remote-rewrite policy for guard-bash.sh. Reads the Bash command
-# on stdin. Exit 0 = allow, 2 = block (reason on stderr).
+# Policy for guard-bash.sh: reads the Bash command on stdin. Exit 0 = allow,
+# 2 = block (reason on stderr). A seat belt against mistakes, not a sandbox;
+# the real control over main is server-side branch protection.
 #
-# Strict whitelist: a command line that involves `push` must be exactly one
-# of
+# Pushes are a strict whitelist: a command line that involves `push` must
+# be exactly one of
 #   git push [-u|--set-upstream] origin claude/NAME[:claude/NAME]
 #   git push [-u|--set-upstream] origin HEAD
 #   git push [-u|--set-upstream] [--force-with-lease[=claude/NAME[:SHA]]]
 #            [--force-if-includes] origin claude/NAME[:claude/NAME]
 # (options in any order, each once, exact spellings, plain characters
-# only). Anything else, including a push sharing a line with `;`, `&&`,
-# `|`, `$(...)` or backticks, is blocked. A few other ways to move main or
-# rewrite the remote (git config, git remote, the GitHub ref APIs) are
-# blocked as well.
+# only, never sharing a line with another command). The whole command text
+# is analysed, heredoc bodies included, except the message of the single
+# shape `[git add ... && | git status && ]git commit ... -F - <<'TAG'`.
+# Also blocked: skipping git hooks, changing git config that redirects
+# pushes or hooks, tampering with the hook files, and ref-moving calls
+# (gh pr merge, GitHub ref/merge/contents/graphql APIs, plumbing pushes).
 import re
 import sys
 
 PLAIN = re.compile(r"^[A-Za-z0-9 ._/@:=-]+$")
 SHA = re.compile(r"^[0-9a-f]{7,64}$")
-INTERPRETER = re.compile(r"\b(bash|sh|zsh|dash|ksh|python3?|perl|ruby|node|eval|source|exec|xargs|env)\b")
-HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
+CHARS = r"[A-Za-z0-9 ._/@:=-]"
+COMMIT_SHAPE = re.compile(
+    r"\A((?:(?:git add " + CHARS + r"+|git status) && )?git commit" + CHARS + r"* -F - <<(['\"])(\w+)\2)\n(.*)\n\3\n?\Z",
+    re.S)
+PROTECTED = r"(\.githooks|\.git/hooks|\.claude/hooks|\.claude/settings\.json|\.git/config)"
 
 
 class Block(Exception):
@@ -37,18 +43,12 @@ def name_ok(n):
 
 
 def code_of(cmd):
-    """The command without heredoc bodies (message text), unless an
-    interpreter might run that text as code."""
-    out, tags = [], []
-    for line in cmd.split("\n"):
-        if tags:
-            if line.strip() == tags[0]:
-                tags.pop(0)
-            continue
-        out.append(line)
-        tags.extend(m.group(2) for m in HEREDOC.finditer(line))
-    code = "\n".join(out)
-    return cmd if INTERPRETER.search(code) else code
+    """The text to analyse: all of it, except the message of a plain
+    `git commit -F - <<'TAG'` command."""
+    m = COMMIT_SHAPE.match(cmd)
+    if m and m.group(3) not in m.group(4).split("\n"):
+        return m.group(1)
+    return cmd
 
 
 def check_push(line):
@@ -89,25 +89,50 @@ def check_push(line):
         raise Block("refspec must be claude/NAME or claude/NAME:claude/NAME (a lease push needs an explicit branch)")
 
 
-def check_others(code, n):
+def check_hooks_not_skipped(n):
+    sub = r"\bgit\s+(?:(?:-C\s*\S+|-c\s*\S+|--[a-z-]+(?:=\S+)?)\s+)*(commit|merge|rebase|push|am|cherry-pick)\b([^;&|\n]*)"
+    for m in re.finditer(sub, n):
+        rest = m.group(2)
+        if re.search(r"(^|\s)--no-v", rest) or re.search(r"(^|\s)-[A-Za-z]*n[A-Za-z]*(\s|$)", rest):
+            raise Block("git hooks (commit rules, verify stamp) can't be skipped")
+
+
+def check_others(n):
     low = n.lower()
+    if "hookspath" in low:
+        raise Block("core.hooksPath is set by the session-start hook; leave it")
     if re.search(r"\bgit_(config|dir|work_tree|ssh|exec_path|alternate|proxy)", low):
         raise Block("git environment overrides are not allowed")
-    if re.search(r"\bgit\b.*\bconfig\b.*(\b(alias|remote|url|push)\.|\bbranch\.\S*\.(remote|pushremote))", low) \
-            or re.search(r"\bgit\b.*\s-c\s*(alias|remote|url|push)\.", low):
-        raise Block("git config for aliases, remotes, urls or push is not changed from a session")
+    if re.search(r"\bgit\b.*(\s-c|--config-env)\s*\S*(?i:hooks|include|alias|url|remote|push)", n):
+        raise Block("git -c may not set hooks, includes, aliases, urls, remotes or push config")
+    if re.search(r"\bgit\b.*\bconfig\b.*(include|alias\.|remote\.|url\.|push\.|branch\.\S*\.(remote|pushremote))", low):
+        raise Block("git config for includes, aliases, remotes, urls or push is not changed from a session")
     if re.search(r"\bgit\b.*\bremote\s+(add|set-url|rename|remove|rm)\b", low):
         raise Block("git remotes are not changed from a session")
-    if re.search(r"\bgh\b.*\bapi\b.*(git/refs|/merges?\b)", low):
-        raise Block("no GitHub ref or merge API calls from a session")
-    if re.search(r"\b(curl|wget)\b.*api\.github\.com.*(git/refs|/merges?\b)", low):
-        raise Block("no GitHub ref or merge API calls from a session")
+    if re.search(r"\bgit\b.*\b(send-pack|receive-pack|http-push|update-ref)\b", low):
+        raise Block("plumbing that writes refs is not run from a session")
+    if re.search(PROTECTED, low) and (
+            re.search(r"\b(rm|mv|cp|ln|chmod|chown|tee|truncate|install|rsync|dd|unlink|shred)\b", low)
+            or re.search(r"\b(sed|perl|ruby)\s+(-\w*i|--in-place)", low)
+            or re.search(r">>?\s*\S*" + PROTECTED, low)):
+        raise Block("the hook files and settings are not changed from a session")
+    if re.search(r"\bgh\b.*\bpr\b.*\bmerge\b", low):
+        raise Block("pull requests are merged by CI, not from a session")
+    if re.search(r"\bgh\b.*\bapi\b", low):
+        write = re.search(r"(-x\s*|--method[= ]\s*)(put|patch|post|delete)", low) or re.search(r"\s(-f|--field|--raw-field|--input)\b", low)
+        if re.search(r"git/refs|/merges?\b|graphql", low) or (
+                write and re.search(r"contents|branches|refs", low)):
+            raise Block("no ref-moving GitHub API calls from a session")
+    if re.search(r"\b(curl|wget)\b.*api\.github\.com.*(/graphql|/contents|git/refs|/merges?\b)", low):
+        raise Block("no ref-moving GitHub API calls from a session")
 
 
 def analyze(cmd):
+    cmd = cmd.replace("\\\r\n", "").replace("\\\n", "")
     code = code_of(cmd)
     n = re.sub(r"[\\'\"]", "", code)
-    check_others(code, n)
+    check_hooks_not_skipped(n)
+    check_others(n)
     if re.search(r"\bgit\b\s+\S*[$`]", n):
         raise Block("can't tell which git command runs")
     if re.search(r"\bpush\b", n) and ("git" in n or re.search(r"[?*\[$`{]", n)):

@@ -175,6 +175,70 @@ t block 'wget --method=POST https://api.github.com/repos/o/r/merges'
 t block 'git commit -n -m x'
 t block 'git config core.hooksPath /dev/null'
 
+# --- round 2: heredoc wrappers, continuations, hook tampering, ref APIs
+t allow 'git add a.md b.md && git commit -q -F - <<'"'EOF'${NL}Fix gh api -X PATCH repos/o/r/git/refs and git push${NL}EOF"
+t allow 'git status && git commit -F - <<"MSG"'"${NL}text${NL}MSG"
+t allow 'git commit -q --allow-empty -F - <<'"'EOF'${NL}x${NL}EOF"
+t allow './.claude/hooks/test-guard-bash.sh'
+t allow 'git commit -m "fix" --amend'
+t block 'echo "<<EOF"'"${NL}git push --force origin claude/x${NL}EOF"
+t block 'echo "<<EOF"'"${NL}gh api -X PATCH repos/o/r/git/refs/heads/main${NL}EOF"
+t block 'echo "<<EOF"'"${NL}git config core.hookspath /dev/null${NL}EOF"
+t block 'echo "<<EOF"'"${NL}git config remote.origin.url evil${NL}EOF"
+t block 'echo "<<EOF"'"${NL}git remote add evil x${NL}EOF"
+t block 'git commit -F - <<EOF'"${NL}git push -f${NL}EOF"
+t block 'git commit -q -F - <<'"'EOF'${NL}msg${NL}EOF${NL}git push --force origin main${NL}EOF"
+t block 'git commit -q -F - <<'"'EOF'${NL}msg${NL}EOF${NL}git push --force origin main"
+t block 'git commit -q -F - <<'"'EOF'${NL}msg${NL}EOF ; git push -f"
+t block 'git add x && git commit -q -F - <<'"'EOF'${NL}msg${NL}EOF${NL}rm .githooks/pre-push"
+t block "git pu\\${NL}sh --delete origin main"
+t block "gh api repos/o/r/git/ref\\${NL}s -X PATCH"
+t block "git commit --no-ver\\${NL}ify -m x"
+t block 'git config core.hookspath /dev/null'
+t block 'git config core.hooksPath /dev/null'
+t block 'git -c "core.hooksP""ath=/dev/null" commit -m x'
+t block 'git config core.hooks""Path /dev/null'
+t block 'git --config-env core.hooksPath=X status'
+t block 'git --config-env=alias.x=Y status'
+t block 'git -c include.path=/tmp/f status'
+t block 'git config include.path /tmp/f'
+t block 'git config includeIf.gitdir:/.path /tmp/f'
+t block 'git config --unset core.hooksPath'
+t block 'rm -rf .githooks'
+t block 'mv .githooks x'
+t block 'cp /tmp/x .git/hooks/pre-push'
+t block 'ln -s /dev/null .githooks/pre-push'
+t block 'chmod -x .githooks/pre-push'
+t block 'echo true > .claude/hooks/guard-bash.sh'
+t block 'echo x >> .claude/settings.json'
+t block 'echo x | tee .claude/hooks/guard-push.py'
+t block 'sed -i s/a/b/ .githooks/pre-push'
+t block 'truncate -s 0 .git/config'
+t block 'gh pr merge 5 --squash'
+t block 'gh api graphql -f query=x'
+t block 'gh api graphql -f query="mutation { mergePullRequest(input: {}) { x } }"'
+t block 'gh api -X PUT repos/o/r/contents/README.md -f message=x'
+t block 'gh api --method=DELETE repos/o/r/branches/main/protection'
+t block 'gh api -X POST repos/o/r/git/refs -f ref=x'
+t block 'gh api repos/o/r/pulls/1/merge -X PUT'
+t block 'curl -X POST https://api.github.com/graphql -d x'
+t block 'curl -X PUT https://api.github.com/repos/o/r/contents/x'
+t block 'wget --method=PATCH https://api.github.com/repos/o/r/git/refs/heads/main'
+t block 'git send-pack origin main'
+t block 'git receive-pack .'
+t block 'git http-push origin main'
+t block 'git update-ref refs/heads/main HEAD'
+t block 'git commit -nm x'
+t block 'git commit -anm x'
+t block 'git commit -n'
+t block 'git commit --no-ver -m x'
+t block 'git commit --no-verif -m x'
+t block 'git -C . commit --no-verify -m x'
+t block 'git merge -n x'
+t block 'git rebase --no-verify main'
+t block 'git am --no-v x.patch'
+t block 'git cherry-pick -n x'
+
 # --- blocked: guard can't read its input (fails closed)
 raw block ''
 raw block 'not json'

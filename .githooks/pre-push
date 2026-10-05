@@ -18,7 +18,8 @@ while read -r lref lsha rref rsha; do
   [ "$lsha" = "$zero" ] && fail "$rref: deleting remote refs is not done from a session"
   base=$rsha
   if [ "$base" = "$zero" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-    base=$(git merge-base "$lsha" origin/main 2>/dev/null) || continue
+    base=$(git merge-base "$lsha" origin/main 2>/dev/null) \
+      || fail "origin/main is unknown here; run git fetch origin main, then push"
   fi
   changed=$(git diff --name-only "$base" "$lsha" -- android core .github/scripts)
   [ -n "$changed" ] || continue

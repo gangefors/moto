@@ -11,13 +11,7 @@ input=$(cat)
 cmd=$(printf '%s' "$input" | jq -er '.tool_input.command | strings') \
   || deny "guard can't read the command from the hook input"
 [ -n "$cmd" ] || deny "empty command"
-if printf '%s' "$cmd" | grep -qE 'git[[:space:]]+(commit|push|merge|rebase|cherry-pick|am)[^|;&]*(--no-verify|[[:space:]]-n([[:space:]]|$))'; then
-  deny "git hooks (commit rules, verify stamp) can't be skipped"
-fi
-if printf '%s' "$cmd" | grep -qE 'git[[:space:]]+(config|-c)[^|;&]*core\.hooksPath'; then
-  deny "core.hooksPath is set by the session-start hook; leave it"
-fi
-# Pushes, remotes and ref APIs: strict whitelist in guard-push.py.
+# All rules (hooks, config, pushes, ref APIs) live in guard-push.py.
 out=$(printf '%s' "$cmd" | python3 "$(dirname "$0")/guard-push.py" 2>&1)
 case $? in
   0) exit 0 ;;
