@@ -69,6 +69,7 @@ A costs some setup and handoffs but fixes what B gets wrong (context size, no in
 ## Consequences
 
 - **Easier:** talk to one session; consistent process for every change; rules checked by machines.
+- **Guard limits:** the Bash guard is a seat belt against mistakes, not a sandbox (file edits and the GitHub MCP write tools are not guarded). The real control against moving `main` is server-side branch protection, which only the owner can set; recommended: require pull request or restrict pushes to `main` to the CI merge job.
 - **Harder:** the agents, skills and hooks are code to keep current; a hook can block a legitimate action (the cause is fixed, hooks are not skipped; the owner can still bypass them by hand).
 - **Cost:** specs in Notion need the Notion connector in every session that runs the pipeline.
 
