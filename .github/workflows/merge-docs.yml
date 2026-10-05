@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 Stefan Gangefors
+#
+# Fast-forwards main to a Claude work branch whose commits since main
+# change no code, so a push of docs, ADRs, CLAUDE.md, .claude/ or CI
+# scripts reaches main within about a minute, with no build, test or lint
+# (android.yml never runs for those). A range that changes code is left to
+# android.yml's own run and merge job; workflow files are refused by
+# .github/scripts/fast_forward.py (the token may not change workflows), so
+# a session merges those by hand. Fast-forward only: never a merge or a
+# rebase.
+#
+# Actions are pinned by commit SHA.
+name: Merge docs
+
+on:
+  push:
+    branches: ["claude/**", "ccr-**"]
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    name: Merge into main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to fast-forward main
+      actions: write # to start CodeQL on main when scripts changed
+    # The same group as the merge job in android.yml, so they never race.
+    concurrency:
+      group: merge-main
+      cancel-in-progress: false
+    steps:
+      # All branches, for the branch tip and main as they are now.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Fast-forward main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          # Tested = main as it is now, so any code in main..tip is a
+          # "newer" commit: left to the build run, never merged unbuilt.
+          main_sha=$(git rev-parse origin/main)
+          plan=$(python3 .github/scripts/fast_forward.py "$main_sha" "origin/$BRANCH" origin/main 2> "$RUNNER_TEMP/reason")
+          reason=$(cat "$RUNNER_TEMP/reason")
+          echo "Merge docs into main: $reason" >> "$GITHUB_STEP_SUMMARY"
+          target=$(sed -n 's/^target=//p' <<< "$plan")
+          if [ -z "$target" ]; then
+            case "$reason" in
+              "a newer commit changes code"*) echo "::notice::Left to the build run: the range changes code, so its own CI run merges it" ;;
+              "main has moved on"*|"workflow files"*) echo "::warning::Not merged: $reason" ;;
+              *) echo "::notice::Not merged: $reason" ;;
+            esac
+            exit 0
+          fi
+          gh api --method PATCH "repos/$GH_REPO/git/refs/heads/main" \
+            -f sha="$target" -F force=false > /dev/null
+          for workflow in $(sed -n 's/^dispatch=//p' <<< "$plan"); do
+            gh workflow run "$workflow" --ref main
+          done
