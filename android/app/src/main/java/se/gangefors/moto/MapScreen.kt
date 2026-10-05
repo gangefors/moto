@@ -1079,9 +1079,7 @@ fun MapScreen() {
     // Recording without a route, with nothing else in hand: ride mode too,
     // with the recording card (2026-10-03). Planning, a picked
     // start or marking pause it; riding a plan swaps in the ride card.
-    val freeRiding = (recording as? Recording.State.Active)?.trackId != null && !riding &&
-        !planning && startPicked == null && !marking
-    val rideMode = riding || freeRiding
+    val (freeRiding, rideMode, pauseWanted) = rideModeOf((recording as? Recording.State.Active)?.trackId != null, riding, planning, startPicked != null, marking)
     val rideModeNow = rememberUpdatedState(rideMode)
     LaunchedEffect(rideMode) {
         if (!rideMode) {
@@ -1091,8 +1089,6 @@ fun MapScreen() {
     }
     // Recording pauses while the rider plans and carries on after
     // (2026-10-03): no standing still and GPS jitter in the ride.
-    val pauseWanted = (recording as? Recording.State.Active)?.trackId != null && !riding &&
-        (planning || startPicked != null)
     LaunchedEffect(pauseWanted) { RecordingService.pause(context, pauseWanted) }
     // The recording card's favourites near the rider, at each fix.
     var nearby by remember { mutableStateOf<List<FavouriteNearby>>(emptyList()) }

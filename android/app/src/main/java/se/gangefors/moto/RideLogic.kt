@@ -262,3 +262,23 @@ fun canPlan(fix: TrackPoint?, nowMs: Long): Boolean {
     if (nowMs - fix.timeMs > PLAN_FIX_MAX_AGE_MS) return true
     return speed <= PLAN_MAX_MPS
 }
+
+/** The map screen's ride mode: [freeRiding] (recording without a route),
+ * [rideMode] (that or riding a route) and whether the recording should
+ * pause ([pauseWanted]). */
+data class RideModeFlags(val freeRiding: Boolean, val rideMode: Boolean, val pauseWanted: Boolean)
+
+/**
+ * The ride mode flags. Recording a track ([recordingTrack]) without
+ * [riding] a route is free riding when nothing else is in hand; planning,
+ * a [startPicked] or [marking] end it, and planning or a picked start
+ * pause the recording. Riding a route is ride mode whatever else is open.
+ */
+fun rideModeOf(recordingTrack: Boolean, riding: Boolean, planning: Boolean, startPicked: Boolean, marking: Boolean): RideModeFlags {
+    val freeRiding = recordingTrack && !riding && !planning && !startPicked && !marking
+    return RideModeFlags(
+        freeRiding = freeRiding,
+        rideMode = riding || freeRiding,
+        pauseWanted = recordingTrack && !riding && (planning || startPicked),
+    )
+}
