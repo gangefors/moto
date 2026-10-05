@@ -199,6 +199,34 @@ class Git(unittest.TestCase):
     def test_tested_main_equals_tip_is_up_to_date(self):
         self.assertEqual(self.output(self.main, self.main, self.main), "")
 
+    def test_renames_and_deletions_count_as_code(self):
+        self.commit("core/x.rs")
+        self.commit("docs/y.md")
+        base = self.run_git("rev-parse", "HEAD")
+        cases = {
+            "to docs": ("core/x.rs", "docs/x.md"),
+            "from docs": ("docs/y.md", "core/y.rs"),
+        }
+        for name, (old, new) in cases.items():
+            with self.subTest(name):
+                self.run_git("checkout", "-q", "-B", "ccr-x", base)
+                self.run_git("mv", old, new)
+                self.run_git("commit", "-q", "-m", name)
+                tip = self.run_git("rev-parse", "HEAD")
+                self.assertEqual(self.output(base, tip, base), "")
+        with self.subTest("deletion"):
+            self.run_git("checkout", "-q", "-B", "ccr-x", base)
+            self.run_git("rm", "-q", "core/x.rs")
+            self.run_git("commit", "-q", "-m", "delete")
+            tip = self.run_git("rev-parse", "HEAD")
+            self.assertEqual(self.output(base, tip, base), "")
+        with self.subTest("built commit, rename after it"):
+            self.run_git("checkout", "-q", "-B", "ccr-x", base)
+            self.run_git("mv", "core/x.rs", "docs/x.md")
+            self.run_git("commit", "-q", "-m", "rename")
+            tip = self.run_git("rev-parse", "HEAD")
+            self.assertEqual(self.output(base, tip, self.main), "")
+
     def test_bad_ref_fails(self):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
