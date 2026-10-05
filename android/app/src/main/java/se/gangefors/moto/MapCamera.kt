@@ -24,6 +24,14 @@ import se.gangefors.moto.core.TrackPoint
 import android.graphics.PointF
 import org.maplibre.android.geometry.LatLngBounds
 import se.gangefors.moto.core.LatLon
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import org.maplibre.android.maps.MapView
+import se.gangefors.moto.debug.DebugTools
 
 /** The map's last known location as a fix, if it has one. */
 internal fun mapFix(map: MapLibreMap?): TrackPoint? {
@@ -246,6 +254,72 @@ internal fun MapScreenScope.onLocateTap() {
                 showOnMap(plan + listOfNotNull(rider), always = true)
                 overviewShown = true
             }
+        }
+    }
+}
+
+@Composable
+internal fun MapScreenScope.LocationEffects() {
+    with(state) {
+        // Show the GPS position as soon as both the style and the permission
+        // are there, following it. A pan or pinch leaves an overview of the
+        // plan (the location button then starts from its first step).
+        DisposableEffect(map, style, hasLocation) {
+            val m = map
+            val s = style
+            if (m == null || s == null || !hasLocation) return@DisposableEffect onDispose {}
+            enableLocation(context, m, s)
+            // Start at the area's zoom, on the rider.
+            // Only at the start: a new style (the theme changed) must not move the map.
+            if (!startSettled) followRider(m, locateZooms.area.toDouble())
+            val moved = MapLibreMap.OnCameraMoveStartedListener { reason ->
+                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                    overviewShown = false
+                    startSettled = true
+                }
+            }
+            m.addOnCameraMoveStartedListener(moved)
+            onDispose { m.removeOnCameraMoveStartedListener(moved) }
+        }
+        // The start (seen on a phone, 2026-10-04): a follow asked for as soon as
+        // the style was loaded was undone by the map, which was not ready for
+        // it. So wait until the map has drawn, then put it on the rider at the
+        // area's zoom (the phone's last known position stands in until the first
+        // fix) and let it follow from there, with one recheck a moment later.
+        // Nothing is forced after that. A pan or pinch before it, or riding,
+        // cancels it. Each step is marked for Debug tools.
+        LaunchedEffect(map, style, hasLocation) {
+            val m = map
+            if (m == null || style == null || !hasLocation) return@LaunchedEffect
+            val rough = lastKnownPosition(context)
+            val ready = CompletableDeferred<Unit>()
+            val onIdle = MapView.OnDidBecomeIdleListener { ready.complete(Unit) }
+            mapView.addOnDidBecomeIdleListener(onIdle)
+            val drawn = try {
+                withTimeoutOrNull(START_READY_TIMEOUT_MS) { ready.await() } != null
+            } finally {
+                mapView.removeOnDidBecomeIdleListener(onIdle)
+            }
+            DebugTools.mark("start: map " + (if (drawn) "drawn" else "not drawn in time") + ", rough position " + (if (rough != null) "found" else "none"))
+            fun goToRider(step: String) {
+                if (startSettled || rideModeNow.value) return
+                val component = m.locationComponent.takeIf { it.isLocationComponentActivated } ?: return
+                val fix = component.lastKnownLocation
+                val here = fix?.let { LatLng(it.latitude, it.longitude) } ?: rough?.let { LatLng(it.latitude, it.longitude) } ?: return
+                val camera = m.cameraPosition
+                val target = camera.target
+                val off = target == null || kotlin.math.abs(target.latitude - here.latitude) > START_OFF_DEGREES ||
+                    kotlin.math.abs(target.longitude - here.longitude) > START_OFF_DEGREES
+                if (off || kotlin.math.abs(camera.zoom - locateZooms.area) > START_ZOOM_TOLERANCE) {
+                    DebugTools.mark("start: " + step + ", camera at zoom " + camera.zoom + ", moved to the rider")
+                    m.moveCamera(CameraUpdateFactory.newLatLngZoom(here, locateZooms.area.toDouble()))
+                }
+                component.cameraMode = CameraMode.TRACKING
+            }
+            goToRider("first")
+            delay(START_RECHECK_MS)
+            goToRider("recheck")
+            startSettled = true
         }
     }
 }
