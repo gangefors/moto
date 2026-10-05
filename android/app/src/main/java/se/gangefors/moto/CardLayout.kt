@@ -208,3 +208,39 @@ fun infoCardsAfterOpening(open: Set<InfoCard>, opening: InfoCard): Set<InfoCard>
  */
 fun cardStackMaxHeightPx(mapHeight: Int, topLimit: Int, bottomLimit: Int, gapPx: Int): Int =
     (mapHeight - topLimit.coerceAtLeast(0) - bottomLimit.coerceAtLeast(0) - 2 * gapPx.coerceAtLeast(0)).coerceAtLeast(0)
+
+/** What Back closes on the map screen, in the order it closes them. */
+enum class BackStep { MARK, VIA_PICK, VIA_SELECTED, ROAD, FAVOURITE, ROUTE, LOOP, START, SAVED_ROUTE, SECTION, RIDE }
+
+/**
+ * What Back closes first: a marking step, a via pick, a selected via, a
+ * road or favourite card, the route or loop sheet, the start card, a
+ * saved route, a favourite section, then a shown ride; null when nothing
+ * is open and Back leaves the app.
+ */
+fun backStep(
+    marking: Boolean,
+    addingVia: Boolean,
+    viaSelected: Boolean,
+    road: Boolean,
+    favourite: Boolean,
+    route: Boolean,
+    loop: Boolean,
+    startPicked: Boolean,
+    savedRoute: Boolean,
+    section: Boolean,
+    ride: Boolean,
+): BackStep? = when {
+    marking -> BackStep.MARK
+    addingVia -> BackStep.VIA_PICK
+    viaSelected -> BackStep.VIA_SELECTED
+    road -> BackStep.ROAD
+    favourite -> BackStep.FAVOURITE
+    route -> BackStep.ROUTE
+    loop -> BackStep.LOOP
+    startPicked -> BackStep.START
+    savedRoute -> BackStep.SAVED_ROUTE
+    section -> BackStep.SECTION
+    ride -> BackStep.RIDE
+    else -> null
+}

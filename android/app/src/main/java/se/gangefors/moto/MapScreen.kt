@@ -2543,34 +2543,38 @@ fun MapScreen() {
         }
         // Back steps back through what is on the map before it leaves the
         // app (a pulled-up sheet handles Back itself first).
-        BackHandler(enabled = marking || addingVia || selectedVia != null || roadInfo != null || favouriteInfoId != null || planning ||
-            startPicked != null || shownRide != null || shownSaved != null || shownSectionId != null) {
-            when {
-                marking -> markBack()
-                addingVia -> {
+        fun currentBackStep() = backStep(
+            marking, addingVia, selectedVia != null, roadInfo != null, favouriteInfoId != null, routeEnds != null,
+            loopStart != null, startPicked != null, shownSaved != null, shownSectionId != null, shownRide != null,
+        )
+        BackHandler(enabled = currentBackStep() != null) {
+            when (currentBackStep()) {
+                BackStep.MARK -> markBack()
+                BackStep.VIA_PICK -> {
                     addingVia = false
                     message = null
                 }
-                selectedVia != null -> selectedVia = null
-                roadInfo != null -> {
+                BackStep.VIA_SELECTED -> selectedVia = null
+                BackStep.ROAD -> {
                     roadInfo = null
                     overlays?.snap?.clear()
                 }
-                favouriteInfoId != null -> favouriteInfoId = null
-                routeEnds != null -> closeRoute()
-                loopStart != null -> closeLoop()
-                startPicked != null -> {
+                BackStep.FAVOURITE -> favouriteInfoId = null
+                BackStep.ROUTE -> closeRoute()
+                BackStep.LOOP -> closeLoop()
+                BackStep.START -> {
                     startPicked = null
                     picker.reset()
                     overlays?.route?.show(null, null, null)
                     message = null
                 }
-                shownSaved != null -> {
+                BackStep.SAVED_ROUTE -> {
                     shownSaved = null
                     overlays?.route?.show(null, null, null)
                 }
-                shownSectionId != null -> hideSection()
-                shownRide != null -> shownRide = null
+                BackStep.SECTION -> hideSection()
+                BackStep.RIDE -> shownRide = null
+                null -> Unit
             }
         }
         // Planning a route or loop: a sheet at the bottom, in landscape at
