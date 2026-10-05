@@ -26,9 +26,6 @@ import androidx.compose.ui.unit.dp
 internal val TOP_BUTTON_SIZE = 48.dp
 private val TOP_BUTTON_MARGIN = 16.dp
 
-/** The zoom buttons' height, dp: two 52 dp cells and the 1 dp divider (see [ZoomButtons]). */
-internal const val ZOOM_BUTTONS_DP = 105f
-
 /** A round button at the top of the map (menu, ride settings). */
 @Composable
 internal fun TopMapButton(icon: Int, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {

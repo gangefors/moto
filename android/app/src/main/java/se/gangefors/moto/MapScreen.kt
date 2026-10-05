@@ -2718,23 +2718,16 @@ fun MapScreen() {
                 planCards(sheetMaxHeight)
             }
         }
-        val reviewShown = pendingTags > 0 && recording !is Recording.State.Active && region is RegionState.Ready
+        val reviewShown = tagsToReview(pendingTags, recording is Recording.State.Active, region is RegionState.Ready)
         if (!marking && !planning && !cardsShown) {
             DisposableEffect(Unit) { onDispose { buttonsLeft = Int.MAX_VALUE } }
             val landscape = mapSize.width > mapSize.height
             // What shows, for the measured fit (heights in dp).
-            val showAddLoop = region is RegionState.Ready && hasLocation && !rideMode
-            val showAdd = showAddLoop && store is StoreState.Ready
-            val showLocate = hasLocation && (!rideMode || ridePanned)
-            val showZoom = recording is Recording.State.Active
-            val showFlag = store is StoreState.Ready && reviewShown
-            val rightColumn = buildList {
-                if (showFlag) add(MAP_BUTTON_DP)
-                if (showAdd) add(MAP_BUTTON_DP)
-                if (showAddLoop) add(MAP_BUTTON_DP)
-                if (showZoom) add(ZOOM_BUTTONS_DP)
-                add(MAP_BUTTON_DP)
-            }
+            val (showAddLoop, showAdd, showLocate, showZoom, showFlag) = buttonsShown(
+                region is RegionState.Ready, store is StoreState.Ready, hasLocation, rideMode, ridePanned,
+                recording is Recording.State.Active, reviewShown,
+            )
+            val rightColumn = rightColumnDp(showFlag, showAdd, showAddLoop, showZoom)
             // The flag (the spots tagged on rides) with how many wait,
             // the count on the button's corner, clear of the flag; on
             // top, above Add favourite (2026-10-04).

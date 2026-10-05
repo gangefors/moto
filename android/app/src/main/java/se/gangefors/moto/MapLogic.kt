@@ -555,6 +555,9 @@ const val COMPASS_GAP_DP = 8f
 const val MAP_BUTTON_DP = 56f
 const val MAP_BUTTON_GAP_DP = 16f
 
+/** The zoom buttons' height, dp: two 52 dp cells and the 1 dp divider (see [ZoomButtons]). */
+internal const val ZOOM_BUTTONS_DP = 105f
+
 /** The compass's distance from the safe area's right and top edges, dp. */
 data class CompassPlacement(val rightDp: Float, val topDp: Float)
 
@@ -600,3 +603,48 @@ fun buttonsFit(availableDp: Float, itemHeightsDp: List<Float>): Boolean =
  */
 fun flagInRightColumn(landscape: Boolean, availableDp: Float, itemHeightsDp: List<Float>): Boolean =
     !landscape || buttonsFit(availableDp, itemHeightsDp)
+
+/** Whether there are tags to review: [pendingTags] waiting, not while
+ * [recording], with the region ready. */
+fun tagsToReview(pendingTags: Int, recording: Boolean, regionReady: Boolean): Boolean =
+    pendingTags > 0 && !recording && regionReady
+
+/** Which of the map's buttons show: loop, add favourite, locate, zoom and
+ * the review flag. */
+data class ButtonsShown(val loop: Boolean, val addFavourite: Boolean, val locate: Boolean, val zoom: Boolean, val flag: Boolean)
+
+/**
+ * The map's buttons that show. Loop needs the region and a location and
+ * is hidden in ride mode; Add favourite needs that and the store; the
+ * position button shows with a location, in ride mode only after a pan
+ * ([ridePanned]); zoom shows while [recording]; the review flag needs the
+ * store and tags to review ([reviewShown]).
+ */
+fun buttonsShown(
+    regionReady: Boolean,
+    storeReady: Boolean,
+    hasLocation: Boolean,
+    rideMode: Boolean,
+    ridePanned: Boolean,
+    recording: Boolean,
+    reviewShown: Boolean,
+): ButtonsShown {
+    val loop = regionReady && hasLocation && !rideMode
+    return ButtonsShown(
+        loop = loop,
+        addFavourite = loop && storeReady,
+        locate = hasLocation && (!rideMode || ridePanned),
+        zoom = recording,
+        flag = storeReady && reviewShown,
+    )
+}
+
+/** The heights of the right-hand column's buttons from the top, dp: the
+ * flag, Add favourite, loop, zoom (when shown) and the record button. */
+fun rightColumnDp(flag: Boolean, addFavourite: Boolean, loop: Boolean, zoom: Boolean): List<Float> = buildList {
+    if (flag) add(MAP_BUTTON_DP)
+    if (addFavourite) add(MAP_BUTTON_DP)
+    if (loop) add(MAP_BUTTON_DP)
+    if (zoom) add(ZOOM_BUTTONS_DP)
+    add(MAP_BUTTON_DP)
+}
