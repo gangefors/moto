@@ -4,8 +4,12 @@
 package se.gangefors.moto
 
 import android.content.Context
+import android.content.res.Configuration
+import android.content.res.Resources
+import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -13,12 +17,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.sync.Mutex
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import se.gangefors.moto.core.Description
 import se.gangefors.moto.core.FavouriteNearby
@@ -320,4 +326,44 @@ internal class MapScreenState(
     var savingName by mutableStateOf<String?>(null)
 
     var interruptedName by mutableStateOf<String?>(null)
+}
+
+/**
+ * What [MapScreen] worked out in one composition, for the code it calls
+ * (ADR-0014). Made anew in each composition, so its plain values are
+ * that composition's; [recording] and [ridesVersion] stay live.
+ */
+internal class MapScreenScope(
+    val state: MapScreenState,
+    val context: Context,
+    val resources: Resources,
+    val mapView: MapView,
+    val region: RegionState,
+    val darkMap: Boolean,
+    val density: Density,
+    val insets: SafeInsets,
+    val windowConfig: Configuration,
+    val landscape: Boolean,
+    val columnWidthDp: Float,
+    val columnRight: Int,
+    val overlays: Overlays?,
+    val following: Following?,
+    val riding: Boolean,
+    val ridingNow: State<Boolean>,
+    val riddenOn: Boolean,
+    val riddenButton: Boolean,
+    val recordPermissions: ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>,
+    val loopChoice: LoopChoice,
+    val planning: Boolean,
+    val freeRiding: Boolean,
+    val rideMode: Boolean,
+    val rideModeNow: State<Boolean>,
+    val pauseWanted: Boolean,
+    val shownSection: Section?,
+    val favouriteInfo: Section?,
+    recordingState: State<Recording.State>,
+    ridesVersionState: State<Int>,
+) {
+    val recording by recordingState
+    val ridesVersion by ridesVersionState
 }
