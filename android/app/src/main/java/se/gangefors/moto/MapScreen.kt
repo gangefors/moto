@@ -960,15 +960,6 @@ fun MapScreen() {
     // Whether any ride has been on this map's roads: the ridden roads
     // button shows only then.
     var hasRidden by remember { mutableStateOf(false) }
-    // The map's zoom once it comes to rest, for what shows only near enough.
-    var mapZoom by remember { mutableFloatStateOf(0f) }
-    DisposableEffect(map) {
-        val m = map ?: return@DisposableEffect onDispose {}
-        val idle = MapLibreMap.OnCameraIdleListener { mapZoom = m.cameraPosition.zoom.toFloat() }
-        m.addOnCameraIdleListener(idle)
-        mapZoom = m.cameraPosition.zoom.toFloat()
-        onDispose { m.removeOnCameraIdleListener(idle) }
-    }
     // Metres a dp shows at the map's middle, for the scale bar (MapLibre's
     // "pixels" here are density-independent: they already are dp).
     var metresPerDp by remember { mutableDoubleStateOf(0.0) }
