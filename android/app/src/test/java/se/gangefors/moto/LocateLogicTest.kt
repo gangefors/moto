@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import se.gangefors.moto.core.LatLon
 
 class LocateLogicTest {
     @Test
@@ -89,5 +90,36 @@ class LocateLogicTest {
         assertEquals(Span.KmTenths(1.0), readableSpan(999.9))
         assertEquals(Span.Metres(550), readableSpan(560.0))
         assertEquals(Span.Metres(50), readableSpan(3.0))
+    }
+
+    private val spot = LatLon(59.0, 18.0)
+
+    @Test
+    fun startPutsAZoomedInMapBackAtTheAreaZoom() {
+        // The decision that undid a location tap in the first seconds.
+        assertEquals(StartStep.MOVE_AND_FOLLOW, startStep(false, false, spot, spot, 14.0, 10))
+    }
+
+    @Test
+    fun startDoesNothingWhileRidingOrWithoutAPosition() {
+        assertEquals(StartStep.NOTHING, startStep(false, true, spot, spot, 10.0, 10))
+        assertEquals(StartStep.NOTHING, startStep(false, false, null, spot, 10.0, 10))
+    }
+
+    @Test
+    fun startOnTheRiderAtTheAreaZoomOnlyFollows() {
+        assertEquals(StartStep.FOLLOW, startStep(false, false, spot, spot, 10.0, 10))
+        assertEquals(StartStep.FOLLOW, startStep(false, false, spot, spot, 10.2, 10))
+        assertEquals(StartStep.FOLLOW, startStep(false, false, spot, spot, 9.8, 10))
+        assertEquals(StartStep.MOVE_AND_FOLLOW, startStep(false, false, spot, spot, 10.5, 10))
+        assertEquals(StartStep.MOVE_AND_FOLLOW, startStep(false, false, spot, spot, 9.5, 10))
+    }
+
+    @Test
+    fun startMovesAMapCentredAwayFromTheRider() {
+        assertEquals(StartStep.MOVE_AND_FOLLOW, startStep(false, false, spot, LatLon(59.003, 18.0), 10.0, 10))
+        assertEquals(StartStep.MOVE_AND_FOLLOW, startStep(false, false, spot, LatLon(59.0, 18.003), 10.0, 10))
+        assertEquals(StartStep.FOLLOW, startStep(false, false, spot, LatLon(59.001, 18.001), 10.0, 10))
+        assertEquals(StartStep.MOVE_AND_FOLLOW, startStep(false, false, spot, null, 10.0, 10))
     }
 }

@@ -3,6 +3,8 @@
 
 package se.gangefors.moto
 
+import se.gangefors.moto.core.LatLon
+
 /*
  * The location button (the rider's option C, 2026-09-28; zoom levels set
  * by the rider, 10 and 14 by default). The first tap follows the rider, fixing the zoom only when
@@ -160,3 +162,50 @@ fun zoomForSpan(metres: Double, widthDp: Double, latitude: Double): Double =
 /** How many metres across a map [widthDp] wide shows at [zoom] and [latitude]. */
 fun spanAtZoom(zoom: Double, widthDp: Double, latitude: Double): Double =
     METRES_PER_PX_AT_ZOOM_0 * kotlin.math.cos(Math.toRadians(latitude)) * widthDp / Math.pow(2.0, zoom)
+
+/*
+ * The start: the first steps after the app opens, which put the map on
+ * the rider at the area's zoom (see LocationEffects).
+ */
+
+/** How far off the rider the map's centre may be, in degrees (about 200 m), before the start moves it. */
+internal const val START_OFF_DEGREES = 0.002
+
+/** How far the zoom may be from the area's zoom before the start sets it. */
+internal const val START_ZOOM_TOLERANCE = 0.3
+
+/** What one step of the start does to the map. */
+enum class StartStep {
+    /** The rider has moved the map: leave it. */
+    RIDER_MOVED,
+
+    /** Riding, or no position yet: nothing. */
+    NOTHING,
+
+    /** Already on the rider at the area's zoom: just follow. */
+    FOLLOW,
+
+    /** Put the map on the rider at the area's zoom, then follow. */
+    MOVE_AND_FOLLOW,
+}
+
+/**
+ * One step of the start (the first once the map has drawn, then the
+ * recheck). [riderMoved]: the rider has moved the map since it opened;
+ * [here]: the first fix, else the phone's last known position;
+ * [target] and [zoom]: the camera's.
+ */
+fun startStep(
+    riderMoved: Boolean,
+    riding: Boolean,
+    here: LatLon?,
+    target: LatLon?,
+    zoom: Double,
+    areaZoom: Int,
+): StartStep {
+    // Today's decision: [riderMoved] is not looked at yet (the fix follows).
+    if (riding || here == null) return StartStep.NOTHING
+    val off = target == null || kotlin.math.abs(target.lat - here.lat) > START_OFF_DEGREES ||
+        kotlin.math.abs(target.lon - here.lon) > START_OFF_DEGREES
+    return if (off || kotlin.math.abs(zoom - areaZoom) > START_ZOOM_TOLERANCE) StartStep.MOVE_AND_FOLLOW else StartStep.FOLLOW
+}

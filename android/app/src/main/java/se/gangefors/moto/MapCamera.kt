@@ -70,12 +70,6 @@ internal const val START_READY_TIMEOUT_MS = 3_000L
 /** How long after the first move the start checks the map once more. */
 internal const val START_RECHECK_MS = 1_500L
 
-/** How far off the rider the map's centre may be, in degrees (about 200 m), before the start moves it. */
-internal const val START_OFF_DEGREES = 0.002
-
-/** How far the zoom may be from the area's zoom before the start sets it. */
-internal const val START_ZOOM_TOLERANCE = 0.3
-
 /** What recording a ride asks for: precise location, and on Android 13+
  * permission to show the recording notification. */
 internal fun recordingPermissions(): Array<String> =
