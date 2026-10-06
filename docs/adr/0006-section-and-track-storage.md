@@ -2,6 +2,8 @@
 
 **Status:** Accepted · **Date:** 2026-09-23 · **Deciders:** the owner · **Repo path:** `docs/adr/0006-section-and-track-storage.md`
 
+Amended by [ADR-0015](0015-tags-kept-until-reviewed.md) (proposed 2026-10-05): a tag is deleted once reviewed; `tags` has no review status from schema 9.
+
 ## Context
 
 M1 (Capture) adds the rider's own data: favourite road sections (PRD R1–R3), recorded ride tracks and quick-tags (R3, R4), and export/import for backup (R10). Until now the app only read a region file; now it must keep personal data safely on the phone.

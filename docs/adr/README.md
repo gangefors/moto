@@ -18,3 +18,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0012](0012-backup-and-restore.md) | Backup and restore — one zip of standard files (GPX, GeoJSON, JSON), merged back in by the core | Accepted | 2026-10-03 |
 | [0013](0013-agentic-change-workflow.md) | Change workflow — a pipeline of agents with two rider gates, routed by risk | Accepted | 2026-10-05 |
 | [0014](0014-map-screen-structure.md) | Map screen structure — one state holder, a per-composition scope, pieces by concern | Accepted | 2026-10-05 |
+| [0015](0015-tags-kept-until-reviewed.md) | Quick-tags — kept only until reviewed; backups hold the unreviewed ones | Proposed | 2026-10-05 |
