@@ -1,6 +1,6 @@
 # ADR-0015: Quick-tags are kept only until they are reviewed
 
-**Status:** Proposed · **Date:** 2026-10-05 · **Deciders:** the owner · **Repo path:** `docs/adr/0015-tags-kept-until-reviewed.md`
+**Status:** Accepted · **Date:** 2026-10-05 · **Deciders:** the owner · **Repo path:** `docs/adr/0015-tags-kept-until-reviewed.md`
 
 Amends ADR-0006 (the `tags` table) and ADR-0012 (the tags in a backup).
 
@@ -76,8 +76,8 @@ Option 1 trades a rare restore case (a backup made before a review, restored aft
 
 ## Action Items
 
-- [ ] Core: schema 9 (delete reviewed tags, drop `tags.status` and its index, index `time_ms`); `TagStatus`, `Tag.status`, `set_tag_status` removed; `list_tags()` without a filter; migration test through `Store::open`.
-- [ ] Core: backup format 2 (tag entries without a state, format 1 refused); restore adds every tag not already there and not on a favourite the phone had before the restore (`Shape::covers_point` in `overlap.rs`, sharing the cover distance with `covers`); `RestoreReport.tags_on_favourites`; tests, corruption tests still passing.
-- [ ] FFI: `TagStatus`, `Tag.status`, `set_tag_status` removed; `list_tags()` without a filter; `RestoreReport.tags_on_favourites`.
-- [ ] App: the review deletes a tag when it is saved as a favourite (after the save) or discarded; a failed save or delete keeps it and counts it as skipped; the flag's count is read again after a restore, and a failed read keeps the last count.
-- [ ] Phone test: update over a database with reviewed and unreviewed tags; review, back up, restore, restore again.
+- [x] Core: schema 9 (delete reviewed tags, drop `tags.status` and its index, index `time_ms`); `TagStatus`, `Tag.status`, `set_tag_status` removed; `list_tags()` without a filter; migration test through `Store::open`.
+- [x] Core: backup format 2 (tag entries without a state, format 1 refused); restore adds every tag not already there and not on a favourite the phone had before the restore (`Shape::covers_point` in `overlap.rs`, sharing the cover distance with `covers`); `RestoreReport.tags_on_favourites`; tests, corruption tests still passing.
+- [x] FFI: `TagStatus`, `Tag.status`, `set_tag_status` removed; `list_tags()` without a filter; `RestoreReport.tags_on_favourites`.
+- [x] App: the review deletes a tag when it is saved as a favourite (after the save) or discarded; a failed save or delete keeps it and counts it as skipped; the flag's count is read again after a restore, and a failed read keeps the last count.
+- [x] Phone test: update over a database with reviewed and unreviewed tags; review, back up, restore, restore again.
