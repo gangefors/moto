@@ -32,7 +32,8 @@ internal fun MapScreenScope.MapDialogs() {
         if (showHelp) HelpPage(onDismiss = { showHelp = false })
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
         // Backup and restore (ADR-0012): its dialogs, and after a restore the
-        // favourites and rides read again.
+        // favourites, rides and the count of tags waiting for review read
+        // again (so the flag shows restored tags at once).
         BackupFlow(
             open = showBackup,
             onClose = { showBackup = false },
@@ -47,6 +48,7 @@ internal fun MapScreenScope.MapDialogs() {
                     }
                 }
                 RideChanges.changed()
+                refreshPendingTags()
             },
             onOpenRegions = { dataPage = DataPage.REGION },
         )

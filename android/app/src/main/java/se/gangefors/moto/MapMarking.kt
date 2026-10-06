@@ -41,13 +41,15 @@ internal fun MapScreenScope.stopMarking() {
 
 internal fun MapScreenScope.draftMessage(d: SectionDraft) = with(state) { resources.getString(R.string.section_proposed, sectionKm(d.distanceM)) }
 
+/** Reads the number of tags waiting for review again; a failed read
+ * keeps the last count (and the flag) as it was. */
 internal fun MapScreenScope.refreshPendingTags() {
     with(state) {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
-            pendingTags = withContext(Dispatchers.IO) {
-                runCatching { ready.store.listTags().size }.getOrDefault(0)
-            }
+            withContext(Dispatchers.IO) {
+                runCatching { ready.store.listTags().size }.getOrNull()
+            }?.let { pendingTags = it }
         }
     }
 }
