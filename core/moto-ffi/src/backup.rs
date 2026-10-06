@@ -103,6 +103,9 @@ pub struct RestoreReport {
     pub routes_skipped: u64,
     pub tags_added: u64,
     pub tags_skipped: u64,
+    /// Tags left out because they lie on a favourite the phone already had
+    /// (taken as reviewed since the backup was made).
+    pub tags_on_favourites: u64,
     /// The backup's settings, for the app to check (which keys it knows)
     /// and apply; `None` if it has none.
     pub settings: Option<Vec<BackupSetting>>,
@@ -122,6 +125,7 @@ impl From<core::RestoreReport> for RestoreReport {
             routes_skipped: r.routes_skipped,
             tags_added: r.tags_added,
             tags_skipped: r.tags_skipped,
+            tags_on_favourites: r.tags_on_favourites,
             settings: r.settings.map(|v| v.into_iter().map(Into::into).collect()),
             regions: r.regions,
         }

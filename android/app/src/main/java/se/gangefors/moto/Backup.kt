@@ -48,7 +48,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import se.gangefors.moto.core.BackupSummary
 import se.gangefors.moto.core.Engine
-import se.gangefors.moto.core.RestoreReport
 import se.gangefors.moto.core.SectionStore
 import se.gangefors.moto.core.backupSummary
 import java.io.File
@@ -97,17 +96,6 @@ private fun countsInWords(resources: Resources, favourites: Int, rides: Int, rou
     )
     return if (parts.isEmpty()) resources.getString(R.string.backup_nothing) else inWords(resources, parts)
 }
-
-private fun ULong.count(): Int = coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
-
-/** What a restore did, for its toast. */
-fun restoreCounts(r: RestoreReport) = RestoreCounts(
-    favourites = r.favouritesAdded.count(),
-    rides = r.ridesAdded.count(),
-    routes = r.routesAdded.count(),
-    tags = r.tagsAdded.count(),
-    alreadyHere = (r.favouritesSkipped + r.ridesSkipped + r.routesSkipped + r.tagsSkipped).count(),
-)
 
 private fun restoredText(resources: Resources, c: RestoreCounts): String {
     if (c.added == 0) return resources.getString(R.string.restored_nothing)

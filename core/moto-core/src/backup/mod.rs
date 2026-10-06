@@ -31,6 +31,7 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::exchange::{self, MAX_IMPORT_SECTIONS};
 use crate::gpx::{self, MAX_GPX_BYTES};
+use crate::overlap::Shape;
 use crate::rematch::rematch_store;
 use crate::section::{Section, validate_name};
 use crate::store::{MAX_ROUTE_POINTS, NewRoute, Store};
@@ -126,6 +127,9 @@ pub struct RestoreReport {
     pub routes_skipped: u64,
     pub tags_added: u64,
     pub tags_skipped: u64,
+    /// Tags left out because they lie on a favourite the phone already had
+    /// (taken as reviewed since the backup was made).
+    pub tags_on_favourites: u64,
     /// The backup's settings, for the app to apply (it checks which keys
     /// it knows); `None` if the backup has none.
     pub settings: Option<Vec<Setting>>,
@@ -783,9 +787,18 @@ pub fn restore_backup(
     }
 
     // Tags: the tag already there when it has the same time and place.
+    // Otherwise one on a favourite the phone had before this restore was
+    // most likely saved as it since the backup was made, so it is already
+    // reviewed (ADR-0015). Favourites this restore adds don't count: every
+    // tag in a backup was waiting when it was made.
+    let on_phone: Vec<Shape> = saved.iter().map(Shape::of_section).collect();
     for (fix, t) in tag_fixes.iter().zip(&manifest.tags) {
         if store.same_tag(fix.time_ms, fix.position)? {
             report.tags_skipped += 1;
+            continue;
+        }
+        if on_phone.iter().any(|s| s.covers_point(fix.position)) {
+            report.tags_on_favourites += 1;
             continue;
         }
         let tag = NewTag {

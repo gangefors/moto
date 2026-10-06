@@ -736,3 +736,94 @@ fn truncated_and_bit_flipped_backups_never_panic() {
         }
     }
 }
+
+/// A favourite along lat 57.0 (moved `north_m` north) through the place
+/// where the [`filled`] tags sit (57.0, 14.0004).
+fn across_the_tags(north_m: f64) -> crate::section::NewSection {
+    let lat = 57.0 + north_m / 111_195.0;
+    let mut s = sample();
+    s.name = "Through the tags".into();
+    s.ways[0].way_id = 99;
+    s.geometry = vec![LatLon { lat, lon: 13.999 }, LatLon { lat, lon: 14.002 }];
+    s
+}
+
+fn delete_tags(s: &mut Store, keep: impl Fn(&crate::tag::Tag) -> bool) {
+    for t in s.list_tags().unwrap() {
+        if !keep(&t) {
+            assert!(s.delete_tag(t.id).unwrap());
+        }
+    }
+}
+
+/// (added, skipped, on favourites) for the tags of a restore.
+fn tag_counts(r: &RestoreReport) -> (u64, u64, u64) {
+    (r.tags_added, r.tags_skipped, r.tags_on_favourites)
+}
+
+#[test]
+fn a_binned_tag_off_any_favourite_comes_back() {
+    let mut s = filled();
+    let f = backup_of(&s, "binned");
+    delete_tags(&mut s, |t| t.time_ms != T0_MS + 2000);
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (1, 2, 0));
+    assert_eq!(s.list_tags().unwrap().len(), 3);
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 3, 0));
+}
+
+#[test]
+fn a_tag_saved_as_a_favourite_since_the_backup_stays_out() {
+    let mut s = filled();
+    let f = backup_of(&s, "saved-since");
+    s.add_section(&across_the_tags(0.0), 1_790_000_000).unwrap();
+    delete_tags(&mut s, |_| false);
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 0, 3));
+    assert!(s.list_tags().unwrap().is_empty());
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 0, 3));
+    assert!(s.list_tags().unwrap().is_empty());
+}
+
+#[test]
+fn a_reinstall_keeps_tags_on_the_backups_own_favourites() {
+    let mut src = filled();
+    src.add_section(&across_the_tags(0.0), 1_790_000_000)
+        .unwrap();
+    let f = backup_of(&src, "reinstall");
+    let mut dst = Store::open_in_memory().unwrap();
+    let r = restore_backup(&mut dst, None, &f.0, 0).unwrap();
+    assert_eq!(r.favourites_added, 3);
+    assert_eq!(tag_counts(&r), (3, 0, 0));
+    assert_eq!(without_live(&dst), without_live(&src));
+    let r = restore_backup(&mut dst, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 3, 0));
+}
+
+#[test]
+fn duplicates_are_counted_before_favourites() {
+    let mut s = filled();
+    s.add_section(&across_the_tags(0.0), 1_790_000_000).unwrap();
+    let f = backup_of(&s, "dup-first");
+    let before = contents(&s);
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 3, 0));
+    assert_eq!(contents(&s), before);
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 3, 0));
+}
+
+#[test]
+fn a_favourite_50_m_away_does_not_keep_tags_out() {
+    let mut s = filled();
+    let f = backup_of(&s, "near-miss");
+    s.add_section(&across_the_tags(50.0), 1_790_000_000)
+        .unwrap();
+    delete_tags(&mut s, |_| false);
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (3, 0, 0));
+    let r = restore_backup(&mut s, None, &f.0, 0).unwrap();
+    assert_eq!(tag_counts(&r), (0, 3, 0));
+}

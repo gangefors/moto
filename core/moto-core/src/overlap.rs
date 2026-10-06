@@ -104,10 +104,7 @@ impl Shape {
             return false;
         }
         let points = densify(&other.line, COVER_STEP_M);
-        if !points
-            .iter()
-            .all(|&p| distance_to_line(p, &self.line) <= COVER_TOLERANCE_M)
-        {
+        if !points.iter().all(|&p| self.near(p)) {
             return false;
         }
         if self.direction == Direction::Forward {
@@ -117,6 +114,21 @@ impl Shape {
             return position_along(&self.line, a) <= position_along(&self.line, b);
         }
         true
+    }
+
+    /// Whether `p` lies within the cover distance of this line: the
+    /// per-point part of [`Shape::covers`].
+    fn near(&self, p: LatLon) -> bool {
+        distance_to_line(p, &self.line) <= COVER_TOLERANCE_M
+    }
+
+    /// Whether a single point, such as a quick-tag, lies on this section:
+    /// inside its widened box and near its line, in either direction. A
+    /// point has no rating or chosen direction, so only the distance part
+    /// of [`Shape::covers`] applies.
+    pub(crate) fn covers_point(&self, p: LatLon) -> bool {
+        let (sw, ne) = self.bbox;
+        (sw.lat..=ne.lat).contains(&p.lat) && (sw.lon..=ne.lon).contains(&p.lon) && self.near(p)
     }
 
     /// Whether this section makes `other` redundant: it covers it, and

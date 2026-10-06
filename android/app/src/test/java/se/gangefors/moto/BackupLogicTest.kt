@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import se.gangefors.moto.core.BackupSetting
 import se.gangefors.moto.core.BackupSettingValue
+import se.gangefors.moto.core.RestoreReport
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -87,6 +88,25 @@ class BackupLogicTest {
         assertEquals(listOf("denmark"), missingRegions(listOf("sweden", "denmark", "denmark", "../x", "Bad"), setOf("sweden")))
         assertTrue(missingRegions(listOf("sweden"), setOf("sweden")).isEmpty())
         assertEquals("North sweden", regionIdName("north-sweden"))
+    }
+
+    @Test
+    fun tagsOnAFavouriteCountAsAlreadyHere() {
+        val r = RestoreReport(
+            favouritesAdded = 1u,
+            favouritesSkipped = 2u,
+            favouritesReplaced = 0u,
+            ridesAdded = 3u,
+            ridesSkipped = 4u,
+            routesAdded = 5u,
+            routesSkipped = 6u,
+            tagsAdded = 7u,
+            tagsSkipped = 8u,
+            tagsOnFavourites = 9u,
+            settings = null,
+            regions = emptyList(),
+        )
+        assertEquals(RestoreCounts(favourites = 1, rides = 3, routes = 5, tags = 7, alreadyHere = 2 + 4 + 6 + 8 + 9), restoreCounts(r))
     }
 
     @Test

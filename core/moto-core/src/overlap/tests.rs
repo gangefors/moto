@@ -182,3 +182,58 @@ fn invalid_sections_are_refused_before_anything_changes() {
     ));
     assert_eq!(store.list_sections(None).unwrap().len(), 1);
 }
+
+/// A favourite along lat 57.1 from lon 14.2 to 14.21 (about 600 m).
+fn east_line(direction: Direction) -> Shape {
+    let line = [
+        LatLon {
+            lat: 57.1,
+            lon: 14.2,
+        },
+        LatLon {
+            lat: 57.1,
+            lon: 14.21,
+        },
+    ];
+    Shape::new(&line, direction, Good)
+}
+
+/// `p` moved `north_m` north and `east_m` east.
+fn moved(p: LatLon, north_m: f64, east_m: f64) -> LatLon {
+    let m_lat = 111_195.0;
+    LatLon {
+        lat: p.lat + north_m / m_lat,
+        lon: p.lon + east_m / (m_lat * p.lat.to_radians().cos()),
+    }
+}
+
+#[test]
+fn a_point_within_the_cover_distance_is_on_a_favourite() {
+    let mid = LatLon {
+        lat: 57.1,
+        lon: 14.205,
+    };
+    let end = LatLon {
+        lat: 57.1,
+        lon: 14.21,
+    };
+    for direction in [Both, Forward] {
+        let s = east_line(direction);
+        assert!(s.covers_point(mid), "on the line");
+        assert!(s.covers_point(moved(mid, 14.0, 0.0)), "14 m off it");
+        assert!(
+            s.covers_point(moved(mid, -14.0, 0.0)),
+            "14 m off, other side"
+        );
+        assert!(s.covers_point(moved(end, 0.0, 14.0)), "14 m past its end");
+        assert!(!s.covers_point(moved(mid, 16.0, 0.0)), "16 m off it");
+        assert!(!s.covers_point(moved(end, 0.0, 16.0)), "16 m past its end");
+        assert!(
+            !s.covers_point(LatLon {
+                lat: 56.0,
+                lon: 13.0
+            }),
+            "far away"
+        );
+    }
+}

@@ -5,6 +5,7 @@ package se.gangefors.moto
 
 import se.gangefors.moto.core.BackupSetting
 import se.gangefors.moto.core.BackupSettingValue
+import se.gangefors.moto.core.RestoreReport
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -109,3 +110,18 @@ data class RestoreCounts(
 ) {
     val added: Int get() = favourites + rides + routes + tags
 }
+
+/** A count from the core, capped to fit an Int. */
+internal fun ULong.count(): Int = coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
+
+/**
+ * What a restore did, for its toast. Tags left out because they lie on a
+ * favourite the phone already had count as already here, like duplicates.
+ */
+fun restoreCounts(r: RestoreReport) = RestoreCounts(
+    favourites = r.favouritesAdded.count(),
+    rides = r.ridesAdded.count(),
+    routes = r.routesAdded.count(),
+    tags = r.tagsAdded.count(),
+    alreadyHere = (r.favouritesSkipped + r.ridesSkipped + r.routesSkipped + r.tagsSkipped + r.tagsOnFavourites).count(),
+)
