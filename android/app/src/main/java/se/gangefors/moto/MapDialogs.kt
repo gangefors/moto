@@ -82,6 +82,9 @@ internal fun MapScreenScope.MapDialogs() {
                             zone = ZoneId.systemDefault(),
                         )
                     }
+                    // Whether the tag was deleted; set off the main thread
+                    // before `after` runs.
+                    var removed = false
                     changeSectionsThen(
                         action = { st ->
                             val result = st.add(
@@ -104,11 +107,14 @@ internal fun MapScreenScope.MapDialogs() {
                             }
                             // Saved, or a favourite covers it already: the tag
                             // is reviewed, so it goes (false if already gone).
-                            if (tag != null) st.deleteTag(tag.id)
+                            // A failed delete doesn't fail the save: the
+                            // favourite is kept and shown, and the tag stays.
+                            removed = tag != null && runCatching { st.deleteTag(tag.id) }.isSuccess
                             text
                         },
-                        // A failed save keeps the tag, counted as skipped.
-                        after = { ok -> if (tag != null) tagHandled(tag, removed = ok) },
+                        // A failed save or delete keeps the tag, counted as
+                        // skipped.
+                        after = { ok -> if (tag != null) tagHandled(tag, removed = ok && removed) },
                     )
                 },
             )
