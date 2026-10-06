@@ -237,3 +237,35 @@ fn a_point_within_the_cover_distance_is_on_a_favourite() {
         );
     }
 }
+
+#[test]
+fn a_point_in_the_box_but_off_the_line_is_not_on_a_favourite() {
+    // An L: east along lat 57.1, then north along lon 14.21.
+    let corner = LatLon {
+        lat: 57.1,
+        lon: 14.21,
+    };
+    let line = [
+        LatLon {
+            lat: 57.1,
+            lon: 14.2,
+        },
+        corner,
+        LatLon {
+            lat: 57.11,
+            lon: 14.21,
+        },
+    ];
+    let s = Shape::new(&line, Both, Good);
+    // Inside the box, about 300 m from both legs.
+    let inside = LatLon {
+        lat: 57.103,
+        lon: 14.205,
+    };
+    assert!(!s.covers_point(inside));
+    // Near the corner but 20 m inside the L: off both legs.
+    assert!(!s.covers_point(moved(corner, 20.0, -20.0)));
+    // On each leg it is on.
+    assert!(s.covers_point(moved(corner, 0.0, -100.0)));
+    assert!(s.covers_point(moved(corner, 100.0, 0.0)));
+}
