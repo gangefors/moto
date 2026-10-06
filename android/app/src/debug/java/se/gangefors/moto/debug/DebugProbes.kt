@@ -31,7 +31,6 @@ import se.gangefors.moto.core.Favourites
 import se.gangefors.moto.core.Direction
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.SectionStatus
-import se.gangefors.moto.core.TagStatus
 import se.gangefors.moto.RoutePrefs
 import se.gangefors.moto.SavedSections
 import se.gangefors.moto.StoreState
@@ -246,7 +245,7 @@ fun riderData(context: Context): RiderData? {
         unfinished = tracks.size - finished.size,
         routes = routes.count { !it.isLoop },
         loops = routes.count { it.isLoop },
-        tagsPending = store.listTags(TagStatus.PENDING).size,
+        tagsPending = store.listTags().size,
     )
 }
 

@@ -154,12 +154,9 @@ fn filled() -> Store {
         speed_mps: Some(19.25),
         track_id,
     };
-    let a = s.add_tag(&tag(T0_MS + 2000, Some(t.id))).unwrap();
-    s.set_tag_status(a.id, TagStatus::Used).unwrap();
-    let b = s
-        .add_tag(&tag(T0_MS + 3_601_000, Some(imported.id)))
+    s.add_tag(&tag(T0_MS + 2000, Some(t.id))).unwrap();
+    s.add_tag(&tag(T0_MS + 3_601_000, Some(imported.id)))
         .unwrap();
-    s.set_tag_status(b.id, TagStatus::Discarded).unwrap();
     s.add_tag(&tag(T0_MS + 9_001_000, Some(live.id))).unwrap();
     s
 }
@@ -218,14 +215,13 @@ fn contents(s: &Store) -> String {
                 .collect::<Vec<_>>()
         );
     }
-    for t in s.list_tags(None).unwrap() {
+    for t in s.list_tags().unwrap() {
         out += &format!(
-            "G {} {:?} {:?} {:?} {:?} {:?}\n",
+            "G {} {:?} {:?} {:?} {:?}\n",
             t.time_ms,
             crate::store::tests_e7(t.position),
             t.heading_deg,
             t.speed_mps,
-            t.status,
             t.track_id.and_then(|id| ride_of.get(&id))
         );
     }
@@ -283,15 +279,12 @@ fn a_backup_restores_everything_into_an_empty_app() {
     let dst_text = without_live(&dst);
     assert_eq!(src_text, dst_text);
     let live_tag = dst
-        .list_tags(None)
+        .list_tags()
         .unwrap()
         .into_iter()
         .find(|t| t.time_ms == T0_MS + 9_001_000)
         .unwrap();
-    assert_eq!(
-        (live_tag.track_id, live_tag.status),
-        (None, TagStatus::Pending)
-    );
+    assert_eq!(live_tag.track_id, None);
     // Favourites wait to be fitted to the map, with their own times and source.
     assert!(
         dst.list_sections(None)
@@ -354,10 +347,15 @@ fn restore_merges_with_what_is_there() {
     );
     assert_eq!(dst.list_tracks().unwrap().len(), 3);
     // The tag on the ride that was already there points at it.
-    let discarded = dst.list_tags(Some(TagStatus::Discarded)).unwrap();
-    assert_eq!(discarded.len(), 1);
+    let merged: Vec<_> = dst
+        .list_tags()
+        .unwrap()
+        .into_iter()
+        .filter(|t| t.time_ms == T0_MS + 3_601_000)
+        .collect();
+    assert_eq!(merged.len(), 1);
     assert_eq!(
-        dst.track_points(discarded[0].track_id.unwrap())
+        dst.track_points(merged[0].track_id.unwrap())
             .unwrap()
             .unwrap()
             .len(),
@@ -520,6 +518,37 @@ fn a_damaged_file_changes_nothing() {
 }
 
 #[test]
+fn the_manifest_is_format_2_without_tag_states() {
+    let f = backup_of(&filled(), "format2");
+    let files = entries(&f.0);
+    let manifest = &files.iter().find(|(n, _)| n == MANIFEST).unwrap().1;
+    let m: serde_json::Value = serde_json::from_slice(manifest).unwrap();
+    assert_eq!(m["format"], 2);
+    let tags = m["tags"].as_array().unwrap();
+    assert_eq!(tags.len(), 3);
+    assert!(tags.iter().all(|t| t.get("status").is_none()), "{tags:?}");
+    // tags.gpx holds every stored tag.
+    let gpx_bytes = &files.iter().find(|(n, _)| n == TAGS).unwrap().1;
+    let fixes = gpx::read_waypoints(std::str::from_utf8(gpx_bytes).unwrap()).unwrap();
+    assert_eq!(fixes.len(), 3);
+}
+
+#[test]
+fn an_older_format_is_not_a_valid_backup() {
+    let f = backup_of(&filled(), "older");
+    let g = Temp::new("older2");
+    for format in [0, 1] {
+        zip_of(
+            &g.0,
+            &with_manifest(&entries(&f.0), |m| m["format"] = format.into()),
+        );
+        let err = refused(&g.0);
+        assert!(err.contains("not a valid moto backup"), "{err}");
+        assert!(read_summary(&g.0).is_err());
+    }
+}
+
+#[test]
 fn a_backup_from_a_newer_app_asks_for_an_update() {
     let f = backup_of(&filled(), "newer");
     let g = Temp::new("newer2");
@@ -584,6 +613,7 @@ fn manifest_metadata_is_checked() {
     let edits: Vec<Box<Edit>> = vec![
         Box::new(|m| m["unknown"] = 1.into()),
         Box::new(|m| m["format"] = 0.into()),
+        Box::new(|m| m["format"] = 1.into()),
         Box::new(|m| m["regions"] = serde_json::json!(["a/b"])),
         Box::new(|m| m["app"] = "x\u{0}".into()),
         Box::new(|m| m["favourites"] = 5.into()),
@@ -595,7 +625,7 @@ fn manifest_metadata_is_checked() {
         Box::new(|m| m["routes"][0]["distance_m"] = (-1.0).into()),
         Box::new(|m| m["routes"][0]["created_at"] = i64::MAX.into()),
         Box::new(|m| m["tags"][0]["ride"] = "rides/09999.gpx".into()),
-        Box::new(|m| m["tags"][0]["status"] = "maybe".into()),
+        Box::new(|m| m["tags"][0]["status"] = "pending".into()),
         Box::new(|m| {
             m["tags"].as_array_mut().unwrap().pop();
         }),

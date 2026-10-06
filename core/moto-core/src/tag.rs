@@ -7,27 +7,6 @@
 use crate::track::TrackPoint;
 use crate::{CoreError, LatLon};
 
-/// Where a tag stands in the post-ride review.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TagStatus {
-    /// Not reviewed yet.
-    Pending = 0,
-    /// Saved as a section.
-    Used = 1,
-    Discarded = 2,
-}
-
-impl TagStatus {
-    pub fn from_i64(v: i64) -> Option<Self> {
-        match v {
-            0 => Some(Self::Pending),
-            1 => Some(Self::Used),
-            2 => Some(Self::Discarded),
-            _ => None,
-        }
-    }
-}
-
 /// A tag as the app creates it: the rider's fix when the button was
 /// pressed, and the ride being recorded, if any.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -66,5 +45,4 @@ pub struct Tag {
     /// The ride it was made on; `None` if none was recording, or the ride
     /// has been deleted.
     pub track_id: Option<i64>,
-    pub status: TagStatus,
 }

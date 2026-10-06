@@ -19,9 +19,13 @@ import se.gangefors.moto.debug.DebugTools
 
 /**
  * Runs [action] on the store off the main thread, then reloads the
- * sections and shows the message [action] returns.
+ * sections and shows the message [action] returns. [after] then runs on
+ * the main thread with whether [action] succeeded.
  */
-internal fun MapScreenScope.changeSectionsThen(action: (SectionStore) -> String?) {
+internal fun MapScreenScope.changeSectionsThen(
+    action: (SectionStore) -> String?,
+    after: (ok: Boolean) -> Unit = {},
+) {
     with(state) {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
@@ -37,8 +41,12 @@ internal fun MapScreenScope.changeSectionsThen(action: (SectionStore) -> String?
                     // Saved or updated: a toast, like the menu pages (a
                     // delete has none: the bin already said "Deleted").
                     done?.let { Toasts.show(it) }
+                    after(true)
                 },
-                onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
+                onFailure = {
+                    notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true)
+                    after(false)
+                },
             )
         }
     }
@@ -46,10 +54,10 @@ internal fun MapScreenScope.changeSectionsThen(action: (SectionStore) -> String?
 
 /** Runs [action] on the store off the main thread, then reloads the sections. */
 internal fun MapScreenScope.changeSections(done: String?, action: (SectionStore) -> Unit) = with(state) {
-    changeSectionsThen {
+    changeSectionsThen(action = {
         action(it)
         done
-    }
+    })
 }
 
 @Composable

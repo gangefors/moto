@@ -7,15 +7,6 @@
 use crate::{Engine, LatLon, MotoError, SectionDraft, SectionStore, TrackPoint};
 use moto_core::tag as core;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum TagStatus {
-    /// Not reviewed yet.
-    Pending,
-    /// Saved as a section.
-    Used,
-    Discarded,
-}
-
 /// A tag as the app creates it: the fix when the button was pressed, and
 /// the ride being recorded, if any.
 #[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
@@ -38,12 +29,11 @@ pub struct Tag {
     pub heading_deg: Option<f64>,
     pub speed_mps: Option<f64>,
     pub track_id: Option<i64>,
-    pub status: TagStatus,
 }
 
 #[uniffi::export]
 impl SectionStore {
-    /// Saves a tag, pending review.
+    /// Saves a tag, waiting for review.
     pub fn add_tag(&self, tag: NewTag) -> Result<Tag, MotoError> {
         let t = core::NewTag {
             time_ms: tag.time_ms,
@@ -55,18 +45,14 @@ impl SectionStore {
         Ok(self.store().add_tag(&t)?.into())
     }
 
-    /// Tags with `status` (all if `None`), oldest first.
-    pub fn list_tags(&self, status: Option<TagStatus>) -> Result<Vec<Tag>, MotoError> {
-        let tags = self.store().list_tags(status.map(Into::into))?;
+    /// All tags (each waiting for review), oldest first.
+    pub fn list_tags(&self) -> Result<Vec<Tag>, MotoError> {
+        let tags = self.store().list_tags()?;
         Ok(tags.into_iter().map(Into::into).collect())
     }
 
-    /// `false` if there is no such tag.
-    pub fn set_tag_status(&self, id: i64, status: TagStatus) -> Result<bool, MotoError> {
-        Ok(self.store().set_tag_status(id, status.into())?)
-    }
-
-    /// `false` if there is no such tag.
+    /// Deletes a tag once it is reviewed (saved as a favourite section or
+    /// discarded); `false` if it did not exist.
     pub fn delete_tag(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_tag(id)?)
     }
@@ -92,29 +78,8 @@ impl Engine {
             heading_deg: tag.heading_deg,
             speed_mps: tag.speed_mps,
             track_id: tag.track_id,
-            status: tag.status.into(),
         };
         Ok(self.inner.suggest_from_tag(&tag, track.as_deref())?.into())
-    }
-}
-
-impl From<TagStatus> for core::TagStatus {
-    fn from(s: TagStatus) -> Self {
-        match s {
-            TagStatus::Pending => Self::Pending,
-            TagStatus::Used => Self::Used,
-            TagStatus::Discarded => Self::Discarded,
-        }
-    }
-}
-
-impl From<core::TagStatus> for TagStatus {
-    fn from(s: core::TagStatus) -> Self {
-        match s {
-            core::TagStatus::Pending => Self::Pending,
-            core::TagStatus::Used => Self::Used,
-            core::TagStatus::Discarded => Self::Discarded,
-        }
     }
 }
 
@@ -128,7 +93,6 @@ impl From<core::Tag> for Tag {
             heading_deg: t.heading_deg,
             speed_mps: t.speed_mps,
             track_id: t.track_id,
-            status: t.status.into(),
         }
     }
 }
@@ -162,23 +126,15 @@ mod tests {
                 track_id: None,
             })
             .unwrap();
-        assert_eq!(tag.status, TagStatus::Pending);
-        assert_eq!(
-            store.list_tags(Some(TagStatus::Pending)).unwrap(),
-            std::slice::from_ref(&tag)
-        );
+        assert_eq!(store.list_tags().unwrap(), std::slice::from_ref(&tag));
 
         let draft = engine.suggest_section(tag.clone(), None).unwrap();
         assert_eq!(draft.ways.len(), 2);
         assert!(draft.distance_m > 900.0);
 
-        assert!(store.set_tag_status(tag.id, TagStatus::Used).unwrap());
-        assert!(
-            store
-                .list_tags(Some(TagStatus::Pending))
-                .unwrap()
-                .is_empty()
-        );
+        assert!(store.delete_tag(tag.id).unwrap());
+        assert!(store.list_tags().unwrap().is_empty());
+        assert!(!store.delete_tag(tag.id).unwrap());
         assert!(matches!(
             store.add_tag(NewTag {
                 heading_deg: Some(-5.0),
@@ -192,17 +148,9 @@ mod tests {
             }),
             Err(MotoError::InvalidInput { .. })
         ));
-        assert!(store.delete_tag(tag.id).unwrap());
         drop(store);
         for suffix in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{suffix}", db.display()));
-        }
-    }
-
-    #[test]
-    fn statuses_convert_both_ways() {
-        for s in [TagStatus::Pending, TagStatus::Used, TagStatus::Discarded] {
-            assert_eq!(TagStatus::from(core::TagStatus::from(s)), s);
         }
     }
 }

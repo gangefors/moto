@@ -345,6 +345,92 @@ fn runs_new_migrations_and_keeps_data() {
 }
 
 #[test]
+fn schema_9_keeps_only_unreviewed_tags() {
+    let db = TempDb::new("schema9");
+    {
+        let mut conn = Connection::open(&db.0).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..8]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO tracks (id, rider_id, started_at) VALUES (7, 'local', 1790000000);
+             INSERT INTO tags (id, rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id, status)
+             VALUES
+                (1, 'local', 1790000001000, 571000000, 142000000, 90.5, 20.25, 7, 0),
+                (2, 'local', 1790000002000, 571000100, 142000100, NULL, NULL, 7, 1),
+                (3, 'local', 1790000003000, 571000200, 142000200, NULL, NULL, NULL, 2),
+                (4, 'local', 1790000004000, 571000300, 142000300, 180.0, NULL, NULL, 0);",
+        )
+        .unwrap();
+    }
+    let mut s = Store::open(&db.0).unwrap();
+    assert_eq!(s.schema_version().unwrap(), 9);
+    assert_eq!(SCHEMA_VERSION, 9);
+    let tags = s.list_tags().unwrap();
+    let kept: Vec<_> = tags
+        .iter()
+        .map(|t| {
+            (
+                t.id,
+                t.time_ms,
+                tests_e7(t.position),
+                t.heading_deg,
+                t.speed_mps,
+                t.track_id,
+            )
+        })
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            (
+                1,
+                1_790_000_001_000,
+                (571_000_000, 142_000_000),
+                Some(90.5),
+                Some(20.25),
+                Some(7)
+            ),
+            (
+                4,
+                1_790_000_004_000,
+                (571_000_300, 142_000_300),
+                Some(180.0),
+                None,
+                None
+            ),
+        ]
+    );
+    let has = |sql: &str| -> i64 { s.conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+    assert_eq!(
+        has("SELECT count(*) FROM pragma_table_info('tags') WHERE name = 'status'"),
+        0
+    );
+    assert_eq!(
+        has("SELECT count(*) FROM sqlite_schema WHERE name = 'tags_status'"),
+        0
+    );
+    assert_eq!(
+        has("SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name = 'tags_time'"),
+        1
+    );
+    let ok: String = s
+        .conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(ok, "ok");
+    let fk_problems = s
+        .conn
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .query_map([], |_| Ok(()))
+        .unwrap()
+        .count();
+    assert_eq!(fk_problems, 0);
+    // The ride link still clears when the ride goes.
+    assert!(s.delete_track(7).unwrap());
+    assert_eq!(s.get_tag(1).unwrap().unwrap().track_id, None);
+}
+
+#[test]
 fn a_failed_migration_changes_nothing() {
     let mut conn = Connection::open_in_memory().unwrap();
     migrate(&mut conn, MIGRATIONS).unwrap();

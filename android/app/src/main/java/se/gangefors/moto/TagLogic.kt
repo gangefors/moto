@@ -39,9 +39,10 @@ fun newTag(fix: TrackPoint, trackId: Long?): NewTag =
     )
 
 /**
- * Post-ride review of pending tags, oldest first: one tag at a time, each
- * saved as a section, discarded, or skipped (it stays pending for the next
- * review), until the last one or until the rider stops.
+ * Post-ride review of the tags waiting for review, oldest first: one tag
+ * at a time, each saved as a section or discarded (and then deleted), or
+ * skipped (it stays for the next review), until the last one or until the
+ * rider stops.
  */
 class TagReview(tags: List<Tag>) {
     private val queue = tags.toList()
@@ -49,7 +50,7 @@ class TagReview(tags: List<Tag>) {
 
     val size: Int get() = queue.size
 
-    /** Tags skipped so far in this review; they stay pending. */
+    /** Tags skipped so far in this review; they stay for the next one. */
     var skipped: Int = 0
         private set
 
@@ -65,10 +66,22 @@ class TagReview(tags: List<Tag>) {
         return current
     }
 
-    /** Leaves [current] pending and moves on, like [next]. */
+    /** Leaves [current] for the next review and moves on, like [next]. */
     fun skip(): Tag? {
         if (current != null) skipped++
         return next()
+    }
+
+    /**
+     * Moves on from tag [tagId] once it is handled: [removed] (saved as a
+     * favourite or discarded, so deleted), or not (it stays for the next
+     * review and counts as skipped). False, changing nothing, if [tagId] is
+     * no longer the tag under review (a second tap).
+     */
+    fun finish(tagId: Long, removed: Boolean): Boolean {
+        if (current?.id != tagId) return false
+        if (removed) next() else skip()
+        return true
     }
 }
 

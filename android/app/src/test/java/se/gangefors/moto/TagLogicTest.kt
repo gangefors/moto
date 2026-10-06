@@ -4,11 +4,12 @@
 package se.gangefors.moto
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.Tag
-import se.gangefors.moto.core.TagStatus
 import se.gangefors.moto.core.TrackPoint
 
 class TagLogicTest {
@@ -47,7 +48,7 @@ class TagLogicTest {
         assertNull(newTag(fix(0), trackId = null).trackId)
     }
 
-    private fun tag(id: Long) = Tag(id, "local", now + id, LatLon(55.7, 13.2), null, null, null, TagStatus.PENDING)
+    private fun tag(id: Long) = Tag(id, "local", now + id, LatLon(55.7, 13.2), null, null, null)
 
     @Test
     fun reviewsTagsOneByOne() {
@@ -74,6 +75,31 @@ class TagLogicTest {
         // Nothing left to skip.
         assertNull(review.skip())
         assertEquals(2, review.skipped)
+    }
+
+    @Test
+    fun aHandledTagMovesTheReviewOnOnce() {
+        val review = TagReview(listOf(tag(1), tag(2), tag(3)))
+        // Saved or discarded: deleted, not skipped.
+        assertTrue(review.finish(1L, removed = true))
+        assertEquals(2L, review.current!!.id)
+        assertEquals(0, review.skipped)
+        // A second tap on the same tag changes nothing.
+        assertFalse(review.finish(1L, removed = true))
+        assertEquals(2L, review.current!!.id)
+        assertEquals(0, review.skipped)
+        // A failed save or delete keeps the tag: counted as skipped.
+        assertTrue(review.finish(2L, removed = false))
+        assertEquals(3L, review.current!!.id)
+        assertEquals(1, review.skipped)
+        // A wrong id changes nothing.
+        assertFalse(review.finish(9L, removed = true))
+        assertEquals(3L, review.current!!.id)
+        // Finishing the last tag ends the review.
+        assertTrue(review.finish(3L, removed = true))
+        assertNull(review.current)
+        assertEquals(1, review.skipped)
+        assertFalse(review.finish(3L, removed = true))
     }
 
     @Test

@@ -67,6 +67,7 @@ pub struct BackupSummary {
     pub favourites: u64,
     pub rides: u64,
     pub routes: u64,
+    /// Tags waiting for review.
     pub tags: u64,
     pub has_settings: bool,
     /// The map regions installed when it was made.

@@ -40,7 +40,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlin.math.roundToInt
 import se.gangefors.moto.core.FollowPhase
-import se.gangefors.moto.core.TagStatus
 import se.gangefors.moto.core.defaultRouteOptions
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -232,13 +231,13 @@ internal fun MapScreenScope.TaskCard(taskCard: Boolean, offerLoop: Boolean, via:
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (tag != null) {
                             // Discards this tag (second tap) and moves on;
-                            // X or Back ends the review, leaving the tags
-                            // not yet handled pending.
+                            // X or Back ends the review, keeping the tags
+                            // not yet handled for the next one.
                             var confirming by remember(tag.id) { mutableStateOf(false) }
                             DeleteButton(
                                 confirming = confirming,
                                 onArm = { confirming = true },
-                                onDelete = { finishTag(TagStatus.DISCARDED) },
+                                onDelete = { discardTag() },
                                 enabled = !proposing,
                             )
                         }

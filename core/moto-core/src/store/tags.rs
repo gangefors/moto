@@ -8,10 +8,10 @@ use rusqlite::{OptionalExtension, params};
 use super::{Store, db_err, e7};
 use crate::region::format::COORD_SCALE;
 use crate::section::LOCAL_RIDER;
-use crate::tag::{NewTag, Tag, TagStatus};
+use crate::tag::{NewTag, Tag};
 use crate::{CoreError, LatLon};
 
-const COLUMNS: &str = "id, rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id, status";
+const COLUMNS: &str = "id, rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id";
 
 type Row = (
     i64,
@@ -22,7 +22,6 @@ type Row = (
     Option<f64>,
     Option<f64>,
     Option<i64>,
-    i64,
 );
 
 fn read(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
@@ -35,13 +34,12 @@ fn read(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
         r.get(5)?,
         r.get(6)?,
         r.get(7)?,
-        r.get(8)?,
     ))
 }
 
 /// A stored row as a tag, validated like a new one.
 fn to_tag(r: Row) -> Result<Tag, CoreError> {
-    let (id, rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id, status) = r;
+    let (id, rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id) = r;
     let corrupt = || CoreError::Storage(format!("tag {id}: invalid data"));
     let coord = |v: i64| {
         i32::try_from(v)
@@ -59,7 +57,6 @@ fn to_tag(r: Row) -> Result<Tag, CoreError> {
         heading_deg,
         speed_mps,
         track_id,
-        status: TagStatus::from_i64(status).ok_or_else(corrupt)?,
     };
     NewTag {
         time_ms,
@@ -74,8 +71,8 @@ fn to_tag(r: Row) -> Result<Tag, CoreError> {
 }
 
 impl Store {
-    /// Saves a tag for the local rider, pending review. The ride it names
-    /// must exist.
+    /// Saves a tag for the local rider, waiting for review. The ride it
+    /// names must exist.
     pub fn add_tag(&mut self, t: &NewTag) -> Result<Tag, CoreError> {
         t.validate()?;
         if let Some(track) = t.track_id
@@ -117,36 +114,22 @@ impl Store {
             .transpose()
     }
 
-    /// Tags with `status` (all if `None`), oldest first.
-    pub fn list_tags(&self, status: Option<TagStatus>) -> Result<Vec<Tag>, CoreError> {
+    /// All tags (each waiting for review), oldest first.
+    pub fn list_tags(&self) -> Result<Vec<Tag>, CoreError> {
         let mut stmt = self
             .conn
-            .prepare(&format!(
-                "SELECT {COLUMNS} FROM tags WHERE ?1 IS NULL OR status = ?1 ORDER BY time_ms, id"
-            ))
+            .prepare(&format!("SELECT {COLUMNS} FROM tags ORDER BY time_ms, id"))
             .map_err(db_err)?;
         let rows = stmt
-            .query_map([status.map(|s| s as i64)], read)
+            .query_map([], read)
             .map_err(db_err)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(db_err)?;
         rows.into_iter().map(to_tag).collect()
     }
 
-    /// Marks a tag used or discarded (or pending again); `false` if there
-    /// is no such tag.
-    pub fn set_tag_status(&mut self, id: i64, status: TagStatus) -> Result<bool, CoreError> {
-        let changed = self
-            .conn
-            .execute(
-                "UPDATE tags SET status = ?2 WHERE id = ?1",
-                params![id, status as i64],
-            )
-            .map_err(db_err)?;
-        Ok(changed > 0)
-    }
-
-    /// Deletes a tag; `false` if it did not exist.
+    /// Deletes a tag once it is reviewed (saved as a favourite section or
+    /// discarded); `false` if it did not exist.
     pub fn delete_tag(&mut self, id: i64) -> Result<bool, CoreError> {
         let changed = self
             .conn
@@ -176,27 +159,22 @@ mod tests {
     }
 
     #[test]
-    fn saves_lists_and_reviews_tags() {
+    fn saves_lists_and_deletes_tags() {
         let mut s = Store::open_in_memory().unwrap();
         let track = s.start_track(MS0 / 1000).unwrap();
         let b = s.add_tag(&tag(MS0 + 2000, Some(track.id))).unwrap();
         let a = s.add_tag(&tag(MS0 + 1000, None)).unwrap();
-        assert_eq!(a.status, TagStatus::Pending);
         assert_eq!(a.rider_id, LOCAL_RIDER);
         assert_eq!((b.track_id, b.heading_deg), (Some(track.id), Some(45.0)));
         // Oldest first.
-        let ids: Vec<i64> = s.list_tags(None).unwrap().iter().map(|t| t.id).collect();
+        let ids: Vec<i64> = s.list_tags().unwrap().iter().map(|t| t.id).collect();
         assert_eq!(ids, [a.id, b.id]);
 
-        assert!(s.set_tag_status(a.id, TagStatus::Used).unwrap());
-        assert!(s.set_tag_status(b.id, TagStatus::Discarded).unwrap());
-        assert!(s.list_tags(Some(TagStatus::Pending)).unwrap().is_empty());
-        assert_eq!(s.list_tags(Some(TagStatus::Used)).unwrap()[0].id, a.id);
-        assert!(!s.set_tag_status(999, TagStatus::Used).unwrap());
-
         assert!(s.delete_tag(a.id).unwrap());
+        assert_eq!(s.list_tags().unwrap(), std::slice::from_ref(&b));
         assert!(!s.delete_tag(a.id).unwrap());
         assert!(s.get_tag(a.id).unwrap().is_none());
+        assert_eq!(s.get_tag(b.id).unwrap(), Some(b));
     }
 
     #[test]
@@ -238,7 +216,7 @@ mod tests {
                 "{bad:?}"
             );
         }
-        assert!(s.list_tags(None).unwrap().is_empty());
+        assert!(s.list_tags().unwrap().is_empty());
     }
 
     #[test]
@@ -248,7 +226,6 @@ mod tests {
             "UPDATE tags SET lat = 950000000",
             "UPDATE tags SET heading_deg = 400.0",
             "UPDATE tags SET time_ms = -3",
-            "UPDATE tags SET status = 7",
         ] {
             let mut s = Store::open_in_memory().unwrap();
             let t = s.add_tag(&tag(MS0, None)).unwrap();
@@ -259,10 +236,7 @@ mod tests {
                 matches!(s.get_tag(t.id), Err(CoreError::Storage(_))),
                 "{sql}"
             );
-            assert!(
-                matches!(s.list_tags(None), Err(CoreError::Storage(_))),
-                "{sql}"
-            );
+            assert!(matches!(s.list_tags(), Err(CoreError::Storage(_))), "{sql}");
         }
     }
 }

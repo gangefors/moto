@@ -138,6 +138,12 @@ const MIGRATIONS: &[&str] = &[
         seq         INTEGER NOT NULL CHECK (seq > 0),
         PRIMARY KEY (track_id, seq)
     ) STRICT, WITHOUT ROWID;",
+    // 9: a tag is kept only until it is reviewed (ADR-0015): reviewed
+    // tags go, and with them the review state.
+    "DELETE FROM tags WHERE status <> 0;
+    DROP INDEX tags_status;
+    ALTER TABLE tags DROP COLUMN status;
+    CREATE INDEX tags_time ON tags (time_ms);",
 ];
 
 /// The schema version this build writes.

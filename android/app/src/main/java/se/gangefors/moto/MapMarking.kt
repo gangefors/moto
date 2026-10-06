@@ -9,7 +9,6 @@ import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
 import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.Tag
-import se.gangefors.moto.core.TagStatus
 import se.gangefors.moto.debug.DebugTools
 
 /** Tag review shows a tag or the section proposed for it close up, as
@@ -47,7 +46,7 @@ internal fun MapScreenScope.refreshPendingTags() {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
             pendingTags = withContext(Dispatchers.IO) {
-                runCatching { ready.store.listTags(TagStatus.PENDING).size }.getOrDefault(0)
+                runCatching { ready.store.listTags().size }.getOrDefault(0)
             }
         }
     }
@@ -147,7 +146,7 @@ internal fun MapScreenScope.startReview() {
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
             val tags = withContext(Dispatchers.IO) {
-                runCatching { ready.store.listTags(TagStatus.PENDING) }.getOrDefault(emptyList())
+                runCatching { ready.store.listTags() }.getOrDefault(emptyList())
             }
             review = TagReview(tags)
             showTag(review?.current)
@@ -155,7 +154,7 @@ internal fun MapScreenScope.startReview() {
     }
 }
 
-/** Leaves the tag under review pending and moves on to the next one. */
+/** Leaves the tag under review for the next review and moves on. */
 internal fun MapScreenScope.skipTag() {
     with(state) {
         if (reviewTag == null) return
@@ -163,14 +162,22 @@ internal fun MapScreenScope.skipTag() {
     }
 }
 
-/** Marks the tag under review and moves on to the next one. */
-internal fun MapScreenScope.finishTag(status: TagStatus) {
+/** Moves the review on from [tag] once it is handled; [removed]: deleted. */
+internal fun MapScreenScope.tagHandled(tag: Tag, removed: Boolean) {
+    with(state) {
+        val r = review ?: return
+        if (r.finish(tag.id, removed)) showTag(r.current)
+    }
+}
+
+/** Discards the tag under review (deletes it) and moves on. */
+internal fun MapScreenScope.discardTag() {
     with(state) {
         val tag = reviewTag ?: return
         val ready = store as? StoreState.Ready ?: return
         scope.launch {
-            withContext(Dispatchers.IO) { runCatching { ready.store.setTagStatus(tag.id, status) } }
-            showTag(review?.next())
+            val removed = withContext(Dispatchers.IO) { runCatching { ready.store.deleteTag(tag.id) }.isSuccess }
+            tagHandled(tag, removed)
         }
     }
 }

@@ -6,7 +6,6 @@ use crate::fixture::{self, L_N};
 use crate::region::Region;
 use crate::region::format::Surface;
 use crate::section::WaySpan;
-use crate::tag::TagStatus;
 
 fn engine(data: crate::region::RegionData) -> Engine {
     Engine::from_region(Region::from_bytes(&data.to_bytes().unwrap()).unwrap())
@@ -35,7 +34,6 @@ fn tag(position: LatLon, heading_deg: Option<f64>) -> Tag {
         heading_deg,
         speed_mps: Some(20.0),
         track_id: None,
-        status: TagStatus::Pending,
     }
 }
 

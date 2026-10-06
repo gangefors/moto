@@ -13,7 +13,7 @@ use super::{Store, db_err, e7, encode_geometry, insert_section_at};
 use crate::CoreError;
 use crate::section::{LOCAL_RIDER, NewSection, Status, validate_name};
 use crate::store::NewRoute;
-use crate::tag::{NewTag, TagStatus};
+use crate::tag::NewTag;
 use crate::track::{MAX_TRACK_POINTS, TrackPoint, ridden_distance_m};
 
 /// Latest time a backup may give, in seconds since the Unix epoch (the
@@ -188,16 +188,16 @@ impl Restore<'_> {
         Ok(self.tx.last_insert_rowid())
     }
 
-    /// Adds a tag with its review status; its ride, if any, must exist.
+    /// Adds a tag, waiting for review; its ride, if any, must exist.
     /// Returns its id.
-    pub fn add_tag(&self, t: &NewTag, status: TagStatus) -> Result<i64, CoreError> {
+    pub fn add_tag(&self, t: &NewTag) -> Result<i64, CoreError> {
         t.validate()?;
         let (lat, lon) = e7(t.position);
         self.tx
             .execute(
                 "INSERT INTO tags
-                    (rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id, status)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    (rider_id, time_ms, lat, lon, heading_deg, speed_mps, track_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     LOCAL_RIDER,
                     t.time_ms,
@@ -205,8 +205,7 @@ impl Restore<'_> {
                     lon,
                     t.heading_deg,
                     t.speed_mps,
-                    t.track_id,
-                    status as i64
+                    t.track_id
                 ],
             )
             .map_err(db_err)?;

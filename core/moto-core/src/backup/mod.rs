@@ -8,8 +8,8 @@
 //! size and SHA-256), `favourites.geojson` (the sections, as the Sections
 //! page exports them), `rides/NNNNN.gpx` (one per ride, a segment per
 //! stretch recorded without a gap), `routes/NNNNN.gpx` (one per saved
-//! route), `tags.gpx` (the quick-tags as waypoints) and `settings.json`
-//! (the app's own settings, carried as they are).
+//! route), `tags.gpx` (the tags waiting for review, as waypoints) and
+//! `settings.json` (the app's own settings, carried as they are).
 //!
 //! A backup comes back from outside the app, so it is hostile input. Only
 //! the fixed names above are accepted, each once; the zip's directory is
@@ -34,7 +34,7 @@ use crate::gpx::{self, MAX_GPX_BYTES};
 use crate::rematch::rematch_store;
 use crate::section::{Section, validate_name};
 use crate::store::{MAX_ROUTE_POINTS, NewRoute, Store};
-use crate::tag::{NewTag, TagStatus};
+use crate::tag::NewTag;
 use crate::track::TrackPoint;
 use crate::{CoreError, Engine, LatLon};
 
@@ -42,7 +42,7 @@ mod settings;
 pub use settings::{MAX_SETTINGS, Setting, SettingValue};
 
 /// The backup format this build writes and the newest it reads.
-pub const FORMAT: u32 = 1;
+pub const FORMAT: u32 = 2;
 /// Largest backup file read.
 pub const MAX_BACKUP_BYTES: u64 = 1 << 30;
 /// Most files in a backup.
@@ -181,41 +181,12 @@ struct RouteEntry {
     created_at: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum TagState {
-    Pending,
-    Used,
-    Discarded,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct TagEntry {
-    status: TagState,
     /// The ride it was made on, by its file in the backup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ride: Option<String>,
-}
-
-impl From<TagStatus> for TagState {
-    fn from(s: TagStatus) -> Self {
-        match s {
-            TagStatus::Pending => Self::Pending,
-            TagStatus::Used => Self::Used,
-            TagStatus::Discarded => Self::Discarded,
-        }
-    }
-}
-
-impl From<TagState> for TagStatus {
-    fn from(s: TagState) -> Self {
-        match s {
-            TagState::Pending => Self::Pending,
-            TagState::Used => Self::Used,
-            TagState::Discarded => Self::Discarded,
-        }
-    }
 }
 
 fn ride_file(i: usize) -> String {
@@ -270,13 +241,13 @@ impl Manifest {
     /// Checks everything that doesn't need the other files: names, counts,
     /// metadata ranges, and that every file named is listed once.
     fn check(&self) -> Result<(), CoreError> {
-        if self.format == 0 {
-            return Err(bad("unknown format"));
-        }
         if self.format > FORMAT {
             return Err(CoreError::InvalidArgument(
                 "this backup is from a newer version of moto".into(),
             ));
+        }
+        if self.format < FORMAT {
+            return Err(bad("unknown format"));
         }
         if self.app.chars().count() > MAX_APP_CHARS || self.app.chars().any(char::is_control) {
             return Err(bad("app version"));
@@ -500,7 +471,7 @@ pub fn write_backup(
         });
     }
 
-    let all_tags = store.list_tags(None)?;
+    let all_tags = store.list_tags()?;
     if all_tags.len() > MAX_TAGS {
         return Err(too_many("tags"));
     }
@@ -520,7 +491,6 @@ pub fn write_backup(
         tags = all_tags
             .iter()
             .map(|t| TagEntry {
-                status: t.status.into(),
                 ride: t.track_id.and_then(|id| ride_of_track.get(&id).cloned()),
             })
             .collect();
@@ -828,7 +798,7 @@ pub fn restore_backup(
                 .as_deref()
                 .and_then(|f| track_of_ride.get(f).copied()),
         };
-        restore.add_tag(&tag, t.status.into())?;
+        restore.add_tag(&tag)?;
         report.tags_added += 1;
     }
 

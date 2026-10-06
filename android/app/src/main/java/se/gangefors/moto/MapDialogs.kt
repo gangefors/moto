@@ -24,7 +24,6 @@ import se.gangefors.moto.core.NewSection
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.SectionSource
 import se.gangefors.moto.core.SectionUpdate
-import se.gangefors.moto.core.TagStatus
 import androidx.compose.runtime.getValue
 
 @Composable
@@ -81,27 +80,34 @@ internal fun MapScreenScope.MapDialogs() {
                             zone = ZoneId.systemDefault(),
                         )
                     }
-                    changeSectionsThen { st ->
-                        val result = st.add(
-                            NewSection(
-                                name = name,
-                                rating = choice.rating,
-                                direction = directionOf(choice.oneWay),
-                                source = if (tag != null) SectionSource.TAG else SectionSource.MAP,
-                                ways = proposed.ways,
-                                geometry = proposed.geometry,
-                            ),
-                        )
-                        when (val outcome = addOutcome(result)) {
-                            AddOutcome.Covered -> resources.getString(R.string.section_covered)
-                            is AddOutcome.Saved -> if (outcome.replaced == 0) {
-                                resources.getString(R.string.section_saved)
-                            } else {
-                                resources.getQuantityString(R.plurals.section_saved_replacing, outcome.replaced, outcome.replaced)
+                    changeSectionsThen(
+                        action = { st ->
+                            val result = st.add(
+                                NewSection(
+                                    name = name,
+                                    rating = choice.rating,
+                                    direction = directionOf(choice.oneWay),
+                                    source = if (tag != null) SectionSource.TAG else SectionSource.MAP,
+                                    ways = proposed.ways,
+                                    geometry = proposed.geometry,
+                                ),
+                            )
+                            val text = when (val outcome = addOutcome(result)) {
+                                AddOutcome.Covered -> resources.getString(R.string.section_covered)
+                                is AddOutcome.Saved -> if (outcome.replaced == 0) {
+                                    resources.getString(R.string.section_saved)
+                                } else {
+                                    resources.getQuantityString(R.plurals.section_saved_replacing, outcome.replaced, outcome.replaced)
+                                }
                             }
-                        }
-                    }
-                    if (tag != null) finishTag(TagStatus.USED)
+                            // Saved, or a favourite covers it already: the tag
+                            // is reviewed, so it goes (false if already gone).
+                            if (tag != null) st.deleteTag(tag.id)
+                            text
+                        },
+                        // A failed save keeps the tag, counted as skipped.
+                        after = { ok -> if (tag != null) tagHandled(tag, removed = ok) },
+                    )
                 },
             )
         }
