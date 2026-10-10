@@ -263,14 +263,18 @@ object Regions {
         }
     }
 
-    /** Downloads and installs [offer] (enabled), then opens the network with it. */
+    /**
+     * Downloads and installs [offer], then opens the network with it: a
+     * region on the phone keeps its switch, a new one comes in on.
+     */
     fun start(context: Context, offer: RegionOffer) = start(context, listOf(offer))
 
     /**
      * Downloads and installs [queue] one after another (Update all), each
      * opened with the network as it is installed. A failure stops the rest;
      * cancelling stops the one downloading and those still waiting. Those
-     * in [off] are installed switched off (after a restore, ADR-0016).
+     * in [off] are installed switched off (after a restore, ADR-0016). A
+     * region already on the phone keeps its switch.
      */
     fun start(context: Context, queue: List<RegionOffer>, off: Set<String> = emptySet()) {
         val app = context.applicationContext

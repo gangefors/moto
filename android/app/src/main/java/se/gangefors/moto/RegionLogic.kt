@@ -91,7 +91,7 @@ fun offersToUpdate(installed: List<InstalledRegion>, offers: List<RegionOffer>):
  * a restore downloads switched off (ADR-0016).
  */
 fun switchedOnAfterInstall(installed: List<InstalledRegion>, id: String, off: Set<String>): Boolean =
-    id !in off
+    installed.firstOrNull { it.id == id }?.enabled ?: (id !in off)
 
 /**
  * A region installed from a download (ADR-0008, ADR-0009): its id and
