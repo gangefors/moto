@@ -91,6 +91,9 @@ pub struct BackupInfo {
     pub app: String,
     /// The keys of the map regions installed, to offer after a restore.
     pub regions: Vec<String>,
+    /// Those of `regions` that are switched off (ADR-0016); keys not in
+    /// `regions` are dropped.
+    pub regions_disabled: Vec<String>,
     /// The app's settings; `None` writes no settings file.
     pub settings: Option<Vec<Setting>>,
     /// When the backup is made, milliseconds since the Unix epoch.
@@ -111,6 +114,9 @@ pub struct BackupSummary {
     pub tags: u64,
     pub has_settings: bool,
     pub regions: Vec<String>,
+    /// Those of `regions` that were switched off; empty for a format-2
+    /// backup, where every region comes back on.
+    pub regions_disabled: Vec<String>,
 }
 
 /// What a restore did.
@@ -135,6 +141,9 @@ pub struct RestoreReport {
     pub settings: Option<Vec<Setting>>,
     /// The map regions the backup was made with.
     pub regions: Vec<String>,
+    /// Those of `regions` that were switched off; empty for a format-2
+    /// backup, where every region comes back on.
+    pub regions_disabled: Vec<String>,
 }
 
 // --- The manifest ---
@@ -352,6 +361,7 @@ impl Manifest {
             tags: self.tags.len() as u64,
             has_settings: self.files.iter().any(|f| f.name == SETTINGS),
             regions: self.regions.clone(),
+            regions_disabled: Vec::new(),
         }
     }
 }

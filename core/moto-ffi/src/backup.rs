@@ -160,6 +160,7 @@ impl SectionStore {
         let info = core::BackupInfo {
             app,
             regions,
+            regions_disabled: Vec::new(),
             settings: settings.map(|v| v.into_iter().map(Into::into).collect()),
             created_at_ms: now_ms(),
         };

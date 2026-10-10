@@ -35,6 +35,7 @@ fn info() -> BackupInfo {
     BackupInfo {
         app: "moto 0.9 (42)".into(),
         regions: vec!["sweden".into(), "denmark".into()],
+        regions_disabled: vec!["denmark".into()],
         settings: Some(vec![
             Setting {
                 key: "ride_zoom_step".into(),
@@ -292,6 +293,17 @@ fn a_backup_restores_everything_into_an_empty_app() {
             .iter()
             .all(|s| s.status == crate::section::Status::NeedsRematch && s.source == Source::Map)
     );
+}
+
+#[test]
+fn a_restore_keeps_the_regions_that_were_switched_off() {
+    // info(): sweden and denmark installed, denmark switched off.
+    let f = backup_of(&filled(), "switched");
+    assert_eq!(read_summary(&f.0).unwrap().regions_disabled, ["denmark"]);
+    let mut dst = Store::open_in_memory().unwrap();
+    let r = restore_backup(&mut dst, None, &f.0, 0).unwrap();
+    assert_eq!(r.regions, ["sweden", "denmark"]);
+    assert_eq!(r.regions_disabled, ["denmark"]);
 }
 
 #[test]
