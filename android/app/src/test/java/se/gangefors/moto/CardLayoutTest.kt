@@ -336,6 +336,16 @@ class CardLayoutTest {
     }
 
     @Test
+    fun rideViewBoundaryIsExactly160Dp() {
+        // 440 dp: the card column ends at 280, leaving exactly 160.
+        sides(true, 440, 0f, 0f, 280f, 0f)
+        // 439 dp: 159 left, centred.
+        sides(true, 439, 0f, 0f, 0f, 0f)
+        // 480 dp with 48 dp at the right: 152 left, centred.
+        sides(true, 480, 0f, 48f, 0f, 0f)
+    }
+
+    @Test
     fun riderNeverSitsUnderTheCard() {
         for (width in 640..1400) {
             for (left in listOf(0f, 24f, 48f)) {
