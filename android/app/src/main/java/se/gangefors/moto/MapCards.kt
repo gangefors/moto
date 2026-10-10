@@ -48,8 +48,31 @@ import androidx.compose.runtime.setValue
 internal fun BoxScope.RideCards(screen: MapScreenScope) {
     with(screen) {
         with(state) {
-            // Riding a route: the card at the top, the map's compass below it
-            // on the right (ADR-0011).
+            // Riding a route: the card at the top (ADR-0011); upright the map's
+            // compass goes below it on the right, on its side the card is at
+            // the top left and the compass keeps the corner.
+            val rideColumnDp = with(density) {
+                rideColumnWidthDp(windowConfig.screenWidthDp, insets.left.toDp().value, insets.right.toDp().value)
+            }
+            val maxHeightPx = with(density) {
+                cardStackMaxHeightPx(
+                    mapSize.height,
+                    insets.top,
+                    rideCardBottomLimitPx(mapSize.height, insets.bottom, LOGO_BAND_DP.dp.roundToPx(), tagTop, cardsTop),
+                    8.dp.roundToPx(),
+                )
+            }
+            // In landscape the card is at the top left, right of the cutout
+            // and never past the middle; one taller than the room scrolls.
+            val capped = landscape && mapSize.height > 0
+            val placement = Modifier
+                .align(if (landscape) Alignment.TopStart else Alignment.TopCenter)
+                .safeDrawingPadding()
+                .padding(top = 8.dp, start = 8.dp, end = 8.dp)
+                .widthIn(max = if (landscape) (rideColumnDp - 16f).coerceAtLeast(0f).dp else TOP_BOX_MAX_WIDTH)
+                .then(if (capped) Modifier.heightIn(max = with(density) { maxHeightPx.toDp() }) else Modifier)
+                .fillMaxWidth()
+                .onGloballyPositioned { rideCardBottom = it.boundsInRoot().bottom.roundToInt() }
             if (following != null) {
                 RideCard(
                     following = following,
@@ -59,13 +82,8 @@ internal fun BoxScope.RideCards(screen: MapScreenScope) {
                         if (following.state.phase == FollowPhase.FINISHED) RecordingService.unfollow(context) else leavingRoute = true
                     },
                     onStopNow = { RecordingService.stop(context) },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .safeDrawingPadding()
-                        .padding(top = 8.dp, start = 8.dp, end = 8.dp)
-                        .widthIn(max = TOP_BOX_MAX_WIDTH)
-                        .fillMaxWidth()
-                        .onGloballyPositioned { rideCardBottom = it.boundsInRoot().bottom.roundToInt() },
+                    modifier = placement,
+                    scrolls = capped,
                 )
             } else if (freeRiding) {
                 val active = recording as? Recording.State.Active
@@ -77,13 +95,8 @@ internal fun BoxScope.RideCards(screen: MapScreenScope) {
                         near = nearby,
                         mapBearing = mapBearing,
                         darkMap = darkMap,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .safeDrawingPadding()
-                            .padding(top = 8.dp, start = 8.dp, end = 8.dp)
-                            .widthIn(max = TOP_BOX_MAX_WIDTH)
-                            .fillMaxWidth()
-                            .onGloballyPositioned { rideCardBottom = it.boundsInRoot().bottom.roundToInt() },
+                        modifier = placement,
+                        scrolls = capped,
                     )
                 }
             }

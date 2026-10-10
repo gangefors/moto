@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import kotlin.math.max
 import kotlin.math.min
 
 /*
@@ -208,6 +209,53 @@ fun infoCardsAfterOpening(open: Set<InfoCard>, opening: InfoCard): Set<InfoCard>
  */
 fun cardStackMaxHeightPx(mapHeight: Int, topLimit: Int, bottomLimit: Int, gapPx: Int): Int =
     (mapHeight - topLimit.coerceAtLeast(0) - bottomLimit.coerceAtLeast(0) - 2 * gapPx.coerceAtLeast(0)).coerceAtLeast(0)
+
+/**
+ * The ride and recording cards' column in landscape is never narrower
+ * than this, dp (a 264 dp card), so nothing on them squeezes in a small
+ * window.
+ */
+const val RIDE_COLUMN_MIN_WIDTH_DP = 280f
+
+/**
+ * The band above the bottom bar at the bottom left that the map's logo,
+ * attribution and scale use, dp: the tag button sits right above it.
+ */
+const val LOGO_BAND_DP = 40f
+
+/**
+ * The width in dp of the ride or recording card's column at the top left
+ * in landscape, right of the [insetLeftDp] cutout or bar: the cards'
+ * column ([leftColumnWidthDp]), but never past the window's middle, where
+ * the rider's marker is, so the road ahead stays in view; at least
+ * [RIDE_COLUMN_MIN_WIDTH_DP], and never more than the room between the
+ * insets. The card is 16 dp narrower (8 dp each side).
+ */
+fun rideColumnWidthDp(windowWidthDp: Int, insetLeftDp: Float, insetRightDp: Float): Float {
+    val width = windowWidthDp.coerceAtLeast(0)
+    val left = insetLeftDp.coerceAtLeast(0f)
+    val half = min(leftColumnWidthDp(width), width * LEFT_COLUMN_MAX_SHARE - left)
+    val room = width - left - insetRightDp.coerceAtLeast(0f)
+    return min(max(half, RIDE_COLUMN_MIN_WIDTH_DP), room).coerceAtLeast(0f)
+}
+
+/**
+ * How far up from the window's bottom, in pixels, the ride or recording
+ * card at the top left (landscape) must end: above the tag button
+ * ([tagTop]) and any cards at the bottom left ([cardsTop]), measured tops
+ * ([Int.MAX_VALUE] when not shown), and at least above the map's logo
+ * band ([logoBandPx]) over the bottom bar ([insetBottom]). For
+ * [cardStackMaxHeightPx], which leaves the gaps.
+ */
+fun rideCardBottomLimitPx(mapHeight: Int, insetBottom: Int, logoBandPx: Int, tagTop: Int, cardsTop: Int): Int =
+    maxOf(insetBottom.coerceAtLeast(0) + logoBandPx.coerceAtLeast(0), rightCardCover(mapHeight, minOf(tagTop, cardsTop)))
+
+/**
+ * Whether the compass sits under the ride or recording card: in ride mode
+ * upright, where the card spans the width. In landscape the card is at
+ * the top left and the compass keeps the top right corner.
+ */
+fun compassUnderRideCard(rideMode: Boolean, landscape: Boolean): Boolean = rideMode && !landscape
 
 /** What Back closes on the map screen, in the order it closes them. */
 enum class BackStep { MARK, VIA_PICK, VIA_SELECTED, ROAD, FAVOURITE, ROUTE, LOOP, START, SAVED_ROUTE, SECTION, RIDE }

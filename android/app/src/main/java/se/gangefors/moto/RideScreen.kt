@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -229,7 +231,9 @@ fun RideCard(
     onStopFollowing: () -> Unit,
     onStopNow: () -> Unit,
     modifier: Modifier = Modifier,
+    scrolls: Boolean = false,
 ) {
+    val scroll = rememberScrollState()
     val context = LocalContext.current
     // The clock for the arrival time and the countdown.
     val now by produceState(System.currentTimeMillis(), following.stopsAtMs) {
@@ -248,7 +252,7 @@ fun RideCard(
         color = if (off) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface,
         contentColor = if (off) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 4.dp, bottom = 12.dp)) {
+        Column((if (scrolls) Modifier.scrollHints(scroll).verticalScroll(scroll) else Modifier).padding(start = 16.dp, end = 4.dp, bottom = 12.dp)) {
             Row {
                 Column(Modifier.weight(1f).padding(top = 12.dp, end = 4.dp)) {
                     when (state.phase) {
@@ -459,7 +463,9 @@ fun RecordingCard(
     mapBearing: Float,
     darkMap: Boolean,
     modifier: Modifier = Modifier,
+    scrolls: Boolean = false,
 ) {
+    val scroll = rememberScrollState()
     val now by produceState(System.currentTimeMillis(), startedAtMs) {
         while (true) {
             value = System.currentTimeMillis()
@@ -471,7 +477,7 @@ fun RecordingCard(
     val time = durationText(minutes)
     val said = stringResource(R.string.recording_card_description, rideKm(distanceM), time)
     Surface(modifier = modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)) {
+        Column((if (scrolls) Modifier.scrollHints(scroll).verticalScroll(scroll) else Modifier).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 itemVerticalAlignment = Alignment.Bottom,

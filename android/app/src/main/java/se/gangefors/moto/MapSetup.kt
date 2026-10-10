@@ -246,7 +246,7 @@ internal fun MapScreenScope.ControlsPlacementEffect() {
                 // With Ride settings' button showing, the compass sits in
                 // the top row, left of it, in both orientations.
                 val placement = compassPlacement(settingsButtonShown = !marking && !planning && !rideMode)
-                val compassTop = if (rideMode && rideCardBottom > 0) {
+                val compassTop = if (compassUnderRideCard(rideMode, landscape) && rideCardBottom > 0) {
                     rideCardBottom - insets.top + 8.dp.roundToPx()
                 } else {
                     placement.topDp.dp.roundToPx()

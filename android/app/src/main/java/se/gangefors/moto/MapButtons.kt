@@ -402,7 +402,7 @@ internal fun BoxScope.QuickTagButton(screen: MapScreenScope, cardsShown: Boolean
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .safeDrawingPadding()
-                        .padding(start = 16.dp, bottom = 40.dp)
+                        .padding(start = 16.dp, bottom = LOGO_BAND_DP.dp)
                         .onGloballyPositioned { tagTop = it.boundsInRoot().top.roundToInt() },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),

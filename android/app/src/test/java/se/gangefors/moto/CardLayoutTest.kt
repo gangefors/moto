@@ -250,4 +250,56 @@ class CardLayoutTest {
         assertEquals(80, card.top)
         assertEquals(400, card.left)
     }
+
+    @Test
+    fun rideColumnIsHalfTheWindowRightOfTheInset() {
+        assertEquals(400f, rideColumnWidthDp(800, 0f, 0f), 0.01f)
+        assertEquals(400f, rideColumnWidthDp(915, 0f, 0f), 0.01f)
+        assertEquals(352f, rideColumnWidthDp(800, 48f, 0f), 0.01f)
+        assertEquals(400f, rideColumnWidthDp(800, 0f, 48f), 0.01f)
+        assertEquals(320f, rideColumnWidthDp(640, 0f, 0f), 0.01f)
+    }
+
+    @Test
+    fun rideColumnNeverPassesTheMiddle() {
+        for (width in 640..1400) {
+            for (left in listOf(0f, 24f, 48f)) {
+                val cardRight = left + rideColumnWidthDp(width, left, 0f) - 8f
+                assertTrue("$width/$left", cardRight <= width / 2f)
+            }
+        }
+    }
+
+    @Test
+    fun rideColumnHasAFloorAndFitsTheRoom() {
+        assertEquals(280f, rideColumnWidthDp(640, 48f, 0f), 0.01f)
+        assertEquals(280f, rideColumnWidthDp(412, 0f, 0f), 0.01f)
+        assertEquals(250f, rideColumnWidthDp(250, 0f, 0f), 0.01f)
+        assertEquals(0f, rideColumnWidthDp(-5, 0f, 0f), 0.01f)
+    }
+
+    @Test
+    fun rideCardStopsAboveTheTagButton() {
+        assertEquals(160, cardStackMaxHeightPx(360, 24, rideCardBottomLimitPx(360, 24, 40, 200, Int.MAX_VALUE), 8))
+        assertEquals(160, rideCardBottomLimitPx(360, 24, 40, 200, Int.MAX_VALUE))
+    }
+
+    @Test
+    fun rideCardStopsAboveTheLogoBandWithoutTheTagButton() {
+        assertEquals(64, rideCardBottomLimitPx(360, 24, 40, Int.MAX_VALUE, Int.MAX_VALUE))
+        assertEquals(64, rideCardBottomLimitPx(360, -10, 64, Int.MAX_VALUE, Int.MAX_VALUE))
+    }
+
+    @Test
+    fun rideCardStopsAboveCardsAtTheBottomLeft() {
+        assertEquals(210, rideCardBottomLimitPx(360, 24, 40, 200, 150))
+    }
+
+    @Test
+    fun compassGoesUnderTheRideCardOnlyUpright() {
+        assertTrue(compassUnderRideCard(rideMode = true, landscape = false))
+        assertFalse(compassUnderRideCard(rideMode = true, landscape = true))
+        assertFalse(compassUnderRideCard(rideMode = false, landscape = false))
+        assertFalse(compassUnderRideCard(rideMode = false, landscape = true))
+    }
 }
