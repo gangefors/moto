@@ -1,6 +1,6 @@
 # ADR-0016: Backup format 3 — a backup records which map regions were switched off
 
-**Status:** Proposed · **Date:** 2026-10-10 · **Deciders:** the owner · **Repo path:** `docs/adr/0016-backup-region-switches.md`
+**Status:** Accepted · **Date:** 2026-10-10 · **Deciders:** the owner · **Repo path:** `docs/adr/0016-backup-region-switches.md`
 
 Amends [ADR-0012](0012-backup-and-restore.md) (what the manifest holds, the formats read, the region offer after a restore) and [ADR-0015](0015-tags-kept-until-reviewed.md) (format 2 is no longer the only format read).
 
@@ -85,7 +85,7 @@ A and B carry the same information; A does it with one field and no second shape
 
 ## Action Items
 
-- [ ] Core: format 3 with `regions_disabled` (always written, checked per format, a subset of `regions` without repeats); formats 2 and 3 read; the format read before the strict parse; `BackupInfo`, `BackupSummary` and `RestoreReport` carry it; reproducing, format-2 and malformed-manifest tests.
-- [ ] FFI: `write_backup` takes `regions_disabled`; `BackupSummary` and `RestoreReport` return it.
-- [ ] App: a backup passes the switched-off regions; the restore offer installs them switched off (`Regions`, `BackupState`, `BackupLogic`), with unit tests.
+- [x] Core: format 3 with `regions_disabled` (always written, checked per format, a subset of `regions` without repeats); formats 2 and 3 read; the format read before the strict parse; `BackupInfo`, `BackupSummary` and `RestoreReport` carry it; reproducing, format-2 and malformed-manifest tests.
+- [x] FFI: `write_backup` takes `regions_disabled`; `BackupSummary` and `RestoreReport` return it.
+- [x] App: a backup passes the switched-off regions; the restore offer installs them switched off (`Regions`, `BackupState`, `BackupLogic`), with unit tests.
 - [ ] Phone test: two regions, one switched off; back up, uninstall, install, restore and download: only the one that was on is on. A format-2 backup restores with both on.
