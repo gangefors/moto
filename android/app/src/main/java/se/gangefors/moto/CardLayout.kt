@@ -240,6 +240,34 @@ fun rideColumnWidthDp(windowWidthDp: Int, insetLeftDp: Float, insetRightDp: Floa
 }
 
 /**
+ * The narrowest the part right of the ride card may be for the followed
+ * rider to sit in it on its side, dp; narrower, the rider is centred.
+ */
+const val RIDE_VIEW_MIN_WIDTH_DP = 160f
+
+/** What the ride camera keeps clear at the map's left and right, dp. */
+data class RideViewSides(val leftDp: Float, val rightDp: Float)
+
+/**
+ * On its side in ride mode the followed rider sits in the right half: the
+ * camera keeps clear the window's left half, or up to the ride card
+ * column's right edge if that reaches further (a cutout or bar at the
+ * left, a narrow window), and the [insetRightDp] bar or cutout. Upright,
+ * or when less than [RIDE_VIEW_MIN_WIDTH_DP] is left, nothing: centred as
+ * before.
+ */
+fun rideViewSidesDp(landscape: Boolean, windowWidthDp: Int, insetLeftDp: Float, insetRightDp: Float): RideViewSides {
+    if (!landscape) return RideViewSides(0f, 0f)
+    val width = windowWidthDp.coerceAtLeast(0).toFloat()
+    val right = insetRightDp.coerceAtLeast(0f)
+    val left = max(
+        width / 2,
+        insetLeftDp.coerceAtLeast(0f) + rideColumnWidthDp(windowWidthDp, insetLeftDp, insetRightDp),
+    )
+    return if (width - right - left >= RIDE_VIEW_MIN_WIDTH_DP) RideViewSides(left, right) else RideViewSides(0f, 0f)
+}
+
+/**
  * How far up from the window's bottom, in pixels, the ride or recording
  * card at the top left (landscape) must end: above the tag button
  * ([tagTop]) and any cards at the bottom left ([cardsTop]), measured tops

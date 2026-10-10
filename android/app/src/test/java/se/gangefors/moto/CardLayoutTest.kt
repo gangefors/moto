@@ -302,4 +302,53 @@ class CardLayoutTest {
         assertFalse(compassUnderRideCard(rideMode = false, landscape = false))
         assertFalse(compassUnderRideCard(rideMode = false, landscape = true))
     }
+
+    private fun sides(landscape: Boolean, width: Int, left: Float, right: Float, l: Float, r: Float) {
+        val s = rideViewSidesDp(landscape, width, left, right)
+        assertEquals(l, s.leftDp, 0.001f)
+        assertEquals(r, s.rightDp, 0.001f)
+    }
+
+    @Test
+    fun rideViewIsTheRightHalfOnItsSide() {
+        sides(true, 800, 0f, 0f, 400f, 0f)
+        sides(true, 915, 0f, 0f, 457.5f, 0f)
+        // The rider is centred in the part kept: about 75 % from the left.
+        val s = rideViewSidesDp(true, 800, 0f, 0f)
+        assertEquals(600f, s.leftDp + (800f - s.leftDp - s.rightDp) / 2, 0.001f)
+    }
+
+    @Test
+    fun rideViewClearsTheCardAndTheBars() {
+        sides(true, 800, 48f, 0f, 400f, 0f)
+        sides(true, 800, 0f, 48f, 400f, 48f)
+        sides(true, 640, 48f, 0f, 328f, 0f)
+        sides(true, 500, 0f, 0f, 280f, 0f)
+        val s = rideViewSidesDp(true, 800, 0f, 48f)
+        assertEquals(576f, s.leftDp + (800f - s.leftDp - s.rightDp) / 2, 0.001f)
+    }
+
+    @Test
+    fun rideViewCentredUprightAndInNarrowWindows() {
+        sides(false, 360, 0f, 0f, 0f, 0f)
+        sides(true, 420, 0f, 0f, 0f, 0f)
+        sides(true, -5, 0f, 0f, 0f, 0f)
+    }
+
+    @Test
+    fun riderNeverSitsUnderTheCard() {
+        for (width in 640..1400) {
+            for (left in listOf(0f, 24f, 48f)) {
+                for (right in listOf(0f, 48f)) {
+                    val s = rideViewSidesDp(true, width, left, right)
+                    val column = left + rideColumnWidthDp(width, left, right)
+                    assertTrue(s.leftDp >= width / 2f)
+                    assertTrue(s.leftDp >= column)
+                    val x = s.leftDp + (width - s.leftDp - s.rightDp) / 2
+                    assertTrue("x $x width $width", x - column >= 80f)
+                    assertTrue("x $x width $width", width - right - x >= 80f)
+                }
+            }
+        }
+    }
 }

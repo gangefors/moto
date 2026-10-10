@@ -4,6 +4,7 @@
 package se.gangefors.moto
 
 import java.time.ZoneId
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -187,7 +188,7 @@ internal fun MapScreenScope.RideCameraEffects() {
             compass?.isClickable = !rideMode
             onDispose { compass?.isClickable = true }
         }
-        DisposableEffect(map, style, hasLocation, rideMode, turnMap, ridePanned, mapSize) {
+        DisposableEffect(map, style, hasLocation, rideMode, turnMap, ridePanned, mapSize, landscape, insets) {
             val m = map
             val s = style
             if (m == null || s == null || !hasLocation || !rideMode) return@DisposableEffect onDispose {}
@@ -195,7 +196,17 @@ internal fun MapScreenScope.RideCameraEffects() {
             val lc = m.locationComponent
             lc.renderMode = RenderMode.GPS
             if (!ridePanned) {
-                m.moveCamera(CameraUpdateFactory.paddingTo(0.0, riderTopPadding(mapSize.height).toDouble(), 0.0, 0.0))
+                // On its side the rider sits in the right half, clear of the card.
+                val d = density.density
+                val sides = rideViewSidesDp(landscape, (mapSize.width / d).roundToInt(), insets.left / d, insets.right / d)
+                m.moveCamera(
+                    CameraUpdateFactory.paddingTo(
+                        (sides.leftDp * d).toDouble(),
+                        riderTopPadding(mapSize.height).toDouble(),
+                        (sides.rightDp * d).toDouble(),
+                        0.0,
+                    ),
+                )
                 // Straight to the ride's zoom as it starts following, so +
                 // and − step from there, not from wherever the map was.
                 val speed = (recording as? Recording.State.Active)?.lastFix?.speedMps
