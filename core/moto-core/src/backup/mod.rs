@@ -692,6 +692,15 @@ fn open(path: &Path) -> Result<Opened, CoreError> {
         }
         read_checked(&mut zip, MANIFEST, size, None)?
     };
+    /// The manifest's format alone, read before the rest so that a newer
+    /// format's new fields don't hide it.
+    #[derive(Deserialize)]
+    struct FormatOnly {
+        format: u32,
+    }
+    let FormatOnly { format } =
+        serde_json::from_slice(&manifest_bytes).map_err(|e| bad(format!("manifest.json: {e}")))?;
+    check_format(format)?;
     let manifest: Manifest =
         serde_json::from_slice(&manifest_bytes).map_err(|e| bad(format!("manifest.json: {e}")))?;
     manifest.check()?;

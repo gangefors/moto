@@ -629,6 +629,27 @@ fn a_backup_from_a_newer_app_asks_for_an_update() {
     );
     assert!(refused(&g.0).contains("newer version"));
     assert!(read_summary(&g.0).is_err());
+    // Also with a field this build doesn't know: the format is read first.
+    zip_of(
+        &g.0,
+        &with_manifest(&entries(&f.0), |m| {
+            m["format"] = (FORMAT + 1).into();
+            m["something_new"] = serde_json::json!({"a": [1, 2]});
+        }),
+    );
+    assert!(refused(&g.0).contains("newer version"));
+    assert!(
+        read_summary(&g.0)
+            .unwrap_err()
+            .to_string()
+            .contains("newer version")
+    );
+    // A manifest whose format isn't a number is still not a backup.
+    zip_of(
+        &g.0,
+        &with_manifest(&entries(&f.0), |m| m["format"] = "3".into()),
+    );
+    assert!(refused(&g.0).contains("not a valid moto backup"));
 }
 
 #[test]
