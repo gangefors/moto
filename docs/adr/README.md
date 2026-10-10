@@ -19,3 +19,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0013](0013-agentic-change-workflow.md) | Change workflow — a pipeline of agents with two rider gates, routed by risk | Accepted | 2026-10-05 |
 | [0014](0014-map-screen-structure.md) | Map screen structure — one state holder, a per-composition scope, pieces by concern | Accepted | 2026-10-05 |
 | [0015](0015-tags-kept-until-reviewed.md) | Quick-tags — kept only until reviewed; backups hold the unreviewed ones | Accepted | 2026-10-05 |
+| [0016](0016-backup-region-switches.md) | Backup format 3 — a backup records which map regions were switched off | Proposed | 2026-10-10 |

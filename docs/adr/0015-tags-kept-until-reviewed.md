@@ -4,6 +4,8 @@
 
 Amends ADR-0006 (the `tags` table) and ADR-0012 (the tags in a backup).
 
+Amended by [ADR-0016](0016-backup-region-switches.md) (proposed 2026-10-10): backups are format 3, and the reader reads formats 2 and 3 (tag entries are the same in both).
+
 ## Context
 
 A quick-tag (PRD R3) marks a spot while riding; after the ride the review turns each one into a favourite section, discards it, or skips it for later. Today (ADR-0006, schema 3) a reviewed tag stays in the database with a status (`pending`, `used`, `discarded`), and a backup (ADR-0012) carries every tag with its review state. Nothing ever reads a reviewed tag again: the favourite it became remembers the road (with source "tag"), and a discarded one has no use. A restore brings reviewed tags back too, counted as tags in its message though no review will ever show them.

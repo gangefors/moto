@@ -4,6 +4,8 @@
 
 Amended by [ADR-0015](0015-tags-kept-until-reviewed.md) (proposed 2026-10-05): backups hold only unreviewed tags, without a review state (format 2; format 1 is no longer read), and a restore adds them as unreviewed, leaving out duplicates and tags on a favourite the phone already had.
 
+Amended by [ADR-0016](0016-backup-region-switches.md) (proposed 2026-10-10): the manifest also lists the regions switched off (format 3; format 2 is still read, with every region on), the format is read before the rest of the manifest, and a region a restore downloads comes back switched off if it was.
+
 ## Context
 
 Everything the rider makes lives only in the app's private storage (ADR-0006): favourite sections, recorded and imported rides, saved routes and loops, quick-tags, and the settings. Reinstalling the app (not upgrading it) wipes all of it. Android's own backup is off (`allowBackup="false"`) on purpose: rides are a location history and must not go to a cloud the rider didn't choose.
