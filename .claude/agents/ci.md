@@ -16,6 +16,14 @@ works through the session's proxy.
   none); runs for a newer push cancel older ones, so check the newest.
 - For each job: status and conclusion. For the merge job, its notice or
   warning ("Not merged: …") or that it fast-forwarded main.
+- Merge status comes first. If the merge job says "Not merged" (or did
+  not run for a branch that should merge), start the report with
+  "NOT MERGED", quote the notice and the commit ids it names, and say
+  that the `debug-branch` release then holds a build without the newer
+  `main` commits. The orchestrator rebases and sends the branch again.
+- Run `git fetch origin` and list every `origin/claude/*` branch with
+  commits that `main` lacks (`git rev-list --count origin/main..<ref>`),
+  with the count and the newest commit title, so no work is left behind.
 - For a failure: fetch only the failed job's log, find the first real
   error (compiler error, failing test and its assertion, clippy lint,
   benchmark or golden-route row that failed) and quote just those lines
