@@ -56,18 +56,18 @@ import java.time.ZoneId
 
 /**
  * When the last backup was made, and the regions a restore found missing
- * (kept here, not in a screen, so they outlive the activity being made
- * again to apply restored settings).
+ * and which of them were switched off (kept here, not in a screen, so
+ * they outlive the activity being made again to apply restored settings).
  */
 object BackupState {
     private const val PREFS = "backup"
     private const val LAST = "last_backup_ms"
 
-    private val _missingRegions = MutableStateFlow<List<String>>(emptyList())
-    val missingRegions: StateFlow<List<String>> = _missingRegions.asStateFlow()
+    private val _restoreRegions = MutableStateFlow(RegionsToRestore.NONE)
+    val restoreRegions: StateFlow<RegionsToRestore> = _restoreRegions.asStateFlow()
 
-    fun offerRegions(ids: List<String>) {
-        _missingRegions.value = ids
+    fun offerRegions(regions: RegionsToRestore) {
+        _restoreRegions.value = regions
     }
 
     fun lastBackupMs(context: Context): Long? =
@@ -160,7 +160,7 @@ fun BackupFlow(
     val scope = rememberCoroutineScope()
     var asking by remember { mutableStateOf<BackupSummary?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
-    val missing by BackupState.missingRegions.collectAsState()
+    val offer by BackupState.restoreRegions.collectAsState()
 
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
         if (uri == null || store == null) return@rememberLauncherForActivityResult
@@ -174,6 +174,7 @@ fun BackupFlow(
                                 out.path,
                                 "moto ${appVersion(context)}",
                                 Regions.installedRegionIds(context).sorted(),
+                                Regions.disabledRegionIds(context).sorted(),
                                 RoutePrefs.forBackup(context),
                             )
                             context.contentResolver.openOutputStream(uri, "wt")?.use { to ->
@@ -253,7 +254,9 @@ fun BackupFlow(
                     result.fold(
                         onSuccess = { r ->
                             Toasts.show(restoredText(resources, restoreCounts(r)))
-                            BackupState.offerRegions(missingRegions(r.regions, Regions.installedRegionIds(context)))
+                            BackupState.offerRegions(
+                                regionsToRestore(r.regions, r.regionsDisabled, Regions.installedRegionIds(context)),
+                            )
                             onRestored()
                             val settings = r.settings.orEmpty()
                             if (settingsFromBackup(settings).isNotEmpty()) {
@@ -280,20 +283,20 @@ fun BackupFlow(
             confirmButton = { TextButton(onClick = { failure = null }) { OneLine(stringResource(R.string.ok)) } },
         )
     }
-    if (missing.isNotEmpty()) {
+    if (offer.missing.isNotEmpty()) {
         AlertDialog(
-            onDismissRequest = { BackupState.offerRegions(emptyList()) },
+            onDismissRequest = { BackupState.offerRegions(RegionsToRestore.NONE) },
             title = { Text(stringResource(R.string.restore_regions_title)) },
-            text = { Text(stringResource(R.string.restore_regions_text, inWords(resources, missing.map(::regionIdName)))) },
+            text = { Text(stringResource(R.string.restore_regions_text, inWords(resources, offer.missing.map(::regionIdName)))) },
             confirmButton = {
                 TextButton(onClick = {
-                    Regions.downloadMissing(context, missing)
-                    BackupState.offerRegions(emptyList())
+                    Regions.downloadMissing(context, offer.missing, offer.off)
+                    BackupState.offerRegions(RegionsToRestore.NONE)
                     onOpenRegions()
                 }) { OneLine(stringResource(R.string.restore_regions_download)) }
             },
             dismissButton = {
-                TextButton(onClick = { BackupState.offerRegions(emptyList()) }) { OneLine(stringResource(R.string.restore_regions_later)) }
+                TextButton(onClick = { BackupState.offerRegions(RegionsToRestore.NONE) }) { OneLine(stringResource(R.string.restore_regions_later)) }
             },
         )
     }

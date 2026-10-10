@@ -92,6 +92,24 @@ fun backupFileDate(date: LocalDate): String = date.format(DateTimeFormatter.ISO_
 fun missingRegions(backup: List<String>, installed: Set<String>): List<String> =
     backup.filter { isRegionId(it) && it !in installed }.distinct()
 
+/**
+ * The map regions a restore offers to download ([missing]: in the backup,
+ * not on the phone, valid ids) and those of them the backup had switched
+ * off ([off]), installed switched off (ADR-0016). A region already on the
+ * phone keeps its own switch.
+ */
+data class RegionsToRestore(val missing: List<String>, val off: Set<String>) {
+    companion object {
+        val NONE = RegionsToRestore(emptyList(), emptySet())
+    }
+}
+
+/** [RegionsToRestore] for a backup's [regions] and the [disabled] ones, with [installed] on the phone. */
+fun regionsToRestore(regions: List<String>, disabled: List<String>, installed: Set<String>): RegionsToRestore {
+    val missing = missingRegions(regions, installed)
+    return RegionsToRestore(missing, disabled.filter { it in missing }.toSet())
+}
+
 /** A region id as a name, for a region not on the phone: "north-sweden" → "North sweden". */
 fun regionIdName(id: String): String =
     id.replace('-', ' ').replaceFirstChar { it.titlecase(Locale.UK) }

@@ -91,6 +91,31 @@ class BackupLogicTest {
     }
 
     @Test
+    fun aRestoreInstallsTheRegionsThatWereOffSwitchedOff() {
+        val backup = listOf("sweden", "denmark")
+        assertEquals(
+            RegionsToRestore(listOf("sweden", "denmark"), setOf("denmark")),
+            regionsToRestore(backup, listOf("denmark"), emptySet()),
+        )
+        // A region already on the phone keeps its own switch.
+        assertEquals(
+            RegionsToRestore(listOf("sweden"), emptySet()),
+            regionsToRestore(backup, listOf("denmark"), setOf("denmark")),
+        )
+        // A format-2 backup: every region comes back on.
+        assertEquals(
+            RegionsToRestore(listOf("sweden", "denmark"), emptySet()),
+            regionsToRestore(backup, emptyList(), emptySet()),
+        )
+        // Only regions the restore downloads.
+        assertEquals(
+            RegionsToRestore(listOf("denmark"), emptySet()),
+            regionsToRestore(listOf("denmark"), listOf("../x", "Denmark", "norway"), emptySet()),
+        )
+        assertTrue(regionsToRestore(emptyList(), emptyList(), emptySet()) == RegionsToRestore.NONE)
+    }
+
+    @Test
     fun tagsOnAFavouriteCountAsAlreadyHere() {
         val r = RestoreReport(
             favouritesAdded = 1u,
@@ -105,6 +130,7 @@ class BackupLogicTest {
             tagsOnFavourites = 9u,
             settings = null,
             regions = emptyList(),
+            regionsDisabled = emptyList(),
         )
         assertEquals(RestoreCounts(favourites = 1, rides = 3, routes = 5, tags = 7, alreadyHere = 2 + 4 + 6 + 8 + 9), restoreCounts(r))
     }

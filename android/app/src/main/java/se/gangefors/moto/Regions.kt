@@ -237,12 +237,20 @@ object Regions {
     /** The ids of the regions on the phone, on or off (for a backup). */
     fun installedRegionIds(context: Context): Set<String> = installedIds(context.applicationContext)
 
+    /** The ids of the regions on the phone that are switched off (for a backup). */
+    fun disabledRegionIds(context: Context): Set<String> {
+        val app = context.applicationContext
+        val p = prefs(app)
+        return installedIds(app).filter { p.getBoolean("off.$it", false) }.toSet()
+    }
+
     /**
      * After a restore: fetches the list of regions (unless it is already
      * here), then downloads those of [ids] it offers that aren't on the
-     * phone, one after another, as Update all does.
+     * phone, one after another, as Update all does; those in [off] are
+     * installed switched off.
      */
-    fun downloadMissing(context: Context, ids: Collection<String>) {
+    fun downloadMissing(context: Context, ids: Collection<String>, off: Set<String> = emptySet()) {
         val app = context.applicationContext
         val want = missingRegions(ids.toList(), installedIds(app)).toSet()
         if (want.isEmpty()) return
@@ -251,7 +259,7 @@ object Regions {
             // The check just started, or whatever was running.
             job?.join()
             val offers = (download.value as? DownloadState.Offers)?.offers ?: return@launch
-            start(app, offers.filter { it.id in want })
+            start(app, offers.filter { it.id in want }, off)
         }
     }
 
@@ -261,9 +269,10 @@ object Regions {
     /**
      * Downloads and installs [queue] one after another (Update all), each
      * opened with the network as it is installed. A failure stops the rest;
-     * cancelling stops the one downloading and those still waiting.
+     * cancelling stops the one downloading and those still waiting. Those
+     * in [off] are installed switched off (after a restore, ADR-0016).
      */
-    fun start(context: Context, queue: List<RegionOffer>) {
+    fun start(context: Context, queue: List<RegionOffer>, off: Set<String> = emptySet()) {
         val app = context.applicationContext
         val bytes = manifest ?: return
         if (job?.isActive == true) return
@@ -275,7 +284,7 @@ object Regions {
             try {
                 list.forEachIndexed { i, offer ->
                     _waiting.value = list.drop(i + 1).map { it.id }.toSet()
-                    if (!install(app, bytes, offer, offers)) return@launch
+                    if (!install(app, bytes, offer, offers, on = offer.id !in off)) return@launch
                 }
                 _download.value = DownloadState.Offers(offers)
             } finally {
@@ -284,8 +293,17 @@ object Regions {
         }
     }
 
-    /** Downloads and installs [offer]; false (and the download failed) when it didn't. */
-    private suspend fun install(app: Context, bytes: ByteArray, offer: RegionOffer, offers: List<RegionOffer>): Boolean {
+    /**
+     * Downloads and installs [offer], switched on unless [on] is false;
+     * false (and the download failed) when it didn't.
+     */
+    private suspend fun install(
+        app: Context,
+        bytes: ByteArray,
+        offer: RegionOffer,
+        offers: List<RegionOffer>,
+        on: Boolean,
+    ): Boolean {
         val part = partial(app, offer)
         try {
             part.parentFile?.mkdirs()
@@ -301,14 +319,16 @@ object Regions {
             lock.withLock {
                 val fp = installRegion(bytes, offer.id, part.path, target.path)
                 part.delete()
-                prefs(app).edit()
+                val edit = prefs(app).edit()
                     .putStringSet(INSTALLED, installedIds(app) + offer.id)
                     .putString("name.${offer.id}", offer.name)
                     .putString("fp.${offer.id}", fp)
                     .putLong("ts.${offer.id}", offer.osmTimestamp)
                     .putString("sha.${offer.id}", offer.gzSha256)
-                    .remove("off.${offer.id}")
-                    .apply()
+                // In the same write, before the reopen, so a region that
+                // was off is never opened.
+                if (on) edit.remove("off.${offer.id}") else edit.putBoolean("off.${offer.id}", true)
+                edit.apply()
                 reopen(app)
             }
             return true

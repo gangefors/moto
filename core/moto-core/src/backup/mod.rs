@@ -9,7 +9,9 @@
 //! page exports them), `rides/NNNNN.gpx` (one per ride, a segment per
 //! stretch recorded without a gap), `routes/NNNNN.gpx` (one per saved
 //! route), `tags.gpx` (the tags waiting for review, as waypoints) and
-//! `settings.json` (the app's own settings, carried as they are).
+//! `settings.json` (the app's own settings, carried as they are). The
+//! manifest also lists the map regions installed and which of them were
+//! switched off (ADR-0016).
 //!
 //! A backup comes back from outside the app, so it is hostile input. Only
 //! the fixed names above are accepted, each once; the zip's directory is
@@ -43,7 +45,11 @@ mod settings;
 pub use settings::{MAX_SETTINGS, Setting, SettingValue};
 
 /// The backup format this build writes and the newest it reads.
-pub const FORMAT: u32 = 2;
+pub const FORMAT: u32 = 3;
+/// The oldest format this build reads.
+pub const MIN_FORMAT: u32 = 2;
+/// The first format with `regions_disabled`.
+const SWITCHES_FROM: u32 = 3;
 /// Largest backup file read.
 pub const MAX_BACKUP_BYTES: u64 = 1 << 30;
 /// Most files in a backup.
@@ -156,6 +162,9 @@ struct Manifest {
     schema: i64,
     created_at_ms: i64,
     regions: Vec<String>,
+    /// From format 3: the regions switched off, a subset of `regions`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    regions_disabled: Option<Vec<String>>,
     files: Vec<FileEntry>,
     favourites: u64,
     rides: Vec<RideEntry>,
@@ -250,23 +259,44 @@ fn valid_region(key: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+/// Refuses a format this build doesn't read: a newer one asks for an
+/// update (the app matches this text), an older one is not a backup.
+fn check_format(format: u32) -> Result<(), CoreError> {
+    if format > FORMAT {
+        return Err(CoreError::InvalidArgument(
+            "this backup is from a newer version of moto".into(),
+        ));
+    }
+    if format < MIN_FORMAT {
+        return Err(bad("unknown format"));
+    }
+    Ok(())
+}
+
 impl Manifest {
     /// Checks everything that doesn't need the other files: names, counts,
     /// metadata ranges, and that every file named is listed once.
     fn check(&self) -> Result<(), CoreError> {
-        if self.format > FORMAT {
-            return Err(CoreError::InvalidArgument(
-                "this backup is from a newer version of moto".into(),
-            ));
-        }
-        if self.format < FORMAT {
-            return Err(bad("unknown format"));
-        }
+        check_format(self.format)?;
         if self.app.chars().count() > MAX_APP_CHARS || self.app.chars().any(char::is_control) {
             return Err(bad("app version"));
         }
         if self.regions.len() > MAX_REGIONS || !self.regions.iter().all(|r| valid_region(r)) {
             return Err(bad("regions"));
+        }
+        let disabled_ok = match &self.regions_disabled {
+            // Format 2 has no switches: every region comes back on.
+            None => self.format < SWITCHES_FROM,
+            Some(off) => {
+                let mut seen = HashSet::new();
+                self.format >= SWITCHES_FROM
+                    && off
+                        .iter()
+                        .all(|r| self.regions.contains(r) && seen.insert(r.as_str()))
+            }
+        };
+        if !disabled_ok {
+            return Err(bad("disabled regions"));
         }
         if self.files.len() > MAX_ENTRIES
             || self.rides.len() > MAX_RIDES
@@ -361,7 +391,7 @@ impl Manifest {
             tags: self.tags.len() as u64,
             has_settings: self.files.iter().any(|f| f.name == SETTINGS),
             regions: self.regions.clone(),
-            regions_disabled: Vec::new(),
+            regions_disabled: self.regions_disabled.clone().unwrap_or_default(),
         }
     }
 }
@@ -414,6 +444,13 @@ pub fn write_backup(
         .take(MAX_REGIONS)
         .cloned()
         .collect();
+    // Only regions the backup lists, once each, so it always reads back.
+    let mut regions_disabled: Vec<String> = Vec::new();
+    for r in &info.regions_disabled {
+        if regions.contains(r) && !regions_disabled.contains(r) {
+            regions_disabled.push(r.clone());
+        }
+    }
     let app: String = info
         .app
         .chars()
@@ -520,6 +557,7 @@ pub fn write_backup(
         schema: store.schema_version()?,
         created_at_ms: info.created_at_ms,
         regions,
+        regions_disabled: Some(regions_disabled),
         files: std::mem::take(&mut w.files),
         favourites: sections.len() as u64,
         rides,
@@ -705,6 +743,7 @@ pub fn restore_backup(
     let manifest = opened.manifest.clone();
     let mut report = RestoreReport {
         regions: manifest.regions.clone(),
+        regions_disabled: manifest.regions_disabled.clone().unwrap_or_default(),
         ..RestoreReport::default()
     };
 

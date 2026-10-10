@@ -72,6 +72,9 @@ pub struct BackupSummary {
     pub has_settings: bool,
     /// The map regions installed when it was made.
     pub regions: Vec<String>,
+    /// Those of `regions` that were switched off; empty for a format-2
+    /// backup, where every region comes back on.
+    pub regions_disabled: Vec<String>,
 }
 
 impl From<core::BackupSummary> for BackupSummary {
@@ -86,6 +89,7 @@ impl From<core::BackupSummary> for BackupSummary {
             tags: s.tags,
             has_settings: s.has_settings,
             regions: s.regions,
+            regions_disabled: s.regions_disabled,
         }
     }
 }
@@ -111,6 +115,9 @@ pub struct RestoreReport {
     pub settings: Option<Vec<BackupSetting>>,
     /// The map regions the backup was made with.
     pub regions: Vec<String>,
+    /// Those of `regions` that were switched off; empty for a format-2
+    /// backup, where every region comes back on.
+    pub regions_disabled: Vec<String>,
 }
 
 impl From<core::RestoreReport> for RestoreReport {
@@ -128,6 +135,7 @@ impl From<core::RestoreReport> for RestoreReport {
             tags_on_favourites: r.tags_on_favourites,
             settings: r.settings.map(|v| v.into_iter().map(Into::into).collect()),
             regions: r.regions,
+            regions_disabled: r.regions_disabled,
         }
     }
 }
@@ -148,19 +156,21 @@ pub fn backup_summary(path: String) -> Result<BackupSummary, MotoError> {
 #[uniffi::export]
 impl SectionStore {
     /// Writes a backup of everything to a new file at `path`: `app` names
-    /// the app and its version, `regions` the map regions installed, and
-    /// `settings` the app's settings (`None`: no settings file).
+    /// the app and its version, `regions` the map regions installed,
+    /// `regions_disabled` those of them switched off, and `settings` the
+    /// app's settings (`None`: no settings file).
     pub fn write_backup(
         &self,
         path: String,
         app: String,
         regions: Vec<String>,
+        regions_disabled: Vec<String>,
         settings: Option<Vec<BackupSetting>>,
     ) -> Result<BackupSummary, MotoError> {
         let info = core::BackupInfo {
             app,
             regions,
-            regions_disabled: Vec::new(),
+            regions_disabled,
             settings: settings.map(|v| v.into_iter().map(Into::into).collect()),
             created_at_ms: now_ms(),
         };
@@ -220,7 +230,8 @@ mod tests {
             .write_backup(
                 path.clone(),
                 "moto test".into(),
-                vec!["sweden".into()],
+                vec!["denmark".into(), "sweden".into()],
+                vec!["denmark".into()],
                 Some(vec![BackupSetting {
                     key: "ride_zoom_step".into(),
                     value: BackupSettingValue::Int { value: 3 },
@@ -229,6 +240,7 @@ mod tests {
             .unwrap();
         assert_eq!(written, backup_summary(path.clone()).unwrap());
         assert!(written.has_settings);
+        assert_eq!(written.regions_disabled, ["denmark"]);
         let (other, b) = open_db("b");
         let report = other.restore_backup(path.clone(), None).unwrap();
         assert_eq!(
@@ -238,7 +250,8 @@ mod tests {
                 value: BackupSettingValue::Int { value: 3 },
             }])
         );
-        assert_eq!(report.regions, ["sweden"]);
+        assert_eq!(report.regions, ["denmark", "sweden"]);
+        assert_eq!(report.regions_disabled, ["denmark"]);
         drop((store, other));
         for p in [&a, &b, &path] {
             remove(p);

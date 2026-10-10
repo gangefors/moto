@@ -256,6 +256,7 @@ fn a_backup_restores_everything_into_an_empty_app() {
     );
     assert_eq!(sum.app, "moto 0.9 (42)");
     assert_eq!(sum.regions, ["sweden", "denmark"]);
+    assert_eq!(sum.regions_disabled, ["denmark"]);
     assert_eq!(sum.created_at_ms, T0_MS);
     assert_eq!(sum.schema, src.schema_version().unwrap());
 
@@ -275,6 +276,7 @@ fn a_backup_restores_everything_into_an_empty_app() {
     want.sort_by(|a, b| a.key.cmp(&b.key));
     assert_eq!(r.settings, Some(want));
     assert_eq!(r.regions, ["sweden", "denmark"]);
+    assert_eq!(r.regions_disabled, ["denmark"]);
     // The live ride's tag comes back, without its ride.
     let src_text = without_live(&src);
     let dst_text = without_live(&dst);
@@ -440,10 +442,19 @@ fn bad_region_keys_and_app_text_are_dropped_when_writing() {
     let f = Temp::new("regions");
     let mut i = info();
     i.regions = vec!["../etc".into(), "ok-1".into(), String::new()];
+    i.regions_disabled = vec![
+        "../etc".into(),
+        "norway".into(),
+        "ok-1".into(),
+        "ok-1".into(),
+    ];
     i.app = "moto\n\u{7}9".into();
     let sum = write_backup(&src, &f.0, &i).unwrap();
     assert_eq!(sum.regions, ["ok-1"]);
+    assert_eq!(sum.regions_disabled, ["ok-1"]);
     assert_eq!(sum.app, "moto9");
+    // What it writes reads back.
+    assert_eq!(read_summary(&f.0).unwrap(), sum);
 }
 
 // --- Hostile files ---
@@ -529,13 +540,20 @@ fn a_damaged_file_changes_nothing() {
     assert!(refused(&g.0).contains("damaged"));
 }
 
-#[test]
-fn the_manifest_is_format_2_without_tag_states() {
-    let f = backup_of(&filled(), "format2");
-    let files = entries(&f.0);
+/// The manifest of the backup at `path`, as JSON.
+fn manifest_of(path: &Path) -> serde_json::Value {
+    let files = entries(path);
     let manifest = &files.iter().find(|(n, _)| n == MANIFEST).unwrap().1;
-    let m: serde_json::Value = serde_json::from_slice(manifest).unwrap();
-    assert_eq!(m["format"], 2);
+    serde_json::from_slice(manifest).unwrap()
+}
+
+#[test]
+fn the_manifest_is_format_3() {
+    let f = backup_of(&filled(), "format3");
+    let files = entries(&f.0);
+    let m = manifest_of(&f.0);
+    assert_eq!(m["format"], 3);
+    assert_eq!(m["regions_disabled"], serde_json::json!(["denmark"]));
     let tags = m["tags"].as_array().unwrap();
     assert_eq!(tags.len(), 3);
     assert!(tags.iter().all(|t| t.get("status").is_none()), "{tags:?}");
@@ -543,6 +561,47 @@ fn the_manifest_is_format_2_without_tag_states() {
     let gpx_bytes = &files.iter().find(|(n, _)| n == TAGS).unwrap().1;
     let fixes = gpx::read_waypoints(std::str::from_utf8(gpx_bytes).unwrap()).unwrap();
     assert_eq!(fixes.len(), 3);
+    // With every region on, the key is there with an empty list.
+    let g = Temp::new("format3-all-on");
+    let mut i = info();
+    i.regions_disabled.clear();
+    write_backup(&filled(), &g.0, &i).unwrap();
+    assert_eq!(manifest_of(&g.0)["regions_disabled"], serde_json::json!([]));
+}
+
+#[test]
+fn a_format_2_backup_restores_with_every_region_on() {
+    let src = filled();
+    let f = backup_of(&src, "format2");
+    let g = Temp::new("format2b");
+    zip_of(
+        &g.0,
+        &with_manifest(&entries(&f.0), |m| {
+            m["format"] = 2.into();
+            m.as_object_mut().unwrap().remove("regions_disabled");
+        }),
+    );
+    let sum = read_summary(&g.0).unwrap();
+    assert_eq!(sum.format, 2);
+    assert_eq!(sum.regions, ["sweden", "denmark"]);
+    assert!(sum.regions_disabled.is_empty());
+    let mut dst = Store::open_in_memory().unwrap();
+    let r = restore_backup(&mut dst, None, &g.0, 0).unwrap();
+    assert_eq!(without_live(&dst), without_live(&src));
+    assert_eq!(r.regions, ["sweden", "denmark"]);
+    assert!(r.regions_disabled.is_empty());
+    let before = contents(&dst);
+    let r = restore_backup(&mut dst, None, &g.0, 0).unwrap();
+    assert_eq!(
+        (
+            r.favourites_added,
+            r.rides_added,
+            r.routes_added,
+            r.tags_added
+        ),
+        (0, 0, 0, 0)
+    );
+    assert_eq!(contents(&dst), before);
 }
 
 #[test]
@@ -644,6 +703,20 @@ fn manifest_metadata_is_checked() {
         Box::new(|m| m["files"][0]["sha256"] = "00".into()),
         Box::new(|m| m["files"][0]["size"] = 1.into()),
         Box::new(|m| m["files"][0]["size"] = u64::MAX.into()),
+        Box::new(|m| m["regions_disabled"] = serde_json::json!(["norway"])),
+        Box::new(|m| m["regions_disabled"] = serde_json::json!(["denmark", "denmark"])),
+        Box::new(|m| m["regions_disabled"] = serde_json::json!(["a/b"])),
+        Box::new(|m| m["regions_disabled"] = "denmark".into()),
+        Box::new(|m| m["regions_disabled"] = serde_json::json!([1])),
+        Box::new(|m| m["regions_disabled"] = serde_json::Value::Null),
+        Box::new(|m| {
+            let many: Vec<String> = (0..65).map(|i| format!("r{i}")).collect();
+            m["regions_disabled"] = serde_json::json!(many);
+        }),
+        Box::new(|m| {
+            m.as_object_mut().unwrap().remove("regions_disabled");
+        }),
+        Box::new(|m| m["format"] = 2.into()),
     ];
     for (i, edit) in edits.iter().enumerate() {
         zip_of(&g.0, &with_manifest(&files, edit));
