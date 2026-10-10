@@ -188,7 +188,11 @@ internal fun MapScreenScope.RideCameraEffects() {
             compass?.isClickable = !rideMode
             onDispose { compass?.isClickable = true }
         }
-        DisposableEffect(map, style, hasLocation, rideMode, turnMap, ridePanned, mapSize, landscape, insets) {
+        // On its side the rider sits in the right half, clear of the card; keyed
+        // on the result so only a change of the sides re-runs the effect.
+        val d = density.density
+        val sides = rideViewSidesDp(landscape, (mapSize.width / d).roundToInt(), insets.left / d, insets.right / d)
+        DisposableEffect(map, style, hasLocation, rideMode, turnMap, ridePanned, mapSize, sides) {
             val m = map
             val s = style
             if (m == null || s == null || !hasLocation || !rideMode) return@DisposableEffect onDispose {}
@@ -196,9 +200,6 @@ internal fun MapScreenScope.RideCameraEffects() {
             val lc = m.locationComponent
             lc.renderMode = RenderMode.GPS
             if (!ridePanned) {
-                // On its side the rider sits in the right half, clear of the card.
-                val d = density.density
-                val sides = rideViewSidesDp(landscape, (mapSize.width / d).roundToInt(), insets.left / d, insets.right / d)
                 m.moveCamera(
                     CameraUpdateFactory.paddingTo(
                         (sides.leftDp * d).toDouble(),
