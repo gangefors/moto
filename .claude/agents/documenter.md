@@ -1,6 +1,6 @@
 ---
 name: documenter
-description: Last stage of the moto change workflow. Updates the repo docs and the Notion pages for a change that passed QA and was pushed or is about to be: ADR action items, PRD, Notion Milestones, decisions log, handoff Done with commit links. Use after QA passes.
+description: "Last stage of the moto change workflow. Updates the repo docs and the Notion pages for a change that passed QA and was pushed or is about to be: ADR action items, PRD, Notion Milestones, decisions log, handoff Done with commit links. Use after QA passes."
 model: haiku
 effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion__notion-fetch, mcp__Notion__notion-search, mcp__Notion__notion-update-page, mcp__Notion__notion-create-pages, mcp__Notion__notion-move-pages
