@@ -284,7 +284,7 @@ object Regions {
             try {
                 list.forEachIndexed { i, offer ->
                     _waiting.value = list.drop(i + 1).map { it.id }.toSet()
-                    if (!install(app, bytes, offer, offers, on = offer.id !in off)) return@launch
+                    if (!install(app, bytes, offer, offers, off)) return@launch
                 }
                 _download.value = DownloadState.Offers(offers)
             } finally {
@@ -294,15 +294,16 @@ object Regions {
     }
 
     /**
-     * Downloads and installs [offer], switched on unless [on] is false;
-     * false (and the download failed) when it didn't.
+     * Downloads and installs [offer], switched on or off by
+     * [switchedOnAfterInstall]; false (and the download failed) when it
+     * didn't.
      */
     private suspend fun install(
         app: Context,
         bytes: ByteArray,
         offer: RegionOffer,
         offers: List<RegionOffer>,
-        on: Boolean,
+        off: Set<String>,
     ): Boolean {
         val part = partial(app, offer)
         try {
@@ -317,6 +318,8 @@ object Regions {
             _download.value = DownloadState.Installing(offer)
             val target = file(app, offer.id).apply { parentFile?.mkdirs() }
             lock.withLock {
+                // The switch as the phone has it, read before the file is replaced.
+                val on = switchedOnAfterInstall(installedList(app), offer.id, off)
                 val fp = installRegion(bytes, offer.id, part.path, target.path)
                 part.delete()
                 val edit = prefs(app).edit()

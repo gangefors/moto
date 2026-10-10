@@ -85,6 +85,15 @@ fun offersToUpdate(installed: List<InstalledRegion>, offers: List<RegionOffer>):
     offers.filter { offerAction(installed, it.id, it.osmTimestamp, it.gzSha256) == OfferAction.UPDATE }
 
 /**
+ * Whether region [id] is switched on once a download of it is installed:
+ * a region on the phone ([installed]) keeps its switch (Update and Update
+ * all, ADR-0009); a new one comes in on unless it is in [off], the regions
+ * a restore downloads switched off (ADR-0016).
+ */
+fun switchedOnAfterInstall(installed: List<InstalledRegion>, id: String, off: Set<String>): Boolean =
+    id !in off
+
+/**
  * A region installed from a download (ADR-0008, ADR-0009): its id and
  * name from the manifest, the day its map data is from (0 while unknown),
  * its file size, whether it is used (a disabled region stays on the

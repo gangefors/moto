@@ -151,4 +151,22 @@ class RegionLogicTest {
         assertTrue(olderNeighbours(listOf(se.copy(osmTimestamp = 0), dk)).isEmpty())
         assertTrue(olderNeighbours(emptyList()).isEmpty())
     }
+
+    @Test
+    fun anUpdateKeepsTheRegionsSwitch() {
+        val installed = listOf(
+            InstalledRegion("alpha", "Alpha", 100, 1, enabled = false, gzSha256 = "a1"),
+            InstalledRegion("beta", "Beta", 100, 1, enabled = true, gzSha256 = "b1"),
+        )
+        // Update or Update all: a region on the phone keeps its switch.
+        assertFalse(switchedOnAfterInstall(installed, "alpha", emptySet()))
+        assertTrue(switchedOnAfterInstall(installed, "beta", emptySet()))
+        // A new download comes in on, or off when a restore had it off.
+        assertTrue(switchedOnAfterInstall(installed, "gamma", emptySet()))
+        assertFalse(switchedOnAfterInstall(installed, "gamma", setOf("gamma")))
+        assertTrue(switchedOnAfterInstall(emptyList(), "gamma", setOf("alpha")))
+        // The phone's switch wins over a restore's (ADR-0016).
+        assertTrue(switchedOnAfterInstall(installed, "beta", setOf("beta")))
+        assertFalse(switchedOnAfterInstall(installed, "alpha", setOf("beta")))
+    }
 }
