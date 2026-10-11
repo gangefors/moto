@@ -3,7 +3,8 @@
   SPDX-License-Identifier: AGPL-3.0-only
   Copyright (C) 2026 Stefan Gangefors
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -15,6 +16,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Region downloads in the background (ADR-0017): a user-initiated
+         data transfer job on Android 14 and newer. A normal permission,
+         granted at install. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <!-- A buzz when a quick-tag is saved (felt through gloves). -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
@@ -36,6 +41,13 @@
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+        <!-- The region download job (ADR-0017): not exported; only the
+             system may bind it. Scheduled on Android 14 and newer only. -->
+        <service
+            android:name=".RegionDownloadJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            tools:targetApi="34" />
         <!-- Stop in the region download notification (ADR-0017): reached
              only through the app's own explicit, immutable PendingIntent. -->
         <receiver

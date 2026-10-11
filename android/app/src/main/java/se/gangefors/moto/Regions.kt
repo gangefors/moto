@@ -4,13 +4,21 @@
 package se.gangefors.moto
 
 import se.gangefors.moto.debug.DebugTools
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
+import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
 import android.os.StatFs
 import android.os.SystemClock
+import androidx.annotation.RequiresApi
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -587,19 +595,134 @@ object Regions {
 
     // ---- Hosts ----
 
-    /** Starts the queue on this phone's host. */
+    /** The one region download job. */
+    private const val JOB_ID = 17
+
+    /**
+     * Starts the queue on this phone's host: the user-initiated job on
+     * Android 14 and newer (scheduling it again replaces a running one,
+     * which goes on from its partial), the in-app host on older versions
+     * or when the job can't be scheduled.
+     */
     private fun schedule(app: Context) {
         val q = _queue.value
         if (!allows(_policy.value, _network.value)) postWaiting(app, q)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && scheduleJob(app)) return
         startInApp(app)
     }
 
+    /** Schedules the job; false when Android refused it (it then runs in the app). */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun scheduleJob(app: Context): Boolean = try {
+        val b = JobInfo.Builder(JOB_ID, ComponentName(app, RegionDownloadJob::class.java))
+            .setUserInitiated(true)
+            .setRequiredNetwork(networkRequest(_policy.value))
+            .setBackoffCriteria(BACKOFF_START_MS, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
+        remainingBytes(app)?.let { b.setEstimatedNetworkBytes(it, 0) }
+        val ok = app.getSystemService(JobScheduler::class.java).schedule(b.build()) == JobScheduler.RESULT_SUCCESS
+        if (!ok) DebugTools.mark("region job not scheduled")
+        ok
+    } catch (e: RuntimeException) {
+        // No permission, or the app isn't visible.
+        DebugTools.mark("region job not scheduled: $e")
+        false
+    }
+
+    /** The networks [policy] allows, as the job's constraint. A VPN counts
+     * as the network under it. */
+    private fun networkRequest(policy: NetworkPolicy): NetworkRequest {
+        val b = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        when (policy) {
+            NetworkPolicy.UNMETERED -> b.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING)
+            NetworkPolicy.HOME -> b.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING)
+            NetworkPolicy.ANY -> Unit
+        }
+        return b.build()
+    }
+
+    /** Bytes still to download for the queue, when every queued offer's size is known. */
+    private fun remainingBytes(app: Context): Long? {
+        val offers = _queue.value.ids.map { id -> lastOffers.firstOrNull { it.id == id } ?: return null }
+        return offers.sumOf { (it.gzBytes.toLong() - partBytes(app, it.id)).coerceAtLeast(0) }
+    }
+
     /** Whether a host already has the queue in hand. */
-    private fun hostPending(app: Context): Boolean = runner?.isActive == true
+    private fun hostPending(app: Context): Boolean =
+        runner?.isActive == true ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                app.getSystemService(JobScheduler::class.java).getPendingJob(JOB_ID) != null)
 
     /** Stops the host that runs the queue. */
     private fun cancelHost(app: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            app.getSystemService(JobScheduler::class.java).cancel(JOB_ID)
+        }
         runner?.cancel()
+    }
+
+    /** The job's parameters while it runs the queue. */
+    @Volatile private var jobParams: JobParameters? = null
+
+    /** The notice a job shows as it starts. */
+    internal fun startingNotice(app: Context): NoticeState {
+        init(app)
+        val q = _queue.value
+        val name = q.ids.firstOrNull()?.let { nameOf(app, it) } ?: ""
+        return NoticeState.Starting(q.index, q.total, name)
+    }
+
+    /** The job started: runs the queue in it (a run already going is stopped first). */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    internal fun runJob(app: Context, params: JobParameters, service: JobService) = synchronized(queueLock) {
+        val previous = runner
+        jobParams = params
+        runner = scope.launch {
+            previous?.cancelAndJoin()
+            val outcome = runQueue(app, JobHost(params, service))
+            if (jobParams === params) jobParams = null
+            service.jobFinished(params, outcome == RunOutcome.RETRY)
+        }
+    }
+
+    /**
+     * Android stopped the job: the network went, or the rider stopped the
+     * app in the active-apps panel (the queue ends). True asks Android to
+     * run it again; the partial is kept.
+     */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    internal fun jobStopped(app: Context, params: JobParameters): Boolean {
+        init(app)
+        synchronized(queueLock) {
+            if (jobParams === params) {
+                runner?.cancel()
+                jobParams = null
+            }
+        }
+        if (params.stopReason == JobParameters.STOP_REASON_USER) {
+            stop(app)
+            return false
+        }
+        val q = _queue.value
+        if (!q.active || q.failed != null) return false
+        // Replaced by a new schedule: the new job shows its own notice.
+        if (params.stopReason != JobParameters.STOP_REASON_CANCELLED_BY_APP) postWaiting(app, q)
+        return true
+    }
+
+    /** The job as the runner's host: its network, and the bytes it moved. */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private class JobHost(private val params: JobParameters, private val service: JobService) : RegionHost {
+        override val network: Network? = params.network
+
+        // Android starts the job only on a network its constraint allows.
+        override suspend fun awaitNetwork(app: Context) = Unit
+
+        override fun transferred(bytes: Long) {
+            service.updateTransferredNetworkBytes(params, bytes, 0)
+        }
     }
 
     /**
