@@ -150,6 +150,20 @@ class RegionQueueLogicTest {
     }
 
     @Test
+    fun aRunIsNeededOnlyForAQueueThatHasNotFailed() {
+        assertFalse(needsRun(DownloadQueue()))
+        val q = enqueue(DownloadQueue(), listOf("alpha"), emptySet())
+        assertTrue(needsRun(q))
+        assertFalse(needsRun(q.copy(failed = "no room")))
+        // Queued again after a failure: Try again isn't needed.
+        assertTrue(needsRun(enqueue(q.copy(failed = "no room"), listOf("beta"), emptySet())))
+        // The last region removed while a run ended: nothing to start.
+        assertFalse(needsRun(dropped(q, "alpha")))
+        // Another region queued meanwhile: a run is started for it.
+        assertTrue(needsRun(enqueue(dropped(q, "alpha"), listOf("beta"), emptySet())))
+    }
+
+    @Test
     fun onlyTheHeadIsInstalled() {
         val q = DownloadQueue(listOf("alpha", "beta"))
         assertTrue(isHead(q, "alpha"))

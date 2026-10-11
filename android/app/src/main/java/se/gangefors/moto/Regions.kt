@@ -514,13 +514,21 @@ object Regions {
         synchronized(batchNames) { batchNames.clear() }
         post(app, null)
         if (lastOffers.isNotEmpty()) _download.value = DownloadState.Offers(lastOffers)
+        restartAfter(app, stopping, clean = true)
+    }
+
+    /**
+     * Once the cancelled run [stopping] has ended (an install under way
+     * finishes first: it can't be cut short), deletes the partials of
+     * regions no longer queued ([clean]) and starts a run for regions
+     * queued meanwhile: while it was ending they were left to it, as it
+     * still counted as running.
+     */
+    private fun restartAfter(app: Context, stopping: Job?, clean: Boolean = false) {
         scope.launch {
-            // An install under way finishes first (it can't be cut short);
-            // then the partial files go, unless queued again meanwhile.
             stopping?.cancelAndJoin()
-            sweep(app)
-            val q = _queue.value
-            if (q.active && q.failed == null) schedule(app)
+            if (clean) sweep(app)
+            if (needsRun(_queue.value)) schedule(app)
         }
     }
 
@@ -540,7 +548,7 @@ object Regions {
         init(app)
         _ask.value = null
         val q = updateQueue(app) { it.copy(once = grant) }
-        if (q.active && q.failed == null) schedule(app)
+        if (needsRun(q)) schedule(app)
     }
 
     /** "Wait for Wi-Fi": the queue waits for an allowed network. */
@@ -564,7 +572,7 @@ object Regions {
         _policy.value = downloadPolicy(on, _queue.value.once)
         _ask.value?.let { _ask.value = mobileDataAsk(_policy.value, _network.value) }
         val q = _queue.value
-        if (q.active && q.failed == null) schedule(app)
+        if (needsRun(q)) schedule(app)
     }
 
     /**
@@ -577,7 +585,7 @@ object Regions {
         init(app)
         scope.launch { sweep(app) }
         val q = _queue.value
-        if (q.active && q.failed == null && !hostPending(app)) schedule(app)
+        if (needsRun(q) && !hostPending(app)) schedule(app)
     }
 
     /** Whether the notification permission was asked for on a download (once). */
@@ -766,7 +774,7 @@ object Regions {
                             // finished (atomic with startInApp's check).
                             val again = synchronized(queueLock) {
                                 val q = _queue.value
-                                (q.active && q.failed == null).also { if (!it && inAppLooping == loop) inAppLooping = 0 }
+                                needsRun(q).also { if (!it && inAppLooping == loop) inAppLooping = 0 }
                             }
                             if (!again) break
                         }
@@ -990,9 +998,11 @@ object Regions {
             val q = updateQueue(app) { dropped(it, id) }
             if (isRegionId(id)) partial(app, id).delete()
             if (!q.active) {
+                val stopping = runner
                 cancelHost(app)
                 _running.value = null
                 post(app, null)
+                restartAfter(app, stopping)
             }
         }
         change(app) { drop(it, id) }
