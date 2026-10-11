@@ -903,8 +903,11 @@ object Regions {
         val f = failureOf(e)
         DebugTools.mark("region download: $f ($e)")
         if (waitsForNetwork(f)) {
-            // The partial and the retry count stay as they are.
+            // The partial and the retry count stay as they are. The row shows
+            // "Waiting for Wi-Fi" (or a network) with what has arrived, from
+            // the queue and the partial, not the transfer that ended.
             _running.value = null
+            if (lastOffers.isNotEmpty()) _download.value = DownloadState.Offers(lastOffers)
             return RunOutcome.WAIT
         }
         if (head != null && deletesPartial(f)) {
