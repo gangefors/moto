@@ -139,6 +139,10 @@ fun enqueue(q: DownloadQueue, ids: List<String>, off: Set<String>): DownloadQueu
 fun installed(q: DownloadQueue, id: String): DownloadQueue =
     if (id !in q.ids) q else q.copy(ids = q.ids - id, off = q.off - id, done = q.done + 1, retries = 0)
 
+/** Whether [id] is still the queue's head: a region removed or stopped
+ * while it downloaded is not installed. */
+fun isHead(q: DownloadQueue, id: String): Boolean = q.ids.firstOrNull() == id
+
 /** [id] is not offered any more or already up to date: removed, done
  * unchanged (the total shrinks). */
 fun dropped(q: DownloadQueue, id: String): DownloadQueue =

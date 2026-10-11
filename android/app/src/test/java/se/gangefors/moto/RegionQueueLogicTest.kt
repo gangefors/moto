@@ -150,6 +150,16 @@ class RegionQueueLogicTest {
     }
 
     @Test
+    fun onlyTheHeadIsInstalled() {
+        val q = DownloadQueue(listOf("alpha", "beta"))
+        assertTrue(isHead(q, "alpha"))
+        assertFalse(isHead(q, "beta"))
+        // Removed while it downloaded, or the queue stopped.
+        assertFalse(isHead(dropped(q, "alpha"), "alpha"))
+        assertFalse(isHead(DownloadQueue(), "alpha"))
+    }
+
+    @Test
     fun partialsOnlyForQueuedRegions() {
         assertEquals("alpha.part", partialFileName("alpha"))
         for (bad in listOf("", "../x", "Alpha", "a".repeat(33), "a/b")) {

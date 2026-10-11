@@ -947,6 +947,11 @@ object Regions {
         val target = file(app, id).apply { parentFile?.mkdirs() }
         withContext(NonCancellable) {
             lock.withLock {
+                // Removed from the queue (its bin, or Stop) while it downloaded.
+                if (!isHead(_queue.value, id)) {
+                    part.delete()
+                    return@withLock
+                }
                 // The switch as the phone has it, read before the file is replaced.
                 val on = switchedOnAfterInstall(installedList(app), id, _queue.value.off)
                 val fp = installRegion(bytes, id, part.path, target.path)
