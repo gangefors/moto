@@ -475,6 +475,8 @@ object Regions {
         // Atomic with the run's last look at the queue: either the run
         // takes the new regions, or a new one is started for them.
         val (q, taken) = synchronized(queueLock) {
+            // A new batch: the ready notice names only its regions.
+            if (!_queue.value.active) synchronized(batchNames) { batchNames.clear() }
             val q = updateQueue(app, { e -> names.forEach { (id, name) -> e.putString(Q_NAME + id, name) } }) {
                 enqueue(it, ids, off)
             }
@@ -958,9 +960,13 @@ object Regions {
                         // that was off is never opened.
                         if (on) edit.remove("off.$id") else edit.putBoolean("off.$id", true)
                     },
-                ) { installed(it, id) }
+                ) {
+                    // Counted for the ready notice only if it was still queued
+                    // (not stopped meanwhile).
+                    if (id in it.ids) synchronized(batchNames) { batchNames += offer.name }
+                    installed(it, id)
+                }
                 part.delete()
-                synchronized(batchNames) { batchNames += offer.name }
                 if (loaded) reopen(app)
             }
         }
