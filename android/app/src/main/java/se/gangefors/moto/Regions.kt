@@ -711,6 +711,10 @@ object Regions {
             val outcome = runQueue(app, JobHost(params, service))
             if (jobParams === params) jobParams = null
             service.jobFinished(params, outcome == RunOutcome.RETRY || outcome == RunOutcome.WAIT)
+            // A region queued while the run failed cleared the failure but was
+            // left to this run, which had already stopped: start one for it.
+            // (The run no longer counts as running, so later ones start their own.)
+            if (outcome == RunOutcome.FAILED && needsRun(_queue.value)) schedule(app)
         }
     }
 
