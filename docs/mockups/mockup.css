@@ -434,3 +434,45 @@ figure.wide { width: 816px; }
 .midline { position: absolute; left: 400px; top: 24px; bottom: 24px; border-left: 2px dotted #e0457b; z-index: 6; pointer-events: none; }
 .midline span { position: absolute; left: 4px; top: 100px; font: 500 10px/16px Roboto, sans-serif; color: #e0457b; }
 .cutbar { position: absolute; top: 24px; bottom: 24px; background: rgba(0,0,0,.28); z-index: 5; }
+
+/* Map region page rows (RegionSection): a row's name and supporting
+   text, its action (X, Download now, Try again) wrapping under the text
+   when there is no room (FlowRow), a 4 dp linear progress bar, the
+   disabled buttons, and the Material 3 switch row. */
+.rgrow { padding: 4px 0; }
+.rgflow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; }
+.rgtxt { padding: 4px 8px 4px 0; min-width: 0; }
+.rn { font: 400 16px/24px Roboto, sans-serif; letter-spacing: .5px; }
+.rgact { display: flex; align-items: center; }
+.lprog { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--sec-container); position: relative; overflow: hidden; }
+.lprog .f { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--primary); }
+.lprog.ind .f { left: 18%; width: 38%; }
+.obtn.nl, .fbtn.nl { padding: 0 24px; min-height: 40px; }
+.obtn.dis { opacity: .38; }
+.fbtn.dis { background: color-mix(in srgb, var(--on-surface) 12%, transparent); color: color-mix(in srgb, var(--on-surface) 38%, transparent); }
+.srow { display: flex; align-items: center; padding: 8px 0; }
+.srow .stx { flex: 1; min-width: 0; padding-right: 12px; }
+.srow .switch { flex: none; }
+.sup { font: 400 12px/16px Roboto, sans-serif; letter-spacing: .4px; color: var(--on-surface-variant); }
+.errtxt { font: 400 16px/24px Roboto, sans-serif; letter-spacing: .5px; color: var(--err); padding: 8px 0; }
+.tbtn.flush { margin-left: -12px; }
+/* A small AlertDialog (the restore dialog's frame, centred). */
+.dlg.sm { top: 50%; transform: translateY(-50%); }
+.dlg .dtxt { padding: 0 24px; font: 400 14px/20px Roboto, sans-serif; letter-spacing: .25px; color: var(--on-surface-variant); }
+.dbtns.gap { gap: 8px; }
+/* Android's own permission dialog (shown as a step, not drawn by the app). */
+.sysdlg { position: absolute; left: 36px; right: 36px; top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.sysdlg .bell { color: var(--primary); display: grid; place-items: center; padding-bottom: 12px; }
+.sysdlg p { margin: 0 0 20px; font: 400 16px/24px Roboto, sans-serif; color: var(--on-surface); }
+.sysdlg .pb { height: 48px; border-radius: 24px; display: grid; place-items: center; font: 500 14px/20px Roboto, sans-serif; background: var(--sec-container); color: var(--on-sec-container); margin-top: 8px; }
+/* Notification details: small-icon glyph, progress bar, text column. */
+.ntf .col { flex: 1; min-width: 0; }
+.ntf .ap svg { width: 20px; height: 20px; }
+.ntf .np { height: 4px; border-radius: 2px; background: #e8def8; margin-top: 8px; position: relative; overflow: hidden; }
+.darkp .ntf .np { background: #4a4458; }
+.ntf .np .f { position: absolute; left: 0; top: 0; bottom: 0; background: #6750a4; border-radius: 2px; }
+.darkp .ntf .np .f { background: #d0bcff; }
+.ntf .np.ind .f { left: 18%; width: 38%; }
+.ntf .chan { font: 500 12px/16px Roboto, sans-serif; opacity: .75; }
+.shade .cap { font: 500 12px/16px Roboto, sans-serif; color: #49454f; padding: 4px 8px 0; }
+.darkp.shade .cap { color: #cac4d0; }
