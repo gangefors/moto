@@ -132,6 +132,9 @@ object Regions {
     private var checkJob: Job? = null
     private var changeJob: Job? = null
     @Volatile private var runner: Job? = null
+    /** A run has the queue in hand and will take any region queued now;
+     * set and cleared under [queueLock] with the queue's last check. */
+    @Volatile private var runActive = false
     private var manifest: ByteArray? = null
     /** The offers of the last manifest read. */
     @Volatile private var lastOffers: List<RegionOffer> = emptyList()
@@ -469,13 +472,17 @@ object Regions {
 
     private fun enqueueIds(app: Context, ids: List<String>, off: Set<String>, names: Map<String, String>) {
         init(app)
-        val q = updateQueue(app, { e -> names.forEach { (id, name) -> e.putString(Q_NAME + id, name) } }) {
-            enqueue(it, ids, off)
+        // Atomic with the run's last look at the queue: either the run
+        // takes the new regions, or a new one is started for them.
+        val (q, taken) = synchronized(queueLock) {
+            val q = updateQueue(app, { e -> names.forEach { (id, name) -> e.putString(Q_NAME + id, name) } }) {
+                enqueue(it, ids, off)
+            }
+            q to runActive
         }
         if (!q.active) return
         _ask.value = mobileDataAsk(_policy.value, _network.value)
-        // A run going on picks the new regions up when their turn comes.
-        if (runner?.isActive == true) return
+        if (taken) return
         schedule(app)
     }
 
@@ -741,19 +748,38 @@ object Regions {
      * after a wait.
      */
     private fun startInApp(app: Context) = synchronized(queueLock) {
-        if (runner?.isActive == true) return@synchronized
+        if (inAppLooping != 0) return@synchronized
+        val loop = ++inAppLoops
+        inAppLooping = loop
         runner = scope.launch {
-            while (true) {
-                val retries = _queue.value.retries
-                when (runQueue(app, InAppHost)) {
-                    RunOutcome.RETRY -> delay(backoffMs(retries))
-                    // The next run waits for an allowed network first.
-                    RunOutcome.WAIT -> Unit
-                    else -> break
+            try {
+                while (true) {
+                    val retries = _queue.value.retries
+                    when (runQueue(app, InAppHost)) {
+                        RunOutcome.RETRY -> delay(backoffMs(retries))
+                        // The next run waits for an allowed network first.
+                        RunOutcome.WAIT -> Unit
+                        else -> {
+                            // Ends only when nothing was queued as the run
+                            // finished (atomic with startInApp's check).
+                            val again = synchronized(queueLock) {
+                                val q = _queue.value
+                                (q.active && q.failed == null).also { if (!it && inAppLooping == loop) inAppLooping = 0 }
+                            }
+                            if (!again) break
+                        }
+                    }
                 }
+            } finally {
+                synchronized(queueLock) { if (inAppLooping == loop) inAppLooping = 0 }
             }
         }
     }
+
+    /** The in-app host's loop that runs (0: none), and the last one
+     * started; guarded by [queueLock]. */
+    private var inAppLooping = 0
+    private var inAppLoops = 0
 
     private object InAppHost : RegionHost {
         override val network: Network? = null
@@ -773,9 +799,18 @@ object Regions {
      * queued region in turn, checked and installed by the core; until the
      * queue is empty, a region fails, or an attempt is to be retried.
      */
-    @android.annotation.SuppressLint("ApplySharedPref") // The partial's checksum must be on disk before its bytes.
     internal suspend fun runQueue(app: Context, host: RegionHost): RunOutcome {
         init(app)
+        synchronized(queueLock) { runActive = true }
+        try {
+            return runQueueOnce(app, host)
+        } finally {
+            synchronized(queueLock) { runActive = false }
+        }
+    }
+
+    @android.annotation.SuppressLint("ApplySharedPref") // The partial's checksum must be on disk before its bytes.
+    private suspend fun runQueueOnce(app: Context, host: RegionHost): RunOutcome {
         var head: String? = null
         var before = -1L
         try {
@@ -791,8 +826,14 @@ object Regions {
                 currentCoroutineContext().ensureActive()
                 val id = _queue.value.ids.firstOrNull()
                 if (id == null) {
-                    // Done, unless a region was queued meanwhile.
-                    if (updateQueue(app) { if (it.active) it else DownloadQueue() }.active) continue
+                    // Done, unless a region was queued meanwhile; from here
+                    // on a region queued starts a new run.
+                    val goOn = synchronized(queueLock) {
+                        val active = updateQueue(app) { if (it.active) it else DownloadQueue() }.active
+                        if (!active) runActive = false
+                        active
+                    }
+                    if (goOn) continue
                     break
                 }
                 head = id
