@@ -9,6 +9,8 @@ import android.content.res.Resources
 import android.view.Gravity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
@@ -179,6 +181,14 @@ internal fun MapScreenScope.MapSetupEffects() {
         LaunchedEffect(Unit) {
             Regions.load(context.applicationContext)
             Regions.resume(context.applicationContext)
+        }
+        // A region download notice was tapped: open the Map region page.
+        val regionPageRequested by Regions.pageRequests.collectAsState()
+        LaunchedEffect(regionPageRequested) {
+            if (regionPageRequested) {
+                dataPage = DataPage.REGION
+                Regions.pageOpened()
+            }
         }
 
         val permissionLauncher = rememberLauncherForActivityResult(

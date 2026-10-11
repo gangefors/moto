@@ -36,6 +36,11 @@
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+        <!-- Stop in the region download notification (ADR-0017): reached
+             only through the app's own explicit, immutable PendingIntent. -->
+        <receiver
+            android:name=".RegionDownloadReceiver"
+            android:exported="false" />
         <!-- Hands an exported route (GPX) to the app the rider picks in the
              share sheet: not exported; each share grants read access to
              that one file only (res/xml/shared_files.xml). -->

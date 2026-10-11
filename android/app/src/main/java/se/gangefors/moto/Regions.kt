@@ -836,7 +836,11 @@ object Regions {
     // ---- Notices ----
 
     /** Shows [s] in the queue's one notification; null takes it away. */
-    private fun post(app: Context, s: NoticeState?) = Unit
+    private fun post(app: Context, s: NoticeState?) {
+        // A late progress notice from a stopped run never brings it back.
+        if (s != null && s !is NoticeState.Ready && s !is NoticeState.Failed && !_queue.value.active) return
+        RegionNotices.show(app, s)
+    }
 
     /** The waiting notice, for the queue's head. */
     private fun postWaiting(app: Context, q: DownloadQueue) {

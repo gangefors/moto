@@ -3,6 +3,7 @@
 
 package se.gangefors.moto
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -30,11 +31,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(this)
         checkCoreLoads()
+        if (savedInstanceState == null) openFrom(intent)
         setContent {
             MotoTheme {
                 MapScreen()
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openFrom(intent)
+    }
+
+    /** A region download notice was tapped (ADR-0017): open the Map region
+     * page. Nothing else is read from the intent; other actions are ignored. */
+    private fun openFrom(intent: Intent?) {
+        if (intent?.action == RegionNotices.ACTION_OPEN) Regions.requestPage()
     }
 
     /** M0 smoke test: one call into the Rust core proves the native library loads. */
