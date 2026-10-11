@@ -20,3 +20,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0014](0014-map-screen-structure.md) | Map screen structure — one state holder, a per-composition scope, pieces by concern | Accepted | 2026-10-05 |
 | [0015](0015-tags-kept-until-reviewed.md) | Quick-tags — kept only until reviewed; backups hold the unreviewed ones | Accepted | 2026-10-05 |
 | [0016](0016-backup-region-switches.md) | Backup format 3 — a backup records which map regions were switched off | Accepted | 2026-10-10 |
+| [0017](0017-region-downloads-in-background.md) | Region downloads in the background — a user-initiated data transfer job, one notification, Wi-Fi unless allowed | Proposed | 2026-10-11 |

@@ -4,6 +4,8 @@
 
 Amends [ADR-0012](0012-backup-and-restore.md) (what the manifest holds, the formats read, the region offer after a restore) and [ADR-0015](0015-tags-kept-until-reviewed.md) (format 2 is no longer the only format read).
 
+Amended by [ADR-0017](0017-region-downloads-in-background.md) (proposed 2026-10-11): the restore's download queue, with the regions to install switched off, is kept on the phone, so a download that is interrupted, or fails and is tried again, still installs them off.
+
 ## Context
 
 A region can be switched off without removing it (ADR-0009): it stays on the phone but isn't opened. A backup (ADR-0012, format 2) lists the map regions installed, on or off, in the manifest's `regions`, and nothing says which were off. After a restore the app offers to download the listed regions that aren't on the phone, and every download is installed switched on. So after a reinstall every restored region is on, also those the rider had switched off. The rider (2026-10-10): only the regions that were on before should be on afterwards.

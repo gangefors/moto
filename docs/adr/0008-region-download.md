@@ -2,6 +2,8 @@
 
 **Status:** Accepted · **Date:** 2026-09-27 · **Deciders:** the owner · **Repo path:** `docs/adr/0008-region-download.md`
 
+Amended by [ADR-0017](0017-region-downloads-in-background.md) (proposed 2026-10-11): downloads run in the background (a user-initiated data transfer job on Android 14 and newer), one region at a time from a queue kept on the phone, with one notification, over Wi-Fi unless mobile data is allowed; the checks and the install are unchanged.
+
 ## Context
 
 Until now the debug APK carried the M0 region (Skåne and its surroundings, 38 MiB) as an asset. That can't grow: all of Sweden is 394 MiB, and the release app should stay small (2026-09-27). ADR-0005 already says regions are downloaded, compressed, and decompressed once into app storage because a memory map needs the raw file; PRD R12 asks that the app can install and replace a region file and report its OSM data date. This ADR decides where the files come from, how they are checked, and how the app installs them.
