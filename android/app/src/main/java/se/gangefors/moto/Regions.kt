@@ -135,7 +135,6 @@ object Regions {
     /** A run has the queue in hand and will take any region queued now;
      * set and cleared under [queueLock] with the queue's last check. */
     @Volatile private var runActive = false
-    private var manifest: ByteArray? = null
     /** The offers of the last manifest read. */
     @Volatile private var lastOffers: List<RegionOffer> = emptyList()
     /** The regions installed in this batch, for the ready notice. */
@@ -333,7 +332,6 @@ object Regions {
             val next = try {
                 val bytes = fetchSmall(regionUrl(regionManifestFileName()), null)
                 val offers = parseRegionManifest(bytes)
-                manifest = bytes
                 lastOffers = offers
                 DownloadState.Offers(offers)
             } catch (e: Exception) {
@@ -823,7 +821,6 @@ object Regions {
             _queue.value.ids.firstOrNull()?.let { setPhase(app, RunPhase.STARTING, it) }
             val bytes = fetchSmall(regionUrl(regionManifestFileName()), host.network)
             val offers = parseRegionManifest(bytes)
-            manifest = bytes
             lastOffers = offers
             var moved = 0L
             while (true) {
