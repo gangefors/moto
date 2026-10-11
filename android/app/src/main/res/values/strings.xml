@@ -61,6 +61,21 @@
     <string name="region_no_room">not enough free space (%1$.1f MB needed)</string>
     <string name="region_network">network problem (%1$s); try again to go on where it stopped</string>
     <string name="region_hint">Regions are downloaded from the app’s GitHub page and checked before use. Map data © OpenStreetMap contributors (ODbL).</string>
+    <string name="region_mobile_data">Download over mobile data</string>
+    <string name="region_mobile_data_hint">Off: downloads wait for Wi-Fi. Never while roaming.</string>
+    <!-- The queue's count: map region %1$d of the %2$d in this batch. -->
+    <string name="region_queue_count">Map region %1$d of %2$d</string>
+    <string name="region_waiting_download">Waiting to download…</string>
+    <string name="region_download_now">Download now</string>
+    <string name="region_notifications_off">Notifications are off: download progress shows only here.</string>
+    <string name="region_notifications_on">Turn on</string>
+    <string name="region_hint_background">Downloads carry on when you leave the app.</string>
+    <string name="region_hint_open">Keep the app open until a download is done.</string>
+    <string name="region_mobile_title">Download over mobile data?</string>
+    <string name="region_mobile_text">The phone is on mobile data, and map regions wait for Wi-Fi. This download is %1$.1f MB.</string>
+    <string name="region_mobile_text_roaming">The phone is roaming abroad, where mobile data may cost extra. This download is %1$.1f MB.</string>
+    <string name="region_mobile_now">Download now</string>
+    <string name="region_mobile_wait">Wait for Wi-Fi</string>
     <string name="region_starting">Starting…</string>
     <string name="region_wait_wifi">Waiting for Wi-Fi</string>
     <string name="region_wait_network">Waiting for a network</string>

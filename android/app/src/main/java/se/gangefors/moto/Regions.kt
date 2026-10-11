@@ -123,6 +123,8 @@ object Regions {
     private const val PART_SHA = "partsha."
     /** "Download over mobile data"; not in backups. */
     private const val MOBILE_DATA = "mobile_data"
+    /** The notification permission was asked for once (ADR-0017). */
+    private const val NOTIF_ASKED = "notif_asked"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
@@ -568,6 +570,13 @@ object Regions {
         scope.launch { sweep(app) }
         val q = _queue.value
         if (q.active && q.failed == null && !hostPending(app)) schedule(app)
+    }
+
+    /** Whether the notification permission was asked for on a download (once). */
+    fun notificationsAsked(context: Context): Boolean = prefs(context.applicationContext).bool(NOTIF_ASKED)
+
+    fun markNotificationsAsked(context: Context) {
+        prefs(context.applicationContext).edit().putBoolean(NOTIF_ASKED, true).apply()
     }
 
     /** A notice was tapped: open the Map region page. */
