@@ -5,21 +5,34 @@ package se.gangefors.moto
 
 import se.gangefors.moto.debug.DebugTools
 import android.content.Context
+import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.StatFs
+import android.os.SystemClock
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,13 +68,32 @@ sealed interface RegionState {
 }
 
 /**
+ * Who runs the download queue (ADR-0017): the network its connections
+ * use (null: the phone's default), how it waits for an allowed network,
+ * and where the bytes it moved are reported.
+ */
+internal interface RegionHost {
+    val network: Network?
+    /** Returns once the queue's network policy allows the network. */
+    suspend fun awaitNetwork(app: Context)
+    /** [bytes] moved so far in this run. */
+    fun transferred(bytes: Long) = Unit
+}
+
+/** How one run of the queue ended. */
+internal enum class RunOutcome { DONE, FAILED, RETRY }
+
+/**
  * The routing regions (ADR-0008, ADR-0009): the downloaded ones, one file
  * each, opened together as one network linked at their borders; none
  * until the rider downloads one (no APK carries a region). A region can
  * be disabled without removing it: it stays on the phone but isn't opened.
- * Downloads run here, not in a screen, so they carry on when the Map region page is
- * closed; an interrupted download resumes where it stopped. The core checks everything
- * before a region is used.
+ *
+ * Downloads (ADR-0017) form a queue kept in the preferences, so it outlives
+ * the screens and the app's process: one region at a time, each from a
+ * freshly fetched signed manifest, resumed from its partial file after a
+ * lost connection or a kill, on the networks the rider allows. The core
+ * checks everything before a region is installed or used.
  */
 object Regions {
     private const val DIR = "regions"
@@ -72,10 +104,35 @@ object Regions {
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
 
+    // The download queue in the preferences (ADR-0017), read back checked.
+    private const val Q_IDS = "queue"
+    private const val Q_OFF = "queue.off"
+    private const val Q_DONE = "queue.done"
+    private const val Q_RETRIES = "queue.retries"
+    private const val Q_ONCE = "queue.once"
+    private const val Q_FAILED = "queue.failed"
+    private const val Q_NAME = "qname."
+    private const val PART_SHA = "partsha."
+    /** "Download over mobile data"; not in backups. */
+    private const val MOBILE_DATA = "mobile_data"
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
-    private var job: Job? = null
+    private var checkJob: Job? = null
+    private var changeJob: Job? = null
+    @Volatile private var runner: Job? = null
     private var manifest: ByteArray? = null
+    /** The offers of the last manifest read. */
+    @Volatile private var lastOffers: List<RegionOffer> = emptyList()
+    /** The regions installed in this batch, for the ready notice. */
+    private val batchNames = mutableListOf<String>()
+    /** [load] has run in this process: only then is the network reopened
+     * after an install (a job run with the app closed never opens it). */
+    @Volatile private var loaded = false
+    /** Guards the queue's read-change-commit. */
+    private val queueLock = Any()
+    @Volatile private var queueRead = false
+    @Volatile private var watching = false
 
     private val _active = MutableStateFlow(ActiveRegion(RegionState.Loading, emptyList()))
     val active: StateFlow<ActiveRegion> = _active.asStateFlow()
@@ -83,19 +140,52 @@ object Regions {
     private val _download = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val download: StateFlow<DownloadState> = _download.asStateFlow()
 
-    // The regions of an Update all still waiting their turn, by id.
-    private val _waiting = MutableStateFlow<Set<String>>(emptySet())
-    val waiting: StateFlow<Set<String>> = _waiting.asStateFlow()
+    private val _queue = MutableStateFlow(DownloadQueue())
+    /** The download queue, as kept on the phone. */
+    val queue: StateFlow<DownloadQueue> = _queue.asStateFlow()
+
+    private val _running = MutableStateFlow<RunPhase?>(null)
+    /** What the runner is doing to the queue's head; null while it isn't running. */
+    val running: StateFlow<RunPhase?> = _running.asStateFlow()
+
+    private val _policy = MutableStateFlow(NetworkPolicy.UNMETERED)
+    /** The networks the queue may use now. */
+    val policy: StateFlow<NetworkPolicy> = _policy.asStateFlow()
+
+    private val _mobileData = MutableStateFlow(false)
+    /** The "Download over mobile data" setting. */
+    val mobileData: StateFlow<Boolean> = _mobileData.asStateFlow()
+
+    private val _network = MutableStateFlow(NetworkNow.OFFLINE)
+    /** The phone's default network. */
+    val network: StateFlow<NetworkNow> = _network.asStateFlow()
+
+    private val _ask = MutableStateFlow<MobileAsk?>(null)
+    /** The mobile-data question, while it waits for an answer. */
+    val ask: StateFlow<MobileAsk?> = _ask.asStateFlow()
+
+    private val _pageRequests = MutableStateFlow(false)
+    /** A notice was tapped: the Map region page should open. */
+    val pageRequests: StateFlow<Boolean> = _pageRequests.asStateFlow()
 
     private fun dir(context: Context) = File(context.filesDir, DIR)
 
     /** Region [id]'s file; the id is checked, so it can only name a file here. */
     private fun file(context: Context, id: String) = File(dir(context), regionFileName(id))
 
-    private fun partial(context: Context, offer: RegionOffer) =
-        File(File(context.noBackupFilesDir, DIR), "${offer.fileName}.part")
+    /** The folder of partial downloads, in no-backup storage. */
+    private fun partDir(context: Context) = File(context.noBackupFilesDir, DIR)
+
+    /** Region [id]'s partial download; the id is checked. */
+    private fun partial(context: Context, id: String) = File(partDir(context), partialFileName(id))
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    // Stored values are read defensively: a wrong type reads as missing.
+    private fun SharedPreferences.str(key: String): String? = runCatching { getString(key, null) }.getOrNull()
+    private fun SharedPreferences.int(key: String): Int = runCatching { getInt(key, 0) }.getOrDefault(0)
+    private fun SharedPreferences.bool(key: String): Boolean = runCatching { getBoolean(key, false) }.getOrDefault(false)
+    private fun SharedPreferences.strings(key: String): Set<String>? = runCatching { getStringSet(key, null) }.getOrNull()
 
     // The engine of the network in use, released once another replaces it.
     private var opened: Engine? = null
@@ -119,6 +209,7 @@ object Regions {
                 open(app)
             },
         )
+        loaded = true
         DebugTools.mark("region ready")
     }
 
@@ -218,19 +309,23 @@ object Regions {
         use(open(context))
     }
 
-    /** Fetches the list of regions this app can read. */
+    /** Fetches the list of regions this app can read (on any network: it is small). */
     fun check(context: Context) {
-        if (job?.isActive == true) return
-        job = scope.launch {
-            _download.value = DownloadState.Checking
-            _download.value = try {
-                val bytes = fetchSmall(regionUrl(regionManifestFileName()))
+        if (checkJob?.isActive == true) return
+        checkJob = scope.launch {
+            // A download's progress is never replaced by the lookup.
+            fun busy() = _download.value.let { it is DownloadState.Downloading || it is DownloadState.Installing }
+            if (!busy()) _download.value = DownloadState.Checking
+            val next = try {
+                val bytes = fetchSmall(regionUrl(regionManifestFileName()), null)
                 val offers = parseRegionManifest(bytes)
                 manifest = bytes
+                lastOffers = offers
                 DownloadState.Offers(offers)
             } catch (e: Exception) {
                 DownloadState.Failed(describe(context, e), emptyList())
             }
+            if (!busy()) _download.value = next
         }
     }
 
@@ -244,123 +339,473 @@ object Regions {
         return installedIds(app).filter { p.getBoolean("off.$it", false) }.toSet()
     }
 
+    // ---- The download queue (ADR-0017) ----
+
+    /** Reads the queue and the setting once per process, and starts watching the network. */
+    private fun init(app: Context) {
+        if (!queueRead) {
+            synchronized(queueLock) {
+                if (!queueRead) {
+                    val p = prefs(app)
+                    _queue.value = readQueue(
+                        p.str(Q_IDS), p.strings(Q_OFF), p.int(Q_DONE), p.str(Q_ONCE), p.str(Q_FAILED), p.int(Q_RETRIES),
+                    )
+                    _mobileData.value = p.bool(MOBILE_DATA)
+                    _policy.value = downloadPolicy(_mobileData.value, _queue.value.once)
+                    queueRead = true
+                }
+            }
+        }
+        watchNetwork(app)
+    }
+
+    /** Follows the phone's default network (ACCESS_NETWORK_STATE only). */
+    private fun watchNetwork(app: Context) {
+        if (watching) return
+        synchronized(queueLock) {
+            if (watching) return
+            watching = true
+        }
+        val cm = app.getSystemService(ConnectivityManager::class.java) ?: return
+        _network.value = cm.activeNetwork?.let { n -> cm.getNetworkCapabilities(n)?.let { networkNow(cm, n, it) } } ?: NetworkNow.OFFLINE
+        try {
+            cm.registerDefaultNetworkCallback(
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                        _network.value = networkNow(cm, network, caps)
+                    }
+
+                    override fun onLost(network: Network) {
+                        _network.value = NetworkNow.OFFLINE
+                    }
+                },
+            )
+        } catch (e: RuntimeException) {
+            // Too many callbacks or a platform refusal: rows then show the
+            // network as it was; the job's own constraint still holds.
+            DebugTools.mark("network watch failed: $e")
+        }
+    }
+
+    private fun networkNow(cm: ConnectivityManager, network: Network, caps: NetworkCapabilities) = NetworkNow(
+        connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+        metered = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
+        roaming = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING)
+        } else {
+            // Android 8.x has no roaming capability yet.
+            @Suppress("DEPRECATION")
+            cm.getNetworkInfo(network)?.isRoaming == true
+        },
+    )
+
+    /** Writes [q] into [edit]; the names and partial checksums of regions no
+     * longer queued go with it. */
+    private fun putQueue(p: SharedPreferences, edit: SharedPreferences.Editor, q: DownloadQueue) {
+        edit.putString(Q_IDS, queueIdsString(q.ids))
+            .putStringSet(Q_OFF, HashSet(q.off))
+            .putInt(Q_DONE, q.done)
+            .putInt(Q_RETRIES, q.retries)
+            .putString(Q_ONCE, onceString(q.once))
+        if (q.failed != null) edit.putString(Q_FAILED, q.failed) else edit.remove(Q_FAILED)
+        for (key in p.all.keys) {
+            val prefix = when {
+                key.startsWith(Q_NAME) -> Q_NAME
+                key.startsWith(PART_SHA) -> PART_SHA
+                else -> continue
+            }
+            if (key.removePrefix(prefix) !in q.ids) edit.remove(key)
+        }
+    }
+
+    /** Changes the queue and commits it at once (it must survive a kill),
+     * with [extra] in the same write. */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    private fun updateQueue(
+        app: Context,
+        extra: (SharedPreferences.Editor) -> Unit = {},
+        change: (DownloadQueue) -> DownloadQueue,
+    ): DownloadQueue = synchronized(queueLock) {
+        val p = prefs(app)
+        val next = change(_queue.value)
+        val edit = p.edit()
+        extra(edit)
+        putQueue(p, edit, next)
+        edit.commit()
+        _queue.value = next
+        _policy.value = downloadPolicy(_mobileData.value, next.once)
+        next
+    }
+
+    /** The name to show for queued region [id]. */
+    private fun nameOf(app: Context, id: String): String =
+        lastOffers.firstOrNull { it.id == id }?.name ?: prefs(app).str(Q_NAME + id) ?: id
+
+    /** Bytes of region [id] already downloaded, for its row. */
+    fun partBytes(context: Context, id: String): Long =
+        if (isRegionId(id)) partial(context.applicationContext, id).length() else 0
+
     /**
-     * After a restore: fetches the list of regions (unless it is already
-     * here), then downloads those of [ids] it offers that aren't on the
-     * phone, one after another, as Update all does; those in [off] are
-     * installed switched off.
+     * Queues [offers] (Download, Update, Update all): one region downloads
+     * at a time, those added while one runs wait their turn. Those in [off]
+     * are installed switched off (a restore, ADR-0016).
+     */
+    fun enqueue(context: Context, offers: List<RegionOffer>, off: Set<String> = emptySet()) {
+        val app = context.applicationContext
+        val valid = offers.filter { isRegionId(it.id) }
+        enqueueIds(app, valid.map { it.id }, off, valid.associate { it.id to it.name })
+    }
+
+    private fun enqueueIds(app: Context, ids: List<String>, off: Set<String>, names: Map<String, String>) {
+        init(app)
+        val q = updateQueue(app, { e -> names.forEach { (id, name) -> e.putString(Q_NAME + id, name) } }) {
+            enqueue(it, ids, off)
+        }
+        if (!q.active) return
+        _ask.value = mobileDataAsk(_policy.value, _network.value)
+        // A run going on picks the new regions up when their turn comes.
+        if (runner?.isActive == true) return
+        schedule(app)
+    }
+
+    /**
+     * After a restore: queues those of [ids] that aren't on the phone, one
+     * after another, as Update all does; those in [off] are installed
+     * switched off. Ids no longer offered are skipped when their turn comes.
      */
     fun downloadMissing(context: Context, ids: Collection<String>, off: Set<String> = emptySet()) {
         val app = context.applicationContext
-        val want = missingRegions(ids.toList(), installedIds(app)).toSet()
+        val want = missingRegions(ids.toList(), installedIds(app))
         if (want.isEmpty()) return
-        if (download.value !is DownloadState.Offers) check(app)
-        scope.launch {
-            // The check just started, or whatever was running.
-            job?.join()
-            val offers = (download.value as? DownloadState.Offers)?.offers ?: return@launch
-            start(app, offers.filter { it.id in want }, off)
-        }
+        val names = lastOffers.filter { it.id in want }.associate { it.id to it.name }
+        enqueueIds(app, want, off, names)
     }
 
     /**
-     * Downloads and installs [offer], then opens the network with it: a
-     * region on the phone keeps its switch, a new one comes in on.
+     * Stops the queue: the download and the regions waiting, with what has
+     * arrived deleted at once (the rider, 2026-10-11); no result notice.
      */
-    fun start(context: Context, offer: RegionOffer) = start(context, listOf(offer))
-
-    /**
-     * Downloads and installs [queue] one after another (Update all), each
-     * opened with the network as it is installed. A failure stops the rest;
-     * cancelling stops the one downloading and those still waiting. Those
-     * in [off] are installed switched off (after a restore, ADR-0016). A
-     * region already on the phone keeps its switch.
-     */
-    fun start(context: Context, queue: List<RegionOffer>, off: Set<String> = emptySet()) {
+    fun stop(context: Context) {
         val app = context.applicationContext
-        val bytes = manifest ?: return
-        if (job?.isActive == true) return
-        val list = queue.filter { isRegionId(it.id) }
-        if (list.isEmpty()) return
-        val offers = (download.value as? DownloadState.Offers)?.offers
-            ?: (download.value as? DownloadState.Failed)?.offers.orEmpty()
-        job = scope.launch {
-            try {
-                list.forEachIndexed { i, offer ->
-                    _waiting.value = list.drop(i + 1).map { it.id }.toSet()
-                    if (!install(app, bytes, offer, offers, off)) return@launch
+        init(app)
+        val stopping = runner
+        cancelHost(app)
+        updateQueue(app) { DownloadQueue() }
+        _ask.value = null
+        _running.value = null
+        synchronized(batchNames) { batchNames.clear() }
+        post(app, null)
+        if (lastOffers.isNotEmpty()) _download.value = DownloadState.Offers(lastOffers)
+        scope.launch {
+            // An install under way finishes first (it can't be cut short);
+            // then the partial files go, unless queued again meanwhile.
+            stopping?.cancelAndJoin()
+            sweep(app)
+            val q = _queue.value
+            if (q.active && q.failed == null) schedule(app)
+        }
+    }
+
+    /** Try again after a failure: carries on from the region that failed. */
+    fun retry(context: Context) {
+        val app = context.applicationContext
+        init(app)
+        val q = updateQueue(app) { it.copy(failed = null, retries = 0) }
+        if (!q.active) return
+        _ask.value = mobileDataAsk(_policy.value, _network.value)
+        schedule(app)
+    }
+
+    /** "Download now": this queue may use [grant] networks. */
+    fun allowOnce(context: Context, grant: NetworkPolicy) {
+        val app = context.applicationContext
+        init(app)
+        _ask.value = null
+        val q = updateQueue(app) { it.copy(once = grant) }
+        if (q.active && q.failed == null) schedule(app)
+    }
+
+    /** "Wait for Wi-Fi": the queue waits for an allowed network. */
+    fun dismissAsk() {
+        _ask.value = null
+    }
+
+    /** Asks the mobile-data question again ("Download now" on a waiting row). */
+    fun askAgain() {
+        _ask.value = mobileDataAsk(_policy.value, _network.value)
+    }
+
+    /** The "Download over mobile data" setting, written at once: the job is
+     * scheduled with it right after. */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    fun setMobileData(context: Context, on: Boolean) {
+        val app = context.applicationContext
+        init(app)
+        prefs(app).edit().putBoolean(MOBILE_DATA, on).commit()
+        _mobileData.value = on
+        _policy.value = downloadPolicy(on, _queue.value.once)
+        _ask.value?.let { _ask.value = mobileDataAsk(_policy.value, _network.value) }
+        val q = _queue.value
+        if (q.active && q.failed == null) schedule(app)
+    }
+
+    /**
+     * At app start, after [load]: follows the network, deletes stray
+     * partial and temporary files, and carries on with a queue that was
+     * interrupted (a kill, a phone restart), without a tap.
+     */
+    fun resume(context: Context) {
+        val app = context.applicationContext
+        init(app)
+        scope.launch { sweep(app) }
+        val q = _queue.value
+        if (q.active && q.failed == null && !hostPending(app)) schedule(app)
+    }
+
+    /** A notice was tapped: open the Map region page. */
+    fun requestPage() {
+        _pageRequests.value = true
+    }
+
+    /** The Map region page was opened for the request. */
+    fun pageOpened() {
+        _pageRequests.value = false
+    }
+
+    /**
+     * Deletes every partial file but those of queued regions, and a
+     * temporary file an install that was killed left behind (under the
+     * lock, so never one an install is writing).
+     */
+    private suspend fun sweep(app: Context) {
+        val parts = partDir(app)
+        partialsToDelete(parts.list()?.toList().orEmpty(), _queue.value.ids).forEach { File(parts, it).delete() }
+        lock.withLock {
+            dir(app).listFiles { f -> f.name.endsWith(".region.tmp") }?.forEach { it.delete() }
+        }
+    }
+
+    // ---- Hosts ----
+
+    /** Starts the queue on this phone's host. */
+    private fun schedule(app: Context) {
+        val q = _queue.value
+        if (!allows(_policy.value, _network.value)) postWaiting(app, q)
+        startInApp(app)
+    }
+
+    /** Whether a host already has the queue in hand. */
+    private fun hostPending(app: Context): Boolean = runner?.isActive == true
+
+    /** Stops the host that runs the queue. */
+    private fun cancelHost(app: Context) {
+        runner?.cancel()
+    }
+
+    /**
+     * The in-app host (Android 8 to 13, and the fallback): runs the queue in
+     * the app's process, waits for an allowed network itself and retries
+     * after a wait.
+     */
+    private fun startInApp(app: Context) = synchronized(queueLock) {
+        if (runner?.isActive == true) return@synchronized
+        runner = scope.launch {
+            while (true) {
+                val retries = _queue.value.retries
+                when (runQueue(app, InAppHost)) {
+                    RunOutcome.RETRY -> delay(backoffMs(retries))
+                    else -> break
                 }
-                _download.value = DownloadState.Offers(offers)
-            } finally {
-                _waiting.value = emptySet()
             }
         }
     }
 
+    private object InAppHost : RegionHost {
+        override val network: Network? = null
+
+        override suspend fun awaitNetwork(app: Context) {
+            if (allows(_policy.value, _network.value)) return
+            _running.value = null
+            postWaiting(app, _queue.value)
+            combine(_policy, _network) { p, n -> allows(p, n) }.first { it }
+        }
+    }
+
+    // ---- The runner ----
+
     /**
-     * Downloads and installs [offer], switched on or off by
-     * [switchedOnAfterInstall]; false (and the download failed) when it
-     * didn't.
+     * Runs the queue once on [host]: a fresh signed manifest, then each
+     * queued region in turn, checked and installed by the core; until the
+     * queue is empty, a region fails, or an attempt is to be retried.
      */
-    private suspend fun install(
-        app: Context,
-        bytes: ByteArray,
-        offer: RegionOffer,
-        offers: List<RegionOffer>,
-        off: Set<String>,
-    ): Boolean {
-        val part = partial(app, offer)
+    @android.annotation.SuppressLint("ApplySharedPref") // The partial's checksum must be on disk before its bytes.
+    internal suspend fun runQueue(app: Context, host: RegionHost): RunOutcome {
+        init(app)
+        var head: String? = null
+        var before = -1L
         try {
-            part.parentFile?.mkdirs()
-            val have = part.length()
-            val free = StatFs(app.filesDir.path).availableBytes
-            if (!hasRoomFor(offer.gzBytes.toLong(), have, offer.regionBytes.toLong(), free)) {
-                val need = mb(offer.gzBytes.toLong() - have + offer.regionBytes.toLong())
-                error(app.getString(R.string.region_no_room, need))
+            sweep(app)
+            host.awaitNetwork(app)
+            _queue.value.ids.firstOrNull()?.let { setPhase(app, RunPhase.STARTING, it) }
+            val bytes = fetchSmall(regionUrl(regionManifestFileName()), host.network)
+            val offers = parseRegionManifest(bytes)
+            manifest = bytes
+            lastOffers = offers
+            var moved = 0L
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val id = _queue.value.ids.firstOrNull()
+                if (id == null) {
+                    // Done, unless a region was queued meanwhile.
+                    if (updateQueue(app) { if (it.active) it else DownloadQueue() }.active) continue
+                    break
+                }
+                head = id
+                before = -1L
+                val offer = offers.firstOrNull { it.id == id }
+                if (offer == null || offerAction(installedList(app), id, offer.osmTimestamp, offer.gzSha256) == OfferAction.INSTALLED) {
+                    // Not offered any more, or already up to date: skipped.
+                    updateQueue(app) { dropped(it, id) }
+                    partial(app, id).delete()
+                    continue
+                }
+                host.awaitNetwork(app)
+                setPhase(app, RunPhase.STARTING, id)
+                val part = partial(app, id).apply { parentFile?.mkdirs() }
+                val total = offer.gzBytes.toLong()
+                val p = prefs(app)
+                // A partial of a file published since is never appended to.
+                if (!keepPartial(p.str(PART_SHA + id), offer.gzSha256, part.length(), total)) part.delete()
+                p.edit().putString(PART_SHA + id, offer.gzSha256).commit()
+                before = part.length()
+                val free = StatFs(app.filesDir.path).availableBytes
+                if (!hasRoomFor(total, before, offer.regionBytes.toLong(), free)) {
+                    val need = mb(total - before + offer.regionBytes.toLong())
+                    throw NoRoom(app.getString(R.string.region_no_room, need))
+                }
+                moved += fetchFile(app, regionUrl(offer.fileName), part, offer, host, moved)
+                install(app, bytes, offer, part)
             }
-            fetchFile(regionUrl(offer.fileName), part, offer)
-            _download.value = DownloadState.Installing(offer)
-            val target = file(app, offer.id).apply { parentFile?.mkdirs() }
+            val names = synchronized(batchNames) { batchNames.toList().also { batchNames.clear() } }
+            _running.value = null
+            _download.value = DownloadState.Offers(offers)
+            post(app, if (names.isEmpty()) null else NoticeState.Ready(names))
+            return RunOutcome.DONE
+        } catch (e: Exception) {
+            // Stopped (by the rider, or Android for the network), also when a
+            // blocked read only ends after the stop: nothing is written; the
+            // partial stays for the next run.
+            if (e is CancellationException || !currentCoroutineContext().isActive) {
+                _running.value = null
+                if (lastOffers.isNotEmpty()) _download.value = DownloadState.Offers(lastOffers)
+                throw e as? CancellationException ?: CancellationException("stopped")
+            }
+            return failed(app, e, head, before)
+        }
+    }
+
+    /** Acts on a failed attempt: retried, or the queue stops with the reason. */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    private fun failed(app: Context, e: Exception, head: String?, before: Long): RunOutcome {
+        val f = failureOf(e)
+        DebugTools.mark("region download: $f ($e)")
+        if (head != null && deletesPartial(f)) {
+            partial(app, head).delete()
+            prefs(app).edit().remove(PART_SHA + head).commit()
+        }
+        val gotBytes = head != null && before >= 0 && partial(app, head).length() > before
+        val retries = if (gotBytes) 0 else _queue.value.retries
+        val q = _queue.value
+        val id = q.ids.firstOrNull()
+        if (shouldRetry(f, retries) && q.active) {
+            val next = updateQueue(app) { it.copy(retries = retries + 1) }
+            if (id != null) {
+                _running.value = RunPhase.RETRYING
+                post(app, NoticeState.Retrying(next.index, next.total, nameOf(app, id)))
+            }
+            return RunOutcome.RETRY
+        }
+        val message = describe(app, e)
+        updateQueue(app) { if (it.active) it.copy(failed = message, retries = 0) else it }
+        _running.value = null
+        _download.value = DownloadState.Offers(lastOffers)
+        if (id != null) post(app, NoticeState.Failed(nameOf(app, id), message))
+        return RunOutcome.FAILED
+    }
+
+    /** The runner is at [phase] with region [id]; the notice follows. */
+    private fun setPhase(app: Context, phase: RunPhase, id: String) {
+        _running.value = phase
+        val q = _queue.value
+        val name = nameOf(app, id)
+        post(
+            app,
+            when (phase) {
+                RunPhase.INSTALLING -> NoticeState.Installing(q.index, q.total, name)
+                RunPhase.RETRYING -> NoticeState.Retrying(q.index, q.total, name)
+                else -> NoticeState.Starting(q.index, q.total, name)
+            },
+        )
+    }
+
+    /**
+     * Installs the downloaded [offer] (the core checks its SHA-256 against
+     * the signed manifest, unpacks it and checks its structure, then renames
+     * it into place), switched on or off by [switchedOnAfterInstall]. Kill
+     * safe: one synchronous write records the install and takes it off the
+     * queue, and only then is the partial deleted.
+     */
+    private suspend fun install(app: Context, bytes: ByteArray, offer: RegionOffer, part: File) {
+        val id = offer.id
+        setPhase(app, RunPhase.INSTALLING, id)
+        _download.value = DownloadState.Installing(offer)
+        val target = file(app, id).apply { parentFile?.mkdirs() }
+        withContext(NonCancellable) {
             lock.withLock {
                 // The switch as the phone has it, read before the file is replaced.
-                val on = switchedOnAfterInstall(installedList(app), offer.id, off)
-                val fp = installRegion(bytes, offer.id, part.path, target.path)
+                val on = switchedOnAfterInstall(installedList(app), id, _queue.value.off)
+                val fp = installRegion(bytes, id, part.path, target.path)
+                updateQueue(
+                    app,
+                    { edit ->
+                        edit.putStringSet(INSTALLED, HashSet(installedIds(app) + id))
+                            .putString("name.$id", offer.name)
+                            .putString("fp.$id", fp)
+                            .putLong("ts.$id", offer.osmTimestamp)
+                            .putString("sha.$id", offer.gzSha256)
+                        // In the same write, before the reopen, so a region
+                        // that was off is never opened.
+                        if (on) edit.remove("off.$id") else edit.putBoolean("off.$id", true)
+                    },
+                ) { installed(it, id) }
                 part.delete()
-                val edit = prefs(app).edit()
-                    .putStringSet(INSTALLED, installedIds(app) + offer.id)
-                    .putString("name.${offer.id}", offer.name)
-                    .putString("fp.${offer.id}", fp)
-                    .putLong("ts.${offer.id}", offer.osmTimestamp)
-                    .putString("sha.${offer.id}", offer.gzSha256)
-                // In the same write, before the reopen, so a region that
-                // was off is never opened.
-                if (on) edit.remove("off.${offer.id}") else edit.putBoolean("off.${offer.id}", true)
-                edit.apply()
-                reopen(app)
+                synchronized(batchNames) { batchNames += offer.name }
+                if (loaded) reopen(app)
             }
-            return true
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            _download.value = DownloadState.Offers(offers)
-            throw e
-        } catch (e: Exception) {
-            // A file the core refused is useless to resume.
-            if (e is se.gangefors.moto.core.MotoException) part.delete()
-            _download.value = DownloadState.Failed(describe(app, e), offers)
-            return false
         }
+        _download.value = DownloadState.Offers(lastOffers)
     }
 
     /** The installed regions' files, for the debug tools. */
     fun installedFiles(context: Context): List<File> =
         installedList(context.applicationContext).map { file(context.applicationContext, it.id) }
 
-    /** Stops a download; what has arrived is kept to resume later. */
-    fun cancel() {
-        job?.cancel()
+    /** Removes region [id] from the phone; the network opens without it. A
+     * queued region is dropped from the queue with its partial. */
+    fun remove(context: Context, id: String) {
+        val app = context.applicationContext
+        init(app)
+        if (id in _queue.value.ids) {
+            val q = updateQueue(app) { dropped(it, id) }
+            if (isRegionId(id)) partial(app, id).delete()
+            if (!q.active) {
+                cancelHost(app)
+                _running.value = null
+                post(app, null)
+            }
+        }
+        change(app) { drop(it, id) }
     }
-
-    /** Removes region [id] from the phone; the network opens without it. */
-    fun remove(context: Context, id: String) = change(context) { drop(it, id) }
 
     /**
      * Enables or disables region [id]: a disabled region stays on the phone
@@ -372,8 +817,8 @@ object Regions {
 
     private fun change(context: Context, what: (Context) -> Unit) {
         val app = context.applicationContext
-        if (job?.isActive == true) return
-        job = scope.launch {
+        if (changeJob?.isActive == true) return
+        changeJob = scope.launch {
             lock.withLock {
                 _active.value = _active.value.copy(state = RegionState.Loading)
                 what(app)
@@ -383,83 +828,123 @@ object Regions {
     }
 
     private fun describe(context: Context, e: Exception): String = when (e) {
+        is NoRoom -> e.message.orEmpty()
         is IOException -> context.getString(R.string.region_network, e.message ?: e.toString())
         else -> e.message ?: e.toString()
     }
 
-    /** Opens [url] over HTTPS, following redirects only to HTTPS. */
-    private fun connect(url: String, range: String?): HttpsURLConnection {
+    // ---- Notices ----
+
+    /** Shows [s] in the queue's one notification; null takes it away. */
+    private fun post(app: Context, s: NoticeState?) = Unit
+
+    /** The waiting notice, for the queue's head. */
+    private fun postWaiting(app: Context, q: DownloadQueue) {
+        val id = q.ids.firstOrNull() ?: return
+        if (q.failed != null) return
+        post(app, NoticeState.Waiting(q.index, q.total, nameOf(app, id), wifi = _policy.value == NetworkPolicy.UNMETERED))
+    }
+
+    // ---- Transfers ----
+
+    /** Opens [url] over HTTPS on [network] (null: the default), following
+     * redirects only to HTTPS. */
+    private fun connect(url: String, range: String?, network: Network?): HttpsURLConnection {
         var target = URL(url)
         repeat(MAX_REDIRECTS) {
-            if (target.protocol != "https") throw IOException("refused a non-HTTPS address")
-            val c = target.openConnection() as HttpsURLConnection
+            if (target.protocol != "https") throw Refused(DownloadFailure.REFUSED_ADDRESS, "refused a non-HTTPS address")
+            val c = (network?.openConnection(target) ?: target.openConnection()) as? HttpsURLConnection
+                ?: throw Refused(DownloadFailure.REFUSED_ADDRESS, "refused a non-HTTPS address")
             c.instanceFollowRedirects = false
             c.connectTimeout = CONNECT_TIMEOUT_MS
             c.readTimeout = READ_TIMEOUT_MS
             range?.let { c.setRequestProperty("Range", it) }
             val code = c.responseCode
             if (code in 300..399) {
-                val next = c.getHeaderField("Location") ?: throw IOException("redirect without a location")
+                val next = c.getHeaderField("Location")
+                    ?: throw Refused(DownloadFailure.REFUSED_ADDRESS, "redirect without a location")
                 c.disconnect()
                 target = URL(target, next)
             } else {
                 return c
             }
         }
-        throw IOException("too many redirects")
+        throw Refused(DownloadFailure.REFUSED_ADDRESS, "too many redirects")
     }
 
-    private fun fetchSmall(url: String): ByteArray {
-        val c = connect(url, null)
+    private fun fetchSmall(url: String, network: Network?): ByteArray {
+        val c = connect(url, null, network)
         try {
-            if (c.responseCode != HttpURLConnection.HTTP_OK) throw IOException("HTTP ${c.responseCode}")
+            if (c.responseCode != HttpURLConnection.HTTP_OK) throw HttpStatus(c.responseCode)
             return c.inputStream.use { readCapped(it, MAX_MANIFEST_BYTES) }
-                ?: throw IOException("the region list is too large")
+                ?: throw Refused(DownloadFailure.OTHER, "the region list is too large")
         } finally {
             c.disconnect()
         }
     }
 
-    private suspend fun fetchFile(url: String, part: File, offer: RegionOffer) {
+    /**
+     * Downloads [offer] into [part], resumed where it stopped and never past
+     * its listed size; [movedBefore] bytes were moved earlier in this run.
+     * Returns the bytes moved now.
+     */
+    private suspend fun fetchFile(app: Context, url: String, part: File, offer: RegionOffer, host: RegionHost, movedBefore: Long): Long {
         val total = offer.gzBytes.toLong()
         var have = part.length()
         if (have > total) {
             part.delete()
             have = 0
         }
-        if (have == total) return
-        val c = connect(url, resumeRange(have, total))
+        if (have == total) return 0
+        val c = connect(url, resumeRange(have, total), host.network)
+        var moved = 0L
         try {
             when (resumeAction(c.responseCode, have)) {
                 ResumeAction.APPEND -> Unit
                 ResumeAction.RESTART -> have = 0
-                ResumeAction.FAIL -> throw IOException("HTTP ${c.responseCode}")
+                ResumeAction.FAIL -> throw HttpStatus(c.responseCode)
             }
+            _running.value = RunPhase.DOWNLOADING
             _download.value = DownloadState.Downloading(offer, have)
+            val q = _queue.value
+            fun show() = post(app, NoticeState.Downloading(q.index, q.total, offer.name, have, total))
+            show()
             c.inputStream.use { input ->
                 FileOutputStream(part, have > 0).use { out ->
                     val buf = ByteArray(1 shl 16)
                     var lastShown = have
+                    var lastPosted = SystemClock.elapsedRealtime()
                     while (true) {
-                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        currentCoroutineContext().ensureActive()
                         val n = input.read(buf)
                         if (n < 0) break
-                        if (have + n > total) throw IOException("the download is larger than listed")
+                        if (have + n > total) throw Refused(DownloadFailure.SIZE_MISMATCH, "the download is larger than listed")
                         out.write(buf, 0, n)
                         have += n
+                        moved += n
                         if (have - lastShown >= PROGRESS_STEP) {
                             lastShown = have
                             _download.value = DownloadState.Downloading(offer, have)
                         }
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastPosted >= NOTICE_STEP_MS) {
+                            lastPosted = now
+                            host.transferred(movedBefore + moved)
+                            show()
+                        }
                     }
                 }
             }
+            host.transferred(movedBefore + moved)
             if (have != total) throw IOException("the download stopped early")
         } finally {
             c.disconnect()
         }
+        return moved
     }
 
     private const val MAX_REDIRECTS = 5
     private const val PROGRESS_STEP = 1L shl 20
+    /** The notice and the job's byte count are updated at most this often. */
+    private const val NOTICE_STEP_MS = 1_000L
 }

@@ -174,8 +174,12 @@ internal fun MapScreenScope.MapSetupEffects() {
             onDispose { permissionOwner.lifecycle.removeObserver(observer) }
         }
 
-        // Open the downloaded region off the main thread.
-        LaunchedEffect(Unit) { Regions.load(context.applicationContext) }
+        // Open the downloaded region off the main thread, then carry on with
+        // a region download that was interrupted (ADR-0017).
+        LaunchedEffect(Unit) {
+            Regions.load(context.applicationContext)
+            Regions.resume(context.applicationContext)
+        }
 
         val permissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),

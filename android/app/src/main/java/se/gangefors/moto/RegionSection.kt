@@ -63,7 +63,7 @@ fun RegionSection() {
     val zone = remember { ZoneId.systemDefault() }
     val active by Regions.active.collectAsState()
     val download by Regions.download.collectAsState()
-    val waiting by Regions.waiting.collectAsState()
+    val queue by Regions.queue.collectAsState()
     var confirmRemove by remember { mutableStateOf<String?>(null) }
     val installed = active.installed
     val working = download is DownloadState.Downloading || download is DownloadState.Installing
@@ -139,11 +139,11 @@ fun RegionSection() {
         shown != null -> {
             val updates = offersToUpdate(installed, shown)
             if (updates.size > 1 && !working && !changing) {
-                Button(onClick = { Regions.start(context, updates) }, modifier = Modifier.padding(vertical = 4.dp)) {
+                Button(onClick = { Regions.enqueue(context, updates) }, modifier = Modifier.padding(vertical = 4.dp)) {
                     OneLine(stringResource(R.string.region_update_all, updates.size))
                 }
             }
-            shown.forEach { OfferRow(it, installed, zone, d, busy = working || changing, waiting = it.id in waiting) }
+            shown.forEach { OfferRow(it, installed, zone, d, busy = working || changing, waiting = it.id in queue.ids.drop(1)) }
         }
         d is DownloadState.Checking || d is DownloadState.Idle ->
             Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -160,6 +160,14 @@ fun RegionSection() {
         if (d.offers.isEmpty() && offers == null) {
             OutlinedButton(onClick = { Regions.check(context) }) { OneLine(stringResource(R.string.region_retry)) }
         }
+    }
+    queue.failed?.let {
+        Text(
+            stringResource(R.string.region_failed_download, it),
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        OutlinedButton(onClick = { Regions.retry(context) }) { OneLine(stringResource(R.string.region_retry)) }
     }
     Text(
         stringResource(R.string.region_hint),
@@ -264,7 +272,7 @@ private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone:
             }
             when {
                 download is DownloadState.Downloading && mine ->
-                    IconButton(onClick = { Regions.cancel() }) {
+                    IconButton(onClick = { Regions.stop(context) }) {
                         Icon(painterResource(R.drawable.ic_close), stringResource(R.string.region_stop))
                     }
                 download is DownloadState.Installing && mine -> {}
@@ -275,10 +283,10 @@ private fun OfferRow(offer: RegionOffer, installed: List<InstalledRegion>, zone:
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(8.dp),
                     )
-                    OfferAction.UPDATE -> Button(onClick = { Regions.start(context, offer) }, enabled = !busy) {
+                    OfferAction.UPDATE -> Button(onClick = { Regions.enqueue(context, listOf(offer)) }, enabled = !busy) {
                         OneLine(stringResource(R.string.region_update))
                     }
-                    OfferAction.DOWNLOAD -> OutlinedButton(onClick = { Regions.start(context, offer) }, enabled = !busy) {
+                    OfferAction.DOWNLOAD -> OutlinedButton(onClick = { Regions.enqueue(context, listOf(offer)) }, enabled = !busy) {
                         OneLine(stringResource(R.string.region_download))
                     }
                 }
