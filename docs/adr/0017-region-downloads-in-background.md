@@ -1,6 +1,6 @@
 # ADR-0017: Region downloads in the background — a user-initiated data transfer job, one notification, Wi-Fi unless allowed
 
-**Status:** Proposed · **Date:** 2026-10-11 · **Deciders:** the owner · **Repo path:** `docs/adr/0017-region-downloads-in-background.md`
+**Status:** Accepted · **Date:** 2026-10-11 · **Deciders:** the owner · **Repo path:** `docs/adr/0017-region-downloads-in-background.md`
 
 Amends [ADR-0008](0008-region-download.md) (downloads only while the app is open, "no background downloads in v1") and [ADR-0016](0016-backup-region-switches.md) (the regions a restore installs switched off are kept with the queue).
 
@@ -102,11 +102,22 @@ DownloadManager gives resume and Wi-Fi rules, but it can't give one combined not
 - **Security:** two new manifest entries, a job service and a receiver, neither exported; one new normal permission; no new library. The open-page intent on the launcher activity carries no data.
 - **Revisit if:** the rider wants downloads to carry on after a phone restart without opening the app (persist the job: needs `RECEIVE_BOOT_COMPLETED`); Android retires or limits user-initiated jobs; an iOS port arrives (background `URLSession`).
 
+## Notes from the build (2026-10-11)
+
+- **Job network request:** the request no longer excludes VPN networks (`NOT_VPN` removed) and requires `NET_CAPABILITY_VALIDATED`, so the job waits for a network that has been checked to reach the internet. Metered and roaming are still inherited from the underlying networks; reviewed as correct.
+- **Flaky connections:** JobScheduler applies its own exponential backoff between retries, on top of the 30 s steps above. Accepted.
+- **Android 8 to 27:** roaming is read through the deprecated `NetworkInfo`, the only option on those versions.
+- **Decisions made in the build:**
+  - After a phone restart or a force stop, the queue resumes only when the app is opened.
+  - Roaming is never used by the setting. It needs the once-only prompt and its warning.
+  - Stop deletes the partial files of the queue.
+  - A download started while one runs joins the end of the queue.
+
 ## Action Items
 
-- [ ] App: the queue in preferences, checked on read, with its pure logic and unit tests (policy, prompt, queue edits, partial rules, retry rules, notification texts).
-- [ ] App: the user-initiated job (Android 14+) and the in-app host (8 to 13) running one queue runner; connections bound to the job's network; fresh signed manifest per run; partials by id with their SHA-256.
-- [ ] App: the combined notification, two channels, Stop receiver (not exported), open-page intent; the notification permission asked once.
-- [ ] App: Map region page: the mobile-data setting, the once-only prompt, the waiting, retrying and queued row states, the notifications-off note; downloads queue while one runs.
-- [ ] App: kill-safe install order, sweep of stray partial and temporary files, the network opened only for a running app.
+- [x] App: the queue in preferences, checked on read, with its pure logic and unit tests (policy, prompt, queue edits, partial rules, retry rules, notification texts).
+- [x] App: the user-initiated job (Android 14+) and the in-app host (8 to 13) running one queue runner; connections bound to the job's network; fresh signed manifest per run; partials by id with their SHA-256.
+- [x] App: the combined notification, two channels, Stop receiver (not exported), open-page intent; the notification permission asked once.
+- [x] App: Map region page: the mobile-data setting, the once-only prompt, the waiting, retrying and queued row states, the notifications-off note; downloads queue while one runs.
+- [x] App: kill-safe install order, sweep of stray partial and temporary files, the network opened only for a running app.
 - [ ] Phone test: background download with the screen off; Wi-Fi lost and back; force stop and phone restart mid-download; force stop while installing; mobile-data prompt both ways; permission refused; a restore with a switched-off region interrupted and resumed.
