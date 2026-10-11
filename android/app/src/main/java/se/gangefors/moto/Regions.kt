@@ -839,11 +839,19 @@ object Regions {
                 currentCoroutineContext().ensureActive()
                 val id = _queue.value.ids.firstOrNull()
                 if (id == null) {
-                    // Done, unless a region was queued meanwhile; from here
-                    // on a region queued starts a new run.
+                    // Done, unless a region was queued meanwhile. Under the
+                    // lock a region queued from here on starts a new batch,
+                    // so this batch's names and its ready notice are settled
+                    // here first (a new batch's waiting notice comes after).
                     val goOn = synchronized(queueLock) {
                         val active = updateQueue(app) { if (it.active) it else DownloadQueue() }.active
-                        if (!active) runActive = false
+                        if (!active) {
+                            runActive = false
+                            val names = synchronized(batchNames) { batchNames.toList().also { batchNames.clear() } }
+                            _running.value = null
+                            _download.value = DownloadState.Offers(offers)
+                            post(app, if (names.isEmpty()) null else NoticeState.Ready(names))
+                        }
                         active
                     }
                     if (goOn) continue
@@ -875,10 +883,6 @@ object Regions {
                 moved += fetchFile(app, regionUrl(offer.fileName), part, offer, host, moved)
                 install(app, bytes, offer, part)
             }
-            val names = synchronized(batchNames) { batchNames.toList().also { batchNames.clear() } }
-            _running.value = null
-            _download.value = DownloadState.Offers(offers)
-            post(app, if (names.isEmpty()) null else NoticeState.Ready(names))
             return RunOutcome.DONE
         } catch (e: Exception) {
             // Stopped (by the rider, or Android for the network), also when a
