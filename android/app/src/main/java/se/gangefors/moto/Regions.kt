@@ -1024,10 +1024,14 @@ object Regions {
 
     // ---- Notices ----
 
-    /** Shows [s] in the queue's one notification; null takes it away. */
-    private fun post(app: Context, s: NoticeState?) {
-        // A late progress notice from a stopped run never brings it back.
-        if (s != null && s !is NoticeState.Ready && s !is NoticeState.Failed && !_queue.value.active) return
+    /**
+     * Shows [s] in the queue's one notification; null takes it away. Under
+     * the queue's lock, so a late progress notice from a stopped run can't
+     * come after Stop took the notification away (an ongoing one can't be
+     * swiped away on Android 13 and older).
+     */
+    private fun post(app: Context, s: NoticeState?) = synchronized(queueLock) {
+        if (s != null && s !is NoticeState.Ready && s !is NoticeState.Failed && !_queue.value.active) return@synchronized
         RegionNotices.show(app, s)
     }
 
