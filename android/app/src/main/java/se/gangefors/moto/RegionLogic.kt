@@ -47,6 +47,18 @@ fun resumeAction(code: Int, have: Long): ResumeAction = when {
     else -> ResumeAction.FAIL
 }
 
+/**
+ * Whether a 206 answer's Content-Range [header] is exactly the rest asked
+ * for: "bytes <[have]>-<[total] - 1>/<[total]>". Anything else (another
+ * range, an unknown length, a malformed or missing header) is not appended
+ * to the partial file.
+ */
+fun contentRangeMatches(header: String?, have: Long, total: Long): Boolean {
+    val m = Regex("bytes ([0-9]{1,18})-([0-9]{1,18})/([0-9]{1,18})").matchEntire(header?.trim() ?: return false) ?: return false
+    val (first, last, length) = m.groupValues.drop(1).map { it.toLongOrNull() ?: return false }
+    return have > 0 && first == have && last == total - 1 && length == total
+}
+
 /** Whether there is room for the rest of the download and the installed region. */
 fun hasRoomFor(gzBytes: Long, have: Long, regionBytes: Long, free: Long): Boolean =
     free - REGION_SPACE_MARGIN >= (gzBytes - have).coerceAtLeast(0) + regionBytes

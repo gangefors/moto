@@ -22,6 +22,21 @@ class RegionLogicTest {
     }
 
     @Test
+    fun appendsOnlyTheRangeAskedFor() {
+        assertTrue(contentRangeMatches("bytes 40-99/100", 40, 100))
+        assertTrue(contentRangeMatches(" bytes 40-99/100 ", 40, 100))
+        for (bad in listOf(
+            null, "", "bytes 0-99/100", "bytes 41-99/100", "bytes 40-98/100", "bytes 40-99/*",
+            "bytes 40-99/101", "bytes */100", "items 40-99/100", "bytes 40-99", "bytes -40-99/100",
+            "bytes 40-99/100, 0-1", "bytes 99999999999999999999-1/2", "bytes 40-99/100\u0000",
+        )) {
+            assertFalse(bad.toString(), contentRangeMatches(bad, 40, 100))
+        }
+        // Nothing to resume from: never a match.
+        assertFalse(contentRangeMatches("bytes 0-99/100", 0, 100))
+    }
+
+    @Test
     fun resumesWhereTheDownloadStopped() {
         assertNull(resumeRange(0, 100))
         assertEquals("bytes=40-", resumeRange(40, 100))

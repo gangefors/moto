@@ -1087,7 +1087,14 @@ object Regions {
             have = 0
         }
         if (have == total) return 0
-        val c = connect(url, resumeRange(have, total), host.network)
+        var c = connect(url, resumeRange(have, total), host.network)
+        if (c.responseCode == 206 && !contentRangeMatches(c.getHeaderField("Content-Range"), have, total)) {
+            // Not the rest of this file: start it afresh.
+            c.disconnect()
+            part.delete()
+            have = 0
+            c = connect(url, null, host.network)
+        }
         var moved = 0L
         try {
             when (resumeAction(c.responseCode, have)) {
