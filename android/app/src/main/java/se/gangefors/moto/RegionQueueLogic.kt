@@ -162,13 +162,25 @@ fun keepPartial(recordedSha: String?, offerSha: String, have: Long, total: Long)
     have == 0L || (recordedSha == offerSha && have in 0..total)
 
 /** Why one region's download stopped. */
-enum class DownloadFailure { NETWORK, HTTP_TRANSIENT, HTTP_OTHER, REFUSED_ADDRESS, SIZE_MISMATCH, CORE_REFUSED, NO_ROOM, OTHER }
+enum class DownloadFailure { NETWORK, HTTP_TRANSIENT, HTTP_OTHER, REFUSED_ADDRESS, SIZE_MISMATCH, CORE_REFUSED, NO_ROOM, NOT_ALLOWED, OTHER }
 
 /** The server answered [code]. */
 class HttpStatus(val code: Int) : IOException("HTTP $code")
 
 /** A download refused on our side (an address, a size), as [kind]. */
 class Refused(val kind: DownloadFailure, message: String) : IOException(message)
+
+/** The phone moved to a network the policy doesn't allow (roaming, or
+ * mobile data switched off) during a transfer on the default network. */
+class NotAllowed : IOException("the network is not allowed now")
+
+/**
+ * Whether a transfer may go on: one bound to the job's network always may
+ * ([bound]: Android stops the job when its constraint no longer holds);
+ * one on the phone's default network only while [policy] allows [now].
+ */
+fun transferAllowed(bound: Boolean, policy: NetworkPolicy, now: NetworkNow): Boolean =
+    bound || allows(policy, now)
 
 /** Too little free space for the region; [message] says how much is needed. */
 class NoRoom(message: String) : Exception(message)
@@ -185,10 +197,15 @@ fun failureOf(e: Throwable): DownloadFailure = when (e) {
     is HttpStatus -> httpFailure(e.code)
     is Refused -> e.kind
     is NoRoom -> DownloadFailure.NO_ROOM
+    is NotAllowed -> DownloadFailure.NOT_ALLOWED
     is MotoException -> DownloadFailure.CORE_REFUSED
     is IOException -> DownloadFailure.NETWORK
     else -> DownloadFailure.OTHER
 }
+
+/** NOT_ALLOWED: not a failure; the queue waits for an allowed network
+ * and goes on from the partial, without counting an attempt. */
+fun waitsForNetwork(f: DownloadFailure): Boolean = f == DownloadFailure.NOT_ALLOWED
 
 /** Attempts in a row without new bytes before a region fails. */
 const val MAX_RETRIES = 5

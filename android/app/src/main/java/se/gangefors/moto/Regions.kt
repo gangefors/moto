@@ -88,8 +88,9 @@ internal interface RegionHost {
     fun transferred(bytes: Long) = Unit
 }
 
-/** How one run of the queue ended. */
-internal enum class RunOutcome { DONE, FAILED, RETRY }
+/** How one run of the queue ended: done, failed, to be retried after a
+ * wait, or to wait for an allowed network (the in-app host). */
+internal enum class RunOutcome { DONE, FAILED, RETRY, WAIT }
 
 /**
  * The routing regions (ADR-0008, ADR-0009): the downloaded ones, one file
@@ -692,7 +693,7 @@ object Regions {
             previous?.cancelAndJoin()
             val outcome = runQueue(app, JobHost(params, service))
             if (jobParams === params) jobParams = null
-            service.jobFinished(params, outcome == RunOutcome.RETRY)
+            service.jobFinished(params, outcome == RunOutcome.RETRY || outcome == RunOutcome.WAIT)
         }
     }
 
@@ -746,6 +747,8 @@ object Regions {
                 val retries = _queue.value.retries
                 when (runQueue(app, InAppHost)) {
                     RunOutcome.RETRY -> delay(backoffMs(retries))
+                    // The next run waits for an allowed network first.
+                    RunOutcome.WAIT -> Unit
                     else -> break
                 }
             }
@@ -841,6 +844,11 @@ object Regions {
     private fun failed(app: Context, e: Exception, head: String?, before: Long): RunOutcome {
         val f = failureOf(e)
         DebugTools.mark("region download: $f ($e)")
+        if (waitsForNetwork(f)) {
+            // The partial and the retry count stay as they are.
+            _running.value = null
+            return RunOutcome.WAIT
+        }
         if (head != null && deletesPartial(f)) {
             partial(app, head).delete()
             prefs(app).edit().remove(PART_SHA + head).commit()
@@ -1052,6 +1060,8 @@ object Regions {
                     var lastPosted = SystemClock.elapsedRealtime()
                     while (true) {
                         currentCoroutineContext().ensureActive()
+                        // Roaming, or mobile data switched off: stop on the default network.
+                        if (!transferAllowed(host.network != null, _policy.value, _network.value)) throw NotAllowed()
                         val n = input.read(buf)
                         if (n < 0) break
                         if (have + n > total) throw Refused(DownloadFailure.SIZE_MISMATCH, "the download is larger than listed")

@@ -208,6 +208,25 @@ class RegionQueueLogicTest {
         assertEquals(DownloadFailure.NETWORK, failureOf(IOException("timeout")))
         assertEquals(DownloadFailure.NETWORK, failureOf(java.net.SocketTimeoutException()))
         assertEquals(DownloadFailure.OTHER, failureOf(IllegalStateException("x")))
+        assertEquals(DownloadFailure.NOT_ALLOWED, failureOf(NotAllowed()))
+    }
+
+    @Test
+    fun aTransferStopsWhenTheNetworkIsNoLongerAllowed() {
+        // On the phone's default network (the in-app host): only while allowed.
+        assertTrue(transferAllowed(false, NetworkPolicy.UNMETERED, wifi))
+        assertFalse(transferAllowed(false, NetworkPolicy.UNMETERED, mobile))
+        assertFalse(transferAllowed(false, NetworkPolicy.HOME, roaming))
+        assertFalse(transferAllowed(false, NetworkPolicy.HOME, offline))
+        assertTrue(transferAllowed(false, NetworkPolicy.HOME, mobile))
+        // Bound to the job's network: Android stops the job itself.
+        assertTrue(transferAllowed(true, NetworkPolicy.UNMETERED, roaming))
+        // Not a failure: waits without counting a retry or losing the partial.
+        val f = failureOf(NotAllowed())
+        assertTrue(waitsForNetwork(f))
+        assertFalse(shouldRetry(f, 0))
+        assertFalse(deletesPartial(f))
+        for (other in DownloadFailure.entries - DownloadFailure.NOT_ALLOWED) assertFalse(other.name, waitsForNetwork(other))
     }
 
     @Test
