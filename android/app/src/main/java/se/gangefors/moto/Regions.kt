@@ -647,11 +647,13 @@ object Regions {
         false
     }
 
-    /** The networks [policy] allows, as the job's constraint. A VPN counts
-     * as the network under it. */
+    /** The networks [policy] allows, as the job's constraint: validated
+     * ones only; a VPN counts as the network under it. */
     private fun networkRequest(policy: NetworkPolicy): NetworkRequest {
         val b = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            // A network that really reaches the internet (not a captive portal).
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
         when (policy) {
             NetworkPolicy.UNMETERED -> b.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
