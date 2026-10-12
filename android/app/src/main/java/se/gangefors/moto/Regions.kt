@@ -166,6 +166,13 @@ object Regions {
     /** The download queue, as kept on the phone. */
     val queue: StateFlow<DownloadQueue> = _queue.asStateFlow()
 
+    private val _installing = MutableStateFlow<String?>(null)
+
+    /** The region being installed: from the core's check until the network
+     * has been opened again with it (or that failed); null otherwise. Not
+     * persisted. */
+    val installing: StateFlow<String?> = _installing.asStateFlow()
+
     private val _running = MutableStateFlow<RunPhase?>(null)
     /** What the runner is doing to the queue's head; null while it isn't running. */
     val running: StateFlow<RunPhase?> = _running.asStateFlow()
@@ -1010,29 +1017,34 @@ object Regions {
                     part.delete()
                     return@withLock
                 }
-                // The switch as the phone has it, read before the file is replaced.
-                val on = switchedOnAfterInstall(installedList(app), id, _queue.value.off)
-                val fp = installRegion(bytes, id, part.path, target.path)
-                updateQueue(
-                    app,
-                    { edit ->
-                        edit.putStringSet(INSTALLED, HashSet(installedIds(app) + id))
-                            .putString("name.$id", offer.name)
-                            .putString("fp.$id", fp)
-                            .putLong("ts.$id", offer.osmTimestamp)
-                            .putString("sha.$id", offer.gzSha256)
-                        // In the same write, before the reopen, so a region
-                        // that was off is never opened.
-                        if (on) edit.remove("off.$id") else edit.putBoolean("off.$id", true)
-                    },
-                ) {
-                    // Counted for the ready notice only if it was still queued
-                    // (not stopped meanwhile).
-                    if (id in it.ids) synchronized(batchNames) { batchNames += offer.name }
-                    installed(it, id)
+                _installing.value = id
+                try {
+                    // The switch as the phone has it, read before the file is replaced.
+                    val on = switchedOnAfterInstall(installedList(app), id, _queue.value.off)
+                    val fp = installRegion(bytes, id, part.path, target.path)
+                    updateQueue(
+                        app,
+                        { edit ->
+                            edit.putStringSet(INSTALLED, HashSet(installedIds(app) + id))
+                                .putString("name.$id", offer.name)
+                                .putString("fp.$id", fp)
+                                .putLong("ts.$id", offer.osmTimestamp)
+                                .putString("sha.$id", offer.gzSha256)
+                            // In the same write, before the reopen, so a region
+                            // that was off is never opened.
+                            if (on) edit.remove("off.$id") else edit.putBoolean("off.$id", true)
+                        },
+                    ) {
+                        // Counted for the ready notice only if it was still queued
+                        // (not stopped meanwhile).
+                        if (id in it.ids) synchronized(batchNames) { batchNames += offer.name }
+                        installed(it, id)
+                    }
+                    part.delete()
+                    if (loaded) reopen(app)
+                } finally {
+                    _installing.value = null
                 }
-                part.delete()
-                if (loaded) reopen(app)
             }
         }
         _download.value = DownloadState.Offers(lastOffers)

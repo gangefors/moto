@@ -287,6 +287,44 @@ class RegionQueueLogicTest {
     }
 
     @Test
+    fun installingRegionHoldsTheRestOfTheQueue() {
+        val u = NetworkPolicy.UNMETERED
+        // Before the commit: the head is installing, the next waits.
+        val both = DownloadQueue(listOf("alpha", "beta"))
+        assertEquals(RowPhase.INSTALLING, rowPhase("alpha", both, RunPhase.INSTALLING, u, wifi, "alpha"))
+        assertEquals(RowPhase.QUEUED, rowPhase("beta", both, RunPhase.INSTALLING, u, wifi, "alpha"))
+        // After the commit: the new head waits for its turn.
+        val after = DownloadQueue(listOf("beta"), done = 1)
+        assertEquals(RowPhase.QUEUED, rowPhase("beta", after, RunPhase.INSTALLING, u, wifi, "alpha"))
+        // After Stop: nothing queued, nothing running, still installing.
+        assertEquals(RowPhase.INSTALLING, rowPhase("alpha", DownloadQueue(), null, u, wifi, "alpha"))
+        // Neither queued nor installing.
+        assertEquals(RowPhase.NONE, rowPhase("gamma", after, RunPhase.INSTALLING, u, wifi, "alpha"))
+        // Nothing installing: the existing results.
+        assertEquals(RowPhase.INSTALLING, rowPhase("beta", after, RunPhase.INSTALLING, u, wifi, null))
+    }
+
+    @Test
+    fun updateAllLeavesOutQueuedAndInstalling() {
+        fun offer(id: String) = se.gangefors.moto.core.RegionOffer(
+            id = id, name = id, fileName = "$id.zst", gzBytes = 1uL, gzSha256 = "new", regionBytes = 2uL,
+            osmTimestamp = 300, southWest = se.gangefors.moto.core.LatLon(55.0, 10.0),
+            northEast = se.gangefors.moto.core.LatLon(56.0, 11.0),
+        )
+        val installed = listOf(
+            InstalledRegion("alpha", "alpha", 200, 1, enabled = true, gzSha256 = "old"),
+            InstalledRegion("beta", "beta", 200, 1, enabled = true, gzSha256 = "old"),
+        )
+        val offers = listOf(offer("alpha"), offer("beta"), offer("gamma")) // gamma is not an update
+        fun ids(q: DownloadQueue, installing: String?) =
+            updatesToQueue(installed, offers, q, installing).map { it.id }
+        assertEquals(listOf("alpha", "beta"), ids(DownloadQueue(), null))
+        assertEquals(offersToUpdate(installed, offers).map { it.id }, ids(DownloadQueue(), null))
+        assertEquals(listOf("beta"), ids(DownloadQueue(listOf("alpha")), null))
+        assertEquals(listOf("beta"), ids(DownloadQueue(), "alpha"))
+    }
+
+    @Test
     fun noticeTextsForOneAndMany() {
         val p = NoticeChannel.PROGRESS
         val mib = 1_000_000L

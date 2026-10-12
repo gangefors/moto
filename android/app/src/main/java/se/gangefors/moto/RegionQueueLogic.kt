@@ -240,13 +240,16 @@ enum class RunPhase { STARTING, DOWNLOADING, INSTALLING, RETRYING }
 enum class RowPhase { NONE, QUEUED, STARTING, DOWNLOADING, INSTALLING, RETRYING, WAITING_WIFI, WAITING_NETWORK, FAILED }
 
 /**
- * Not queued → NONE; queued, not the head → QUEUED; the head: failed →
- * FAILED; running → its phase; else allowed now → STARTING, UNMETERED →
- * WAITING_WIFI, else WAITING_NETWORK.
+ * The region being [installing] → INSTALLING (queued or not, whatever the
+ * run says: it is installed but the network has not opened with it yet);
+ * not queued → NONE; queued and another is installing, or not the head →
+ * QUEUED; the head: failed → FAILED; running → its phase; else allowed now
+ * → STARTING, UNMETERED → WAITING_WIFI, else WAITING_NETWORK.
  */
 fun rowPhase(offerId: String, q: DownloadQueue, running: RunPhase?, policy: NetworkPolicy, now: NetworkNow, installing: String? = null): RowPhase = when {
+    offerId == installing -> RowPhase.INSTALLING
     offerId !in q.ids -> RowPhase.NONE
-    q.ids.first() != offerId -> RowPhase.QUEUED
+    installing != null || q.ids.first() != offerId -> RowPhase.QUEUED
     q.failed != null -> RowPhase.FAILED
     running != null -> when (running) {
         RunPhase.STARTING -> RowPhase.STARTING
@@ -258,6 +261,15 @@ fun rowPhase(offerId: String, q: DownloadQueue, running: RunPhase?, policy: Netw
     policy == NetworkPolicy.UNMETERED -> RowPhase.WAITING_WIFI
     else -> RowPhase.WAITING_NETWORK
 }
+
+/** What "Update all" queues: the updates not queued and not being installed. */
+fun updatesToQueue(
+    installed: List<InstalledRegion>,
+    offers: List<se.gangefors.moto.core.RegionOffer>,
+    q: DownloadQueue,
+    installing: String?,
+): List<se.gangefors.moto.core.RegionOffer> =
+    offersToUpdate(installed, offers).filter { it.id !in q.ids && it.id != installing }
 
 /** A string resource with its format arguments. */
 data class Txt(val id: Int, val args: List<Any> = emptyList())

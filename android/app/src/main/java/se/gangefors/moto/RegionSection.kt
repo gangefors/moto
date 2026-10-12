@@ -79,6 +79,7 @@ fun RegionSection() {
     val active by Regions.active.collectAsState()
     val download by Regions.download.collectAsState()
     val queue by Regions.queue.collectAsState()
+    val installing by Regions.installing.collectAsState()
     val running by Regions.running.collectAsState()
     val policy by Regions.policy.collectAsState()
     val network by Regions.network.collectAsState()
@@ -194,7 +195,7 @@ fun RegionSection() {
     when {
         shown != null && shown.isEmpty() -> Text(stringResource(R.string.region_no_offers), Modifier.padding(vertical = 8.dp))
         shown != null -> {
-            val updates = offersToUpdate(installed, shown).filter { it.id !in queue.ids }
+            val updates = updatesToQueue(installed, shown, queue, installing)
             if (updates.size > 1 && !changing) {
                 Button(onClick = { Regions.enqueue(context, updates) }, modifier = Modifier.padding(vertical = 4.dp)) {
                     OneLine(stringResource(R.string.region_update_all, updates.size))
@@ -205,7 +206,7 @@ fun RegionSection() {
                     offer,
                     installed,
                     zone,
-                    phase = rowPhase(offer.id, queue, running, policy, network),
+                    phase = rowPhase(offer.id, queue, running, policy, network, installing),
                     download = d,
                     // "Download now" only on a network the setting doesn't allow.
                     canAsk = mobileDataAsk(policy, network) != null,
@@ -362,7 +363,8 @@ private fun Supporting(text: String) {
  * queued, waiting its turn; the queue's first, starting, downloading,
  * installing, waiting for a network, retrying or failed, with an X that
  * stops the queue (none while installing) and, while it waits on a
- * network the setting doesn't allow ([canAsk]), "Download now".
+ * network the setting doesn't allow ([canAsk]), "Download now". A region
+ * being installed stays installing until the network has opened with it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
