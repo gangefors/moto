@@ -287,6 +287,18 @@ class RegionQueueLogicTest {
     }
 
     @Test
+    fun regionInstalledBeforeTheRegionsOpenOffersNoButton() {
+        val u = NetworkPolicy.UNMETERED
+        // The download job checked and installed alpha before the app had
+        // opened its regions: off the queue, no longer marked as installing,
+        // and the network still loading with nothing listed yet.
+        val onPhone = listOf(InstalledRegion("alpha", "alpha", 300, 1, enabled = true, gzSha256 = "a2"))
+        val shown = withPhoneList(ActiveRegion(RegionState.Loading, emptyList()), onPhone)
+        assertEquals(RowPhase.NONE, rowPhase("alpha", DownloadQueue(), null, u, wifi, null))
+        assertEquals(OfferAction.INSTALLED, offerAction(shown.installed, "alpha", 300, "a2"))
+    }
+
+    @Test
     fun installingRegionHoldsTheRestOfTheQueue() {
         val u = NetworkPolicy.UNMETERED
         // Before the commit: the head is installing, the next waits.

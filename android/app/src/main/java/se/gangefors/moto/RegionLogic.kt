@@ -180,3 +180,6 @@ fun openCheck(recorded: String?, returned: String?): OpenCheck = when {
     else -> OpenCheck.FULL_CHECKSUM_DIFFERED
 }
 
+
+// Stub: replaced by the real rule in the next commit.
+fun withPhoneList(active: ActiveRegion, onPhone: List<InstalledRegion>): ActiveRegion = active

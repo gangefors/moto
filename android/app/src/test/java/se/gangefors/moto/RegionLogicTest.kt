@@ -184,4 +184,27 @@ class RegionLogicTest {
         assertTrue(switchedOnAfterInstall(installed, "beta", setOf("beta")))
         assertFalse(switchedOnAfterInstall(installed, "alpha", setOf("beta")))
     }
+
+    @Test
+    fun phoneListShownWhileTheNetworkLoads() {
+        val a1 = InstalledRegion("alpha", "Alpha", 200, 1, enabled = true, gzSha256 = "a1")
+        val a2 = InstalledRegion("alpha", "Alpha", 300, 1, enabled = true, gzSha256 = "a2")
+        val b1 = InstalledRegion("beta", "Beta", 300, 1, enabled = false, gzSha256 = "b1")
+        // Start-up: the record is listed, the state stays Loading.
+        val startup = withPhoneList(ActiveRegion(RegionState.Loading, emptyList()), listOf(a1, b1))
+        assertEquals(listOf(a1, b1), startup.installed)
+        assertEquals(RegionState.Loading, startup.state)
+        // The rows then follow the record.
+        assertEquals(OfferAction.UPDATE, offerAction(startup.installed, "alpha", 300, "a2"))
+        assertEquals(OfferAction.INSTALLED, offerAction(startup.installed, "beta", 300, "b1"))
+        assertEquals(OfferAction.DOWNLOAD, offerAction(startup.installed, "gamma", 300, "g1"))
+        // An update installed while loading replaces the older list.
+        val updated = withPhoneList(ActiveRegion(RegionState.Loading, listOf(a1, b1)), listOf(a2, b1))
+        assertEquals(listOf(a2, b1), updated.installed)
+        // Any other state keeps its list (Ready needs a native engine).
+        val missing = ActiveRegion(RegionState.Missing, listOf(b1))
+        assertEquals(missing, withPhoneList(missing, listOf(a2)))
+        val failed = ActiveRegion(RegionState.Failed("x"), listOf(a1))
+        assertEquals(failed, withPhoneList(failed, listOf(a2, b1)))
+    }
 }
