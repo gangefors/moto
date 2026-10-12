@@ -181,5 +181,12 @@ fun openCheck(recorded: String?, returned: String?): OpenCheck = when {
 }
 
 
-// Stub: replaced by the real rule in the next commit.
-fun withPhoneList(active: ActiveRegion, onPhone: List<InstalledRegion>): ActiveRegion = active
+/**
+ * [active] with the regions on the phone ([onPhone]: installed and checked)
+ * as its list while its network is loading (at start-up, and after an
+ * install before the app has opened its regions), so the Map region page
+ * never offers Download for a region already installed. Any other state
+ * keeps its list: it comes from opening (or failing to open) the network.
+ */
+fun withPhoneList(active: ActiveRegion, onPhone: List<InstalledRegion>): ActiveRegion =
+    if (active.state is RegionState.Loading) active.copy(installed = onPhone) else active

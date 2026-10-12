@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -139,8 +140,9 @@ object Regions {
     @Volatile private var lastOffers: List<RegionOffer> = emptyList()
     /** The regions installed in this batch, for the ready notice. */
     private val batchNames = mutableListOf<String>()
-    /** [load] has run in this process: only then is the network reopened
-     * after an install (a job run with the app closed never opens it). */
+    /** [load] has opened the network in this process: only then is it
+     * reopened after an install; before that an install lists the regions
+     * on the phone instead (a job run with the app closed never opens it). */
     @Volatile private var loaded = false
     /** Guards the queue's read-change-commit. */
     private val queueLock = Any()
@@ -169,8 +171,8 @@ object Regions {
     private val _installing = MutableStateFlow<String?>(null)
 
     /** The region being installed: from the core's check until the network
-     * has been opened again with it (or that failed); null otherwise. Not
-     * persisted. */
+     * has been opened again with it (or that failed), or, before the app has
+     * opened its regions, until it is listed; null otherwise. Not persisted. */
     val installing: StateFlow<String?> = _installing.asStateFlow()
 
     private val _running = MutableStateFlow<RunPhase?>(null)
@@ -227,8 +229,19 @@ object Regions {
         if (previous != null && previous !== opened) NativeRelease.later(previous)
     }
 
+    /** Lists the regions on the phone while the network is loading (see
+     * withPhoneList). The list is read inside the update, so a race never
+     * leaves an older list in place of a newer one. Not on the main thread. */
+    private fun listOnPhone(app: Context) = _active.update { withPhoneList(it, installedList(app)) }
+
     /** Opens the enabled regions at app start. */
-    suspend fun load(context: Context) = lock.withLock {
+    suspend fun load(context: Context) {
+        // Before the lock, so the list shows even while an install holds it.
+        withContext(Dispatchers.IO) { listOnPhone(context.applicationContext) }
+        loadLocked(context)
+    }
+
+    private suspend fun loadLocked(context: Context) = lock.withLock {
         if (_active.value.state !is RegionState.Loading) return@withLock
         DebugTools.mark("region load started")
         use(
@@ -1041,7 +1054,7 @@ object Regions {
                         installed(it, id)
                     }
                     part.delete()
-                    if (loaded) reopen(app)
+                    if (loaded) reopen(app) else listOnPhone(app)
                 } finally {
                     _installing.value = null
                 }

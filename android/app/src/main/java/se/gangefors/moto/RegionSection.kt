@@ -364,7 +364,9 @@ private fun Supporting(text: String) {
  * installing, waiting for a network, retrying or failed, with an X that
  * stops the queue (none while installing) and, while it waits on a
  * network the setting doesn't allow ([canAsk]), "Download now". A region
- * being installed stays installing until the network has opened with it.
+ * being installed stays installing until the network has opened with it
+ * or, before the app has opened its regions, until it is listed as
+ * installed (the page's list is then the phone's record).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
