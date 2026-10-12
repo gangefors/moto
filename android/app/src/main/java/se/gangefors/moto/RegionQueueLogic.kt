@@ -244,7 +244,7 @@ enum class RowPhase { NONE, QUEUED, STARTING, DOWNLOADING, INSTALLING, RETRYING,
  * FAILED; running → its phase; else allowed now → STARTING, UNMETERED →
  * WAITING_WIFI, else WAITING_NETWORK.
  */
-fun rowPhase(offerId: String, q: DownloadQueue, running: RunPhase?, policy: NetworkPolicy, now: NetworkNow): RowPhase = when {
+fun rowPhase(offerId: String, q: DownloadQueue, running: RunPhase?, policy: NetworkPolicy, now: NetworkNow, installing: String? = null): RowPhase = when {
     offerId !in q.ids -> RowPhase.NONE
     q.ids.first() != offerId -> RowPhase.QUEUED
     q.failed != null -> RowPhase.FAILED

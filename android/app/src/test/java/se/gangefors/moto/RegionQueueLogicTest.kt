@@ -277,6 +277,16 @@ class RegionQueueLogicTest {
     }
 
     @Test
+    fun regionBeingInstalledOffersNoButton() {
+        val u = NetworkPolicy.UNMETERED
+        // Committed and off the queue, or with the next region queued:
+        // still being installed until the network has opened with it.
+        for (q in listOf(DownloadQueue(), DownloadQueue(listOf("beta"), done = 1))) {
+            assertEquals(RowPhase.INSTALLING, rowPhase("alpha", q, RunPhase.INSTALLING, u, wifi, "alpha"))
+        }
+    }
+
+    @Test
     fun noticeTextsForOneAndMany() {
         val p = NoticeChannel.PROGRESS
         val mib = 1_000_000L
