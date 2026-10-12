@@ -4,6 +4,8 @@
 
 Amends [ADR-0008](0008-region-download.md) (downloads only while the app is open, "no background downloads in v1") and [ADR-0016](0016-backup-region-switches.md) (the regions a restore installs switched off are kept with the queue).
 
+Amended 2026-10-12 (see [the amendment](#amendment-2026-10-12-no-ready-notice-while-the-app-is-open)): the "ready" notice is shown only while the app is away, and opening the app takes it away.
+
 ## Context
 
 A map region is 100–150 MiB compressed, and a restore or Update all fetches several, one after another. Today (ADR-0008) the download runs in the app's process while the app is open. If the rider leaves the app, Android can stop it at any time. A lost connection fails the queue. Nothing resumes after a restart. The rider (2026-10-11) wants downloads to run in the background with:
@@ -113,6 +115,16 @@ DownloadManager gives resume and Wi-Fi rules, but it can't give one combined not
   - Stop deletes the partial files of the queue.
   - A download started while one runs joins the end of the queue.
 
+## Amendment (2026-10-12): no ready notice while the app is open
+
+The rider (2026-10-12) follows the queue on the Map region page while the app is open, so a "ready" notice there is one more thing to clear. Only the ready notice changes: failed, waiting and retrying notices stay as decided above (he wants to see failures).
+
+- **"Open" means the app's activity is started:** on screen, on any page, also with a dialog over it. The activity's own start and stop say so; a configuration change doesn't count as leaving. No new dependency: `ProcessLifecycleOwner` would need `lifecycle-process`, and with one activity its started state is the same signal.
+- **Ready only while the app is away.** A batch that ends while the app is open, or that installed nothing, leaves no notice.
+- **The job's notification goes with the job.** While a user-initiated job runs, the app can't take its notification away, and DETACH would leave the last progress notice behind. So a batch that ends without a notice sets the job's notification once more with `JOB_END_NOTIFICATION_POLICY_REMOVE` before the job finishes, and Android removes it. A ready, failed, waiting or retrying notice keeps DETACH.
+- **Opening the app takes a ready notice away**, and a leftover progress notice once the queue is empty, never a failed one. Each notice carries its kind in its extras, so this also works after the app's process was killed while the notice stayed.
+- **The progress notice stays while a region downloads,** also with the app open: Android requires it for the job on Android 14 and newer and doesn't let the app remove it. It is already on the low-importance channel, silent and alerting once.
+
 ## Action Items
 
 - [x] App: the queue in preferences, checked on read, with its pure logic and unit tests (policy, prompt, queue edits, partial rules, retry rules, notification texts).
@@ -120,4 +132,6 @@ DownloadManager gives resume and Wi-Fi rules, but it can't give one combined not
 - [x] App: the combined notification, two channels, Stop receiver (not exported), open-page intent; the notification permission asked once.
 - [x] App: Map region page: the mobile-data setting, the once-only prompt, the waiting, retrying and queued row states, the notifications-off note; downloads queue while one runs.
 - [x] App: kill-safe install order, sweep of stray partial and temporary files, the network opened only for a running app.
+- [ ] App (amendment 2026-10-12): the ready notice only while the app is away; the job's notification removed when a batch ends without a notice; a ready or leftover notice taken away when the app opens; pure rules with unit tests.
+- [ ] Phone test (amendment 2026-10-12): a batch that ends with the app open leaves no notification; one that ends with the app away shows "ready", gone once the app opens; a failure's notice stays.
 - [ ] Phone test: background download with the screen off; Wi-Fi lost and back; force stop and phone restart mid-download; force stop while installing; mobile-data prompt both ways; permission refused; a restore with a switched-off region interrupted and resumed.
