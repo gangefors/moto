@@ -132,6 +132,6 @@ The rider (2026-10-12) follows the queue on the Map region page while the app is
 - [x] App: the combined notification, two channels, Stop receiver (not exported), open-page intent; the notification permission asked once.
 - [x] App: Map region page: the mobile-data setting, the once-only prompt, the waiting, retrying and queued row states, the notifications-off note; downloads queue while one runs.
 - [x] App: kill-safe install order, sweep of stray partial and temporary files, the network opened only for a running app.
-- [ ] App (amendment 2026-10-12): the ready notice only while the app is away; the job's notification removed when a batch ends without a notice; a ready or leftover notice taken away when the app opens; pure rules with unit tests.
+- [x] App (amendment 2026-10-12): the ready notice only while the app is away; the job's notification removed when a batch ends without a notice; a ready or leftover notice taken away when the app opens; pure rules with unit tests.
 - [ ] Phone test (amendment 2026-10-12): a batch that ends with the app open leaves no notification; one that ends with the app away shows "ready", gone once the app opens; a failure's notice stays.
 - [ ] Phone test: background download with the screen off; Wi-Fi lost and back; force stop and phone restart mid-download; force stop while installing; mobile-data prompt both ways; permission refused; a restore with a switched-off region interrupted and resumed.
