@@ -39,6 +39,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // "The app is open" for the region notices (ADR-0017) is this activity
+    // being started; a configuration change is not leaving.
+    override fun onStart() {
+        super.onStart()
+        Regions.setInFront(this, true)
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) Regions.setInFront(this, false)
+        super.onStop()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openFrom(intent)

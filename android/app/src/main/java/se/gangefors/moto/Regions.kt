@@ -144,6 +144,15 @@ object Regions {
     @Volatile private var loaded = false
     /** Guards the queue's read-change-commit. */
     private val queueLock = Any()
+
+    /** Whether MainActivity is started (the app is open), see [setInFront]. */
+    @Volatile private var inFront = false
+
+    /** The last batch ended without a notice (app open, or nothing installed). */
+    @Volatile private var quietEnd = false
+
+    /** The last queue notice posted, to set once more as the job ends. */
+    @Volatile private var lastShown: NoticeState? = null
     @Volatile private var queueRead = false
     @Volatile private var watching = false
 
@@ -369,6 +378,21 @@ object Regions {
             }
         }
         watchNetwork(app)
+    }
+
+    /**
+     * MainActivity started or stopped (ADR-0017). Opening the app takes a
+     * ready notice away, and a leftover progress one once the queue is
+     * empty, never a failed one or the notice of a running queue.
+     */
+    fun setInFront(context: Context, front: Boolean) {
+        inFront = front
+        if (!front) return
+        val app = context.applicationContext
+        init(app)
+        synchronized(queueLock) {
+            if (clearsInFront(RegionNotices.shownKind(app), _queue.value.active)) RegionNotices.show(app, null)
+        }
     }
 
     /** Follows the phone's default network (ACCESS_NETWORK_STATE only). */
@@ -698,7 +722,7 @@ object Regions {
         init(app)
         val q = _queue.value
         val name = q.ids.firstOrNull()?.let { nameOf(app, it) } ?: ""
-        return NoticeState.Starting(q.index, q.total, name)
+        return NoticeState.Starting(q.index, q.total, name).also { lastShown = it }
     }
 
     /** The job started: runs the queue in it (a run already going is stopped first). */
@@ -710,6 +734,21 @@ object Regions {
             previous?.cancelAndJoin()
             val outcome = runQueue(app, JobHost(params, service))
             if (jobParams === params) jobParams = null
+            // A batch that ended without a notice: Android removes the job's
+            // last progress notice as the job ends (DETACH would keep it).
+            val last = lastShown
+            if (outcome == RunOutcome.DONE && quietEnd && last != null) {
+                try {
+                    service.setNotification(
+                        params,
+                        RegionNotices.NOTICE_ID,
+                        RegionNotices.build(app, last),
+                        JobService.JOB_END_NOTIFICATION_POLICY_REMOVE,
+                    )
+                } catch (e: RuntimeException) {
+                    DebugTools.mark("job notification not removed: ${e.javaClass.simpleName}")
+                }
+            }
             service.jobFinished(params, outcome == RunOutcome.RETRY || outcome == RunOutcome.WAIT)
             // A region queued while the run failed cleared the failure but was
             // left to this run, which had already stopped: start one for it.
@@ -816,6 +855,7 @@ object Regions {
     internal suspend fun runQueue(app: Context, host: RegionHost): RunOutcome {
         init(app)
         synchronized(queueLock) { runActive = true }
+        quietEnd = false
         try {
             return runQueueOnce(app, host)
         } finally {
@@ -850,7 +890,9 @@ object Regions {
                             val names = synchronized(batchNames) { batchNames.toList().also { batchNames.clear() } }
                             _running.value = null
                             _download.value = DownloadState.Offers(offers)
-                            post(app, if (names.isEmpty()) null else NoticeState.Ready(names))
+                            val ready = readyNotice(names, inFront)
+                            quietEnd = ready == null
+                            post(app, ready)
                         }
                         active
                     }
@@ -1055,6 +1097,7 @@ object Regions {
      */
     private fun post(app: Context, s: NoticeState?) = synchronized(queueLock) {
         if (s != null && s !is NoticeState.Ready && s !is NoticeState.Failed && !_queue.value.active) return@synchronized
+        if (s != null) lastShown = s
         RegionNotices.show(app, s)
     }
 

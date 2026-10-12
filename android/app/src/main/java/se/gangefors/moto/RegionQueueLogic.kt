@@ -276,6 +276,39 @@ sealed interface NoticeState {
     data class Failed(val name: String, val message: String) : NoticeState
 }
 
+/** The kind of a queue notification; carried in its extras (ADR-0017). */
+enum class NoticeKind { STARTING, DOWNLOADING, INSTALLING, WAITING, RETRYING, READY, FAILED }
+
+/** The kind of [s]. */
+fun noticeKind(s: NoticeState): NoticeKind = when (s) {
+    is NoticeState.Starting -> NoticeKind.STARTING
+    is NoticeState.Downloading -> NoticeKind.DOWNLOADING
+    is NoticeState.Installing -> NoticeKind.INSTALLING
+    is NoticeState.Waiting -> NoticeKind.WAITING
+    is NoticeState.Retrying -> NoticeKind.RETRYING
+    is NoticeState.Ready -> NoticeKind.READY
+    is NoticeState.Failed -> NoticeKind.FAILED
+}
+
+/** The kind named [name] exactly; anything else (null, empty, other case, unknown) is null. */
+fun noticeKindOf(name: String?): NoticeKind? = NoticeKind.entries.firstOrNull { it.name == name }
+
+/** The ready notice for [names], or null when there is nothing to say or the app is open. */
+fun readyNotice(names: List<String>, inFront: Boolean): NoticeState.Ready? =
+    if (names.isEmpty() || inFront) null else NoticeState.Ready(names)
+
+/**
+ * Whether opening the app takes away a notice of [kind]: a ready one, and a
+ * progress-type one only once the queue is empty (a leftover); never a
+ * failed one, nor one of unknown kind.
+ */
+fun clearsInFront(kind: NoticeKind?, queueActive: Boolean): Boolean = when (kind) {
+    NoticeKind.READY -> true
+    NoticeKind.STARTING, NoticeKind.DOWNLOADING, NoticeKind.INSTALLING,
+    NoticeKind.WAITING, NoticeKind.RETRYING -> !queueActive
+    NoticeKind.FAILED, null -> false
+}
+
 /**
  * The notification: [title], [text], its bar ([progress] 0–1, null for an
  * indeterminate one, unless there is none: ![bar]), its channel, and

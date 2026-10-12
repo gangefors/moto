@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 
 /**
@@ -32,6 +33,9 @@ object RegionNotices {
 
     /** Opens the Map region page ([MainActivity]); carries no data. */
     const val ACTION_OPEN = "se.gangefors.moto.action.OPEN_REGIONS"
+
+    /** The extra that carries a notice's [NoticeKind] name. */
+    const val EXTRA_KIND = "se.gangefors.moto.notice_kind"
 
     private fun channels(app: Context, nm: NotificationManager) {
         if (nm.getNotificationChannel(CHANNEL_PROGRESS) == null) {
@@ -67,6 +71,7 @@ object RegionNotices {
             .setContentTitle(text(app, n.title))
             .setContentText(text)
             .setContentIntent(open)
+            .addExtras(Bundle().apply { putString(EXTRA_KIND, noticeKind(s).name) })
         if (n.ongoing) {
             val stop = PendingIntent.getBroadcast(
                 app,
@@ -100,6 +105,19 @@ object RegionNotices {
         val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         return granted && app.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
+    }
+
+    /**
+     * The kind of the app's own notice that is showing, read back from its
+     * extras (so it works after the process died while the notice stayed);
+     * null when there is none or it can't be read.
+     */
+    fun shownKind(context: Context): NoticeKind? = try {
+        val nm = context.applicationContext.getSystemService(NotificationManager::class.java)
+        val n = nm.activeNotifications.firstOrNull { it.id == NOTICE_ID }
+        noticeKindOf(n?.notification?.extras?.getString(EXTRA_KIND))
+    } catch (e: RuntimeException) {
+        null
     }
 
     /** Shows [s] (silently nothing when notifications are off); null takes it away. */

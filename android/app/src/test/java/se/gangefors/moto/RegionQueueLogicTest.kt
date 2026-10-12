@@ -341,4 +341,41 @@ class RegionQueueLogicTest {
         assertEquals(NoticeChannel.RESULT, f.channel)
         assertFalse(f.bar)
     }
+
+    @Test
+    fun readyNoticeIsOnlyForAnAwayAppWithNames() {
+        assertNull(readyNotice(emptyList(), inFront = true))
+        assertNull(readyNotice(emptyList(), inFront = false))
+        assertNull(readyNotice(listOf("Sweden"), inFront = true))
+        assertEquals(NoticeState.Ready(listOf("Sweden", "Norway")), readyNotice(listOf("Sweden", "Norway"), inFront = false))
+    }
+
+    @Test
+    fun clearsInFrontTable() {
+        for (kind in NoticeKind.entries) {
+            val active = kind == NoticeKind.READY
+            val empty = kind != NoticeKind.FAILED
+            assertEquals("$kind active", active, clearsInFront(kind, queueActive = true))
+            assertEquals("$kind empty", empty, clearsInFront(kind, queueActive = false))
+        }
+        assertFalse(clearsInFront(null, queueActive = true))
+        assertFalse(clearsInFront(null, queueActive = false))
+    }
+
+    @Test
+    fun noticeKindMapsEverySubtype() {
+        assertEquals(NoticeKind.STARTING, noticeKind(NoticeState.Starting(1, 2, "a")))
+        assertEquals(NoticeKind.DOWNLOADING, noticeKind(NoticeState.Downloading(1, 2, "a", 1, 2)))
+        assertEquals(NoticeKind.INSTALLING, noticeKind(NoticeState.Installing(1, 2, "a")))
+        assertEquals(NoticeKind.WAITING, noticeKind(NoticeState.Waiting(1, 2, "a", wifi = true)))
+        assertEquals(NoticeKind.RETRYING, noticeKind(NoticeState.Retrying(1, 2, "a")))
+        assertEquals(NoticeKind.READY, noticeKind(NoticeState.Ready(listOf("a"))))
+        assertEquals(NoticeKind.FAILED, noticeKind(NoticeState.Failed("a", "m")))
+    }
+
+    @Test
+    fun noticeKindOfRoundTripsAndRejectsTheRest() {
+        for (kind in NoticeKind.entries) assertEquals(kind, noticeKindOf(kind.name))
+        for (bad in listOf(null, "", "ready", "READY ", "UNKNOWN")) assertNull(bad, noticeKindOf(bad))
+    }
 }
