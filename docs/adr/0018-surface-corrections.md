@@ -21,7 +21,7 @@ Forces:
 
 **Unknown surface stays paved, on purpose** (the rider, 2026-10-21). Roads OSM leaves without a surface keep being routed and ridden as paved, as today; no default counts untagged tracks or minor roads as gravel, now or later. A surface correction is the way to fix a road the map has wrong or leaves out.
 
-**A correction is a stretch, not a whole road.** It is stored like a section: the OSM way spans it covers (way id and node range), plus its own line. Surface is direction-free: a correction applies to both directions. New table `surface_corrections` (id, `rider_id`, surface, status `ok` / `needs_rematch` / `unmatched`, created and changed times, bounding box, own line in the sections' fixed-point blob) and `surface_correction_ways` (ordered way spans, cascade delete), schema 10. A correction is Paved or Gravel only (2026-10-21, the rider: two choices that stand for all the map's surfaces). It is stored as the region-format `Surface` code for paved (3) or gravel (6); any other code is refused. Routing reads it with `Surface::is_paved`, as for the map's own values. At most 10 000 corrections.
+**A correction is a stretch, not a whole road.** It is stored like a section: the OSM way spans it covers (way id and node range), plus its own line. Surface is direction-free: a correction applies to both directions. New table `surface_corrections` (id, `rider_id`, surface, status `ok` / `needs_rematch`, created and changed times, bounding box, own line in the sections' fixed-point blob) and `surface_correction_ways` (ordered way spans, cascade delete), schema 10. A correction is Paved or Gravel only (2026-10-21, the rider: two choices that stand for all the map's surfaces). It is stored as the region-format `Surface` code for paved (3) or gravel (6); any other code is refused. Routing reads it with `Surface::is_paved`, as for the map's own values. At most 10 000 corrections.
 
 **Overlap: newest wins.** Saving a correction deletes, in the same transaction, the one it edits and every older one whose way spans it fully covers. Where corrections overlap only in part, the newer one (changed time, then id) decides that stretch.
 
@@ -34,7 +34,7 @@ Forces:
 
 Way spans are node ranges, so the router sees a correction rounded out to the OSM nodes at its ends (draft rule, ADR-0006); its own line is kept for re-matching and for marking it again. A road corrected to gravel keeps the speed the map gives it (the builder's gravel cap applies to mapped gravel only).
 
-**Survives rebuilds like sections.** When the region key changes, every correction is flagged and re-matched by its own line with the sections' matcher and tolerances; one that fits gets its new way spans and `ok`, one that doesn't is kept as `unmatched` (not applied, tried again at every later region change), one off the open map waits as `needs_rematch`. Unmatched corrections are listed in a small "Surface corrections to check" dialog, opened from the notice after the update and from the Map region page while there are any; each can be marked again or removed with the bin. The region key is stored only after sections and corrections are both done.
+**Survives rebuilds like sections.** When the region key changes, every correction is flagged and re-matched by its own line with the sections' matcher and tolerances; one that fits gets its new way spans and `ok`; one that doesn't is deleted (2026-10-21, the rider: if the map moved that much, the correction is probably wrong); one off the open map (its region switched off) waits as `needs_rematch` and is matched once its region is back. There is no `unmatched` state for corrections. After a run that deleted any, the app shows one short notice, once, with no action. The region key is stored only after sections and corrections are both done.
 
 **Backup format 4.** A new entry `surface-corrections.geojson` (LineStrings; properties surface `paved` or `gravel`, created and changed times, way spans; `moto.content` = `"surface"`), listed when the manifest's new `surface_corrections` count is above 0. The manifest must have the count in format 4 and must not in formats 2–3; the entry is refused in formats 2–3. Caps: 10 000 features, 64 MiB, the sections' point and way limits; strict types (`deny_unknown_fields`), every value range-checked, SHA-256 as for every entry. A restore adds them in the same transaction as the rest, skips one with the same surface and the same line, keeps their times, and leaves them `needs_rematch` until the re-match after the restore. Formats 2 and 3 still restore (no corrections).
 
@@ -47,7 +47,7 @@ Way spans are node ranges, so the router sees a correction rounded out to the OS
 | Dimension | Assessment |
 | --- | --- |
 | Fidelity | What the rider marks is what routes see (to the OSM node) |
-| Rebuilds | Re-matched by geometry, as sections; flagged, never dropped |
+| Rebuilds | Re-matched by geometry, as sections; deleted when they no longer fit |
 | Hot path | One bit test per edge where a correction might apply; none without corrections |
 | Complexity | Medium: share-aware cost terms, a new store table, backup entry, rematch |
 
@@ -105,9 +105,9 @@ A costs more than C in the cost function, but C's mismatch between what was mark
 - [ ] Store: schema 10, save (with replace and covered-older removal), list, look-up near a point, delete; validation; migration and corruption tests.
 - [ ] Core: the stretch under a tap (the OSM way, at most 10 km each side).
 - [ ] Core: surface in the overlay; share-aware cost, route figures, `SectionGravel`, loop waypoints, the search bound; unit tests.
-- [ ] Core: corrections re-matched with sections on a region change.
+- [ ] Core: corrections re-matched with sections on a region change; those that no longer fit deleted.
 - [ ] Core: backup format 4 (entry, manifest count, caps, dedupe on restore); format 2 and 3 tests; corruption tests.
 - [ ] Golden: corrections in the runner; a case each way (made-up corrections); every other case unchanged.
 - [ ] FFI: the stretch, save, list, look-up, delete; report fields.
-- [ ] App: drag handles on the marking ends; Correct surface on the road's and favourite's cards; the marking mode with Paved | Gravel; the dialog of corrections to check; the plan sheet stepping aside; backup counts; the how-to line.
+- [ ] App: drag handles on the marking ends; Correct surface on the road's and favourite's cards; the marking mode with Paved | Gravel; the notice after an update that removed any; the plan sheet stepping aside; backup counts; the how-to line.
 - [ ] Phone test: correct an untagged road to gravel and see a gravel-avoiding route leave it; drag an end; edit and remove; back up and restore.
