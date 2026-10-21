@@ -2,7 +2,7 @@
 
 **Status:** Proposed · **Date:** 2026-10-21 · **Deciders:** the owner · **Repo path:** `docs/adr/0018-surface-corrections.md`
 
-Extends [ADR-0006](0006-section-and-track-storage.md) (schema 10: two new tables; a favourite's line can be changed) and [ADR-0010](0010-unridden-roads.md) (the rider's overlay also carries surface). Amends [ADR-0012](0012-backup-and-restore.md) and [ADR-0016](0016-backup-region-switches.md) (backup format 4 adds the corrections). The region file ([ADR-0005](0005-region-file-format.md)) does not change.
+Extends [ADR-0006](0006-section-and-track-storage.md) (schema 10: two new tables and a favourite's own surface; a favourite's line can be changed) and [ADR-0010](0010-unridden-roads.md) (the rider's overlay also carries surface). Amends [ADR-0012](0012-backup-and-restore.md) and [ADR-0016](0016-backup-region-switches.md) (backup format 4 adds the corrections). The region file ([ADR-0005](0005-region-file-format.md)) does not change.
 
 ## Context
 
@@ -38,7 +38,7 @@ Way spans are node ranges, so the router sees a correction rounded out to the OS
 
 **Backup format 4.** A new entry `surface-corrections.geojson` (LineStrings; properties surface `paved` or `gravel`, created and changed times, way spans; `moto.content` = `"surface"`), listed when the manifest's new `surface_corrections` count is above 0. The manifest must have the count in format 4 and must not in formats 2–3; the entry is refused in formats 2–3. Caps: 10 000 features, 64 MiB, the sections' point and way limits; strict types (`deny_unknown_fields`), every value range-checked, SHA-256 as for every entry. A restore adds them in the same transaction as the rest, skips one with the same surface and the same line, keeps their times, and leaves them `needs_rematch` until the re-match after the restore. Formats 2 and 3 still restore (no corrections).
 
-**UI** (spec `surface-corrections`, mockup at Gate 1): the road's card (tap a road) and a favourite's card get "Correct surface". It proposes the whole OSM way under the tap (OSM splits ways where the surface changes; at most 10 km each side) or the favourite's line, in the marking mode favourites use, with end pins that can be dragged (and tapped near, as today), a Paved | Gravel choice (nothing picked until the rider picks one), and Save. Corrections are never drawn on the map (2026-10-21, the rider: it is information for routing, not a map layer). The stretch and its pins show only while marking. The road's card shows the corrected surface and what the map says, with edit and the bin. While a route or loop is shown, its sheet steps aside during the correction, and the route is found again with it.
+**UI** (spec `surface-corrections`, mockup at Gate 1): the road's card (tap a road) gets "Correct surface". It proposes the whole OSM way under the tap (OSM splits ways where the surface changes; at most 10 km each side) in the marking mode favourites use, with end pins that can be dragged (and tapped near, as today), a Paved | Gravel choice (nothing picked until the rider picks one), and Save. Corrections are never drawn on the map (2026-10-21, the rider: it is information for routing, not a map layer). The stretch and its pins show only while marking. The road's card keeps its text as for an uncorrected road (the map's surface in the facts line) and adds, as its last row, "Your correction: Gravel" (or Paved) with the pencil and the bin beside it (2026-10-21, the rider). While a route or loop is shown, its sheet steps aside during the correction, and the route is found again with it.
 
 **Favourites get the same draggable ends, also when edited** (2026-10-21, the rider). Marking a new favourite uses the draggable pins. A saved favourite's edit sheet gets "Change start and end". It leaves the sheet for the marking mode with the favourite's own line; Save… there goes back to the sheet, and the sheet's Save stores everything in one update. The core's `update_section` (FFI `SectionUpdate`) takes an optional new line: way spans plus its own geometry, validated like a new section, written in the same transaction as name, rating and direction.
 
@@ -46,6 +46,15 @@ Way spans are node ranges, so the router sees a correction rounded out to the OS
 - Its way spans, line and bounding box are replaced. Its status becomes `ok`, which also fixes a favourite that no longer fit the map, and its changed time is now.
 - No overlap rules run: other favourites are left as they are.
 - Nothing else holds a link to a favourite's line. Ridden counts are worked out from the line when asked, so they follow it. Quick-tags, saved routes and the parts of a followed route keep their own copies.
+
+**A favourite's own surface is set in its edit sheet** (2026-10-21, the rider). There is no "Correct surface" on the favourite's card. The edit sheet has a row "Map | Paved | Gravel", in the style of the Rating row, with a line saying what the map has there.
+
+- Stored as a nullable `surface` column on `sections` (schema 10; NULL is Map, else the paved or gravel code, as for corrections). It is saved in the same `update_section` as rating and direction, through `SectionUpdate`: unchanged, Map (cleared), Paved or Gravel.
+- It covers exactly the favourite's way spans, both directions (one-way doesn't matter), and moves with the favourite's ends.
+- It goes with the favourite: deleted with it, kept through re-matches, and applied only while the favourite is `ok`. A favourite that no longer fits is kept and flagged (PRD R1), so its surface waits with it and applies again once it fits.
+- In the overlay, favourites' surfaces are painted after the standalone corrections, so on its own stretch a favourite's choice wins; with Map, the map and any standalone correction under it count.
+- A road tapped where a favourite's surface applies (the favourite hidden, as while gravel is avoided) shows the same "Your correction" row. Its pencil opens the favourite's edit sheet, and its bin sets the favourite back to Map.
+- Exports, imports and backups carry it as an optional `surface` property (`paved` or `gravel`) on the favourite's feature in `favourites.geojson`, read strictly: anything else refuses the file.
 
 ## Options Considered
 
@@ -110,6 +119,7 @@ A costs more than C in the cost function, but C's mismatch between what was mark
 ## Action Items
 
 - [ ] Store: schema 10, save (with replace and covered-older removal), list, look-up near a point, delete; validation; migration and corruption tests.
+- [ ] Store, exchange and FFI: a favourite's own surface (`sections.surface`, `SectionUpdate`, the optional `surface` property in `favourites.geojson`); the overlay and the look-up take it; tests including malformed values.
 - [ ] Core: the stretch under a tap (the OSM way, at most 10 km each side).
 - [ ] Core: surface in the overlay; share-aware cost, route figures, `SectionGravel`, loop waypoints, the search bound; unit tests.
 - [ ] Core: corrections re-matched with sections on a region change; those that no longer fit deleted.
@@ -117,5 +127,5 @@ A costs more than C in the cost function, but C's mismatch between what was mark
 - [ ] Golden: corrections in the runner; a case each way (made-up corrections); every other case unchanged.
 - [ ] FFI: the stretch, save, list, look-up, delete; report fields.
 - [ ] Store and FFI: a new line in `update_section` / `SectionUpdate`; tests including malformed lines.
-- [ ] App: drag handles on the marking ends; "Change start and end" in a favourite's edit sheet; Correct surface on the road's and favourite's cards; the marking mode with Paved | Gravel; the notice after an update that removed any; the plan sheet stepping aside; backup counts; the how-to line.
+- [ ] App: drag handles on the marking ends; "Change start and end" and the Map | Paved | Gravel row in a favourite's edit sheet; Correct surface on the road's card; the marking mode with Paved | Gravel; the notice after an update that removed any; the plan sheet stepping aside; backup counts; the how-to line.
 - [ ] Phone test: correct an untagged road to gravel and see a gravel-avoiding route leave it; drag an end; edit and remove; move a favourite's ends and check its rating and direction stay; back up and restore.
