@@ -9,9 +9,19 @@
 //! time through the rider's overlay ([`crate::Favourites`]); the region
 //! graph never changes.
 
+use std::collections::HashSet;
+
+use crate::draft::{SectionDraft, from_path};
 use crate::region::format::Surface;
+use crate::route::Partial;
 use crate::section::{MAX_RIDER_ID_BYTES, MAX_SECTION_POINTS, MAX_SECTION_WAYS, Status, WaySpan};
-use crate::{CoreError, LatLon};
+use crate::{CoreError, Engine, LatLon};
+
+/// How far the stretch under a tap ([`stretch_at`]) reaches on each side
+/// of it, in metres.
+pub const STRETCH_REACH_M: f64 = 10_000.0;
+/// Most edges the stretch under a tap follows on each side.
+const MAX_STRETCH_EDGES: usize = 20_000;
 
 /// Most surface corrections a store keeps.
 pub const MAX_SURFACE_CORRECTIONS: usize = 10_000;
@@ -148,6 +158,102 @@ pub(crate) fn covers(new: &[WaySpan], old: &[WaySpan]) -> bool {
     !old.is_empty() && old.iter().all(|o| new.iter().any(|n| span_within(o, n)))
 }
 
+/// One side of [`stretch_at`]: from edge `start`, `walked` metres from
+/// the tap already, edge by edge along the same OSM way (`ahead`: on
+/// from each edge's head; else back from its tail), until the way ends,
+/// an edge comes round again, or [`STRETCH_REACH_M`] is reached, where
+/// the last piece is cut. Pieces in walking order.
+fn walk_way(
+    engine: &Engine,
+    start: u32,
+    mut walked: f64,
+    ahead: bool,
+    seen: &mut HashSet<u32>,
+) -> Vec<Partial> {
+    let region = engine.net();
+    let length = |id: u32| (f64::from(region.edge(id).length_dm) / 10.0).max(0.0);
+    let mut parts = Vec::new();
+    let mut cur = start;
+    let mut steps = 0;
+    while walked < STRETCH_REACH_M && steps < MAX_STRETCH_EDGES {
+        steps += 1;
+        let (e, r) = (region.edge(cur), region.way_ref(cur));
+        let follows = |c: &u32| {
+            region.get_edge(*c).is_some_and(|ce| {
+                let cr = region.way_ref(*c);
+                ce.geometry != e.geometry
+                    && cr.way_id == r.way_id
+                    && if ahead {
+                        cr.from_idx == r.to_idx
+                    } else {
+                        cr.to_idx == r.from_idx
+                    }
+            })
+        };
+        let next = if ahead {
+            region.out_edges(e.head).find(follows)
+        } else {
+            region.in_edges(e.tail).find(follows)
+        };
+        let Some(c) = next.filter(|c| seen.insert(*c)) else {
+            break;
+        };
+        let l = length(c);
+        let left = STRETCH_REACH_M - walked;
+        let cut = if l > left { left / l } else { 1.0 };
+        parts.push(if ahead {
+            Partial {
+                edge: c,
+                from: 0.0,
+                to: cut,
+            }
+        } else {
+            Partial {
+                edge: c,
+                from: 1.0 - cut,
+                to: 1.0,
+            }
+        });
+        if l > left {
+            break;
+        }
+        walked += l;
+        cur = c;
+    }
+    parts
+}
+
+/// The OSM way under `point` (snapped as [`Engine::snap`] does), as a
+/// draft to correct: from the snapped edge on along the same way, edge by
+/// edge, and back the same way, each side stopping at the way's end, back
+/// at the first edge (a closed way) or [`STRETCH_REACH_M`] from the tap,
+/// where the last piece is cut. OSM splits ways where the surface
+/// changes, so this is usually the stretch to correct as it stands.
+pub(crate) fn stretch_at(engine: &Engine, point: LatLon) -> Result<SectionDraft, CoreError> {
+    point.validate()?;
+    let region = engine.net();
+    let p = engine.snap(point)?;
+    let len0 = (f64::from(region.edge(p.edge).length_dm) / 10.0).max(0.0);
+    let mut seen = HashSet::from([p.edge]);
+    let ahead = walk_way(engine, p.edge, (1.0 - p.offset) * len0, true, &mut seen);
+    let behind = walk_way(engine, p.edge, p.offset * len0, false, &mut seen);
+    // The tapped edge itself, cut where it alone runs past the reach.
+    let (from, to) = if len0 > 0.0 {
+        let k = STRETCH_REACH_M / len0;
+        ((p.offset - k).max(0.0), (p.offset + k).min(1.0))
+    } else {
+        (0.0, 1.0)
+    };
+    let mut parts: Vec<Partial> = behind.into_iter().rev().collect();
+    parts.push(Partial {
+        edge: p.edge,
+        from,
+        to,
+    });
+    parts.extend(ahead);
+    from_path(region, &parts)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -238,5 +344,176 @@ pub(crate) mod tests {
         assert!(covers(&[s(1, 0, 5), s(2, 0, 9)], &[s(1, 1, 2), s(2, 9, 3)]));
         assert!(!covers(&[s(1, 0, 5)], &[s(1, 1, 2), s(2, 0, 1)]));
         assert!(!covers(&[s(1, 0, 5)], &[]), "nothing to cover");
+    }
+
+    pub(crate) fn engine(data: crate::region::RegionData) -> Engine {
+        Engine::from_region(crate::region::Region::from_bytes(&data.to_bytes().unwrap()).unwrap())
+    }
+
+    /// One straight east–west OSM way (500) along lat 55.70 from lon
+    /// 13.00 to 13.60, split into twelve roads of about 3.1 km, with a
+    /// side road (way 501) north from its middle node.
+    pub(crate) fn long_way() -> crate::region::RegionData {
+        use crate::fixture::{Road, build};
+        use crate::region::format::RoadClass;
+        let mut nodes: Vec<(f64, f64)> = (0..13)
+            .map(|i| (55.70, 13.0 + 0.05 * f64::from(i)))
+            .collect();
+        nodes.push((55.72, 13.30));
+        let mut roads: Vec<Road> = (0..12u32)
+            .map(|i| Road {
+                way_start: i,
+                ..Road::new(i, i + 1, RoadClass::Tertiary, 70, 500)
+            })
+            .collect();
+        roads.push(Road::new(6, 13, RoadClass::Tertiary, 70, 501));
+        build(&nodes, &roads, 50_000)
+    }
+
+    #[test]
+    fn the_stretch_is_the_whole_way_under_the_tap() {
+        use crate::fixture::{self, ladder};
+        // The ladder's north road is way 1 in two roads; its ends meet
+        // way 3 and way 4.
+        let e = engine(ladder(Surface::Asphalt));
+        let d = e
+            .surface_stretch_at(LatLon {
+                lat: 55.7201,
+                lon: 13.405,
+            })
+            .unwrap();
+        assert_eq!(d.ways.len(), 1, "{d:?}");
+        let w = d.ways[0];
+        assert_eq!(
+            (w.way_id, w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx)),
+            (1, 0, 2)
+        );
+        let road_m = crate::geo::haversine_m(
+            LatLon {
+                lat: 55.72,
+                lon: 13.40,
+            },
+            LatLon {
+                lat: 55.72,
+                lon: 13.44,
+            },
+        );
+        assert!((d.distance_m - road_m).abs() < 1.0, "{d:?}");
+
+        // Not on into other ways at junctions: the fork's straight road
+        // alone, though the north loop and the stubs meet it.
+        let e = engine(fixture::fork());
+        let d = e
+            .surface_stretch_at(LatLon {
+                lat: 55.7001,
+                lon: 13.42,
+            })
+            .unwrap();
+        assert_eq!(d.ways.len(), 1, "{d:?}");
+        assert_eq!(d.ways[0].way_id, 10);
+        // The north loop: three roads of one way.
+        let d = e
+            .surface_stretch_at(LatLon {
+                lat: 55.7101,
+                lon: 13.42,
+            })
+            .unwrap();
+        assert_eq!(d.ways.len(), 1, "{d:?}");
+        let w = d.ways[0];
+        assert_eq!(
+            (w.way_id, w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx)),
+            (fixture::FORK_NORTH, 0, 3)
+        );
+    }
+
+    #[test]
+    fn the_stretch_stops_10_km_each_side() {
+        let e = engine(long_way());
+        let d = e
+            .surface_stretch_at(LatLon {
+                lat: 55.7001,
+                lon: 13.31,
+            })
+            .unwrap();
+        assert!(
+            (d.distance_m - 2.0 * STRETCH_REACH_M).abs() < 5.0,
+            "{}",
+            d.distance_m
+        );
+        assert_eq!(d.ways.len(), 1);
+        assert_eq!(d.ways[0].way_id, 500, "not up the side road");
+        // Near an end: the way's end on that side, 10 km on the other.
+        let d = e
+            .surface_stretch_at(LatLon {
+                lat: 55.7001,
+                lon: 13.01,
+            })
+            .unwrap();
+        let to_start = 0.01 * 111_320.0 * 55.70f64.to_radians().cos();
+        assert!(
+            (d.distance_m - (STRETCH_REACH_M + to_start)).abs() < 30.0,
+            "{}",
+            d.distance_m
+        );
+    }
+
+    #[test]
+    fn a_closed_way_is_walked_round_once() {
+        use crate::fixture::{Road, build};
+        use crate::region::format::RoadClass;
+        let nodes = [
+            (55.70, 13.40),
+            (55.70, 13.41),
+            (55.71, 13.41),
+            (55.71, 13.40),
+            (55.69, 13.40),
+        ];
+        let ring = |from, to, start| Road {
+            way_start: start,
+            ..Road::new(from, to, RoadClass::Unclassified, 50, 600)
+        };
+        let e = engine(build(
+            &nodes,
+            &[
+                ring(0, 1, 0),
+                ring(1, 2, 1),
+                ring(2, 3, 2),
+                ring(3, 0, 3),
+                Road::new(0, 4, RoadClass::Unclassified, 50, 601),
+            ],
+            50_000,
+        ));
+        let d = e
+            .surface_stretch_at(LatLon {
+                lat: 55.705,
+                lon: 13.4101,
+            })
+            .unwrap();
+        let ring_m: f64 = (0..4)
+            .map(|i| {
+                let a = nodes[i];
+                let b = nodes[(i + 1) % 4];
+                crate::geo::haversine_m(
+                    LatLon { lat: a.0, lon: a.1 },
+                    LatLon { lat: b.0, lon: b.1 },
+                )
+            })
+            .sum();
+        assert!((d.distance_m - ring_m).abs() < 1.0, "{}", d.distance_m);
+        assert!(d.ways.iter().all(|w| w.way_id == 600), "{d:?}");
+    }
+
+    #[test]
+    fn a_tap_off_the_region_is_a_typed_error() {
+        let e = engine(crate::fixture::ladder(Surface::Asphalt));
+        for p in [
+            LatLon { lat: 0.0, lon: 0.0 },
+            LatLon {
+                lat: f64::NAN,
+                lon: 13.4,
+            },
+        ] {
+            assert!(e.surface_stretch_at(p).is_err(), "{p:?}");
+        }
     }
 }

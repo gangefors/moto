@@ -326,6 +326,13 @@ impl Engine {
         crate::draft::from_path(&self.net, &parts)
     }
 
+    /// The OSM way under `point`, at most
+    /// [`crate::surface::STRETCH_REACH_M`] each side of it, as a draft for
+    /// a surface correction (ADR-0018). Errors are as [`Self::snap`]'s.
+    pub fn surface_stretch_at(&self, point: LatLon) -> Result<SectionDraft, CoreError> {
+        crate::surface::stretch_at(self, point)
+    }
+
     /// Fits a recorded GPS track (points in recording order) to the roads
     /// (PRD R4): the matched pieces as OSM way spans plus geometry. Points
     /// outside the region or far from any road are skipped; where the
