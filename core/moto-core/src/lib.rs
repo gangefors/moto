@@ -41,6 +41,7 @@ pub mod section;
 mod snap;
 pub mod store;
 mod suggest;
+pub mod surface;
 pub mod tag;
 pub mod track;
 mod types;

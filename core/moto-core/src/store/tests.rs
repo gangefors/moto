@@ -362,8 +362,7 @@ fn schema_9_keeps_only_unreviewed_tags() {
         .unwrap();
     }
     let mut s = Store::open(&db.0).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 9);
-    assert_eq!(SCHEMA_VERSION, 9);
+    assert_eq!(s.schema_version().unwrap(), SCHEMA_VERSION);
     let tags = s.list_tags().unwrap();
     let kept: Vec<_> = tags
         .iter()

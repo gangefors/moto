@@ -144,6 +144,35 @@ const MIGRATIONS: &[&str] = &[
     DROP INDEX tags_status;
     ALTER TABLE tags DROP COLUMN status;
     CREATE INDEX tags_time ON tags (time_ms);",
+    // 10: surface corrections (ADR-0018): the rider's own road surface for
+    // a stretch, Paved (3) or Gravel (6), stored like a section; and a
+    // favourite section's own surface (NULL: the map's).
+    "CREATE TABLE surface_corrections (
+        id          INTEGER PRIMARY KEY,
+        rider_id    TEXT    NOT NULL,
+        surface     INTEGER NOT NULL CHECK (surface IN (3, 6)),
+        status      INTEGER NOT NULL CHECK (status IN (0, 1)),
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL,
+        min_lat     INTEGER NOT NULL,
+        min_lon     INTEGER NOT NULL,
+        max_lat     INTEGER NOT NULL,
+        max_lon     INTEGER NOT NULL,
+        geometry    BLOB    NOT NULL
+    ) STRICT;
+    CREATE INDEX surface_corrections_area
+        ON surface_corrections (min_lat, max_lat, min_lon, max_lon);
+    CREATE TABLE surface_correction_ways (
+        correction_id INTEGER NOT NULL REFERENCES surface_corrections (id) ON DELETE CASCADE,
+        seq           INTEGER NOT NULL,
+        way_id        INTEGER NOT NULL,
+        from_idx      INTEGER NOT NULL CHECK (from_idx BETWEEN 0 AND 4294967295),
+        to_idx        INTEGER NOT NULL CHECK (to_idx BETWEEN 0 AND 4294967295),
+        PRIMARY KEY (correction_id, seq)
+    ) STRICT, WITHOUT ROWID;
+    CREATE INDEX surface_correction_ways_way ON surface_correction_ways (way_id);
+    ALTER TABLE sections ADD COLUMN surface INTEGER
+        CHECK (surface IS NULL OR surface IN (3, 6));",
 ];
 
 /// The schema version this build writes.
@@ -598,6 +627,7 @@ pub use followed::FollowedRoute;
 mod rematch;
 mod ride_ways;
 mod starts;
+mod surface;
 pub use ride_ways::MAX_RIDE_WAYS;
 mod routes;
 pub use routes::{MAX_ROUTE_POINTS, NewRoute, SavedRoute};
