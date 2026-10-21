@@ -6,6 +6,8 @@
 //! extracts, so after a region update each section's own geometry is
 //! map-matched to the new road network. A section that no longer fits is
 //! flagged `unmatched`, never dropped: the rider's data outlives any map.
+//! Surface corrections (ADR-0018) are re-matched the same way; one that
+//! no longer fits is deleted.
 
 use crate::geo::{densify, distance_to_line, haversine_m};
 use crate::matching::MatchedPiece;
@@ -45,7 +47,13 @@ pub fn region_key(engine: &Engine) -> String {
 /// A section's fit to the current region: its new way spans and geometry,
 /// or `None` if it no longer fits well enough.
 pub fn rematch(engine: &Engine, section: &Section) -> Option<(Vec<WaySpan>, Vec<LatLon>)> {
-    let old = &section.geometry;
+    rematch_line(engine, &section.geometry)
+}
+
+/// A stretch's fit to the current region by its own line `old` (a
+/// section's or a surface correction's): the new way spans and line, or
+/// `None` if it no longer fits well enough.
+pub fn rematch_line(engine: &Engine, old: &[LatLon]) -> Option<(Vec<WaySpan>, Vec<LatLon>)> {
     let old_len: f64 = old.windows(2).map(|w| haversine_m(w[0], w[1])).sum();
     if old.len() < 2 || old_len <= 0.0 {
         return None;
@@ -84,6 +92,14 @@ pub struct RematchReport {
     /// removed, ADR-0009): kept as they are, still `needs_rematch`, and
     /// matched again once their region is open.
     pub off_map: u64,
+    /// Surface corrections looked at.
+    pub surface_checked: u64,
+    /// Surface corrections that fit the region.
+    pub surface_matched: u64,
+    /// Surface corrections that no longer fit: deleted.
+    pub surface_removed: u64,
+    /// Surface corrections off the open map: kept, waiting.
+    pub surface_off_map: u64,
 }
 
 /// Whether `section` lies on the open map: every point in the open
@@ -92,7 +108,12 @@ pub struct RematchReport {
 /// fails this; one whose road changed or went (inside an open region) has
 /// roads around it and passes, and is then matched or flagged.
 fn on_open_map(engine: &Engine, section: &Section) -> bool {
-    section.geometry.iter().all(|&p| {
+    line_on_open_map(engine, &section.geometry)
+}
+
+/// As [`on_open_map`], for any stretch's own line.
+fn line_on_open_map(engine: &Engine, line: &[LatLon]) -> bool {
+    line.iter().all(|&p| {
         engine.covers(p) == Some(true)
             || crate::snap::snap(engine.net(), p, OFF_MAP_REACH_M).is_ok()
     })
@@ -108,21 +129,32 @@ const OFF_MAP_REACH_M: f64 = 1_000.0;
 /// transaction, then each is re-matched and saved on its own, and only
 /// then is the region remembered: a crash part-way leaves the work to be
 /// redone on the next start, never a section wrongly marked as fitting.
+/// Surface corrections go the same way, after the sections; one that no
+/// longer fits is deleted, each in its own transaction, before the region
+/// is remembered.
 pub fn rematch_store(store: &mut Store, engine: &Engine) -> Result<RematchReport, CoreError> {
     let key = region_key(engine);
     let pending = store.sections_with_status(Status::NeedsRematch)?;
+    let pending_corrections = store.surface_corrections_with_status(Status::NeedsRematch)?;
     let same_map = store.region_key()?.as_deref() == Some(key.as_str());
-    if same_map && pending.iter().all(|s| !on_open_map(engine, s)) {
-        // Nothing new: the sections waiting are all off the open map.
+    if same_map
+        && pending.iter().all(|s| !on_open_map(engine, s))
+        && pending_corrections
+            .iter()
+            .all(|c| !line_on_open_map(engine, &c.geometry))
+    {
+        // Nothing new: what waits is all off the open map.
         return Ok(RematchReport {
             off_map: pending.len() as u64,
+            surface_off_map: pending_corrections.len() as u64,
             ..RematchReport::default()
         });
     }
-    // Another map: every section is matched again. The same map with
-    // sections waiting (a run cut short): only those.
+    // Another map: every section and correction is matched again. The
+    // same map with some waiting (a run cut short): only those.
     if !same_map {
         store.flag_all_for_rematch()?;
+        store.flag_corrections_for_rematch()?;
     }
     let mut report = RematchReport::default();
     for section in store.sections_with_status(Status::NeedsRematch)? {
@@ -139,6 +171,25 @@ pub fn rematch_store(store: &mut Store, engine: &Engine) -> Result<RematchReport
             None => {
                 store.set_status(section.id, Status::Unmatched)?;
                 report.unmatched += 1;
+            }
+        }
+    }
+    for correction in store.surface_corrections_with_status(Status::NeedsRematch)? {
+        if !line_on_open_map(engine, &correction.geometry) {
+            report.surface_off_map += 1;
+            continue;
+        }
+        report.surface_checked += 1;
+        match rematch_line(engine, &correction.geometry) {
+            Some((ways, geometry)) => {
+                store.save_correction_match(correction.id, &ways, &geometry)?;
+                report.surface_matched += 1;
+            }
+            None => {
+                // The map moved too far: the correction is probably wrong
+                // now (the rider, ADR-0018).
+                store.delete_surface_correction(correction.id)?;
+                report.surface_removed += 1;
             }
         }
     }

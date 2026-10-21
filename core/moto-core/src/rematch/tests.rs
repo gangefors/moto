@@ -337,3 +337,139 @@ fn a_ride_off_the_map_is_stored_with_no_ways() {
     assert!(store.ride_ways(&region_key(&e)).unwrap().is_empty());
     assert!(store.rides_to_match(&region_key(&e)).unwrap().is_empty());
 }
+
+/// A store with a Gravel correction along A→B on the original fixture
+/// (and the region remembered), and the correction's id.
+fn store_with_correction() -> (Store, i64) {
+    let old = engine(fixture::region());
+    let draft = old
+        .section_between(ll(55.7001, 13.202), ll(55.7001, 13.208))
+        .unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    let id = store
+        .add_surface_correction(
+            &crate::surface::NewSurfaceCorrection {
+                rider_id: LOCAL_RIDER.into(),
+                surface: crate::region::format::Surface::Gravel,
+                ways: draft.ways,
+                geometry: draft.geometry,
+            },
+            None,
+            T0,
+        )
+        .unwrap()
+        .correction
+        .id;
+    store.set_region_key(&region_key(&old)).unwrap();
+    (store, id)
+}
+
+#[test]
+fn corrections_follow_renumbered_ways() {
+    let (mut store, id) = store_with_correction();
+    let before = store.surface_correction(id).unwrap().unwrap();
+    assert_eq!(before.ways[0].way_id, 100);
+    let new = engine(lund(0.0, 1000, false, false));
+    let report = rematch_store(&mut store, &new).unwrap();
+    assert_eq!(
+        (
+            report.surface_checked,
+            report.surface_matched,
+            report.surface_removed,
+            report.surface_off_map
+        ),
+        (1, 1, 0, 0)
+    );
+    let after = store.surface_correction(id).unwrap().unwrap();
+    assert_eq!(after.status, Status::Ok);
+    assert!(after.ways.iter().all(|w| w.way_id == 1100), "{after:?}");
+    assert_eq!(
+        (after.surface, after.created_at, after.updated_at),
+        (before.surface, T0, T0)
+    );
+    assert_eq!(store.region_key().unwrap(), Some(region_key(&new)));
+    // The same map again: nothing to do.
+    let again = rematch_store(&mut store, &new).unwrap();
+    assert_eq!(again, RematchReport::default());
+}
+
+#[test]
+fn corrections_that_no_longer_fit_are_deleted() {
+    for (name, region) in [
+        ("road moved 60 m", lund(60.0, 0, false, false)),
+        ("way renumbered and moved", lund(80.0, 7, false, false)),
+    ] {
+        let (mut store, id) = store_with_correction();
+        let report = rematch_store(&mut store, &engine(region)).unwrap();
+        assert_eq!(
+            (report.surface_checked, report.surface_removed),
+            (1, 1),
+            "{name}"
+        );
+        assert_eq!(store.surface_correction(id).unwrap(), None, "{name}");
+        assert!(store.surface_corrections().unwrap().is_empty(), "{name}");
+    }
+}
+
+#[test]
+fn a_correction_off_the_open_map_waits_for_its_region() {
+    let (mut store, id) = store_with_correction();
+    let far = engine(lund(50_000.0, 0, false, false));
+    let report = rematch_store(&mut store, &far).unwrap();
+    assert_eq!(
+        (
+            report.surface_checked,
+            report.surface_off_map,
+            report.surface_removed
+        ),
+        (0, 1, 0)
+    );
+    let waiting = store.surface_correction(id).unwrap().unwrap();
+    assert_eq!(waiting.status, Status::NeedsRematch);
+    // Not applied while it waits.
+    let f = crate::Favourites::build_all(&far, &[], &[], &[waiting]);
+    assert_eq!(f.corrected_edge_count(), 0);
+    // The same map again: only counted.
+    let again = rematch_store(&mut store, &far).unwrap();
+    assert_eq!((again.surface_checked, again.surface_off_map), (0, 1));
+    // Its region back: matched.
+    let back = rematch_store(&mut store, &engine(fixture::region())).unwrap();
+    assert_eq!((back.surface_checked, back.surface_matched), (1, 1));
+    assert_eq!(
+        store.surface_correction(id).unwrap().unwrap().status,
+        Status::Ok
+    );
+}
+
+#[test]
+fn an_interrupted_run_finishes_the_corrections_too() {
+    // Flagged, then the app died before the region was remembered.
+    let (mut store, id) = store_with_correction();
+    store.flag_corrections_for_rematch().unwrap();
+    let report = rematch_store(&mut store, &engine(fixture::region())).unwrap();
+    assert_eq!((report.surface_checked, report.surface_matched), (1, 1));
+    assert_eq!(
+        store.surface_correction(id).unwrap().unwrap().status,
+        Status::Ok
+    );
+    // Sections and corrections together, on a new map.
+    let (mut store, section) = store_with_section();
+    let c = store
+        .add_surface_correction(
+            &crate::surface::NewSurfaceCorrection {
+                rider_id: LOCAL_RIDER.into(),
+                surface: crate::region::format::Surface::Paved,
+                ways: store.get_section(section).unwrap().unwrap().ways,
+                geometry: store.get_section(section).unwrap().unwrap().geometry,
+            },
+            None,
+            T0,
+        )
+        .unwrap()
+        .correction
+        .id;
+    let report = rematch_store(&mut store, &engine(lund(10.0, 0, false, false))).unwrap();
+    assert_eq!((report.checked, report.matched), (1, 1));
+    assert_eq!((report.surface_checked, report.surface_matched), (1, 1));
+    assert!(store.surface_correction(c).unwrap().is_some());
+}
