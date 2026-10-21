@@ -558,6 +558,21 @@ impl Favourites {
         self.max_unpaved_kmh
     }
 
+    /// Only the rider's surface corrections of this overlay: no
+    /// favourites, no rides.
+    pub fn surface_only(&self) -> Self {
+        if self.surface_marked.is_empty() {
+            return Self::none();
+        }
+        Self {
+            region_key: self.region_key.clone(),
+            surface_marked: self.surface_marked.clone(),
+            surface: self.surface.clone(),
+            max_unpaved_kmh: self.max_unpaved_kmh,
+            ..Self::default()
+        }
+    }
+
     /// How many edges the rider's surface corrections change.
     pub fn corrected_edge_count(&self) -> usize {
         self.surface.len()

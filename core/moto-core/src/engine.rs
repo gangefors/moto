@@ -155,6 +155,18 @@ impl Engine {
     /// favourites, no curvature, the budget unused. The reference that
     /// fun routes are measured against.
     pub fn route(&self, from: LatLon, to: LatLon, opts: &RouteOptions) -> Result<Route, CoreError> {
+        self.fastest_route(from, to, opts, &Favourites::none())
+    }
+
+    /// As [`Self::route`], on the road surfaces the rider's corrections in
+    /// `overlay` give (ADR-0018); its favourites and rides don't count.
+    pub fn fastest_route(
+        &self,
+        from: LatLon,
+        to: LatLon,
+        opts: &RouteOptions,
+        overlay: &Favourites,
+    ) -> Result<Route, CoreError> {
         let fastest = RouteOptions {
             curvy: false,
             // Preferring gravel is a pull; the fastest route only allows it.
@@ -164,7 +176,7 @@ impl Engine {
             },
             ..opts.clone()
         };
-        self.route_with(from, to, &fastest, &Favourites::none())
+        self.route_with(from, to, &fastest, &overlay.surface_only())
     }
 
     /// Route from `from` to `to` over as much of the rider's `favourites`

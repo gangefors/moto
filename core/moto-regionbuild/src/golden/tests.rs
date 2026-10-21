@@ -623,3 +623,36 @@ fn loops_through_points_are_checked_as_round_trips() {
         assert!(Case::parse(b).is_err(), "{b}");
     }
 }
+
+#[test]
+fn surface_corrections_set_the_route_gravel() {
+    // The fixture route is paved; corrected to gravel along it, the
+    // route's gravel figure counts it.
+    let file = built_fixture("golden-surface");
+    let engine = Engine::open(file.path()).unwrap();
+    let fix = r#","gravel":"allow","surface":[{"from":[55.7043,13.1905],"to":[55.7057,13.1935],"surface":"gravel"}]"#;
+    let o = Case::parse(&case(fix, r#""min_unpaved_km":0.1"#))
+        .unwrap()
+        .run(&engine);
+    assert!(o.failures.is_empty(), "{o:?}");
+    // The same stretch corrected to paved after it: the newer one wins.
+    let both = r#","gravel":"allow","surface":[{"from":[55.7043,13.1905],"to":[55.7057,13.1935],"surface":"gravel"},{"from":[55.7043,13.1905],"to":[55.7057,13.1935],"surface":"paved"}]"#;
+    let o = Case::parse(&case(both, r#""min_unpaved_km":0.1"#))
+        .unwrap()
+        .run(&engine);
+    assert_eq!(o.failures.len(), 1, "{o:?}");
+}
+
+#[test]
+fn bad_surface_corrections_are_refused() {
+    for bad in [
+        r#","surface":[{"from":[55.7,13.19],"to":[55.7,13.2],"surface":"dirt"}]"#,
+        r#","surface":[{"from":[55.7,13.19],"to":[55.7,13.2],"surface":"unknown"}]"#,
+        r#","surface":[{"from":[55.7,13.19],"to":[55.7,13.2],"surface":6}]"#,
+        r#","surface":[{"from":[55.7,13.19],"to":[55.7,13.2]}]"#,
+        r#","surface":[{"from":[55.7,13.19],"to":[55.7,13.2],"surface":"paved","width":3}]"#,
+        r#","surface":[{"from":[95.0,13.19],"to":[55.7,13.2],"surface":"paved"}]"#,
+    ] {
+        assert!(Case::parse(&case(bad, "")).is_err(), "{bad}");
+    }
+}

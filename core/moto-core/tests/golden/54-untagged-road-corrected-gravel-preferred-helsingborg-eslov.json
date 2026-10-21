@@ -1,0 +1,16 @@
+{
+  "name": "Helsingborg to Eslöv, a corrected gravel road preferred",
+  "description": "As case 53, with gravel preferred and a 10 % budget (so mapped gravel further off is out of reach): the route rides the corrected road, and its gravel figure counts it (about 2.95 km).",
+  "from": [56.046, 12.694],
+  "to": [55.839, 13.304],
+  "curvy": false,
+  "gravel": "prefer",
+  "max_detour": 0.1,
+  "surface": [
+    {"from": [55.932, 12.81713], "to": [55.9068, 12.8236], "surface": "gravel"}
+  ],
+  "expect": {
+    "pass": [[55.91908, 12.81621]],
+    "min_unpaved_km": 2.4
+  }
+}

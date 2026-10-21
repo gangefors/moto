@@ -1,0 +1,12 @@
+{
+  "name": "South of Sjöbo, the gravel shortcut corrected to paved",
+  "description": "Case 16's gravel shortcut, corrected to paved by a made-up surface correction, with gravel avoided as in case 16: the route now takes the shortcut instead of going round on mapped paved roads.",
+  "from": [55.5578, 13.8215],
+  "to": [55.6155, 13.8641],
+  "surface": [
+    {"from": [55.5587, 13.821], "to": [55.5555, 13.859], "surface": "paved"}
+  ],
+  "expect": {
+    "pass": [[55.56802, 13.85889]]
+  }
+}

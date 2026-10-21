@@ -293,3 +293,49 @@ fn partly_corrected_edges_cost_by_their_share() {
     let worth = fun.gravel_worth(id, &edge);
     assert!((worth - share * crate::scoring::PARAMS.gravel_weight).abs() < 1e-9);
 }
+
+#[test]
+fn the_fastest_route_goes_by_the_corrected_surface_alone() {
+    let e = fast_ladder(Surface::Asphalt);
+    let whole = e
+        .section_between(
+            LatLon {
+                lat: 55.7201,
+                lon: 13.4001,
+            },
+            LatLon {
+                lat: 55.7201,
+                lon: 13.4399,
+            },
+        )
+        .unwrap();
+    let section = crate::section::Section {
+        id: 1,
+        rider_id: crate::section::LOCAL_RIDER.into(),
+        name: String::new(),
+        rating: crate::section::Rating::Epic,
+        direction: crate::section::Direction::Both,
+        source: crate::section::Source::Map,
+        status: crate::section::Status::Ok,
+        created_at: 0,
+        updated_at: 0,
+        ways: whole.ways.clone(),
+        geometry: whole.geometry.clone(),
+    };
+    let fav = Favourites::build_all(
+        &e,
+        std::slice::from_ref(&section),
+        &[],
+        &[correction(1, Surface::Gravel, &whole, 10)],
+    );
+    let o = no_motorways(Gravel::Avoid);
+    assert!(!passes(&e.route(FROM, TO, &o).unwrap(), SOUTH));
+    // The correction counts, the epic favourite on it doesn't pull.
+    let r = e.fastest_route(FROM, TO, &o, &fav).unwrap();
+    assert!(passes(&r, SOUTH), "{r:?}");
+    assert!(fav.surface_only().is_empty());
+    assert_eq!(
+        e.fastest_route(FROM, TO, &o, &Favourites::none()).unwrap(),
+        e.route(FROM, TO, &o).unwrap()
+    );
+}

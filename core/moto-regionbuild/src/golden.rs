@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use moto_core::geo::{distance_to_line, haversine_m};
 use moto_core::roundtrip::{MAX_LOOPS, MAX_REUSE, TOLERANCE, home_radius_m};
 use moto_core::section::{Direction, LOCAL_RIDER, Rating, Section, Source, Status};
+use moto_core::surface::SurfaceCorrection;
 use moto_core::{
     Engine, Favourites, FavouritesMode, Gravel, LatLon, LoopOptions, RoundTripTarget, Route,
     RouteOptions, TimeBudget, UnriddenMode,
@@ -84,6 +85,11 @@ pub struct Case {
     pub tolls: bool,
     #[serde(default)]
     pub favourites: Vec<Favourite>,
+    /// Surface corrections (ADR-0018): the road between two points, as
+    /// the app marks a stretch, Paved or Gravel. Made up, never a rider's
+    /// own; a long road is a chain of pieces.
+    #[serde(default)]
+    pub surface: Vec<SurfaceFix>,
     /// Rides the rider has been on, each a line of [lat, lon] points
     /// along the roads (made up, never a rider's own), matched to the
     /// roads like the app's rides (ADR-0010).
@@ -150,6 +156,32 @@ pub struct Favourite {
     pub rating: RatingName,
     #[serde(default)]
     pub one_way: bool,
+}
+
+/// A surface correction: the road between two points, as the app marks
+/// it, and the surface the rider says it has.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SurfaceFix {
+    pub from: [f64; 2],
+    pub to: [f64; 2],
+    pub surface: SurfaceName,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SurfaceName {
+    Paved,
+    Gravel,
+}
+
+impl From<SurfaceName> for moto_core::region::format::Surface {
+    fn from(s: SurfaceName) -> Self {
+        match s {
+            SurfaceName::Paved => Self::Paved,
+            SurfaceName::Gravel => Self::Gravel,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -353,9 +385,10 @@ impl Case {
             || e.pass.len() > MAX_ITEMS
             || e.avoid.len() > MAX_ITEMS
             || case.rides.len() > MAX_ITEMS
+            || case.surface.len() > MAX_ITEMS
         {
             return Err(format!(
-                "at most {MAX_ITEMS} favourites, rides, pass and avoid points"
+                "at most {MAX_ITEMS} favourites, surface corrections, rides, pass and avoid points"
             ));
         }
         for ride in &case.rides {
@@ -436,6 +469,7 @@ impl Case {
             .iter()
             .flatten()
             .chain(case.favourites.iter().flat_map(|f| [&f.from, &f.to]))
+            .chain(case.surface.iter().flat_map(|f| [&f.from, &f.to]))
             .chain(&e.pass)
             .chain(&e.avoid)
         {
@@ -547,11 +581,36 @@ impl Case {
                 Ok(m.pieces.into_iter().flat_map(|p| p.ways).collect())
             })
             .collect::<Result<Vec<_>, String>>()?;
-        Ok(Favourites::build_with_rides(
+        Ok(Favourites::build_all(
             engine,
             &self.favourites(engine)?,
             &rides,
+            &self.corrections(engine)?,
         ))
+    }
+
+    /// The case's surface corrections on `engine`'s region, marked like
+    /// in the app, the later ones newer.
+    fn corrections(&self, engine: &Engine) -> Result<Vec<SurfaceCorrection>, String> {
+        self.surface
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let d = engine
+                    .section_between(ll(f.from)?, ll(f.to)?)
+                    .map_err(|e| format!("surface correction {}: {e}", i + 1))?;
+                Ok(SurfaceCorrection {
+                    id: i as i64 + 1,
+                    rider_id: LOCAL_RIDER.into(),
+                    surface: f.surface.into(),
+                    status: Status::Ok,
+                    created_at: i as i64,
+                    updated_at: i as i64,
+                    ways: d.ways,
+                    geometry: d.geometry,
+                })
+            })
+            .collect()
     }
 
     /// The case's favourites on `engine`'s region, marked like in the app.
@@ -618,7 +677,9 @@ impl Case {
             let (from, to) = (ll(self.from)?, ll(to)?);
             let opts = self.options();
             let fav = self.overlay(engine)?;
-            let fastest = engine.route(from, to, &opts).map_err(|e| e.to_string())?;
+            let fastest = engine
+                .fastest_route(from, to, &opts, &fav)
+                .map_err(|e| e.to_string())?;
             let route = engine
                 .route_with(from, to, &opts, &fav)
                 .map_err(|e| e.to_string())?;

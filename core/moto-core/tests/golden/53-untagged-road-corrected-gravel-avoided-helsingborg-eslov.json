@@ -1,0 +1,13 @@
+{
+  "name": "Helsingborg to Eslöv, an untagged road corrected to gravel",
+  "description": "Case 01's fastest route rides 3 km of a secondary road OSM gives no surface, routed as paved. Corrected to gravel by a made-up surface correction, with gravel avoided, the route leaves it for paved roads.",
+  "from": [56.046, 12.694],
+  "to": [55.839, 13.304],
+  "curvy": false,
+  "surface": [
+    {"from": [55.932, 12.81713], "to": [55.9068, 12.8236], "surface": "gravel"}
+  ],
+  "expect": {
+    "avoid": [[55.91908, 12.81621]]
+  }
+}
