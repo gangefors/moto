@@ -9,9 +9,10 @@
 //! page exports them), `rides/NNNNN.gpx` (one per ride, a segment per
 //! stretch recorded without a gap), `routes/NNNNN.gpx` (one per saved
 //! route), `tags.gpx` (the tags waiting for review, as waypoints) and
-//! `settings.json` (the app's own settings, carried as they are). The
-//! manifest also lists the map regions installed and which of them were
-//! switched off (ADR-0016).
+//! `settings.json` (the app's own settings, carried as they are), and from
+//! format 4 `surface-corrections.geojson` (the rider's surface corrections,
+//! ADR-0018). The manifest also lists the map regions installed and which
+//! of them were switched off (ADR-0016).
 //!
 //! A backup comes back from outside the app, so it is hostile input. Only
 //! the fixed names above are accepted, each once; the zip's directory is
@@ -43,14 +44,17 @@ use crate::track::TrackPoint;
 use crate::{CoreError, Engine, LatLon};
 
 mod settings;
+mod surface;
 pub use settings::{MAX_SETTINGS, Setting, SettingValue};
 
 /// The backup format this build writes and the newest it reads.
-pub const FORMAT: u32 = 3;
+pub const FORMAT: u32 = 4;
 /// The oldest format this build reads.
 pub const MIN_FORMAT: u32 = 2;
 /// The first format with `regions_disabled`.
 const SWITCHES_FROM: u32 = 3;
+/// The first format with surface corrections.
+const CORRECTIONS_FROM: u32 = 4;
 /// Largest backup file read.
 pub const MAX_BACKUP_BYTES: u64 = 1 << 30;
 /// Most files in a backup.
@@ -78,6 +82,7 @@ const MANIFEST: &str = "manifest.json";
 const SECTIONS: &str = "favourites.geojson";
 const SETTINGS: &str = "settings.json";
 const TAGS: &str = "tags.gpx";
+const CORRECTIONS: &str = "surface-corrections.geojson";
 
 fn bad(why: impl Into<String>) -> CoreError {
     CoreError::InvalidArgument(format!("not a valid moto backup: {}", why.into()))
@@ -120,6 +125,8 @@ pub struct BackupSummary {
     pub routes: u64,
     pub tags: u64,
     pub has_settings: bool,
+    /// Surface corrections; 0 for a backup from before format 4.
+    pub surface_corrections: u64,
     pub regions: Vec<String>,
     /// Those of `regions` that were switched off; empty for a format-2
     /// backup, where every region comes back on.
@@ -143,6 +150,10 @@ pub struct RestoreReport {
     /// Tags left out because they lie on a favourite the phone already had
     /// (taken as reviewed since the backup was made).
     pub tags_on_favourites: u64,
+    /// Surface corrections added, and those already on the phone (the
+    /// same surface on the same line).
+    pub surface_added: u64,
+    pub surface_skipped: u64,
     /// The backup's settings, for the app to apply (it checks which keys
     /// it knows); `None` if the backup has none.
     pub settings: Option<Vec<Setting>>,
@@ -168,6 +179,9 @@ struct Manifest {
     regions_disabled: Option<Vec<String>>,
     files: Vec<FileEntry>,
     favourites: u64,
+    /// From format 4: how many surface corrections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    surface_corrections: Option<u64>,
     rides: Vec<RideEntry>,
     routes: Vec<RouteEntry>,
     tags: Vec<TagEntry>,
@@ -232,7 +246,7 @@ fn numbered(name: &str, dir: &str) -> bool {
 /// backup has.
 fn cap_for(name: &str) -> Option<usize> {
     match name {
-        SECTIONS => Some(MAX_SECTIONS_BYTES),
+        SECTIONS | CORRECTIONS => Some(MAX_SECTIONS_BYTES),
         SETTINGS => Some(MAX_SETTINGS_BYTES),
         TAGS => Some(MAX_GPX_BYTES),
         _ if numbered(name, "rides") || numbered(name, "routes") => Some(MAX_GPX_BYTES),
@@ -299,6 +313,17 @@ impl Manifest {
         if !disabled_ok {
             return Err(bad("disabled regions"));
         }
+        // Format 4 always says how many corrections; older ones never.
+        let corrections_ok = match self.surface_corrections {
+            None => self.format < CORRECTIONS_FROM,
+            Some(n) => {
+                self.format >= CORRECTIONS_FROM
+                    && n <= crate::surface::MAX_SURFACE_CORRECTIONS as u64
+            }
+        };
+        if !corrections_ok {
+            return Err(bad("surface corrections"));
+        }
         if self.files.len() > MAX_ENTRIES
             || self.rides.len() > MAX_RIDES
             || self.routes.len() > MAX_RIDES
@@ -336,6 +361,9 @@ impl Manifest {
         }
         if self.tags.is_empty() == listed(TAGS) {
             return Err(bad("tags don't match the files"));
+        }
+        if (self.surface_corrections.unwrap_or(0) > 0) != listed(CORRECTIONS) {
+            return Err(bad("surface corrections don't match the files"));
         }
         let mut used = HashSet::new();
         for r in &self.rides {
@@ -391,6 +419,7 @@ impl Manifest {
             routes: self.routes.len() as u64,
             tags: self.tags.len() as u64,
             has_settings: self.files.iter().any(|f| f.name == SETTINGS),
+            surface_corrections: self.surface_corrections.unwrap_or(0),
             regions: self.regions.clone(),
             regions_disabled: self.regions_disabled.clone().unwrap_or_default(),
         }
@@ -467,6 +496,11 @@ pub fn write_backup(
     let sections: Vec<Section> = store.list_sections(None)?;
     if !sections.is_empty() {
         w.add(SECTIONS, &exchange::to_geojson(&sections)?)?;
+    }
+
+    let corrections = store.surface_corrections()?;
+    if !corrections.is_empty() {
+        w.add(CORRECTIONS, &surface::to_geojson(&corrections)?)?;
     }
 
     let mut rides = Vec::new();
@@ -561,6 +595,7 @@ pub fn write_backup(
         regions_disabled: Some(regions_disabled),
         files: std::mem::take(&mut w.files),
         favourites: sections.len() as u64,
+        surface_corrections: Some(corrections.len() as u64),
         rides,
         routes,
         tags,
@@ -774,6 +809,15 @@ pub fn restore_backup(
     } else {
         Vec::new()
     };
+    let corrections = if opened.sizes.contains_key(CORRECTIONS) {
+        let read = surface::read(&read_entry(&mut opened, CORRECTIONS)?)?;
+        if Some(read.len() as u64) != manifest.surface_corrections {
+            return Err(bad("surface corrections don't match the manifest"));
+        }
+        read
+    } else {
+        Vec::new()
+    };
     let tag_fixes = if opened.sizes.contains_key(TAGS) {
         let fixes = gpx::read_waypoints(&utf8(read_entry(&mut opened, TAGS)?, TAGS)?)?;
         if fixes.len() != manifest.tags.len() {
@@ -807,6 +851,18 @@ pub fn restore_backup(
     report.favourites_added = add.len() as u64;
     report.favourites_skipped = plan.skipped.len() as u64;
     report.favourites_replaced = plan.remove.len() as u64;
+
+    // Surface corrections: the one already there when it has the same
+    // surface and line (also one added earlier from this file). The rest
+    // wait to be fitted to the map, keeping their times.
+    for c in &corrections {
+        if store.same_correction(c.correction.surface, &c.correction.geometry)? {
+            report.surface_skipped += 1;
+            continue;
+        }
+        restore.add_corrections(&[(c.correction.clone(), c.created_at, c.updated_at)])?;
+        report.surface_added += 1;
+    }
 
     // Rides: the ride already there when it has the same fixes.
     let mut track_of_ride = HashMap::new();
@@ -880,7 +936,7 @@ pub fn restore_backup(
 
     restore.commit()?;
     if let Some(engine) = engine
-        && report.favourites_added > 0
+        && (report.favourites_added > 0 || report.surface_added > 0)
     {
         rematch_store(store, engine)?;
     }

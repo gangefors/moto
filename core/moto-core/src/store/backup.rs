@@ -8,11 +8,13 @@
 
 use rusqlite::{Transaction, params};
 
+use super::surface::insert_correction;
 use super::tracks::insert_points;
 use super::{Store, db_err, e7, encode_geometry, insert_section_at};
 use crate::CoreError;
 use crate::section::{LOCAL_RIDER, NewSection, Status, validate_name};
 use crate::store::NewRoute;
+use crate::surface::{MAX_SURFACE_CORRECTIONS, NewSurfaceCorrection};
 use crate::tag::NewTag;
 use crate::track::{MAX_TRACK_POINTS, TrackPoint, ridden_distance_m};
 
@@ -59,6 +61,23 @@ impl Store {
         Ok(lines.contains(&want))
     }
 
+    /// Whether a surface correction of `surface` with exactly the line
+    /// `geometry` (to 1e-7 degrees) is saved, whatever its status.
+    pub fn same_correction(
+        &self,
+        surface: crate::region::format::Surface,
+        geometry: &[crate::LatLon],
+    ) -> Result<bool, CoreError> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM surface_corrections
+                    WHERE surface = ?1 AND geometry = ?2)",
+                params![surface as i64, encode_geometry(geometry)],
+                |r| r.get::<_, bool>(0),
+            )
+            .map_err(db_err)
+    }
+
     /// Whether a tag at `time_ms` and `position` (to 1e-7 degrees) is saved.
     pub fn same_tag(&self, time_ms: i64, position: crate::LatLon) -> Result<bool, CoreError> {
         let (lat, lon) = e7(position);
@@ -98,6 +117,34 @@ impl Restore<'_> {
                 insert_section_at(&self.tx, s, *created, *updated, Status::NeedsRematch)
             })
             .collect()
+    }
+
+    /// Adds surface corrections (validated) made and changed at the times
+    /// given, waiting to be fitted to the map (ADR-0018). Refused when the
+    /// store would hold more than [`MAX_SURFACE_CORRECTIONS`].
+    pub fn add_corrections(
+        &self,
+        add: &[(NewSurfaceCorrection, i64, i64)],
+    ) -> Result<(), CoreError> {
+        for (c, created, updated) in add {
+            c.validate()?;
+            if !valid_time_s(*created) || !valid_time_s(*updated) {
+                return Err(bad("surface correction: invalid time"));
+            }
+        }
+        let have: i64 = self
+            .tx
+            .query_row("SELECT count(*) FROM surface_corrections", [], |r| r.get(0))
+            .map_err(db_err)?;
+        if usize::try_from(have).unwrap_or(usize::MAX) + add.len() > MAX_SURFACE_CORRECTIONS {
+            return Err(bad(format!(
+                "at most {MAX_SURFACE_CORRECTIONS} surface corrections"
+            )));
+        }
+        for (c, created, updated) in add {
+            insert_correction(&self.tx, c, *created, *updated, Status::NeedsRematch)?;
+        }
+        Ok(())
     }
 
     /// Adds a finished ride: its fixes in `segments` (a new segment where

@@ -159,6 +159,27 @@ fn filled() -> Store {
     s.add_tag(&tag(T0_MS + 3_601_000, Some(imported.id)))
         .unwrap();
     s.add_tag(&tag(T0_MS + 9_001_000, Some(live.id))).unwrap();
+
+    // Two surface corrections, one waiting for its region.
+    let mut gravel = crate::surface::tests::sample(crate::region::format::Surface::Gravel);
+    gravel.geometry[1].lat = 56.305;
+    s.add_surface_correction(&gravel, None, 1_787_000_000)
+        .unwrap();
+    let mut paved = crate::surface::tests::sample(crate::region::format::Surface::Paved);
+    paved.ways = vec![
+        crate::section::WaySpan {
+            way_id: 5,
+            from_idx: 9,
+            to_idx: 2,
+        },
+        crate::section::WaySpan {
+            way_id: 6,
+            from_idx: 0,
+            to_idx: 4_294_967_295,
+        },
+    ];
+    s.add_surface_correction(&paved, None, 1_788_000_000)
+        .unwrap();
     s
 }
 
@@ -211,6 +232,19 @@ fn contents(s: &Store) -> String {
             s.route_geometry(r.id)
                 .unwrap()
                 .unwrap()
+                .iter()
+                .map(|p| crate::store::tests_e7(*p))
+                .collect::<Vec<_>>()
+        );
+    }
+    for c in s.surface_corrections().unwrap() {
+        out += &format!(
+            "C {:?} {} {} {:?} {:?}\n",
+            c.surface,
+            c.created_at,
+            c.updated_at,
+            c.ways,
+            c.geometry
                 .iter()
                 .map(|p| crate::store::tests_e7(*p))
                 .collect::<Vec<_>>()
@@ -548,11 +582,12 @@ fn manifest_of(path: &Path) -> serde_json::Value {
 }
 
 #[test]
-fn the_manifest_is_format_3() {
-    let f = backup_of(&filled(), "format3");
+fn the_manifest_is_format_4() {
+    let f = backup_of(&filled(), "format4");
     let files = entries(&f.0);
     let m = manifest_of(&f.0);
-    assert_eq!(m["format"], 3);
+    assert_eq!(m["format"], 4);
+    assert_eq!(m["surface_corrections"], 2);
     assert_eq!(m["regions_disabled"], serde_json::json!(["denmark"]));
     let tags = m["tags"].as_array().unwrap();
     assert_eq!(tags.len(), 3);
@@ -561,12 +596,63 @@ fn the_manifest_is_format_3() {
     let gpx_bytes = &files.iter().find(|(n, _)| n == TAGS).unwrap().1;
     let fixes = gpx::read_waypoints(std::str::from_utf8(gpx_bytes).unwrap()).unwrap();
     assert_eq!(fixes.len(), 3);
+    // The corrections, as GeoJSON.
+    let geo: serde_json::Value =
+        serde_json::from_slice(&files.iter().find(|(n, _)| n == CORRECTIONS).unwrap().1).unwrap();
+    assert_eq!(
+        geo["moto"],
+        serde_json::json!({"format": 1, "content": "surface"})
+    );
+    let props = &geo["features"][1]["properties"];
+    assert_eq!(props["surface"], "paved");
+    assert_eq!(
+        props["ways"],
+        serde_json::json!([[5, 9, 2], [6, 0, 4_294_967_295u64]])
+    );
+    assert_eq!(read_summary(&f.0).unwrap().surface_corrections, 2);
     // With every region on, the key is there with an empty list.
-    let g = Temp::new("format3-all-on");
+    let g = Temp::new("format4-all-on");
     let mut i = info();
     i.regions_disabled.clear();
     write_backup(&filled(), &g.0, &i).unwrap();
     assert_eq!(manifest_of(&g.0)["regions_disabled"], serde_json::json!([]));
+    // No corrections: the count is 0 and there is no file.
+    let mut none = filled();
+    for c in none.surface_corrections().unwrap() {
+        none.delete_surface_correction(c.id).unwrap();
+    }
+    let h = backup_of(&none, "format4-none");
+    assert_eq!(manifest_of(&h.0)["surface_corrections"], 0);
+    assert!(entries(&h.0).iter().all(|(n, _)| n != CORRECTIONS));
+}
+
+/// `files` as a backup of an older `format` (2 or 3) would have them: no
+/// surface corrections, and in format 2 no region switches.
+fn as_format(files: &[(String, Vec<u8>)], format: u32) -> Vec<(String, Vec<u8>)> {
+    let kept: Vec<(String, Vec<u8>)> = files
+        .iter()
+        .filter(|(n, _)| n != CORRECTIONS)
+        .cloned()
+        .collect();
+    with_manifest(&kept, |m| {
+        m["format"] = format.into();
+        let o = m.as_object_mut().unwrap();
+        o.remove("surface_corrections");
+        if format < 3 {
+            o.remove("regions_disabled");
+        }
+        let listed = o["files"].as_array_mut().unwrap();
+        listed.retain(|f| f["name"] != CORRECTIONS);
+    })
+}
+
+/// [`without_live`], also without the surface corrections.
+fn without_live_or_corrections(s: &Store) -> String {
+    without_live(s)
+        .lines()
+        .filter(|l| !l.starts_with("C "))
+        .map(|l| format!("{l}\n"))
+        .collect()
 }
 
 #[test]
@@ -574,22 +660,21 @@ fn a_format_2_backup_restores_with_every_region_on() {
     let src = filled();
     let f = backup_of(&src, "format2");
     let g = Temp::new("format2b");
-    zip_of(
-        &g.0,
-        &with_manifest(&entries(&f.0), |m| {
-            m["format"] = 2.into();
-            m.as_object_mut().unwrap().remove("regions_disabled");
-        }),
-    );
+    zip_of(&g.0, &as_format(&entries(&f.0), 2));
     let sum = read_summary(&g.0).unwrap();
     assert_eq!(sum.format, 2);
     assert_eq!(sum.regions, ["sweden", "denmark"]);
     assert!(sum.regions_disabled.is_empty());
+    assert_eq!(sum.surface_corrections, 0);
     let mut dst = Store::open_in_memory().unwrap();
     let r = restore_backup(&mut dst, None, &g.0, 0).unwrap();
-    assert_eq!(without_live(&dst), without_live(&src));
+    assert_eq!(
+        without_live_or_corrections(&dst),
+        without_live_or_corrections(&src)
+    );
     assert_eq!(r.regions, ["sweden", "denmark"]);
     assert!(r.regions_disabled.is_empty());
+    assert_eq!(r.surface_added, 0);
     let before = contents(&dst);
     let r = restore_backup(&mut dst, None, &g.0, 0).unwrap();
     assert_eq!(
@@ -602,6 +687,311 @@ fn a_format_2_backup_restores_with_every_region_on() {
         (0, 0, 0, 0)
     );
     assert_eq!(contents(&dst), before);
+}
+
+#[test]
+fn a_format_3_backup_still_restores() {
+    let src = filled();
+    let f = backup_of(&src, "format3");
+    let g = Temp::new("format3b");
+    zip_of(&g.0, &as_format(&entries(&f.0), 3));
+    let sum = read_summary(&g.0).unwrap();
+    assert_eq!((sum.format, sum.surface_corrections), (3, 0));
+    assert_eq!(sum.regions_disabled, ["denmark"]);
+    let mut dst = Store::open_in_memory().unwrap();
+    restore_backup(&mut dst, None, &g.0, 0).unwrap();
+    assert_eq!(
+        without_live_or_corrections(&dst),
+        without_live_or_corrections(&src)
+    );
+    assert!(dst.surface_corrections().unwrap().is_empty());
+}
+
+#[test]
+fn the_corrections_count_and_file_go_with_format_4_only() {
+    let f = backup_of(&filled(), "count");
+    let files = entries(&f.0);
+    let g = Temp::new("count2");
+    // Format 4 without the count.
+    zip_of(
+        &g.0,
+        &with_manifest(&files, |m| {
+            m.as_object_mut().unwrap().remove("surface_corrections");
+        }),
+    );
+    assert!(refused(&g.0).contains("surface corrections"));
+    // Format 3 with the count, or with the file.
+    zip_of(
+        &g.0,
+        &with_manifest(&files, |m| {
+            m["format"] = 3.into();
+        }),
+    );
+    refused(&g.0);
+    zip_of(
+        &g.0,
+        &with_manifest(&as_format(&files, 3), |m| {
+            m["surface_corrections"] = 0.into();
+        }),
+    );
+    refused(&g.0);
+    let mut with_file = as_format(&files, 3);
+    with_file.insert(
+        0,
+        (
+            CORRECTIONS.into(),
+            files
+                .iter()
+                .find(|(n, _)| n == CORRECTIONS)
+                .unwrap()
+                .1
+                .clone(),
+        ),
+    );
+    zip_of(&g.0, &with_file);
+    refused(&g.0);
+    // A count that doesn't match the file, or is over the cap.
+    for n in [0u64, 1, 3, 10_001] {
+        zip_of(
+            &g.0,
+            &with_manifest(&files, |m| m["surface_corrections"] = n.into()),
+        );
+        refused(&g.0);
+    }
+}
+
+/// The backup `files` with `surface-corrections.geojson` replaced by
+/// `bytes` (its manifest entry made to match), and `count` corrections
+/// in the manifest.
+fn with_corrections_file(
+    files: &[(String, Vec<u8>)],
+    bytes: &[u8],
+    count: u64,
+) -> Vec<(String, Vec<u8>)> {
+    let replaced: Vec<(String, Vec<u8>)> = files
+        .iter()
+        .map(|(n, b)| {
+            if n == CORRECTIONS {
+                (n.clone(), bytes.to_vec())
+            } else {
+                (n.clone(), b.clone())
+            }
+        })
+        .collect();
+    let size = bytes.len();
+    let sha = hex(&Sha256::digest(bytes));
+    with_manifest(&replaced, move |m| {
+        m["surface_corrections"] = count.into();
+        for f in m["files"].as_array_mut().unwrap() {
+            if f["name"] == CORRECTIONS {
+                f["size"] = size.into();
+                f["sha256"] = sha.clone().into();
+            }
+        }
+    })
+}
+
+#[test]
+fn a_damaged_corrections_file_refuses_the_restore() {
+    let f = backup_of(&filled(), "corrupt");
+    let files = entries(&f.0);
+    let good = files
+        .iter()
+        .find(|(n, _)| n == CORRECTIONS)
+        .unwrap()
+        .1
+        .clone();
+    let doc: serde_json::Value = serde_json::from_slice(&good).unwrap();
+    let g = Temp::new("corrupt2");
+    // Truncated, and bit-flipped, with the hash in the manifest unchanged.
+    let mut flipped = good.clone();
+    flipped[good.len() / 3] ^= 0x10;
+    for bytes in [good[..good.len() / 2].to_vec(), flipped] {
+        let tampered: Vec<_> = files
+            .iter()
+            .map(|(n, b)| {
+                let b = if n == CORRECTIONS {
+                    bytes.clone()
+                } else {
+                    b.clone()
+                };
+                (n.clone(), b)
+            })
+            .collect();
+        zip_of(&g.0, &tampered);
+        refused(&g.0);
+    }
+    // Over the size cap.
+    zip_of(
+        &g.0,
+        &with_manifest(&files, |m| {
+            for f in m["files"].as_array_mut().unwrap() {
+                if f["name"] == CORRECTIONS {
+                    f["size"] = (MAX_SECTIONS_BYTES as u64 + 1).into();
+                }
+            }
+        }),
+    );
+    refused(&g.0);
+    // Valid JSON, wrong values: hashes made to match, so only the reader
+    // stands between them and the store.
+    type Edit = Box<dyn Fn(&mut serde_json::Value)>;
+    let first = |path: &'static str, v: serde_json::Value| -> Edit {
+        Box::new(move |d: &mut serde_json::Value| {
+            *d["features"][0].pointer_mut(path).unwrap() = v.clone();
+        })
+    };
+    let cases: Vec<(&str, Edit)> = vec![
+        ("dirt", first("/properties/surface", "dirt".into())),
+        ("unknown", first("/properties/surface", "unknown".into())),
+        ("number surface", first("/properties/surface", 6.into())),
+        (
+            "unknown property",
+            Box::new(|d| d["features"][0]["properties"]["colour"] = "red".into()),
+        ),
+        ("unknown top field", Box::new(|d| d["extra"] = 1.into())),
+        ("way 0", first("/properties/ways/0/0", 0.into())),
+        ("negative way", first("/properties/ways/0/0", (-3).into())),
+        (
+            "index past u32",
+            first("/properties/ways/0/1", 4_294_967_296u64.into()),
+        ),
+        ("negative index", first("/properties/ways/0/2", (-1).into())),
+        (
+            "time before 1970",
+            first("/properties/created_at", (-1).into()),
+        ),
+        (
+            "time after 2100",
+            first("/properties/updated_at", 5_000_000_000i64.into()),
+        ),
+        (
+            "lat out of range",
+            first("/geometry/coordinates/0/1", 91.0.into()),
+        ),
+        (
+            "lon out of range",
+            first("/geometry/coordinates/0/0", 181.0.into()),
+        ),
+        (
+            "one point",
+            Box::new(|d| {
+                d["features"][0]["geometry"]["coordinates"]
+                    .as_array_mut()
+                    .unwrap()
+                    .truncate(1)
+            }),
+        ),
+        (
+            "a point with altitude",
+            first(
+                "/geometry/coordinates/0",
+                serde_json::json!([12.45, 56.3, 10.0]),
+            ),
+        ),
+        ("a Point", first("/geometry/type", "Point".into())),
+        (
+            "wrong content",
+            Box::new(|d| d["moto"]["content"] = "sections".into()),
+        ),
+        ("wrong format", Box::new(|d| d["moto"]["format"] = 2.into())),
+        (
+            "more features than the count",
+            Box::new(|d| {
+                let f = d["features"][0].clone();
+                d["features"].as_array_mut().unwrap().insert(0, f);
+            }),
+        ),
+    ];
+    for (why, edit) in cases {
+        let mut d = doc.clone();
+        edit(&mut d);
+        let bytes = serde_json::to_vec(&d).unwrap();
+        zip_of(&g.0, &with_corrections_file(&files, &bytes, 2));
+        let err = refused(&g.0);
+        assert!(err.contains("not a valid moto backup"), "{why}: {err}");
+    }
+    // Text that isn't JSON at all, NaN included.
+    for bytes in [
+        &b"NaN"[..],
+        b"{\"type\": \"FeatureCollection\"",
+        b"\xff\xfe",
+    ] {
+        zip_of(&g.0, &with_corrections_file(&files, bytes, 2));
+        refused(&g.0);
+    }
+    // Over 10 000 features, the count saying 10 000.
+    let mut d = doc.clone();
+    let f0 = d["features"][0].clone();
+    *d["features"].as_array_mut().unwrap() = vec![f0; 10_001];
+    let bytes = serde_json::to_vec(&d).unwrap();
+    zip_of(&g.0, &with_corrections_file(&files, &bytes, 10_000));
+    refused(&g.0);
+}
+
+#[test]
+fn corrections_come_back_waiting_with_their_times_once() {
+    let src = filled();
+    let f = backup_of(&src, "corr-round");
+    let mut dst = Store::open_in_memory().unwrap();
+    let r = restore_backup(&mut dst, None, &f.0, 0).unwrap();
+    assert_eq!((r.surface_added, r.surface_skipped), (2, 0));
+    let back = dst.surface_corrections().unwrap();
+    let mine = src.surface_corrections().unwrap();
+    assert_eq!(back.len(), 2);
+    for (b, m) in back.iter().zip(&mine) {
+        assert_eq!(b.status, crate::section::Status::NeedsRematch);
+        assert_eq!(
+            (b.surface, b.created_at, b.updated_at, &b.ways, &b.geometry),
+            (m.surface, m.created_at, m.updated_at, &m.ways, &m.geometry)
+        );
+    }
+    // Twice: nothing more.
+    let r = restore_backup(&mut dst, None, &f.0, 0).unwrap();
+    assert_eq!((r.surface_added, r.surface_skipped), (0, 2));
+    assert_eq!(dst.surface_corrections().unwrap().len(), 2);
+    // A file with the same correction twice adds it once.
+    let files = entries(&f.0);
+    let good = files
+        .iter()
+        .find(|(n, _)| n == CORRECTIONS)
+        .unwrap()
+        .1
+        .clone();
+    let mut d: serde_json::Value = serde_json::from_slice(&good).unwrap();
+    let f0 = d["features"][0].clone();
+    d["features"].as_array_mut().unwrap()[1] = f0;
+    let g = Temp::new("corr-dup");
+    zip_of(
+        &g.0,
+        &with_corrections_file(&files, &serde_json::to_vec(&d).unwrap(), 2),
+    );
+    let mut fresh = Store::open_in_memory().unwrap();
+    let r = restore_backup(&mut fresh, None, &g.0, 0).unwrap();
+    assert_eq!((r.surface_added, r.surface_skipped), (1, 1));
+}
+
+#[test]
+fn a_failure_later_in_the_restore_leaves_no_correction() {
+    let f = backup_of(&filled(), "corr-late");
+    // A ride, read after the corrections went in, no longer matches its
+    // hash.
+    let tampered: Vec<_> = entries(&f.0)
+        .into_iter()
+        .map(|(n, mut b)| {
+            if n == "rides/00002.gpx" {
+                let i = b.len() / 2;
+                b[i] = if b[i] == b'1' { b'2' } else { b'1' };
+            }
+            (n, b)
+        })
+        .collect();
+    let g = Temp::new("corr-late2");
+    zip_of(&g.0, &tampered);
+    let mut dst = Store::open_in_memory().unwrap();
+    assert!(restore_backup(&mut dst, None, &g.0, 0).is_err());
+    assert!(dst.surface_corrections().unwrap().is_empty());
+    assert!(dst.list_sections(None).unwrap().is_empty());
 }
 
 #[test]
