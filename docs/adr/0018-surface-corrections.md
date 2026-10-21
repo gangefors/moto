@@ -19,6 +19,8 @@ Forces:
 
 ## Decision
 
+**Unknown surface stays paved, on purpose** (the rider, 2026-10-21). Roads OSM leaves without a surface keep being routed and ridden as paved, as today; no default counts untagged tracks or minor roads as gravel, now or later. A surface correction is the way to fix a road the map has wrong or leaves out.
+
 **A correction is a stretch, not a whole road.** It is stored like a section: the OSM way spans it covers (way id and node range), plus its own line. Surface is direction-free: a correction applies to both directions. New table `surface_corrections` (id, `rider_id`, surface, status `ok` / `needs_rematch` / `unmatched`, created and changed times, bounding box, own line in the sections' fixed-point blob) and `surface_correction_ways` (ordered way spans, cascade delete), schema 10. Surface is a region-format `Surface` code 1–7 (`Unknown` refused); the app offers Paved and Gravel, and any known code reads back, so a finer choice later needs no migration. At most 10 000 corrections.
 
 **Overlap: newest wins.** Saving a correction deletes, in the same transaction, the one it edits and every older one whose way spans it fully covers. Where corrections overlap only in part, the newer one (changed time, then id) decides that stretch.
@@ -96,7 +98,7 @@ A costs more than C in the cost function, but C's mismatch between what is drawn
 - **Harder:** every unpaved test in the core goes through the overlay; corrections must be re-matched after region updates and carried in backups.
 - **Security:** new store rows are validated on read (surface code, line, spans), new FFI calls take whole requests, the backup gains a hostile-input entry with caps, strict types and corruption tests.
 - **Performance:** the overlay build reads one more table; routing without corrections is unchanged, and with them pays a bit test per edge (benchmark guards it).
-- **Revisit if:** most corrections turn out to be untagged tracks (a better default, a separate change, would make them unneeded), or the rider wants finer surfaces or speeds on corrected roads.
+- **Revisit if:** the rider wants finer surfaces or speeds on corrected roads.
 
 ## Action Items
 
