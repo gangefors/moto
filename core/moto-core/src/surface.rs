@@ -346,6 +346,82 @@ pub(crate) mod tests {
         assert!(!covers(&[s(1, 0, 5)], &[]), "nothing to cover");
     }
 
+    /// A saved `ok` correction of `surface` on `draft`, changed at `at`.
+    pub(crate) fn correction(
+        id: i64,
+        surface: Surface,
+        draft: &SectionDraft,
+        at: i64,
+    ) -> SurfaceCorrection {
+        SurfaceCorrection {
+            id,
+            rider_id: LOCAL_RIDER.into(),
+            surface,
+            status: Status::Ok,
+            created_at: at,
+            updated_at: at,
+            ways: draft.ways.clone(),
+            geometry: draft.geometry.clone(),
+        }
+    }
+
+    /// [`crate::fixture::ladder`] with its north road (way 1) at `kmh`
+    /// and a shape point every 0.005° of longitude, so its way nodes are
+    /// 0–4 from L_NW to L_N and 4–8 on to L_NE.
+    pub(crate) fn shaped_ladder(north: Surface, kmh: u8) -> crate::region::RegionData {
+        use crate::fixture::{L_N, L_NE, L_NW, L_S, L_SE, L_SW, Road, build};
+        use crate::region::format::RoadClass;
+        let nodes = [
+            (55.72, 13.40),
+            (55.72, 13.42),
+            (55.72, 13.44),
+            (55.70, 13.40),
+            (55.70, 13.42),
+            (55.70, 13.44),
+        ];
+        let north_road = |from, to, start: u32, lon: f64| Road {
+            surface: north,
+            way_start: start,
+            via: (1..4)
+                .map(|k| (55.72, lon + 0.005 * f64::from(k)))
+                .collect(),
+            ..Road::new(from, to, RoadClass::Residential, kmh, 1)
+        };
+        let roads = [
+            north_road(L_NW, L_N, 0, 13.40),
+            north_road(L_N, L_NE, 4, 13.42),
+            Road::new(L_SW, L_S, RoadClass::Motorway, 110, 2),
+            Road::new(L_S, L_SE, RoadClass::Motorway, 110, 2),
+            Road::new(L_NW, L_SW, RoadClass::Unclassified, 50, 3),
+            Road::new(L_NE, L_SE, RoadClass::Unclassified, 50, 4),
+        ];
+        build(&nodes, &roads, 50_000)
+    }
+
+    /// A draft of way 1 (the shaped ladder's north road) nodes `from` to
+    /// `to`, its line along lat 55.72.
+    pub(crate) fn north_draft(from: u32, to: u32) -> SectionDraft {
+        let lon = |i: u32| 13.40 + 0.005 * f64::from(i);
+        SectionDraft {
+            ways: vec![WaySpan {
+                way_id: 1,
+                from_idx: from,
+                to_idx: to,
+            }],
+            geometry: vec![
+                LatLon {
+                    lat: 55.72,
+                    lon: lon(from),
+                },
+                LatLon {
+                    lat: 55.72,
+                    lon: lon(to),
+                },
+            ],
+            distance_m: 0.0,
+        }
+    }
+
     pub(crate) fn engine(data: crate::region::RegionData) -> Engine {
         Engine::from_region(crate::region::Region::from_bytes(&data.to_bytes().unwrap()).unwrap())
     }

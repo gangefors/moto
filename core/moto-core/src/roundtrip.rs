@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::favourites::Favourites;
 use crate::geo::{bearing_deg, destination, haversine_m};
-use crate::region::format::{RoadClass, Surface, edge_flags};
+use crate::region::format::{RoadClass, edge_flags};
 use crate::route::{Cost, Fun, Off, Partial, Routed, build, latlon, path};
 use crate::scoring::PARAMS;
 use crate::{
@@ -412,7 +412,7 @@ fn through_loops(
         }
         WAYPOINT_PULL_IN.iter().find_map(|&f| {
             let p = destination(from, bearing, radius * f);
-            loop_road_near(engine, p, opts).inspect(|_| taken.push(p))
+            loop_road_near(engine, fun.overlay(), p, opts).inspect(|_| taken.push(p))
         })
     };
     let mut candidates = vec![visit.clone()];
@@ -758,7 +758,7 @@ fn loop_at(
             .iter()
             .find_map(|&f| {
                 let p = destination(start.position, b, radius * f);
-                loop_road_near(engine, p, opts).inspect(|_| taken.push(p))
+                loop_road_near(engine, fun.overlay(), p, opts).inspect(|_| taken.push(p))
             })
             .or_else(|| {
                 let p = destination(start.position, b, radius);
@@ -1083,13 +1083,19 @@ fn overlap(a: &Loop, b: &Loop) -> f64 {
 /// The nearest point near `p` on a road a loop should pass through: a
 /// main or minor through road (trunk to unclassified), open to all,
 /// posted over `slow_kmh` and outside built-up areas (a waypoint in a
-/// town leads the loop into it), and paved unless the rider
+/// town leads the loop into it), and paved (as the rider's surface
+/// corrections in `overlay` have it, ADR-0018) unless the rider
 /// prefers gravel. Never a service road, driveway, residential street,
 /// track or ferry, which the loop would ride out to and back for nothing,
 /// and never a one-way road such as one carriageway of a dual
 /// carriageway: the loop would ride down it to the next turning and back
 /// up the other carriageway, an out-and-back no trimming can see.
-fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<RoadPoint> {
+fn loop_road_near(
+    engine: &Engine,
+    overlay: &Favourites,
+    p: LatLon,
+    opts: &RouteOptions,
+) -> Option<RoadPoint> {
     let region = engine.net();
     crate::snap::nearby(region, p, WAYPOINT_SEARCH_M, WAYPOINT_CANDIDATES)
         .into_iter()
@@ -1109,7 +1115,7 @@ fn loop_road_near(engine: &Engine, p: LatLon, opts: &RouteOptions) -> Option<Roa
             );
             let open = e.flags & (edge_flags::DESTINATION | edge_flags::FERRY) == 0;
             let town = e.flags & edge_flags::BUILT_UP != 0;
-            let paved = Surface::from_u8(e.surface).is_none_or(Surface::is_paved);
+            let paved = !overlay.is_unpaved_at(rp.edge, &e);
             let prefer = opts.gravel == Gravel::Prefer;
             // Not on a town street: a waypoint there leads the loop into
             // town. Gravel roads are mostly 50 km/h, so they may be slow.

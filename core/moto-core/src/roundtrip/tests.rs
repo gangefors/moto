@@ -587,7 +587,7 @@ fn waypoints_go_on_through_roads() {
     let e = engine(fixture::build(&nodes, &roads, 50_000));
     let p = ll(55.6995, 13.41);
     let way = |opts: &RouteOptions| {
-        let w = loop_road_near(&e, p, opts).unwrap();
+        let w = loop_road_near(&e, &Favourites::none(), p, opts).unwrap();
         e.net().way_ref(w.edge).way_id
     };
     assert_eq!(way(&RouteOptions::default()), 3, "paved through road");
@@ -597,7 +597,37 @@ fn waypoints_go_on_through_roads() {
     };
     assert_eq!(way(&prefer), 2, "gravel is fine when preferred");
     // Nothing suitable in reach: no waypoint.
-    assert!(loop_road_near(&e, ll(55.80, 13.41), &RouteOptions::default()).is_none());
+    let none = Favourites::none();
+    assert!(loop_road_near(&e, &none, ll(55.80, 13.41), &RouteOptions::default()).is_none());
+
+    // The rider corrected the paved tertiary road to gravel, and the
+    // gravel one to paved (ADR-0018): they swap.
+    let draft = |lat| {
+        e.section_between(ll(lat, 13.4001), ll(lat, 13.4199))
+            .unwrap()
+    };
+    let at = |id, s, lat| crate::surface::tests::correction(id, s, &draft(lat), 1);
+    let fav = Favourites::build_all(
+        &e,
+        &[],
+        &[],
+        &[
+            at(1, Surface::Gravel, 55.7036),
+            at(2, Surface::Paved, 55.7018),
+        ],
+    );
+    let way = |opts: &RouteOptions| {
+        let w = loop_road_near(&e, &fav, p, opts).unwrap();
+        e.net().way_ref(w.edge).way_id
+    };
+    assert_eq!(way(&RouteOptions::default()), 2, "corrected to paved");
+    assert_eq!(way(&prefer), 2, "the nearest when gravel is preferred");
+    let fav = Favourites::build_all(&e, &[], &[], &[at(1, Surface::Gravel, 55.7036)]);
+    assert!(
+        loop_road_near(&e, &fav, p, &RouteOptions::default()).is_none(),
+        "both through roads gravel now"
+    );
+    assert!(loop_road_near(&e, &fav, p, &prefer).is_some());
 }
 
 #[test]

@@ -75,11 +75,18 @@ fn is_travel_road(e: &Edge) -> bool {
 fn avoid_extra(off: &Off, fun: &Fun, id: u32, e: &Edge) -> f64 {
     let motorway = RoadClass::from_u8(e.class) == Some(RoadClass::Motorway);
     let mut factor: f64 = 1.0;
-    if off.avoid.motorways && motorway
-        || off.unpaved && is_unpaved(e)
-        || off.avoid.ferries && is_ferry(e)
-    {
+    if off.avoid.motorways && motorway || off.avoid.ferries && is_ferry(e) {
         factor = PARAMS.avoid_penalty;
+    }
+    // Avoided gravel costs by the unpaved share of the edge (ADR-0018):
+    // all of it the full penalty, as for any wholly unpaved road.
+    if off.unpaved {
+        let share = fun.favourites.unpaved_share(id, e);
+        if share >= 1.0 {
+            factor = PARAMS.avoid_penalty;
+        } else if share > 0.0 {
+            factor = factor.max(1.0 + share * (PARAMS.avoid_penalty - 1.0));
+        }
     }
     if off.avoid.tolls && is_toll(e) {
         factor = factor.max(PARAMS.toll_penalty);
@@ -140,8 +147,13 @@ impl<'a> Fun<'a> {
     /// Whether favourites on edge `e` count: not while they are avoided,
     /// nor on gravel while gravel is avoided (the map hides those sections
     /// then too).
-    fn favourite_counts(&self, e: &Edge) -> bool {
-        !self.shun && !(self.no_gravel && is_unpaved(e))
+    fn favourite_counts(&self, id: u32, e: &Edge) -> bool {
+        !self.shun && !(self.no_gravel && self.favourites.is_unpaved_at(id, e))
+    }
+
+    /// The rider's overlay this search goes by.
+    pub(crate) fn overlay(&self) -> &'a Favourites {
+        self.favourites
     }
 
     /// Share of edge `id` that is worth nothing for lying on an avoided
@@ -162,7 +174,7 @@ impl<'a> Fun<'a> {
 
     /// The favourite bonus of edge `id` as this search sees it.
     fn favourite_bonus(&self, id: u32, e: &Edge) -> f64 {
-        if self.favourite_counts(e) {
+        if self.favourite_counts(id, e) {
             self.favourites.bonus(id)
         } else {
             0.0
@@ -214,13 +226,17 @@ impl<'a> Fun<'a> {
         }
     }
 
-    /// What gravel adds to an edge's worth: `gravel_weight` on unpaved
-    /// roads when the rider prefers gravel, else nothing.
-    fn gravel_worth(&self, e: &Edge) -> f64 {
-        if self.gravel && is_unpaved(e) {
+    /// What gravel adds to edge `id`'s worth when the rider prefers it:
+    /// `gravel_weight` times its unpaved share (ADR-0018), else nothing.
+    fn gravel_worth(&self, id: u32, e: &Edge) -> f64 {
+        if !self.gravel {
+            return 0.0;
+        }
+        let share = self.favourites.unpaved_share(id, e);
+        if share >= 1.0 {
             PARAMS.gravel_weight
         } else {
-            0.0
+            share * PARAMS.gravel_weight
         }
     }
 
@@ -237,7 +253,9 @@ impl<'a> Fun<'a> {
             PARAMS.fast_penalty
         } else if e.speed_kmh >= PARAMS.brisk_kmh {
             PARAMS.brisk_penalty
-        } else if e.speed_kmh <= PARAMS.slow_kmh && !(self.gravel && is_unpaved(e)) {
+        } else if e.speed_kmh <= PARAMS.slow_kmh
+            && !(self.gravel && self.favourites.is_unpaved_at(id, e))
+        {
             PARAMS.slow_penalty
         } else {
             1.0
@@ -274,7 +292,7 @@ impl<'a> Fun<'a> {
         } else {
             0.0
         };
-        let road = (curve + self.gravel_worth(e)) * (1.0 - self.shunned(id));
+        let road = (curve + self.gravel_worth(id, e)) * (1.0 - self.shunned(id));
         let worth = (self.favourite_bonus(id, e) / PARAMS.max_pull + road).min(1.0);
         let dullness = 1.0 + (penalty - 1.0) * (1.0 - curviness);
         (1.0 - pull * PARAMS.max_pull * worth) * (1.0 + pull * (dullness - 1.0))
@@ -294,7 +312,7 @@ impl<'a> Fun<'a> {
     /// What curvature and gravel add to edge `id`'s worth (nothing on
     /// avoided favourites).
     fn road_worth(&self, id: u32, e: &Edge) -> f64 {
-        (self.curve_worth(id, e) + self.gravel_worth(e)) * (1.0 - self.shunned(id))
+        (self.curve_worth(id, e) + self.gravel_worth(id, e)) * (1.0 - self.shunned(id))
     }
 
     /// The least any metre of road can cost at `pull` (seconds), for the
@@ -316,8 +334,14 @@ impl<'a> Fun<'a> {
             0.0
         };
         let mut least = per_m(curve, max_speed_kmh);
-        if self.gravel && self.region.max_unpaved_kmh() > 0.0 {
-            least = least.min(per_m(curve + gravel, self.region.max_unpaved_kmh()));
+        // Corrected gravel keeps its road's speed, so it may be faster
+        // than any mapped gravel (ADR-0018).
+        let unpaved_kmh = self
+            .region
+            .max_unpaved_kmh()
+            .max(self.favourites.max_unpaved_kmh());
+        if self.gravel && unpaved_kmh > 0.0 {
+            least = least.min(per_m(curve + gravel, unpaved_kmh));
         }
         if !self.shun && self.favourites.max_bonus() > 0.0 {
             let worth = self.favourites.max_bonus() / PARAMS.max_pull + curve + gravel;
@@ -583,7 +607,7 @@ impl Builder {
             self.unridden_m += frac * length_m;
         }
         self.favourite_m += length_m * favourites.covered_between(id, from, to);
-        let favourite_value = if fun.favourite_counts(&e) {
+        let favourite_value = if fun.favourite_counts(id, &e) {
             favourites.value_between(id, from, to)
         } else {
             0.0
@@ -601,9 +625,14 @@ impl Builder {
                 rating,
             );
         }
-        if is_unpaved(&e) && to > from {
-            self.unpaved_m += frac * length_m;
-            push_part(&mut self.unpaved_parts, polyline_slice(&line, from, to));
+        // The unpaved stretches of the edge it rides, as corrected
+        // (ADR-0018); all of it on a mapped unpaved road.
+        for &(a, b) in favourites.unpaved_stretches(id, &e) {
+            let (lo, hi) = (from.max(f64::from(a)), to.min(f64::from(b)));
+            if hi > lo {
+                self.unpaved_m += (hi - lo) * length_m;
+                push_part(&mut self.unpaved_parts, polyline_slice(&line, lo, hi));
+            }
         }
         if is_toll(&e) {
             self.toll_m += frac * length_m;
@@ -1260,6 +1289,9 @@ pub(crate) fn shortest_within(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod surface_tests;
 
 #[cfg(test)]
 mod tests {

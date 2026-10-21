@@ -10,12 +10,17 @@
 use std::collections::HashMap;
 
 use crate::geo::haversine_m;
+use crate::region::format::Edge;
 use crate::region::format::WayRef;
 use crate::region::format::edge_flags::REVERSED;
 use crate::route::{edge_line, is_unpaved};
 use crate::scoring::PARAMS;
 use crate::section::{Direction, Rating, Section, Status, WaySpan};
+use crate::surface::SurfaceCorrection;
 use crate::{CoreError, Engine, LatLon};
+
+/// The whole of an edge, as unpaved stretches.
+const WHOLE: &[(f32, f32)] = &[(0.0, 1.0)];
 
 /// Favourite edges of one region.
 #[derive(Debug, Clone, Default)]
@@ -60,6 +65,23 @@ pub struct Favourites {
     /// travel order. Where the map draws a favourite, it draws no ridden
     /// road ([`Self::ridden_lines`]).
     drawn: HashMap<u32, Vec<(i64, f32, f32)>>,
+    /// One bit per edge, set for the edges in [`Self::surface`] (empty
+    /// when no surface correction changes any edge, ADR-0018).
+    surface_marked: Vec<u64>,
+    /// Of each edge whose surface the rider's corrections change: its
+    /// unpaved share and its unpaved stretches, as fractions in travel
+    /// order, sorted and apart. Edges not in it go by the map.
+    surface: HashMap<u32, (f32, Vec<(f32, f32)>)>,
+    /// The highest speed of an edge a correction makes at least partly
+    /// unpaved, km/h (0 with none): see the route search's estimate.
+    max_unpaved_kmh: f64,
+}
+
+/// A stretch of one OSM way a correction paints, as the build looks it up.
+struct Paint {
+    lo: u32,
+    hi: u32,
+    unpaved: bool,
 }
 
 /// Where a favourite section runs on gravel or other unpaved road, for
@@ -106,6 +128,37 @@ impl Favourites {
     /// to (each ride's way spans, see `Store::ride_ways`) marked as ridden
     /// (ADR-0010).
     pub fn build_with_rides(engine: &Engine, sections: &[Section], rides: &[Vec<WaySpan>]) -> Self {
+        Self::build_all(engine, sections, rides, &[])
+    }
+
+    /// As [`Self::build_with_rides`], with the rider's surface
+    /// `corrections` (ADR-0018): those that are `ok` set the surface of
+    /// the stretches they cover, both ways; where they overlap the newest
+    /// (`updated_at`, then id) wins. Elsewhere the map's surface counts.
+    pub fn build_all(
+        engine: &Engine,
+        sections: &[Section],
+        rides: &[Vec<WaySpan>],
+        corrections: &[SurfaceCorrection],
+    ) -> Self {
+        let mut paints_by_way: HashMap<i64, Vec<Paint>> = HashMap::new();
+        let mut ordered: Vec<&SurfaceCorrection> = corrections
+            .iter()
+            .filter(|c| c.status == Status::Ok)
+            .collect();
+        ordered.sort_by_key(|c| (c.updated_at, c.id));
+        for c in ordered {
+            let unpaved = !c.surface.is_paved();
+            for w in &c.ways {
+                let (lo, hi) = (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx));
+                if lo < hi {
+                    paints_by_way
+                        .entry(w.way_id)
+                        .or_default()
+                        .push(Paint { lo, hi, unpaved });
+                }
+            }
+        }
         let mut ridden_by_way: HashMap<i64, Vec<(u32, u32)>> = HashMap::new();
         for w in rides.iter().flatten() {
             let (lo, hi) = (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx));
@@ -148,7 +201,7 @@ impl Favourites {
             anchors,
             ..Self::default()
         };
-        if by_way.is_empty() && ridden_by_way.is_empty() {
+        if by_way.is_empty() && ridden_by_way.is_empty() && paints_by_way.is_empty() {
             return favourites;
         }
 
@@ -157,16 +210,39 @@ impl Favourites {
         let mut gravel: HashMap<usize, SectionGravel> = HashMap::new();
         let mut ridden = vec![0u64; region.edge_count().div_ceil(64)];
         let mut any_ridden = false;
+        let mut surface: HashMap<u32, (f32, Vec<(f32, f32)>)> = HashMap::new();
         for id in 0..region.edge_count() as u32 {
             let r = &region.way_ref(id);
             let rides = ridden_by_way.get(&r.way_id);
             let spans = by_way.get(&r.way_id);
-            if rides.is_none() && spans.is_none() {
+            let paints = paints_by_way.get(&r.way_id);
+            if rides.is_none() && spans.is_none() && paints.is_none() {
                 continue;
             }
             let (lo, hi) = (r.from_idx.min(r.to_idx), r.from_idx.max(r.to_idx));
             if lo == hi {
                 continue;
+            }
+            // The edge's unpaved stretches where corrections change them.
+            let painted = paints
+                .and_then(|p| painted(engine, id, r, lo, hi, is_unpaved(&region.edge(id)), p));
+            if let Some(stretches) = &painted {
+                let share: f64 = stretches.iter().map(|(a, b)| b - a).sum();
+                if share > 0.0 {
+                    favourites.max_unpaved_kmh = favourites
+                        .max_unpaved_kmh
+                        .max(f64::from(region.edge(id).speed_kmh));
+                }
+                surface.insert(
+                    id,
+                    (
+                        share.clamp(0.0, 1.0) as f32,
+                        stretches
+                            .iter()
+                            .map(|&(a, b)| (a as f32, b as f32))
+                            .collect(),
+                    ),
+                );
             }
             if let Some(rides) = rides
                 && ridden_share(engine, id, r, lo, hi, rides) >= 0.5
@@ -207,16 +283,24 @@ impl Favourites {
                 // takes.
                 let e = &region.edge(id);
                 let once = s.along_way.is_some() || e.flags & REVERSED == 0;
-                if once && is_unpaved(e) && stretch.1 > stretch.0 {
-                    let part =
-                        crate::geo::polyline_slice(&edge_line(region, e), stretch.0, stretch.1);
+                let unpaved: &[(f64, f64)] = match &painted {
+                    Some(p) => p,
+                    None if is_unpaved(e) => &[(0.0, 1.0)],
+                    None => &[],
+                };
+                for &(a, b) in unpaved.iter().filter(|_| once) {
+                    let (from, to) = (a.max(stretch.0), b.min(stretch.1));
+                    if to <= from {
+                        continue;
+                    }
+                    let part = crate::geo::polyline_slice(&edge_line(region, e), from, to);
                     let g = gravel.entry(s.section).or_insert_with(|| SectionGravel {
                         section_id: sections[s.section].id,
                         unpaved_m: 0.0,
                         length_m: crate::geo::polyline_length_m(&sections[s.section].geometry),
                         parts: Vec::new(),
                     });
-                    g.unpaved_m += (stretch.1 - stretch.0) * f64::from(e.length_dm) / 10.0;
+                    g.unpaved_m += (to - from) * f64::from(e.length_dm) / 10.0;
                     if part.len() >= 2 {
                         g.parts.push(part);
                     }
@@ -251,6 +335,14 @@ impl Favourites {
             favourites.marked = marked;
             favourites.weights = weights;
             favourites.edge_count = region.edge_count();
+        }
+        if !surface.is_empty() {
+            let mut marked = vec![0u64; region.edge_count().div_ceil(64)];
+            for &id in surface.keys() {
+                marked[(id >> 6) as usize] |= 1 << (id & 63);
+            }
+            favourites.surface_marked = marked;
+            favourites.surface = surface;
         }
         let mut gravel: Vec<SectionGravel> = gravel.into_values().collect();
         gravel.sort_by_key(|g| g.section_id);
@@ -340,13 +432,18 @@ impl Favourites {
     /// Refuses favourites built for another region: their edge ids would
     /// point at the wrong roads.
     pub(crate) fn check(&self, engine: &Engine) -> Result<(), CoreError> {
-        if self.region_key.is_empty() && self.is_empty() && self.ridden.is_empty() {
+        if self.region_key.is_empty()
+            && self.is_empty()
+            && self.ridden.is_empty()
+            && self.surface_marked.is_empty()
+        {
             return Ok(());
         }
         let edges = engine.net().edge_count();
         if self.region_key != crate::rematch::region_key(engine)
             || (!self.weights.is_empty() && self.edge_count != edges)
             || (!self.ridden.is_empty() && self.ridden.len() != edges.div_ceil(64))
+            || (!self.surface_marked.is_empty() && self.surface_marked.len() != edges.div_ceil(64))
         {
             return Err(CoreError::InvalidArgument(
                 "favourites were built for another region; build them again".into(),
@@ -407,6 +504,63 @@ impl Favourites {
             .get(&id)
             .map_or(0.0, |&(_, _, w, _)| f64::from(w));
         self.covered_between(id, from, to) * weight
+    }
+
+    /// The unpaved share and stretches of edge `id` as the rider's
+    /// corrections set them, if they change it.
+    #[inline]
+    fn corrected(&self, id: u32) -> Option<&(f32, Vec<(f32, f32)>)> {
+        if self.surface_marked.is_empty() {
+            return None;
+        }
+        let word = self.surface_marked.get((id >> 6) as usize)?;
+        if word >> (id & 63) & 1 == 0 {
+            return None;
+        }
+        self.surface.get(&id)
+    }
+
+    /// Share of edge `id` (`e`) that is unpaved: as corrected, else
+    /// exactly 1.0 or 0.0 from the map.
+    #[inline]
+    pub(crate) fn unpaved_share(&self, id: u32, e: &Edge) -> f64 {
+        match self.corrected(id) {
+            Some(&(share, _)) => f64::from(share),
+            None if is_unpaved(e) => 1.0,
+            None => 0.0,
+        }
+    }
+
+    /// Whether edge `id` (`e`) counts as unpaved for yes-or-no rules: at
+    /// least half of it is.
+    #[inline]
+    pub(crate) fn is_unpaved_at(&self, id: u32, e: &Edge) -> bool {
+        match self.corrected(id) {
+            Some(&(share, _)) => share >= 0.5,
+            None => is_unpaved(e),
+        }
+    }
+
+    /// The unpaved stretches of edge `id` (`e`), as fractions in travel
+    /// order: as corrected, else all of it where the map says unpaved.
+    #[inline]
+    pub(crate) fn unpaved_stretches(&self, id: u32, e: &Edge) -> &[(f32, f32)] {
+        match self.corrected(id) {
+            Some((_, stretches)) => stretches,
+            None if is_unpaved(e) => WHOLE,
+            None => &[],
+        }
+    }
+
+    /// The highest speed of an edge a correction makes unpaved, km/h.
+    #[inline]
+    pub(crate) fn max_unpaved_kmh(&self) -> f64 {
+        self.max_unpaved_kmh
+    }
+
+    /// How many edges the rider's surface corrections change.
+    pub fn corrected_edge_count(&self) -> usize {
+        self.surface.len()
     }
 
     /// The gravel stretches of the sections that run on any, by section
@@ -506,6 +660,83 @@ fn chain_lines(pieces: Vec<Vec<LatLon>>) -> Vec<Vec<LatLon>> {
     lines
 }
 
+/// The unpaved stretches of edge `id` (way nodes `lo` to `hi` of its way
+/// ref `r`, unpaved on the map when `base`) once `paints`, in order, have
+/// set theirs; `None` when they change nothing.
+fn painted(
+    engine: &Engine,
+    id: u32,
+    r: &WayRef,
+    lo: u32,
+    hi: u32,
+    base: bool,
+    paints: &[Paint],
+) -> Option<Vec<(f64, f64)>> {
+    let mut segments = vec![(0.0f64, 1.0f64, base)];
+    for p in paints {
+        let (from, to) = (lo.max(p.lo), hi.min(p.hi));
+        if from >= to {
+            continue; // apart, or touching at one node
+        }
+        let (a, b) = if from == lo && to == hi {
+            (0.0, 1.0)
+        } else {
+            covered(engine, id, r, from, to)
+        };
+        if b > a {
+            paint(&mut segments, a, b, p.unpaved);
+        }
+    }
+    if segments.iter().all(|s| s.2 == base) {
+        return None;
+    }
+    Some(
+        segments
+            .into_iter()
+            .filter(|s| s.2)
+            .map(|s| (s.0, s.1))
+            .collect(),
+    )
+}
+
+/// Sets `[a, b]` of `segments` (covering 0–1 in order, apart) to
+/// `value`, joining neighbours of the same value.
+fn paint(segments: &mut Vec<(f64, f64, bool)>, a: f64, b: f64, value: bool) {
+    let mut out: Vec<(f64, f64, bool)> = Vec::with_capacity(segments.len() + 2);
+    let mut placed = false;
+    for &(s, t, v) in segments.iter() {
+        if t <= a || s >= b {
+            if s >= b && !placed {
+                out.push((a, b, value));
+                placed = true;
+            }
+            out.push((s, t, v));
+            continue;
+        }
+        if s < a {
+            out.push((s, a, v));
+        }
+        if !placed {
+            out.push((a, b, value));
+            placed = true;
+        }
+        if t > b {
+            out.push((b, t, v));
+        }
+    }
+    if !placed {
+        out.push((a, b, value));
+    }
+    let mut joined: Vec<(f64, f64, bool)> = Vec::with_capacity(out.len());
+    for seg in out {
+        match joined.last_mut() {
+            Some(last) if last.2 == seg.2 && (last.1 - seg.0).abs() < 1e-12 => last.1 = seg.1,
+            _ => joined.push(seg),
+        }
+    }
+    *segments = joined;
+}
+
 /// The largest share of edge `id` (way nodes `lo` to `hi` of its way ref
 /// `r`) that one of `rides`' spans of the same way covers.
 fn ridden_share(
@@ -563,3 +794,6 @@ fn covered(engine: &Engine, id: u32, r: &WayRef, from: u32, to: u32) -> (f64, f6
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod surface_tests;
