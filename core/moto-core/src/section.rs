@@ -146,6 +146,21 @@ pub struct Section {
     pub geometry: Vec<LatLon>,
 }
 
+/// A new line for a saved section (its start and end moved, ADR-0018):
+/// the OSM way spans it covers and its own geometry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SectionLine {
+    pub ways: Vec<WaySpan>,
+    pub geometry: Vec<LatLon>,
+}
+
+impl SectionLine {
+    /// Checks the line as a new section's is checked.
+    pub fn validate(&self) -> Result<(), CoreError> {
+        crate::surface::validate_line(&self.ways, &self.geometry)
+    }
+}
+
 /// Changes to a saved section; `None` leaves a field as it is.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SectionUpdate {
@@ -153,8 +168,12 @@ pub struct SectionUpdate {
     pub rating: Option<Rating>,
     pub direction: Option<Direction>,
     /// Turns the section round: its geometry and way spans run the other
-    /// way, so a one-way section is good in the other direction.
+    /// way, so a one-way section is good in the other direction. With a
+    /// new `line`, the new line is turned round.
     pub reverse: bool,
+    /// A new line: its way spans, geometry and bounds are replaced and it
+    /// fits the map again (`ok`); id, rider, source and created time stay.
+    pub line: Option<SectionLine>,
 }
 
 /// `ways` ridden the other way: last first, each span flipped.

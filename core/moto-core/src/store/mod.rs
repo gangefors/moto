@@ -303,9 +303,11 @@ impl Store {
         rows.into_iter().map(|r| self.finish(r)).collect()
     }
 
-    /// Changes name, rating or direction, and turns the section round if
-    /// asked (all in one transaction); returns the updated section, or
-    /// `None` if there is no section with that id.
+    /// Changes name, rating or direction, gives the section a new line,
+    /// and turns it round if asked (after the new line), all in one
+    /// transaction; returns the updated section, or `None` (with nothing
+    /// written) if there is no section with that id. No overlap rules
+    /// run: other sections stay as they are.
     pub fn update_section(
         &mut self,
         id: i64,
@@ -314,6 +316,9 @@ impl Store {
     ) -> Result<Option<Section>, CoreError> {
         if let Some(name) = &update.name {
             validate_name(name)?;
+        }
+        if let Some(line) = &update.line {
+            line.validate()?;
         }
         let tx = self.conn.transaction().map_err(db_err)?;
         let changed = tx
@@ -335,6 +340,26 @@ impl Store {
             .map_err(db_err)?;
         if changed == 0 {
             return Ok(None);
+        }
+        if let Some(line) = &update.line {
+            let (min, max) = bounds(&line.geometry);
+            tx.execute(
+                "UPDATE sections SET status = ?2, min_lat = ?3, min_lon = ?4, max_lat = ?5,
+                    max_lon = ?6, geometry = ?7 WHERE id = ?1",
+                params![
+                    id,
+                    Status::Ok as i64,
+                    min.0,
+                    min.1,
+                    max.0,
+                    max.1,
+                    encode_geometry(&line.geometry)
+                ],
+            )
+            .map_err(db_err)?;
+            tx.execute("DELETE FROM section_ways WHERE section_id = ?1", [id])
+                .map_err(db_err)?;
+            insert_ways(&tx, id, &line.ways)?;
         }
         if update.reverse {
             reverse_section(&tx, id)?;

@@ -545,3 +545,225 @@ fn defensive_settings_are_on() {
             .is_err()
     );
 }
+
+// --- A favourite's new line (ADR-0018) ---
+
+/// A line along lat `lat` from lon 13.20 to 13.22 on way `way`.
+fn line_at(lat: f64, way: i64) -> crate::section::SectionLine {
+    crate::section::SectionLine {
+        ways: vec![WaySpan {
+            way_id: way,
+            from_idx: 0,
+            to_idx: 4,
+        }],
+        geometry: vec![ll(lat, 13.20), ll(lat, 13.21), ll(lat, 13.22)],
+    }
+}
+
+#[test]
+fn a_new_line_replaces_ways_geometry_and_bounds() {
+    let mut s = store();
+    let mut new = sample();
+    new.direction = Direction::Forward;
+    new.source = crate::section::Source::Tag;
+    let saved = s.add_section(&new, T0).unwrap();
+    s.set_status(saved.id, Status::Unmatched).unwrap();
+    let up = SectionUpdate {
+        line: Some(line_at(55.70, 500)),
+        ..Default::default()
+    };
+    let moved = s.update_section(saved.id, &up, T0 + 60).unwrap().unwrap();
+    assert_eq!(moved.id, saved.id);
+    assert_eq!(
+        (
+            &moved.rider_id,
+            &moved.name,
+            moved.rating,
+            moved.direction,
+            moved.source,
+            moved.created_at
+        ),
+        (
+            &saved.rider_id,
+            &saved.name,
+            saved.rating,
+            saved.direction,
+            saved.source,
+            saved.created_at
+        )
+    );
+    assert_eq!(moved.updated_at, T0 + 60);
+    assert_eq!(moved.status, Status::Ok, "fits the map again");
+    assert_eq!(moved.ways, line_at(55.70, 500).ways);
+    assert_eq!(moved.geometry, line_at(55.70, 500).geometry);
+    let old_spans: i64 = s
+        .conn
+        .query_row(
+            "SELECT count(*) FROM section_ways WHERE way_id = 42",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(old_spans, 0, "the old spans are gone");
+    // The bounding box moved with it.
+    let old_area = (ll(56.29, 12.44), ll(56.32, 12.47));
+    let new_area = (ll(55.69, 13.19), ll(55.71, 13.23));
+    assert!(s.list_sections(Some(old_area)).unwrap().is_empty());
+    assert_eq!(
+        s.list_sections(Some(new_area)).unwrap(),
+        std::slice::from_ref(&moved)
+    );
+    // From needs_rematch too.
+    s.set_status(saved.id, Status::NeedsRematch).unwrap();
+    let again = s
+        .update_section(
+            saved.id,
+            &SectionUpdate {
+                line: Some(line_at(55.71, 501)),
+                ..Default::default()
+            },
+            T0 + 61,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.status, Status::Ok);
+}
+
+#[test]
+fn a_new_line_and_a_turn_give_the_new_line_turned_round() {
+    let mut s = store();
+    let saved = s.add_section(&sample(), T0).unwrap();
+    let mut line = line_at(55.70, 500);
+    line.ways.insert(
+        1,
+        WaySpan {
+            way_id: 501,
+            from_idx: 7,
+            to_idx: 3,
+        },
+    );
+    let up = SectionUpdate {
+        line: Some(line.clone()),
+        reverse: true,
+        ..Default::default()
+    };
+    let turned = s.update_section(saved.id, &up, T0 + 60).unwrap().unwrap();
+    let mut back = line.geometry.clone();
+    back.reverse();
+    assert_eq!(turned.geometry, back);
+    assert_eq!(turned.ways, crate::section::reversed_ways(&line.ways));
+}
+
+#[test]
+fn malformed_lines_are_refused_and_change_nothing() {
+    let mut s = store();
+    let saved = s.add_section(&sample(), T0).unwrap();
+    type Break = Box<dyn Fn(&mut crate::section::SectionLine)>;
+    let cases: Vec<(&str, Break)> = vec![
+        ("no points", Box::new(|l| l.geometry.clear())),
+        ("one point", Box::new(|l| l.geometry.truncate(1))),
+        (
+            "too many points",
+            Box::new(|l| l.geometry = vec![l.geometry[0]; crate::section::MAX_SECTION_POINTS + 1]),
+        ),
+        ("NaN", Box::new(|l| l.geometry[1].lon = f64::NAN)),
+        ("north of 90", Box::new(|l| l.geometry[0].lat = 91.0)),
+        ("south of -90", Box::new(|l| l.geometry[0].lat = -91.0)),
+        ("way 0", Box::new(|l| l.ways[0].way_id = 0)),
+        ("negative way", Box::new(|l| l.ways[0].way_id = -1)),
+        (
+            "too many ways",
+            Box::new(|l| l.ways = vec![l.ways[0]; crate::section::MAX_SECTION_WAYS + 1]),
+        ),
+    ];
+    for (why, break_it) in cases {
+        let mut line = line_at(55.70, 500);
+        break_it(&mut line);
+        let up = SectionUpdate {
+            name: Some("Changed".into()),
+            rating: Some(Rating::Good),
+            line: Some(line),
+            ..Default::default()
+        };
+        assert!(
+            matches!(
+                s.update_section(saved.id, &up, T0 + 60),
+                Err(CoreError::InvalidArgument(_))
+            ),
+            "{why}"
+        );
+        assert_eq!(s.get_section(saved.id).unwrap().unwrap(), saved, "{why}");
+    }
+    // A missing id: nothing written.
+    let up = SectionUpdate {
+        line: Some(line_at(55.70, 500)),
+        ..Default::default()
+    };
+    assert_eq!(s.update_section(saved.id + 1, &up, T0).unwrap(), None);
+    assert_eq!(s.list_sections(None).unwrap(), [saved]);
+}
+
+#[test]
+fn a_failed_span_insert_rolls_back_name_and_rating_too() {
+    let mut s = store();
+    let saved = s.add_section(&sample(), T0).unwrap();
+    s.conn
+        .execute_batch(
+            "CREATE TEMP TRIGGER fail BEFORE INSERT ON section_ways
+             BEGIN SELECT RAISE(ABORT, 'disk on fire'); END;",
+        )
+        .unwrap();
+    let up = SectionUpdate {
+        name: Some("Changed".into()),
+        rating: Some(Rating::Good),
+        line: Some(line_at(55.70, 500)),
+        ..Default::default()
+    };
+    let err = s.update_section(saved.id, &up, T0 + 60).unwrap_err();
+    assert!(matches!(err, CoreError::Storage(ref m) if m.contains("disk on fire")));
+    assert_eq!(s.get_section(saved.id).unwrap().unwrap(), saved);
+}
+
+#[test]
+fn ridden_counts_and_the_overlay_follow_the_new_line() {
+    use crate::fixture::{Road, build};
+    use crate::region::format::RoadClass;
+    use crate::ridden::{RideLine, ridden};
+    let mut s = store();
+    let saved = s.add_section(&sample(), T0).unwrap();
+    // A ride along lat 55.70.
+    let ride: Vec<LatLon> = (0..=40)
+        .map(|i| ll(55.7001, 13.20 + f64::from(i) * 0.0005))
+        .collect();
+    let rides = [RideLine {
+        started_at: T0,
+        line: &ride,
+    }];
+    let before = ridden(&s.list_sections(None).unwrap(), &rides);
+    assert_eq!(before[0].times, 0);
+    // A region with one road along lat 55.70 (way 500).
+    let data = build(
+        &[(55.70, 13.20), (55.70, 13.22)],
+        &[Road::new(0, 1, RoadClass::Tertiary, 70, 500)],
+        50_000,
+    );
+    let engine = crate::Engine::from_region(
+        crate::region::Region::from_bytes(&data.to_bytes().unwrap()).unwrap(),
+    );
+    let draft = engine
+        .section_between(ll(55.7001, 13.2001), ll(55.7001, 13.2199))
+        .unwrap();
+    let up = SectionUpdate {
+        line: Some(crate::section::SectionLine {
+            ways: draft.ways.clone(),
+            geometry: draft.geometry.clone(),
+        }),
+        ..Default::default()
+    };
+    s.update_section(saved.id, &up, T0 + 60).unwrap().unwrap();
+    let sections = s.list_sections(None).unwrap();
+    assert_eq!(ridden(&sections, &rides)[0].times, 1);
+    // The overlay uses the new spans: the road is a favourite now.
+    let f = crate::Favourites::build(&engine, &sections);
+    assert_eq!(f.edge_count(), 2, "both ways of way 500");
+}

@@ -192,6 +192,7 @@ impl SectionStore {
             rating: update.rating.map(Into::into),
             direction: update.direction.map(Into::into),
             reverse: update.reverse,
+            line: None,
         };
         Ok(self
             .store()
