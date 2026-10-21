@@ -487,18 +487,3 @@ figure.wide { width: 816px; }
 /* Snackbar with text only. */
 .sc-snack { position: absolute; left: 8px; right: 8px; bottom: 32px; z-index: 4; background: var(--inv); color: var(--oninv); border-radius: 4px; box-shadow: 0 3px 6px rgb(0 0 0 / .3); display: flex; align-items: center; padding-left: 16px; }
 .sc-snack .t { flex: 1; min-width: 0; padding: 14px 0; font: 400 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .25px; }
-
-/* Section sheet (ModalBottomSheet) as the favourite's edit state shows it today:
-   scrim over the map, container-low sheet with 28 dp top corners, 24 dp start padding. */
-.sc-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; box-sizing: border-box; background: var(--container-low); border-radius: 28px 28px 0 0; padding: 0 12px 40px 24px; color: var(--on-surface); }
-.sc-sheet .handle { height: 32px; margin-left: -12px; }
-.sc-sheet .sttl { display: flex; align-items: center; }
-.sc-sheet .sttl span.t { flex: 1; font: 400 calc(22px * var(--fs))/calc(28px * var(--fs)) Roboto, sans-serif; }
-.sc-sheet .sbody { padding-right: 12px; }
-.sc-tf { position: relative; margin-top: 16px; height: 56px; box-sizing: border-box; border: 1px solid var(--outline); border-radius: 4px; padding: 0 16px; display: flex; align-items: center; font: italic 400 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .5px; color: color-mix(in srgb, var(--on-surface-variant) 60%, transparent); }
-.sc-tf .lab { position: absolute; left: 12px; top: -8px; padding: 0 4px; background: var(--container-low); font: 400 12px/16px Roboto, sans-serif; letter-spacing: .4px; font-style: normal; color: var(--on-surface-variant); }
-.sc-tfs { font: 400 calc(12px * var(--fs))/calc(16px * var(--fs)) Roboto, sans-serif; letter-spacing: .4px; color: var(--on-surface-variant); padding: 4px 16px 0; }
-.sc-sheet .srow { display: flex; align-items: center; padding-top: 8px; font: 400 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .5px; }
-.sc-sheet .srow .grow { flex: 1; }
-.sc-sheet .oh { font: 500 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .1px; padding: 16px 0 8px; }
-.sc-sheet .sbtns { display: flex; align-items: center; padding: 8px 12px 0 0; }
