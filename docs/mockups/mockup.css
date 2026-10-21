@@ -435,44 +435,49 @@ figure.wide { width: 816px; }
 .midline span { position: absolute; left: 4px; top: 100px; font: 500 10px/16px Roboto, sans-serif; color: #e0457b; }
 .cutbar { position: absolute; top: 24px; bottom: 24px; background: rgba(0,0,0,.28); z-index: 5; }
 
-/* Map region page rows (RegionSection): a row's name and supporting
-   text, its action (X, Download now, Try again) wrapping under the text
-   when there is no room (FlowRow), a 4 dp linear progress bar, the
-   disabled buttons, and the Material 3 switch row. */
-.rgrow { padding: 4px 0; }
-.rgflow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; }
-.rgtxt { padding: 4px 8px 4px 0; min-width: 0; }
-.rn { font: 400 16px/24px Roboto, sans-serif; letter-spacing: .5px; }
-.rgact { display: flex; align-items: center; }
-.lprog { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--sec-container); position: relative; overflow: hidden; }
-.lprog .f { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--primary); }
-.lprog.ind .f { left: 18%; width: 38%; }
-.obtn.nl, .fbtn.nl { padding: 0 24px; min-height: 40px; }
-.obtn.dis { opacity: .38; }
-.fbtn.dis { background: color-mix(in srgb, var(--on-surface) 12%, transparent); color: color-mix(in srgb, var(--on-surface) 38%, transparent); }
-.srow { display: flex; align-items: center; padding: 8px 0; }
-.srow .stx { flex: 1; min-width: 0; padding-right: 12px; }
-.srow .switch { flex: none; }
-.sup { font: 400 12px/16px Roboto, sans-serif; letter-spacing: .4px; color: var(--on-surface-variant); }
-.errtxt { font: 400 16px/24px Roboto, sans-serif; letter-spacing: .5px; color: var(--err); padding: 8px 0; }
-.tbtn.flush { margin-left: -12px; }
-/* A small AlertDialog (the restore dialog's frame, centred). */
-.dlg.sm { top: 50%; transform: translateY(-50%); }
-.dlg .dtxt { padding: 0 24px; font: 400 14px/20px Roboto, sans-serif; letter-spacing: .25px; color: var(--on-surface-variant); }
-.dbtns.gap { gap: 8px; }
-/* Android's own permission dialog (shown as a step, not drawn by the app). */
-.sysdlg { position: absolute; left: 36px; right: 36px; top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
-.sysdlg .bell { color: var(--primary); display: grid; place-items: center; padding-bottom: 12px; }
-.sysdlg p { margin: 0 0 20px; font: 400 16px/24px Roboto, sans-serif; color: var(--on-surface); }
-.sysdlg .pb { height: 48px; border-radius: 24px; display: grid; place-items: center; font: 500 14px/20px Roboto, sans-serif; background: var(--sec-container); color: var(--on-sec-container); margin-top: 8px; }
-/* Notification details: small-icon glyph, progress bar, text column. */
-.ntf .col { flex: 1; min-width: 0; }
-.ntf .ap svg { width: 20px; height: 20px; }
-.ntf .np { height: 4px; border-radius: 2px; background: #e8def8; margin-top: 8px; position: relative; overflow: hidden; }
-.darkp .ntf .np { background: #4a4458; }
-.ntf .np .f { position: absolute; left: 0; top: 0; bottom: 0; background: #6750a4; border-radius: 2px; }
-.darkp .ntf .np .f { background: #d0bcff; }
-.ntf .np.ind .f { left: 18%; width: 38%; }
-.ntf .chan { font: 500 12px/16px Roboto, sans-serif; opacity: .75; }
-.shade .cap { font: 500 12px/16px Roboto, sans-serif; color: #49454f; padding: 4px 8px 0; }
-.darkp.shade .cap { color: #cac4d0; }
+/* Surface corrections (2026-10-21, spec surface-corrections): the road
+   card's correction rows, the surface task card, the lines the corrections
+   and the draft draw, and the toast pill. --fs is the system font scale
+   (1.3 on .big13, the largest size); icons and bars keep their dp. */
+.phone { --fs: 1; }
+.phone.big13 { --fs: 1.3; }
+.sc-svg { position: absolute; left: 0; top: 0; width: 360px; height: 760px; z-index: 1; pointer-events: none; }
+.sc-cards { position: absolute; left: 8px; right: 8px; bottom: 32px; display: flex; flex-direction: column; gap: 8px; z-index: 3; }
+.sc-card { background: var(--sheet); color: var(--on-surface); border-radius: 16px; box-shadow: 0 1px 3px rgb(0 0 0 / .3); padding: 0 4px 12px 16px; }
+.sc-card.task { padding-top: 4px; }
+.sc-card .ib { color: var(--on-surface); }
+.sc-row { display: flex; align-items: flex-start; }
+.sc-grow { flex: 1; min-width: 0; padding: 12px 4px 0 0; }
+.sc-title { font: 500 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .15px; }
+.sc-sup { font: 400 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .25px; color: var(--on-surface-variant); }
+.sc-note { font: 400 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .5px; color: var(--err); }
+.sc-small { font: 400 calc(12px * var(--fs))/calc(16px * var(--fs)) Roboto, sans-serif; letter-spacing: .4px; color: var(--on-surface-variant); }
+.sc-msg { font: 400 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .5px; }
+.sc-body { padding-right: 12px; }
+.sc-corr { display: flex; align-items: center; padding: 4px 0 0; }
+.sc-corr .t { flex: 1; min-width: 0; font: 400 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .25px; color: var(--on-surface-variant); }
+.sc-corr .ib { margin-right: -12px; }
+.sc-bin { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #c5221f; }
+.sc-bin.armed { background: #c5221f; color: #fff; }
+.sc-btns { display: flex; flex-wrap: wrap; gap: 4px 8px; padding-top: 8px; }
+.sc-btns.end { justify-content: flex-end; padding-top: 4px; }
+.sc-btn { min-height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; padding: 8px 24px 8px 16px; border: 1px solid var(--outline); border-radius: 20px; color: var(--primary); font: 500 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .1px; white-space: nowrap; }
+.sc-btn svg { width: 18px; height: 18px; flex: none; }
+.sc-btn.fill { background: var(--primary); color: var(--on-primary); border-color: transparent; padding-left: 24px; }
+.sc-btn.dis { background: color-mix(in srgb, var(--on-surface) 12%, transparent); color: color-mix(in srgb, var(--on-surface) 38%, transparent); }
+/* SingleChoiceSegmentedButtonRow with icon = {} (as Choices.kt): equal segments, no check mark. */
+.sc-seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.sc-seg span { min-height: 40px; box-sizing: border-box; display: grid; place-items: center; padding: 0 12px; border: 1px solid var(--outline); margin-left: -1px; font: 500 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .1px; white-space: nowrap; }
+.sc-seg span:first-child { border-radius: 20px 0 0 20px; margin-left: 0; }
+.sc-seg span:last-child { border-radius: 0 20px 20px 0; }
+.sc-seg span.on { background: var(--sec-container); color: var(--on-sec-container); }
+/* The app's toast (Toasts.kt): inverse pill, 24 dp from the sides, 48 dp above the bar. */
+.sc-toast { position: absolute; left: 24px; right: 24px; bottom: 72px; display: flex; justify-content: center; z-index: 5; }
+.sc-toast span { background: var(--inv); color: var(--oninv); border-radius: 22px; padding: 12px 20px; font: 400 14px/20px Roboto, sans-serif; letter-spacing: .25px; box-shadow: 0 2px 6px rgb(0 0 0 / .35); display: inline-flex; align-items: center; gap: 4px; }
+.sc-toast svg { width: 18px; height: 18px; }
+/* Annotations, not app UI: the finger, and small pink labels. */
+.sc-finger { position: absolute; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: rgb(30 30 30 / .28); box-shadow: 0 0 0 2px rgb(255 255 255 / .8); z-index: 2; }
+.sc-lab { position: absolute; z-index: 6; white-space: nowrap; background: #e0457b; color: #fff; font: 500 10px/16px Roboto, sans-serif; padding: 0 6px; border-radius: 8px; letter-spacing: .3px; }
+.sc-zo { position: absolute; inset: 0; overflow: hidden; background: #f8f4f0; }
+.sc-zo.darkz { background: #45516e; }
+.sc-zo .mapimg { transform: scale(.5); transform-origin: 50% 45%; }
