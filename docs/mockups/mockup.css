@@ -482,33 +482,8 @@ figure.wide { width: 816px; }
 .sc-zo.darkz { background: #45516e; }
 .sc-zo .mapimg { transform: scale(.5); transform-origin: 50% 45%; }
 
-/* Surface corrections, round 2 (2026-10-21): nothing is drawn on the map; the
-   "Surface corrections to check" notice, dialog and Map region button. */
-/* Snackbar with Show and a dismiss cross (as the favourites' notice). */
+/* Surface corrections, round 2 (2026-10-21): nothing is drawn on the map; a
+   plain notice (snackbar, no action) says corrections were removed. */
+/* Snackbar with text only. */
 .sc-snack { position: absolute; left: 8px; right: 8px; bottom: 32px; z-index: 4; background: var(--inv); color: var(--oninv); border-radius: 4px; box-shadow: 0 3px 6px rgb(0 0 0 / .3); display: flex; align-items: center; padding-left: 16px; }
 .sc-snack .t { flex: 1; min-width: 0; padding: 14px 0; font: 400 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .25px; }
-.sc-snack .act { flex: none; padding: 0 12px; height: 40px; display: inline-flex; align-items: center; font: 500 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .1px; color: #d0bcff; }
-.darkp .sc-snack .act { color: #6750a4; }
-.sc-snack .ib { color: var(--oninv); }
-/* AlertDialog with a list: 28 dp corners, 24 dp padding, rows with pencil and bin. */
-.sc-dlg { position: absolute; left: 24px; right: 24px; top: 110px; z-index: 5; box-sizing: border-box; background: var(--sc-high); border-radius: 28px; padding: 24px 24px 16px; color: var(--on-surface); }
-.sc-dlg h4 { margin: 0 0 16px; font: 400 calc(24px * var(--fs))/calc(32px * var(--fs)) Roboto, sans-serif; }
-.sc-dlg p { margin: 0 0 8px; font: 400 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .25px; color: var(--on-surface-variant); }
-.sc-drow { display: flex; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--outline-variant); }
-.sc-drow .tx { flex: 1; min-width: 0; padding: 4px 0; }
-.sc-drow .n { font: 400 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .5px; }
-.sc-drow .s { font: 400 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .25px; color: var(--on-surface-variant); }
-.sc-drow .ib { color: var(--on-surface); margin-right: -4px; }
-.sc-dacts { display: flex; justify-content: flex-end; padding-top: 16px; }
-.sc-dacts span { height: 40px; padding: 0 12px; display: inline-flex; align-items: center; font: 500 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .1px; color: var(--primary); }
-/* A settings page (Map region): top bar, group label, supporting text, rows. */
-.sc-pg { position: absolute; inset: 28px 0 24px; padding: 0 24px; overflow: hidden; }
-.sc-ptop { height: 64px; margin: 0 -24px 0 -16px; display: flex; align-items: center; }
-.sc-ptop span.t { font: 400 calc(22px * var(--fs))/calc(28px * var(--fs)) Roboto, sans-serif; }
-.sc-pg .g { font: 500 calc(14px * var(--fs))/calc(20px * var(--fs)) Roboto, sans-serif; letter-spacing: .1px; color: var(--primary); padding: 8px 0 4px; }
-.sc-pg .sm { font: 400 calc(12px * var(--fs))/calc(16px * var(--fs)) Roboto, sans-serif; letter-spacing: .4px; color: var(--on-surface-variant); }
-.sc-pg .rw { display: flex; align-items: center; padding: 8px 0; }
-.sc-pg .rw .tx { flex: 1; min-width: 0; padding-right: 12px; font: 400 calc(16px * var(--fs))/calc(24px * var(--fs)) Roboto, sans-serif; letter-spacing: .5px; }
-.sc-pg .tb { margin: 4px 0 0 -12px; }
-.sc-pg hr { border: 0; border-top: 1px solid var(--outline-variant); margin: 24px 0 0; }
-.sc-pg .ib { color: var(--on-surface); }
