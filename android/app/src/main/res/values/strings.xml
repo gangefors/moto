@@ -268,7 +268,7 @@
     <string name="about_version">Version %1$s</string>
     <string name="help_title">How to use</string>
     <string name="help_map_title">The map</string>
-    <string name="help_map">Tap a road to see what it is, or a favourite section to open its card. The buttons on the map:</string>
+    <string name="help_map">Tap a road to see what it is, or a favourite section to open its card. Where a road’s surface is wrong, [gravel] Correct surface on its card sets what it really is: drag the ends to where it changes, pick Paved or Gravel, and routes go by it. The buttons on the map:</string>
     <string name="help_plan_title">Plan a ride</string>
     <string name="help_plan">Long-press a place to start there, then long-press where you want to go. Pull a route’s or loop’s card up for its choices, like avoiding your favourites to find new roads. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
     <string name="help_sections_title">Favourite sections</string>
@@ -401,6 +401,16 @@
     <string name="section_pick_end">Start set. Tap where the favourite ends.</string>
     <string name="section_proposing">Finding the road…</string>
     <string name="section_proposed">%1$.1f km. Drag an end, or tap near it, to move it.</string>
+    <string name="surface_correct">Correct surface</string>
+    <string name="surface_proposed">%1$.1f km. Drag the ends to where the surface changes.</string>
+    <string name="surface_choice">Surface</string>
+    <string name="surface_saved">Surface correction saved</string>
+    <string name="surface_corrected">Your correction: %1$s</string>
+    <string name="surface_edit">Change the surface correction</string>
+    <plurals name="surface_removed_notice">
+        <item quantity="one">%d surface correction no longer matched the map and was removed</item>
+        <item quantity="other">%d surface corrections no longer matched the map and were removed</item>
+    </plurals>
     <string name="section_save_ellipsis">Save…</string>
     <string name="section_save">Save</string>
     <string name="section_new_title">New favourite · %1$.1f km</string>
@@ -675,7 +685,7 @@
     <!-- Backup and restore (ADR-0012). -->
     <string name="backup_title">Backup</string>
     <string name="backup_menu">Backup &amp; Restore</string>
-    <string name="backup_text">A backup is one file with your favourite sections, rides, saved routes, tags and settings, so you can reinstall the app or move to a new phone. Map regions aren’t in it: download them again after restoring.</string>
+    <string name="backup_text">A backup is one file with your favourite sections, surface corrections, rides, saved routes, tags and settings, so you can reinstall the app or move to a new phone. Map regions aren’t in it: download them again after restoring.</string>
     <string name="backup_private">The file shows where you’ve ridden: keep it somewhere private.</string>
     <string name="backup_last">Last backup: %1$s</string>
     <string name="backup_do">Backup</string>
@@ -690,6 +700,10 @@
     <plurals name="backup_count_favourites">
         <item quantity="one">%1$d favourite</item>
         <item quantity="other">%1$d favourites</item>
+    </plurals>
+    <plurals name="backup_count_surface">
+        <item quantity="one">%1$d surface correction</item>
+        <item quantity="other">%1$d surface corrections</item>
     </plurals>
     <plurals name="backup_count_rides">
         <item quantity="one">%1$d ride</item>
@@ -707,6 +721,7 @@
     <string name="restore_title">Restore this backup?</string>
     <string name="restore_made">Made %1$s, by %2$s.</string>
     <string name="restore_favourites">Favourite sections</string>
+    <string name="restore_surface">Surface corrections</string>
     <string name="restore_rides">Rides</string>
     <string name="restore_routes">Saved routes</string>
     <string name="restore_tags">Tags</string>

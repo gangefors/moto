@@ -45,6 +45,9 @@ internal fun MapScreenScope.MapDialogs() {
                 if (s != null) {
                     scope.launch {
                         withContext(Dispatchers.IO) { runCatching { s.list(null) } }.onSuccess { sections = it }
+                        // A restore may add only surface corrections: the
+                        // overlay is built again for them too.
+                        surfaceVersion++
                     }
                 }
                 RideChanges.changed()

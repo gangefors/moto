@@ -4,6 +4,10 @@
 package se.gangefors.moto
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +23,15 @@ import se.gangefors.moto.core.Surface as RoadSurface
  * look out for. The cross closes it.
  */
 @Composable
-fun RoadInfoCard(info: RoadInfo, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun RoadInfoCard(
+    info: RoadInfo,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    surfaceRow: SurfaceRow? = null,
+    onCorrect: () -> Unit = {},
+    onEditCorrection: (SurfaceEdit) -> Unit = {},
+    onDeleteCorrection: (SurfaceEdit) -> Unit = {},
+) {
     val facts = roadFacts(info)
     // Named roads lead with their number and name ("Road 13 · Storgatan"),
     // their kind joins the facts below.
@@ -47,6 +59,23 @@ fun RoadInfoCard(info: RoadInfo, onClose: () -> Unit, modifier: Modifier = Modif
         val grey = MaterialTheme.colorScheme.onSurfaceVariant
         Text(stringResource(R.string.road_details, facts.lengthKm, info.wayId), style = small, color = grey)
         facts.tapOffM?.let { Text(stringResource(R.string.road_tap_off, it), style = small, color = grey) }
+        // The rider's own surface (ADR-0018), as the last row: the text
+        // above stays the map's.
+        when (surfaceRow) {
+            null -> Unit
+            SurfaceRow.Correct -> FlowRow(
+                Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                IconTextButton(R.drawable.ic_gravel, stringResource(R.string.surface_correct), onCorrect)
+            }
+            is SurfaceRow.Corrected -> SurfaceCorrectedRow(
+                surfaceRow,
+                onEdit = { onEditCorrection(surfaceRow.edit) },
+                onDelete = { onDeleteCorrection(surfaceRow.edit) },
+            )
+        }
     }
 }
 

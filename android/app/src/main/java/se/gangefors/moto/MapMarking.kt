@@ -7,7 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
+import se.gangefors.moto.core.FavouriteSurface
+import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.NewSurfaceCorrection
 import se.gangefors.moto.core.SectionDraft
+import se.gangefors.moto.core.SectionUpdate
+import se.gangefors.moto.core.SurfaceCorrection
 import se.gangefors.moto.core.Tag
 import se.gangefors.moto.debug.DebugTools
 
@@ -39,6 +44,9 @@ internal fun MapScreenScope.stopMarking() {
         marking = false
         draft = null
         savingDraft = false
+        markKind = MarkKind.FAVOURITE
+        surfaceChoice = null
+        replacingCorrection = null
         dragging = null
         // The marking steps ("10 km. Tap near an end…") end with it.
         message = null
@@ -46,7 +54,10 @@ internal fun MapScreenScope.stopMarking() {
     }
 }
 
-internal fun MapScreenScope.draftMessage(d: SectionDraft) = with(state) { resources.getString(R.string.section_proposed, sectionKm(d.distanceM)) }
+internal fun MapScreenScope.draftMessage(d: SectionDraft) = with(state) {
+    val text = if (markKind == MarkKind.SURFACE) R.string.surface_proposed else R.string.section_proposed
+    resources.getString(text, sectionKm(d.distanceM))
+}
 
 /** Reads the number of tags waiting for review again; a failed read
  * keeps the last count (and the flag) as it was. */
@@ -255,12 +266,123 @@ internal fun MapScreenScope.proposeBetween(ready: RegionState.Ready, start: LatL
     }
 }
 
+/** Shows [d] as the proposal, its pins at its ends, and fits the map to
+ * it above the task card. */
+private fun MapScreenScope.proposeDraft(d: SectionDraft) {
+    with(state) {
+        val first = d.geometry.first()
+        val last = d.geometry.last()
+        marker.propose(LatLng(first.lat, first.lon), LatLng(last.lat, last.lon))
+        draft = d
+        message = draftMessage(d)
+        showOnMap(listOf(d.geometry), always = true, minSpanM = TAG_REVIEW_SPAN_M)
+        showDraft()
+    }
+}
+
+/**
+ * Starts marking a surface correction (ADR-0018): from the road card,
+ * the OSM way under [at]; from a correction's pencil, [existing]'s own
+ * stretch and surface. A plan stays (its sheet steps aside meanwhile);
+ * the road's card closes.
+ */
+internal fun MapScreenScope.startSurfaceMarking(ready: RegionState.Ready, at: LatLon?, existing: SurfaceCorrection?) {
+    with(state) {
+        stopMarking()
+        roadInfo = null
+        roadCorrection = null
+        overlays?.snap?.clear()
+        marking = true
+        markKind = MarkKind.SURFACE
+        markSession++
+        surfaceChoice = firstSurfaceChoice(existing)
+        replacingCorrection = existing?.id
+        if (existing != null) {
+            proposeDraft(SectionDraft(existing.ways, existing.geometry, lengthM(existing.geometry)))
+            return
+        }
+        val point = at ?: return stopMarking()
+        val session = markSession
+        proposing = true
+        message = resources.getString(R.string.section_proposing)
+        scope.launch {
+            val result = busy.run(R.string.busy_section) {
+                withContext(Dispatchers.Default) {
+                    runCatching { DebugTools.query("surface stretch") { ready.engine.surfaceStretchAt(point) } }
+                }
+            }
+            proposing = false
+            if (!marking || session != markSession) return@launch
+            result.fold(
+                onSuccess = { proposeDraft(it) },
+                onFailure = { e ->
+                    stopMarking()
+                    notify(coreErrorMessage(resources, e), long = true)
+                },
+            )
+        }
+    }
+}
+
+/** Saves the marked surface correction, replacing the one edited. */
+internal fun MapScreenScope.saveSurfaceCorrection() {
+    with(state) {
+        val ready = store as? StoreState.Ready ?: return
+        val d = draft ?: return
+        val choice = surfaceChoice ?: return
+        val replaces = replacingCorrection
+        val session = markSession
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    ready.store.addSurfaceCorrection(NewSurfaceCorrection(choice, d.ways, d.geometry), replaces)
+                }
+            }
+            result.fold(
+                onSuccess = {
+                    surfaceVersion++
+                    Toasts.show(resources.getString(R.string.surface_saved))
+                    if (session == markSession) stopMarking()
+                },
+                // Marking stays, to try again.
+                onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
+            )
+        }
+    }
+}
+
+/** Deletes a standalone surface correction (the bin already confirmed). */
+internal fun MapScreenScope.deleteSurfaceCorrection(id: Long) {
+    with(state) {
+        val ready = store as? StoreState.Ready ?: return
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { ready.store.deleteSurfaceCorrection(id) }
+            }
+            result.fold(
+                onSuccess = { surfaceVersion++ },
+                onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
+            )
+        }
+    }
+}
+
+/** Sets a favourite's own surface back to the map's; the favourite stays. */
+internal fun MapScreenScope.clearFavouriteSurface(sectionId: Long) {
+    changeSections(null) { st -> st.update(sectionId, SectionUpdate(name = null, rating = null, direction = null, reverse = false, surface = FavouriteSurface.MAP)) }
+}
+
 /** Back while marking: the last point placed goes, or marking (or the
  * tag review) stops when nothing is placed. */
 internal fun MapScreenScope.markBack() {
     with(state) {
         if (reviewTag != null) {
             endReview(null)
+            return
+        }
+        // A surface correction: Back cancels it, as in tag review.
+        if (markKind == MarkKind.SURFACE) {
+            stopMarking()
             return
         }
         // A proposal still being found for the old points is dropped.

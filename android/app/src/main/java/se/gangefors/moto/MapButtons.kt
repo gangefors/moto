@@ -166,8 +166,8 @@ internal fun BoxScope.PlanButtons(screen: MapScreenScope) {
             // right above the sheet and the cards (upright), or above the info
             // cards at the right (landscape), and drops back when they close.
             // Both buttons stay over a pulled-up sheet, right above its top.
-            val fitButton = planning
-            if (fitButton || riddenButton) {
+            val fitButton = planSheetShown(planning, marking)
+            if (fitButton || (riddenButton && !marking)) {
                 val bottomPx = controlsBottomPx(landscape, insets.bottom, mapSize.height, sheetTop, cardsTop, infoRightTop)
                 DisposableEffect(Unit) { onDispose { planButtonsTop = Int.MAX_VALUE } }
                 Row(
@@ -191,7 +191,7 @@ internal fun BoxScope.PlanButtons(screen: MapScreenScope) {
                             showOnMap(lines + ends, always = true)
                         })
                     }
-                    if (riddenButton) RiddenButton(on = riddenOn, onChange = { riddenWhilePlanning = it })
+                    if (riddenButton && !marking) RiddenButton(on = riddenOn, onChange = { riddenWhilePlanning = it })
                 }
             }
         }

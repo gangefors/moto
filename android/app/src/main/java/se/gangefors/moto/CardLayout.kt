@@ -285,6 +285,12 @@ fun rideCardBottomLimitPx(mapHeight: Int, insetBottom: Int, logoBandPx: Int, tag
  */
 fun compassUnderRideCard(rideMode: Boolean, landscape: Boolean): Boolean = rideMode && !landscape
 
+/** Whether the planning sheet (and its buttons) shows: while a plan is
+ * open, not while a stretch is marked on it (a surface correction from a
+ * road on the route); the plan and its lines stay and the sheet comes
+ * back when the marking ends. */
+fun planSheetShown(planning: Boolean, marking: Boolean): Boolean = planning && !marking
+
 /** What Back closes on the map screen, in the order it closes them. */
 enum class BackStep { MARK, VIA_PICK, VIA_SELECTED, ROAD, FAVOURITE, ROUTE, LOOP, START, SAVED_ROUTE, SECTION, RIDE }
 

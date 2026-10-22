@@ -122,6 +122,19 @@ internal class MapScreenState(
     var proposing by mutableStateOf(false)
     var savingDraft by mutableStateOf(false)
     var editing by mutableStateOf<Section?>(null)
+    // What "mark" mode marks (ADR-0018): a favourite, or a surface
+    // correction with the surface picked (none until the rider picks)
+    // and the correction it replaces when one is edited.
+    var markKind by mutableStateOf(MarkKind.FAVOURITE)
+    var surfaceChoice by mutableStateOf<se.gangefors.moto.core.Surface?>(null)
+    var replacingCorrection by mutableStateOf<Long?>(null)
+    // The rider's surface corrections, and the one (or a favourite's own
+    // surface) on the road last tapped. Never drawn on the map.
+    // Counts changes to them, so what depends on them is done again.
+    var surfaceVersion by mutableIntStateOf(0)
+    var roadCorrection by mutableStateOf<se.gangefors.moto.core.CorrectionAt?>(null)
+    // The road [roadCorrection] was looked up for (the row waits for it).
+    var roadCorrectionFor by mutableStateOf<RoadInfo?>(null)
     // An end pin being dragged: which, and the point it would land on.
     var dragging by mutableStateOf<SectionMarker.End?>(null)
     // The menu, and the page it opened.

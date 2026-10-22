@@ -127,14 +127,33 @@ internal fun MapScreenScope.InfoCards() {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        roadInfo?.let {
+        roadInfo?.let { info ->
+            val ready = region as? RegionState.Ready
             RoadInfoCard(
-                it,
+                info,
                 onClose = {
                     roadInfo = null
                     overlays?.snap?.clear()
                 },
                 modifier = Modifier.fillMaxWidth(),
+                surfaceRow = if (ready != null && roadCorrectionFor == info) surfaceRow(roadCorrection) else null,
+                onCorrect = { ready?.let { startSurfaceMarking(it, info.point.position, null) } },
+                onEditCorrection = { edit ->
+                    when (edit) {
+                        is SurfaceEdit.Standalone -> ready?.let { startSurfaceMarking(it, null, edit.correction) }
+                        is SurfaceEdit.Favourite -> sections.firstOrNull { it.id == edit.sectionId }?.let {
+                            roadInfo = null
+                            overlays?.snap?.clear()
+                            editing = it
+                        }
+                    }
+                },
+                onDeleteCorrection = { edit ->
+                    when (edit) {
+                        is SurfaceEdit.Standalone -> deleteSurfaceCorrection(edit.correction.id)
+                        is SurfaceEdit.Favourite -> clearFavouriteSurface(edit.sectionId)
+                    }
+                },
             )
         }
         shownRide?.let {
@@ -239,7 +258,22 @@ internal fun MapScreenScope.TaskCard(taskCard: Boolean, offerLoop: Boolean, via:
                         }
                     }
                 }
-                if (marking) {
+                if (marking && markKind == MarkKind.SURFACE) {
+                    // A surface correction: Paved | Gravel (neither picked
+                    // until the rider picks) and Save, wrapping when there
+                    // is no room. X cancels; no bin, no Skip.
+                    FlowRow(
+                        Modifier.padding(top = 4.dp, end = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        SurfacePicker(selected = surfaceChoice, onSelect = { surfaceChoice = it })
+                        Button(
+                            onClick = { saveSurfaceCorrection() },
+                            enabled = surfaceChoice != null && draft != null && !proposing,
+                        ) { OneLine(stringResource(R.string.section_save)) }
+                    }
+                } else if (marking) {
                     val tag = reviewTag
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (tag != null) {
@@ -306,7 +340,7 @@ internal fun BoxScope.CardColumns(screen: MapScreenScope, leftCardsShown: Boolea
                         .align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter)
                         .then(
                             when {
-                                !planning -> Modifier.safeDrawingPadding()
+                                !planSheetShown(planning, marking) -> Modifier.safeDrawingPadding()
                                 // The sheet covers the bar below; the cutout at the left is still clear.
                                 landscape -> Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Left))
                                 else -> Modifier

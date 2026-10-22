@@ -125,8 +125,10 @@ data class RestoreCounts(
     val routes: Int,
     val tags: Int,
     val alreadyHere: Int,
+    /** Surface corrections added (ADR-0018). */
+    val surfaceCorrections: Int = 0,
 ) {
-    val added: Int get() = favourites + rides + routes + tags
+    val added: Int get() = favourites + rides + routes + tags + surfaceCorrections
 }
 
 /** A count from the core, capped to fit an Int. */
@@ -141,5 +143,8 @@ fun restoreCounts(r: RestoreReport) = RestoreCounts(
     rides = r.ridesAdded.count(),
     routes = r.routesAdded.count(),
     tags = r.tagsAdded.count(),
-    alreadyHere = (r.favouritesSkipped + r.ridesSkipped + r.routesSkipped + r.tagsSkipped + r.tagsOnFavourites).count(),
+    alreadyHere = (
+        r.favouritesSkipped + r.ridesSkipped + r.routesSkipped + r.tagsSkipped + r.tagsOnFavourites + r.surfaceSkipped
+    ).count(),
+    surfaceCorrections = r.surfaceAdded.count(),
 )

@@ -87,9 +87,10 @@ private fun inWords(resources: Resources, parts: List<String>): String = when (p
 }
 
 /** "23 favourites, 112 rides, 9 routes and 4 tags", leaving out what there is none of. */
-private fun countsInWords(resources: Resources, favourites: Int, rides: Int, routes: Int, tags: Int): String {
+private fun countsInWords(resources: Resources, favourites: Int, rides: Int, routes: Int, tags: Int, surface: Int = 0): String {
     val parts = listOfNotNull(
         favourites.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.backup_count_favourites, it, it) },
+        surface.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.backup_count_surface, it, it) },
         rides.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.backup_count_rides, it, it) },
         routes.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.backup_count_routes, it, it) },
         tags.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.backup_count_tags, it, it) },
@@ -99,7 +100,7 @@ private fun countsInWords(resources: Resources, favourites: Int, rides: Int, rou
 
 private fun restoredText(resources: Resources, c: RestoreCounts): String {
     if (c.added == 0) return resources.getString(R.string.restored_nothing)
-    val added = resources.getString(R.string.restored, countsInWords(resources, c.favourites, c.rides, c.routes, c.tags))
+    val added = resources.getString(R.string.restored, countsInWords(resources, c.favourites, c.rides, c.routes, c.tags, c.surfaceCorrections))
     return if (c.alreadyHere == 0) {
         added
     } else {
@@ -193,7 +194,9 @@ fun BackupFlow(
                     Toasts.show(
                         resources.getString(
                             R.string.backup_saved,
-                            countsInWords(resources, s.favourites.count(), s.rides.count(), s.routes.count(), s.tags.count()),
+                            countsInWords(
+                                resources, s.favourites.count(), s.rides.count(), s.routes.count(), s.tags.count(), s.surfaceCorrections.count(),
+                            ),
                         ),
                     )
                 },
@@ -346,6 +349,7 @@ private fun RestoreDialog(summary: BackupSummary, onRestore: () -> Unit, onDismi
                 Spacer(Modifier.padding(top = 12.dp))
                 HorizontalDivider()
                 CountRow(R.drawable.ic_star, R.string.restore_favourites, summary.favourites.count())
+                CountRow(R.drawable.ic_gravel, R.string.restore_surface, summary.surfaceCorrections.count())
                 CountRow(R.drawable.ic_ride, R.string.restore_rides, summary.rides.count())
                 CountRow(R.drawable.ic_bookmark, R.string.restore_routes, summary.routes.count())
                 CountRow(R.drawable.ic_flag, R.string.restore_tags, summary.tags.count())

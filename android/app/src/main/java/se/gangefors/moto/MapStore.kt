@@ -52,6 +52,20 @@ internal fun MapScreenScope.changeSectionsThen(
     }
 }
 
+/** One notice, with no action, when a map update removed [removed]
+ * surface corrections that no longer matched it (ADR-0018). */
+internal fun MapScreenScope.surfaceRemovedNotice(removed: ULong) {
+    if (removed == 0uL) return
+    val n = removed.count()
+    state.noticeScope.launch {
+        state.notices.showSnackbar(
+            resources.getQuantityString(R.plurals.surface_removed_notice, n, n),
+            withDismissAction = true,
+            duration = SnackbarDuration.Long,
+        )
+    }
+}
+
 /** Runs [action] on the store off the main thread, then reloads the sections. */
 internal fun MapScreenScope.changeSections(done: String?, action: (SectionStore) -> Unit) = with(state) {
     changeSectionsThen(action = {
@@ -92,13 +106,16 @@ internal fun MapScreenScope.StoreAndRegionEffects() {
                         val report = DebugTools.startup("sections re-match") { s.rematch(engine) }
                         // Reloaded when any section was looked at or now waits
                         // off the open map (a region switched off or removed).
-                        report to if (report.checked > 0uL || report.offMap > 0uL) s.list(null) else null
+                        val sectionsTouched = report.checked > 0uL || report.offMap > 0uL
+                        val correctionsTouched = report.surfaceChecked > 0uL || report.surfaceOffMap > 0uL
+                        Triple(report, if (sectionsTouched) s.list(null) else null, correctionsTouched)
                     }
                 }
             }
             result.fold(
-                onSuccess = { (report, updated) ->
+                onSuccess = { (report, updated, correctionsTouched) ->
                     updated?.let { sections = it }
+                    if (correctionsTouched) surfaceVersion++
                     if (report.unmatched > 0uL) {
                         // Show opens Sections with only those that need a look.
                         noticeScope.launch {
@@ -114,7 +131,11 @@ internal fun MapScreenScope.StoreAndRegionEffects() {
                                 sectionFilter = SectionFilter(attention = true)
                                 dataPage = DataPage.SECTIONS
                             }
+                            // Then the corrections the update removed, once.
+                            surfaceRemovedNotice(report.surfaceRemoved)
                         }
+                    } else {
+                        surfaceRemovedNotice(report.surfaceRemoved)
                     }
                 },
                 onFailure = { notify(resources.getString(R.string.sections_failed, it.message ?: it.toString()), long = true) },
@@ -134,7 +155,21 @@ internal fun MapScreenScope.StoreAndRegionEffects() {
             }
             if (named > 0) RideChanges.changed()
         }
-        LaunchedEffect(store, region, sections, ridesVersion) {
+        // The rider's own surface on the road tapped (ADR-0018), for the
+        // last row of its card.
+        LaunchedEffect(roadInfo, surfaceVersion, sections) {
+            val info = roadInfo
+            val s = (store as? StoreState.Ready)?.store
+            if (info == null || s == null) {
+                roadCorrection = null
+                roadCorrectionFor = null
+                return@LaunchedEffect
+            }
+            val found = withContext(Dispatchers.IO) { runCatching { s.surfaceCorrectionAt(info.point.position) } }
+            roadCorrection = found.getOrNull()
+            roadCorrectionFor = info.takeIf { found.isSuccess }
+        }
+        LaunchedEffect(store, region, sections, surfaceVersion, ridesVersion) {
             val s = (store as? StoreState.Ready)?.store ?: return@LaunchedEffect
             val engine = (region as? RegionState.Ready)?.engine ?: return@LaunchedEffect
             withContext(Dispatchers.IO) {

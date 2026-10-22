@@ -141,7 +141,8 @@ internal fun BoxScope.PlanSheet(screen: MapScreenScope) {
                         )
                     }
             }
-            if (planning) {
+            // While a stretch is marked on the plan, the sheet steps aside.
+            if (planSheetShown(planning, marking)) {
                 DisposableEffect(Unit) {
                     onDispose {
                         sheetTop = Int.MAX_VALUE

@@ -408,13 +408,18 @@ class RecordingService : Service() {
             RoutePrefs.gravel(applicationContext),
             RoutePrefs.avoid(applicationContext),
         )
+        // On the surfaces the rider corrected (ADR-0018): the overlay is
+        // built for this question and freed after it (it is rare).
+        val overlay = session?.store?.let { s -> runCatching { s.favourites(engine) }.getOrNull() }
         val back = try {
             DebugTools.query("way back", { "${sectionKm(it.route.distanceM)} km, turn round ${it.turnRound}" }) {
-                engine.rejoin(fix.position, fix.bearingDeg, f.follower, opts)
+                engine.rejoin(fix.position, fix.bearingDeg, f.follower, opts, overlay)
             }
         } catch (e: Exception) {
             Log.w(TAG, "no way back: ${e.message}")
             return
+        } finally {
+            overlay?.destroy()
         }
         f.back = back.route.geometry
         f.backM = back.route.distanceM
