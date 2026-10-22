@@ -330,6 +330,13 @@ fun backStep(
     else -> null
 }
 
+/** The favourite section and tapped favourite whose cards are shown. */
+data class FavouriteCards(val sectionId: Long?, val favouriteId: Long?)
+
+/** Stub: returns the ids unchanged. */
+fun favouriteCardsShown(shownSectionId: Long?, favouriteInfoId: Long?, reshaping: Boolean): FavouriteCards =
+    FavouriteCards(shownSectionId, favouriteInfoId)
+
 /** Which cards are open on the map screen: a [task] card, an [info] card,
  * [any] card, and whether the [left] column (with the sheet's) has one. */
 data class CardsOpen(val task: Boolean, val info: Boolean, val any: Boolean, val left: Boolean)

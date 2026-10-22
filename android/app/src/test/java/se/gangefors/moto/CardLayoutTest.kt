@@ -361,4 +361,12 @@ class CardLayoutTest {
             }
         }
     }
+
+    @Test
+    fun favouriteCardsHiddenWhileReshaping() {
+        val none = FavouriteCards(null, null)
+        assertEquals(none, favouriteCardsShown(7L, null, reshaping = true))
+        assertEquals(none, favouriteCardsShown(null, 7L, reshaping = true))
+        assertEquals(none, favouriteCardsShown(7L, 9L, reshaping = true))
+    }
 }
