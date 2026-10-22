@@ -18,6 +18,6 @@ Load the `workflow` skill and run it for this bug: `$ARGUMENTS`.
 3. Gate 1 is short: the cause, the fix and the test in a few lines (and a
    mockup only if the screen changes). Skip the wait when the rider has
    already said "just fix it" and the tier is `low` or `normal`.
-4. `implement` (first commit: the failing test) → `verify` → `reviewer`
-   → `qa` → `documenter` → push, within the loop limits.
+4. `implement` (first commit: the failing test; runs verify.sh) →
+   `reviewer` → `documenter` → push, within the loop limits.
 5. Gate 2: report as the workflow says.

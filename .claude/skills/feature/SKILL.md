@@ -15,6 +15,9 @@ Load the `workflow` skill and run it for this feature: `$ARGUMENTS`.
 3. If UI is `yes`, call `mockup` with the spec URL; loop with the
    architect up to the limit; then Gate 1 (spec summary, criteria and
    mockup link). If UI is `no`, Gate 1 is the summary and criteria alone.
-4. After he approves: `implement` → `verify` → `reviewer` → `qa` within
-   the loop limits and the tier's models, then `documenter`, then push.
+   Route his comments as the workflow says: wording and layout to
+   `mockup`, approach changes to `architect`.
+4. After he approves: for each slice in the spec's order, `implement`
+   (runs verify.sh) → `reviewer`, within the loop limits and the slice's
+   tier; then `documenter`, then push.
 5. Gate 2: report as the workflow says.

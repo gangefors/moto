@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: The moto change pipeline — how the main session turns a feature, bug fix or refactor request into a merged change with agents (architect, mockup, implement, verify, reviewer, qa, documenter), which model each risk tier uses, the loop limits, the handoff report format and the two rider gates. Load at the start of any change; /feature, /bugfix and /refactor load it for you.
+description: The moto change pipeline — how the main session turns a feature, bug fix or refactor request into a merged change with agents (architect, mockup, implement, reviewer, documenter) and the verify.sh script, which model each risk tier and slice uses, the loop limits, the handoff report format and the two rider gates. Load at the start of any change; /feature, /bugfix and /refactor load it for you.
 ---
 <!-- SPDX-License-Identifier: AGPL-3.0-only
      Copyright (C) 2026 Stefan Gangefors -->
@@ -11,48 +11,63 @@ The main session is the **orchestrator**: it talks to the rider, picks the
 tier, calls the agents in order, routes their reports and keeps its own
 context small. It designs, codes and reviews nothing itself. The rider
 only sees two things: the **design** (Gate 1) and the **result** (Gate 2).
-Everything in between runs without asking.
+Everything in between runs without asking. ADR-0013 set this up;
+ADR-0019 made it leaner.
 
 ## Pipeline
 
 ```
 request ─▶ architect ◀─▶ mockup (UI only) ─▶ [Gate 1: rider approves design]
-  ─▶ implement ◀─▶ verify ─▶ reviewer ◀─▶ implement ─▶ qa
-  ─▶ documenter ─▶ push ─▶ CI ─▶ [Gate 2: rider tests the build]
+  ─▶ for each slice: implement (+ verify.sh) ◀─▶ reviewer
+  ─▶ documenter ─▶ verify.sh ─▶ push ─▶ CI ─▶ [Gate 2: rider tests the build]
 ```
 
-| # | Stage | Agent (default model, effort) | Does |
+| # | Stage | Who (default model, effort) | Does |
 |---|---|---|---|
-| 1 | Design | `architect` (Opus, xhigh) | Spec page in Notion, ADR if architectural, root cause for a bug of unknown cause |
-| 2 | Mockup | `mockup` (Sonnet, medium) | Only when the spec's UI brief isn't `none`; revised with the architect |
-| 3 | Build | `implement` (Sonnet, medium) | Tests first, code, local checks, commits (never pushes) |
-| 4 | Checks | `verify` (Sonnet) | fmt, clippy, tests, deny, Gradle; stamps the code fingerprint on pass |
-| 5 | Review | `reviewer` (Sonnet, high) | Diff against spec, CLAUDE.md, security |
-| 6 | QA | `qa` (Haiku, medium) | Acceptance criteria, golden routes and benchmark, phone test list |
-| 7 | Docs | `documenter` (Haiku, medium) | ADR ticks, PRD, Notion Milestones, decisions log, handoff Done |
+| 1 | Design | `architect` (Opus, high) | Spec page in Notion with slices, ADR when architectural, root cause for a bug of unknown cause |
+| 2 | Mockup | `mockup` (Sonnet, medium) | Only when the UI brief isn't `none`; also takes the rider's wording and layout revisions |
+| 3 | Build | `implement` (Sonnet, medium) | Tests first, code, commits, runs `verify.sh` and fixes what fails (never pushes) |
+| 4 | Review and QA | `reviewer` (Sonnet, high) | Diff against spec, CLAUDE.md, security; every acceptance criterion with evidence; phone test list |
+| 5 | Docs | `documenter` (Haiku, medium) | ADR ticks, PRD, Notion Milestones, decisions log, handoff Done |
 
 Helpers any stage may use: `search` (Haiku), `ci` (Haiku), `notion` (Haiku).
+
+The local checks are not an agent: `.claude/scripts/verify.sh` runs the
+checks the change needs (fmt, clippy, tests, deny, the Android build,
+script and guard tests) with CI's versions and prints one line per check.
+Only it writes the stamp the pre-push hook requires, and only when all
+passed. `setup-env.sh` beside it installs the toolchains once. The
+golden routes and the benchmark run in CI on every build; locally only
+the implementer runs the golden routes, for a scoring change (the
+before/after table CLAUDE.md asks for).
 
 ## Spec
 
 The spec lives in Notion as a child page `Spec: <slug>` of the Handoff
 page (written by the architect; sections are in its prompt). Agents get
 the **URL**, never the spec text: they fetch it themselves, so the main
-session never holds it. ADRs stay in the repo.
+session never holds it. When the change has an ADR, the ADR holds the
+design and the spec only links it: one source, read once.
 
-## Tiers: route by risk
+## Tiers and slices: route by risk
 
-The architect sets `RISK` in the spec; the orchestrator picks the models
+The architect sets `RISK` per slice; the orchestrator picks the models
 from it (the Agent tool's `model` argument; effort is the agent's own).
 
 | Risk | Examples | Architect | Implement | Review |
 |---|---|---|---|---|
 | `low` | strings, renames, copy, small layout tweaks, doc fixes | skipped: the orchestrator writes a 5-line spec page itself | Haiku | Sonnet |
-| `normal` | everyday features and bug fixes with a clear cause | Opus | Sonnet | Sonnet |
+| `normal` | everyday features, Compose UI, bug fixes with a clear cause | Opus | Sonnet | Sonnet |
 | `high` | route scoring, region file or any untrusted-input parsing (backup, GPX, GeoJSON, downloads), FFI surface, schema, security, performance-sensitive code | Opus + ADR | Opus | Opus |
 
-When unsure, take the higher tier. QA, verify and documenter don't change.
-A `low` change that turns out to touch a `high` area is re-tiered.
+A change that mixes risks comes as **slices** (typically `core`: high,
+then `app`: normal). Each slice runs implement ◀▶ reviewer on its own
+tier and commit range, in the order the spec gives; the next slice starts
+when the previous one passed review. So Opus builds and reviews only the
+risky part, and the UI on top of it is Sonnet's.
+
+When unsure, take the higher tier. A `low` change that turns out to touch
+a `high` area is re-tiered.
 
 ## Entry points
 
@@ -61,24 +76,36 @@ A `low` change that turns out to touch a `high` area is re-tiered.
 - `/bugfix`: triage first. Cause known: spec with the reproducing test.
   Unknown: the architect finds it. No mockup unless the fix changes the
   screen. The first implementer commit is the failing test.
-- `/refactor`: the spec fixes what must not change. QA must show golden
-  routes and benchmark unchanged. No mockup.
+- `/refactor`: the spec fixes what must not change. CI's golden routes and
+  benchmark must show it unchanged. No mockup.
 - A chore with no design (a version bump, a doc edit) is `low`: spec page
-  in two lines, then implement, verify, review, push.
+  in two lines, then implement, review, push.
 
 ## Gates
 
 **Gate 1, design.** After the architect (and mockup, when there is UI) the
-orchestrator shows the rider: the approach in a few lines, the acceptance
-criteria, the spec link, the ADR path and the mockup link. The mockup is
-mandatory for UI changes and follows the mockup rules in CLAUDE.md. Build
-only after he says go. Comments revise the spec or mockup; repeat.
+orchestrator shows the rider: the approach in a few lines, the slices,
+the acceptance criteria, the spec link, the ADR path and the mockup link.
+The mockup is mandatory for UI changes and follows the `ui-rules` and
+`mockups` skills. Build only after he says go.
+
+His comments are routed by what they change:
+
+- **Wording, strings, layout, colours, an icon:** to the `mockup` agent
+  (page edit and republish, plus the matching UI brief edit). No architect.
+- **The approach** (what the feature does, data, a new screen, a
+  different trade-off): to the `architect`, with the comments verbatim;
+  it changes only what they touch.
+
+After he approves a design with UI, ask the `mockup` agent to move the
+page's new components into the kit (one commit).
 
 **Gate 2, result.** After documenter and push, wait for the build with the
 `ci` agent only when needed, then tell the rider: the commit id, the
 direct APK link once published and working (see CLAUDE.md), what changed
-in a few lines, QA's phone test list and anything left open. He tests; his
-feedback starts a new change.
+in a few lines, the reviewer's phone test list (added to the Checklist
+artifact) and anything left open. He tests; his feedback starts a new
+change.
 
 Between the gates nothing waits for the rider, except a `BLOCKED` report
 that needs his decision.
@@ -91,13 +118,13 @@ what blocks (last findings, what was tried) with a recommendation.
 | Loop | Limit |
 |---|---|
 | architect ◀▶ mockup (before showing the rider) | 2 rounds |
-| implement ◀▶ verify | 2 retries |
-| implement ◀▶ reviewer (`blocker`/`major` findings) | 3 rounds |
-| implement ◀▶ qa (FAIL) | 2 rounds |
-| rider revisions at Gate 1 | unlimited (his call) |
+| implement's own verify.sh fix attempts | 3 runs, then `BLOCKED` |
+| implement ◀▶ reviewer (`blocker`/`major` findings or a criterion not met), per slice | 2 rounds |
+| rider revisions at Gate 1 | unlimited (his call), routed as above |
 
-After every fix round that changes code, verify runs again (the stamp is
-for one code fingerprint) before the reviewer sees it again.
+Round 2 of a review gets only the round-1 FINDINGS and the fix commits'
+range: the reviewer checks those fixes and nothing else. The implementer
+runs verify.sh again after its fixes, before the reviewer sees them.
 
 ## Handoff format
 
@@ -111,23 +138,29 @@ SPEC: <notion url>
 SUMMARY / FINDINGS / ...: short, structured, with path:line
 ```
 
-- `FAIL` goes back to the implementer with only the `FINDINGS` lines, the
-  spec URL and the commit range. Not the whole report history.
+- `FAIL` goes back to the implementer with only the `FINDINGS` and the
+  criteria not met, the spec URL, the slice and the commit range. Not the
+  whole report history.
 - `BLOCKED` carries a question; the orchestrator answers it from the spec
   and the rider's earlier decisions, or asks the rider.
 - Never paste a stage's whole output into the next prompt; pass the URL,
-  the commit range and the findings.
-- Brief each agent fully: it starts with no context (request, tier, spec
-  URL, commit range, decisions the rider made, what to return).
+  the slice, the commit range and the findings.
+- Brief each agent fully: it starts with no context (request, tier,
+  slice, spec URL, ADR path, commit range, decisions the rider made,
+  what to return). CLAUDE.md is loaded into every agent already: don't
+  tell agents to read it, and don't paste rules from it.
 
 ## Pushing
 
-The orchestrator pushes (`git push -u origin claude/<name>`) after
-review and QA pass and the documenter's commits exist. Hooks enforce the
+The orchestrator runs `.claude/scripts/verify.sh 2>&1 | tail -40` (it
+returns at once when the implementer's run already stamped this code),
+then pushes (`git push -u origin claude/<name>`) after every slice's
+review passed and the documenter's commits exist. Hooks enforce the
 rules in `.githooks/` and `.claude/hooks/`: pushes only to `claude/*`; no
-code push without a passing `verify` stamp for exactly that code; commit
-title at most 50 characters and body wrapped at 72; no session link;
-rule files (`CLAUDE.md`, ADRs) in their own commits; SPDX headers; no
-skipping hooks; no force push except `--force-with-lease` to `claude/*`. If a hook blocks, fix the cause.
+code push without a verify.sh stamp for exactly that code (only the
+script writes it); commit title at most 50 characters and body wrapped
+at 72; no session link; rule files (`CLAUDE.md`, ADRs) in their own
+commits; SPDX headers; no skipping hooks; no force push except
+`--force-with-lease` to `claude/*`. If a hook blocks, fix the cause.
 CI's merge job merges to `main`; don't wait for it unless the rider needs
 the build.

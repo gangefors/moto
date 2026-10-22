@@ -52,8 +52,9 @@ Merge by hand (fast-forward, then push `main`) only where the jobs can't:
 
 - **Main moved on**: order of preference is fast-forward, rebase, merge.
   Rebase the branch (`git fetch origin main && git rebase origin/main`),
-  re-run verify if code changed, then `git push --force-with-lease origin
-  <branch>`; CI then fast-forwards `main`. The run shows a warning "Not
+  re-run `.claude/scripts/verify.sh` if code changed, then
+  `git push --force-with-lease origin <branch>`; CI then fast-forwards
+  `main`. The run shows a warning "Not
   merged: main has moved on". Merge `origin/main` into the branch only if
   a rebase is impossible or unwise (shared history others have checked
   out, conflicts that make a rebase unsafe).

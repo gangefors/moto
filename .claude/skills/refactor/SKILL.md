@@ -13,8 +13,9 @@ Load the `workflow` skill and run it for this refactor: `$ARGUMENTS`.
    and pass tests. Refactors that touch scoring, parsers or FFI are tier
    `high`.
 2. Gate 1: the approach and what is proven unchanged. No mockup.
-3. `implement` → `verify` → `reviewer` (checks that behaviour didn't
-   change and nothing was added) → `qa` (golden routes and benchmark must
-   be unchanged when core code moved; any difference is a FAIL) →
-   `documenter` → push, within the loop limits.
+3. `implement` (runs verify.sh; when routing or scoring code moved, it
+   also runs the golden routes before and after, and any difference is
+   `BLOCKED`) → `reviewer` (checks that behaviour didn't change and
+   nothing was added) → `documenter` → push, within the loop limits.
+   CI's benchmark must show no regression.
 4. Gate 2: report as the workflow says.

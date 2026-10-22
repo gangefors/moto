@@ -7,10 +7,18 @@ description: Build, test, lint, benchmark and golden-route commands for the moto
 
 # Commands
 
-Run the local checks with the Rust version CI uses (`RUST_VERSION` in
-`.github/workflows/android.yml`); newer clippy versions add lints. Nothing
-is pushed that fails them. Pipe long output through `tail`/`grep` so only
-the result lands in the conversation.
+**The local checks:** `.claude/scripts/verify.sh 2>&1 | tail -60`. It
+picks the checks from what changed, uses CI's pinned versions (installing
+them once through `.claude/scripts/setup-env.sh rust|android`), prints
+one line per check with only the first errors of a failure, and writes
+the stamp the pre-push hook needs when all passed. `--all` runs every
+check. Nothing is pushed that fails them. The commands below are for
+everything else, and for running one check by hand while fixing it.
+
+Run cargo with the Rust version CI uses (`RUST_VERSION` in
+`.github/workflows/android.yml`); newer clippy versions add lints. Pipe
+long output through `tail`/`grep` so only the result lands in the
+conversation.
 
 ```sh
 cd core

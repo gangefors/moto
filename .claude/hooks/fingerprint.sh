@@ -4,7 +4,7 @@
 #
 # Prints a fingerprint of the code a push would put on CI: the trees of
 # android/, core/ and .github/scripts at a commit (default HEAD). Docs
-# commits don't change it, so a passing `verify` stays valid after them.
+# commits don't change it, so a passing verify.sh stays valid after them.
 set -u
 rev=${1:-HEAD}
 for p in android core .github/scripts; do

@@ -7,7 +7,8 @@ description: How to build and revise UI mockups for the moto app as published HT
 
 # Mockups
 
-Mockups look as close to the real app as possible, never ASCII sketches:
+The `ui-rules` skill has the rules that apply. Mockups look as close to
+the real app as possible, never ASCII sketches:
 an HTML page published as an artifact, with phones at real size (360 dp
 wide) and the app's own Material 3 colours (light and dark), Roboto type
 scale, components at their real dp sizes, strings from `strings.xml` and
@@ -45,7 +46,9 @@ files: {"mockup.css": "docs/mockups/mockup.css",
   component) and fix any drift in `mockup.css` first.
 - One rendered screenshot check is enough for a small revision; render
   only the changed phone.
-- New or changed components go into `docs/mockups/mockup.css` (its own
-  commit), so the next mockup starts from them.
+- New or changed components stay in a `<style>` block in the page until
+  the rider approves the design at Gate 1; then they move into
+  `docs/mockups/mockup.css` in one commit, so the next mockup starts from
+  them. Never commit kit classes for a design that may still change.
 - Answering a mockup comment (a rename, a colour) is a small edit: change
   the page file and republish; don't rebuild the page.
