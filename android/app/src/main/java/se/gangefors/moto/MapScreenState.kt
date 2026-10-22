@@ -122,6 +122,8 @@ internal class MapScreenState(
     var proposing by mutableStateOf(false)
     var savingDraft by mutableStateOf(false)
     var editing by mutableStateOf<Section?>(null)
+    // An end pin being dragged: which, and the point it would land on.
+    var dragging by mutableStateOf<SectionMarker.End?>(null)
     // The menu, and the page it opened.
     var menuOpen by mutableStateOf(false)
     var showAbout by mutableStateOf(false)

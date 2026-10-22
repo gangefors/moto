@@ -22,7 +22,13 @@ internal fun MapScreenScope.showDraft() {
         when (val st = marker.state) {
             SectionMarker.State.Off, SectionMarker.State.PickStart -> o.draft.show(null, null, null)
             is SectionMarker.State.PickEnd -> o.draft.show(st.start, null, null)
-            is SectionMarker.State.Proposed -> o.draft.show(st.start, st.end, draft?.geometry)
+            // A pin being dragged leaves the overlay: the one under the
+            // finger stands for it (MarkHandles).
+            is SectionMarker.State.Proposed -> o.draft.show(
+                st.start.takeIf { dragging != SectionMarker.End.START },
+                st.end.takeIf { dragging != SectionMarker.End.END },
+                draft?.geometry,
+            )
         }
     }
 }
@@ -33,6 +39,7 @@ internal fun MapScreenScope.stopMarking() {
         marking = false
         draft = null
         savingDraft = false
+        dragging = null
         // The marking steps ("10 km. Tap near an end…") end with it.
         message = null
         showDraft()
@@ -200,36 +207,50 @@ internal fun MapScreenScope.onMarkTap(ready: RegionState.Ready, point: LatLng) {
                 }
                 showDraft()
             }
-            is SectionMarker.State.Proposed -> {
-                proposing = true
-                overlays?.draft?.show(st.start, st.end, draft?.geometry)
-                message = resources.getString(R.string.section_proposing)
-                val session = markSession
-                scope.launch {
-                    val result = busy.run(R.string.busy_section) {
-                        withContext(Dispatchers.Default) {
-                            runCatching {
-                                DebugTools.query("favourite draft") { ready.engine.sectionBetween(st.start.toLatLon(), st.end.toLatLon()) }
-                            }
-                        }
+            is SectionMarker.State.Proposed -> proposeBetween(ready, st.start, st.end)
+            else -> Unit
+        }
+    }
+}
+
+/**
+ * Finds the road between [start] and [end] (a tap moved an end, or a pin
+ * was dragged there) and shows it as the draft. One the core can't find
+ * puts the ends back as they were, with a notice.
+ */
+internal fun MapScreenScope.proposeBetween(ready: RegionState.Ready, start: LatLng, end: LatLng) {
+    with(state) {
+        proposing = true
+        overlays?.draft?.show(start, end, draft?.geometry)
+        message = resources.getString(R.string.section_proposing)
+        val session = markSession
+        scope.launch {
+            val result = busy.run(R.string.busy_section) {
+                withContext(Dispatchers.Default) {
+                    runCatching {
+                        DebugTools.query("favourite draft") { ready.engine.sectionBetween(start.toLatLon(), end.toLatLon()) }
                     }
-                    proposing = false
-                    if (!marking || session != markSession) return@launch
-                    result.fold(
-                        onSuccess = { d ->
-                            draft = d
-                            message = draftMessage(d)
-                        },
-                        onFailure = { e ->
-                            marker.rejectLast()
-                            message = resources.getString(R.string.section_pick_end)
-                            notify(coreErrorMessage(resources, e), long = true)
-                        },
-                    )
-                    showDraft()
                 }
             }
-            else -> Unit
+            proposing = false
+            if (!marking || session != markSession) return@launch
+            result.fold(
+                onSuccess = { d ->
+                    draft = d
+                    message = draftMessage(d)
+                },
+                onFailure = { e ->
+                    marker.rejectLast()
+                    val kept = draft
+                    message = if (kept != null && marker.state is SectionMarker.State.Proposed) {
+                        draftMessage(kept)
+                    } else {
+                        resources.getString(R.string.section_pick_end)
+                    }
+                    notify(coreErrorMessage(resources, e), long = true)
+                },
+            )
+            showDraft()
         }
     }
 }

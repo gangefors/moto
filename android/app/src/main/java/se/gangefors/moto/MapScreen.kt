@@ -250,6 +250,8 @@ fun MapScreen() {
 
             Box(Modifier.fillMaxSize().onSizeChanged { mapSize = it }) {
                 AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+                // The marked stretch's end pins, to drag (ADR-0018).
+                MarkHandles(screen)
                 // Theme-coloured scrim keeps the navigation bar icons readable over any
                 // part of the map; the icons follow the same theme (MainActivity). The
                 // status bar has no scrim: its icons switch to contrast with the map

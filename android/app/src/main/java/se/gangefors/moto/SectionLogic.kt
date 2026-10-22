@@ -83,6 +83,20 @@ class SectionMarker<P>(private val distance: (P, P) -> Double) {
         return state
     }
 
+    /** Which end of a proposal a pin is. */
+    enum class End { START, END }
+
+    /**
+     * Moves [end] of a proposal to [point] (a pin dragged there) and
+     * returns the new state: a [State.Proposed] to propose again. Only a
+     * proposal changes; [rejectLast] undoes it as it does a tap.
+     */
+    fun moveEnd(end: End, point: P): State<P> {
+        val s = state as? State.Proposed ?: return state
+        moveTo(if (end == End.START) State.Proposed(point, s.end) else State.Proposed(s.start, point))
+        return state
+    }
+
     /** Undoes the last tap, whose point the core could not use. */
     fun rejectLast() {
         state = previous

@@ -276,4 +276,20 @@ class SectionLogicTest {
         assertEquals(line to false, shownSectionLine(line, oneWay = true, preview = false to false))
         assertEquals(line to true, shownSectionLine(line, oneWay = false, preview = true to false))
     }
+
+    @Test
+    fun endsMoveOnlyInAProposal() {
+        val m = marker()
+        assertEquals(State.Off, m.moveEnd(SectionMarker.End.START, 1.0))
+        m.begin()
+        assertEquals(State.PickStart, m.moveEnd(SectionMarker.End.END, 1.0))
+        m.propose(0.0, 10.0)
+        assertEquals(State.Proposed(-2.0, 10.0), m.moveEnd(SectionMarker.End.START, -2.0))
+        assertEquals(State.Proposed(-2.0, 14.0), m.moveEnd(SectionMarker.End.END, 14.0))
+        // The core couldn't use it: back as before.
+        m.rejectLast()
+        assertEquals(State.Proposed(-2.0, 10.0), m.state)
+        // The start pin stays the start, whichever is nearer.
+        assertEquals(State.Proposed(11.0, 10.0), m.moveEnd(SectionMarker.End.START, 11.0))
+    }
 }
