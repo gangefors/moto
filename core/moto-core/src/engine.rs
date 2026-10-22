@@ -167,6 +167,21 @@ impl Engine {
         opts: &RouteOptions,
         overlay: &Favourites,
     ) -> Result<Route, CoreError> {
+        self.fastest_on(from, to, opts, &overlay.surface_only())
+    }
+
+    /// [`Self::fastest_route`] on `surface`, an overlay that is already
+    /// surface-only (corrections, no favourites; see
+    /// [`Favourites::surface_only`]), so a caller routing many targets
+    /// builds it once.
+    pub(crate) fn fastest_on(
+        &self,
+        from: LatLon,
+        to: LatLon,
+        opts: &RouteOptions,
+        surface: &Favourites,
+    ) -> Result<Route, CoreError> {
+        debug_assert!(surface.is_empty(), "the overlay must be surface-only");
         let fastest = RouteOptions {
             curvy: false,
             // Preferring gravel is a pull; the fastest route only allows it.
@@ -176,7 +191,7 @@ impl Engine {
             },
             ..opts.clone()
         };
-        self.route_with(from, to, &fastest, &overlay.surface_only())
+        self.route_with(from, to, &fastest, surface)
     }
 
     /// Route from `from` to `to` over as much of the rider's `favourites`

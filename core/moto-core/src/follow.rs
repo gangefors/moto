@@ -745,8 +745,10 @@ impl Engine {
         } else {
             0.0
         };
+        // Once per rejoin, not per target: it copies the corrections.
+        let surface = overlay.surface_only();
         let ways = crate::par::map(&targets, |&m| {
-            self.fastest_route(position, follower.point_at(m), opts, overlay)
+            self.fastest_on(position, follower.point_at(m), opts, &surface)
                 .map(|r| (m, r))
         });
         let cost = |m: f64, r: &Route| r.duration_s + (m - base) * per_m;

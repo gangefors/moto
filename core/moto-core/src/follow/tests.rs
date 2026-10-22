@@ -717,6 +717,86 @@ mod rejoin {
     }
 
     #[test]
+    fn several_targets_with_a_correction_go_as_before() {
+        use crate::region::format::Surface;
+        let e = engine();
+        let (f, here) = off_at_column_5(&e);
+        let opts = RouteOptions::default();
+        // The targets, as rejoin_with builds them.
+        let total = f.total_m();
+        let base = f.along_m();
+        let mut targets: Vec<f64> = REJOIN_AHEAD_M
+            .iter()
+            .map(|o| (base + o).min(total))
+            .collect();
+        targets.dedup();
+        assert!(targets.len() >= 3, "{targets:?}");
+        // Column 5 north of the crossing is gravel by correction, and an
+        // epic favourite lies elsewhere (it must not count).
+        let corrected = e.section_between(at(3, 5), at(2, 5)).unwrap();
+        let fav_draft = e.section_between(at(8, 8), at(8, 10)).unwrap();
+        let fav = crate::section::Section {
+            surface: None,
+            id: 1,
+            rider_id: crate::section::LOCAL_RIDER.into(),
+            name: String::new(),
+            rating: crate::section::Rating::Epic,
+            direction: crate::section::Direction::Both,
+            source: crate::section::Source::Map,
+            status: crate::section::Status::Ok,
+            created_at: 0,
+            updated_at: 0,
+            ways: fav_draft.ways.clone(),
+            geometry: fav_draft.geometry.clone(),
+        };
+        let overlay = crate::Favourites::build_all(
+            &e,
+            &[fav],
+            &[],
+            &[crate::surface::tests::correction(
+                1,
+                Surface::Gravel,
+                &corrected,
+                1,
+            )],
+        );
+        let none = crate::Favourites::none();
+        let ways_with = |o: &crate::Favourites| -> Vec<Route> {
+            targets
+                .iter()
+                .map(|&m| e.fastest_route(here, f.point_at(m), &opts, o).unwrap())
+                .collect()
+        };
+        assert_ne!(
+            ways_with(&overlay),
+            ways_with(&none),
+            "the correction is not in play"
+        );
+        // (a) The best way back by the per-target path, first wins ties.
+        let per_m = f.duration_s() / total;
+        let ways = ways_with(&overlay);
+        let mut best = 0;
+        for (i, (&m, r)) in targets.iter().zip(&ways).enumerate() {
+            let cost = |m: f64, r: &Route| r.duration_s + (m - base) * per_m;
+            if cost(m, r) < cost(targets[best], &ways[best]) {
+                best = i;
+            }
+        }
+        for bearing in [None, Some(0.0), Some(180.0)] {
+            let back = e.rejoin_with(here, bearing, &f, &opts, &overlay).unwrap();
+            assert_eq!(back.route, ways[best]);
+            assert_eq!(back.to_along_m.to_bits(), targets[best].to_bits());
+            let behind = bearing.is_some_and(|b| starts_behind(&ways[best].geometry, b));
+            assert_eq!(back.turn_round, behind);
+        }
+        // (b) Pinned figures, recorded before the change.
+        let back = e.rejoin_with(here, None, &f, &opts, &overlay).unwrap();
+        assert_eq!(back.to_along_m.to_bits(), 0x40af_50f4_8b9c_8845);
+        assert_eq!(back.route.duration_s.to_bits(), 0x4047_24d5_640f_660f);
+        assert_eq!(back.route.distance_m.to_bits(), 0x408c_2051_8d28_0c06);
+    }
+
+    #[test]
     fn bad_input_is_refused() {
         let e = engine();
         let (f, here) = off_at_column_5(&e);
