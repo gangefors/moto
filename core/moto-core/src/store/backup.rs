@@ -8,6 +8,8 @@
 
 use rusqlite::{Transaction, params};
 
+use std::collections::HashSet;
+
 use super::surface::insert_correction;
 use super::tracks::insert_points;
 use super::{Store, db_err, e7, encode_geometry, insert_section_at};
@@ -21,6 +23,18 @@ use crate::track::{MAX_TRACK_POINTS, TrackPoint, ridden_distance_m};
 /// Latest time a backup may give, in seconds since the Unix epoch (the
 /// start of 2100), so nothing absurd lands in the database.
 const MAX_TIME_S: i64 = 4_102_444_800;
+
+/// A surface correction as a restore tells duplicates apart: its surface
+/// code and its line as stored (1e-7° fixed point).
+pub type CorrectionKey = (i64, Vec<u8>);
+
+/// The [`CorrectionKey`] of a correction of `surface` along `geometry`.
+pub fn correction_key(
+    surface: crate::region::format::Surface,
+    geometry: &[crate::LatLon],
+) -> CorrectionKey {
+    (surface as i64, encode_geometry(geometry))
+}
 
 /// A restore in progress. Dropping it without [`Restore::commit`] undoes
 /// everything it added.
@@ -61,21 +75,19 @@ impl Store {
         Ok(lines.contains(&want))
     }
 
-    /// Whether a surface correction of `surface` with exactly the line
-    /// `geometry` (to 1e-7 degrees) is saved, whatever its status.
-    pub fn same_correction(
-        &self,
-        surface: crate::region::format::Surface,
-        geometry: &[crate::LatLon],
-    ) -> Result<bool, CoreError> {
-        self.conn
-            .query_row(
-                "SELECT EXISTS (SELECT 1 FROM surface_corrections
-                    WHERE surface = ?1 AND geometry = ?2)",
-                params![surface as i64, encode_geometry(geometry)],
-                |r| r.get::<_, bool>(0),
-            )
-            .map_err(db_err)
+    /// The surface and stored line of every saved surface correction,
+    /// whatever its status, read once for a restore's duplicate check.
+    pub fn correction_keys(&self) -> Result<HashSet<CorrectionKey>, CoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT surface, geometry FROM surface_corrections")
+            .map_err(db_err)?;
+        let keys = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?)))
+            .map_err(db_err)?
+            .collect::<Result<HashSet<_>, _>>()
+            .map_err(db_err)?;
+        Ok(keys)
     }
 
     /// Whether a tag at `time_ms` and `position` (to 1e-7 degrees) is saved.

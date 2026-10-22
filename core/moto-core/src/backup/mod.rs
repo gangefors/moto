@@ -855,14 +855,22 @@ pub fn restore_backup(
     // Surface corrections: the one already there when it has the same
     // surface and line (also one added earlier from this file). The rest
     // wait to be fitted to the map, keeping their times.
+    // What is saved is read once (no query per correction); the file's
+    // own repeats count as already there too.
+    let mut have = store.correction_keys()?;
+    let mut fresh = Vec::new();
     for c in &corrections {
-        if store.same_correction(c.correction.surface, &c.correction.geometry)? {
+        if !have.insert(crate::store::correction_key(
+            c.correction.surface,
+            &c.correction.geometry,
+        )) {
             report.surface_skipped += 1;
             continue;
         }
-        restore.add_corrections(&[(c.correction.clone(), c.created_at, c.updated_at)])?;
-        report.surface_added += 1;
+        fresh.extend([(c.correction.clone(), c.created_at, c.updated_at)]);
     }
+    restore.add_corrections(&fresh)?;
+    report.surface_added = fresh.len() as u64;
 
     // Rides: the ride already there when it has the same fixes.
     let mut track_of_ride = HashMap::new();

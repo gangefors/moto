@@ -659,7 +659,7 @@ fn decode_line(bytes: &[u8], max: usize) -> Option<Vec<LatLon>> {
 }
 
 mod backup;
-pub use backup::Restore;
+pub use backup::{CorrectionKey, Restore, correction_key};
 mod exchange;
 mod followed;
 pub use followed::FollowedRoute;
