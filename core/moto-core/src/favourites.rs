@@ -632,6 +632,12 @@ impl Favourites {
         }
     }
 
+    /// Whether the rider's surface corrections change any edge.
+    #[inline]
+    pub(crate) fn has_corrections(&self) -> bool {
+        !self.surface_marked.is_empty()
+    }
+
     /// How many edges the rider's surface corrections change.
     pub fn corrected_edge_count(&self) -> usize {
         self.surface.len()

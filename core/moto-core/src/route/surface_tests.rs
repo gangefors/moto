@@ -340,3 +340,41 @@ fn the_fastest_route_goes_by_the_corrected_surface_alone() {
         e.route(FROM, TO, &o).unwrap()
     );
 }
+
+#[test]
+fn without_corrections_the_edge_cost_takes_the_map_path() {
+    // The fast path: no corrected edge, the old cost; with corrections,
+    // edges they don't touch cost exactly the same.
+    let e = engine(shaped_ladder(Surface::Gravel, 30));
+    let none = Favourites::none();
+    let same = overlay(&e, &[correction(1, Surface::Gravel, &north_draft(0, 8), 1)]);
+    let some = overlay(&e, &[correction(1, Surface::Paved, &north_draft(0, 4), 1)]);
+    for (g, curvy) in [
+        (Gravel::Avoid, false),
+        (Gravel::Prefer, true),
+        (Gravel::Allow, true),
+    ] {
+        let o = options(g, curvy);
+        let off = Off::of(&o);
+        let plain = Fun::new(e.net(), &none, &o);
+        assert!(!plain.corrected);
+        assert!(
+            !Fun::new(e.net(), &same, &o).corrected,
+            "a correction that changes nothing"
+        );
+        let fun = Fun::new(e.net(), &some, &o);
+        assert!(fun.corrected);
+        for id in 0..e.net().edge_count() as u32 {
+            let edge = e.net().edge(id);
+            let untouched = !(e.net().way_ref(id).way_id == 1
+                && e.net().way_ref(id).from_idx.max(e.net().way_ref(id).to_idx) <= 4);
+            for pull in [0.0, 0.5, 1.0] {
+                let a = Cost::Favoured(off, plain, pull).edge(id, &edge);
+                let b = Cost::Favoured(off, fun, pull).edge(id, &edge);
+                if untouched {
+                    assert_eq!(a.to_bits(), b.to_bits(), "edge {id} {g:?} {pull}");
+                }
+            }
+        }
+    }
+}

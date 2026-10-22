@@ -81,11 +81,17 @@ fn avoid_extra(off: &Off, fun: &Fun, id: u32, e: &Edge) -> f64 {
     // Avoided gravel costs by the unpaved share of the edge (ADR-0018):
     // all of it the full penalty, as for any wholly unpaved road.
     if off.unpaved {
-        let share = fun.favourites.unpaved_share(id, e);
-        if share >= 1.0 {
-            factor = PARAMS.avoid_penalty;
-        } else if share > 0.0 {
-            factor = factor.max(1.0 + share * (PARAMS.avoid_penalty - 1.0));
+        if !fun.corrected {
+            if is_unpaved(e) {
+                factor = PARAMS.avoid_penalty;
+            }
+        } else {
+            let share = fun.favourites.unpaved_share(id, e);
+            if share >= 1.0 {
+                factor = PARAMS.avoid_penalty;
+            } else if share > 0.0 {
+                factor = factor.max(1.0 + share * (PARAMS.avoid_penalty - 1.0));
+            }
         }
     }
     if off.avoid.tolls && is_toll(e) {
@@ -117,6 +123,10 @@ pub(crate) struct Fun<'a> {
     unridden: bool,
     /// The kinds of road the rider avoids.
     avoid: crate::Avoid,
+    /// The overlay changes some edge's surface (ADR-0018). Without, every
+    /// unpaved test is the map's, as before corrections: one flag, read
+    /// once per search, keeps the edge cost on its old path.
+    corrected: bool,
 }
 
 impl<'a> Fun<'a> {
@@ -130,6 +140,17 @@ impl<'a> Fun<'a> {
             shun: opts.favourites == FavouritesMode::Avoid,
             unridden: opts.unridden == crate::UnriddenMode::Prefer,
             avoid: opts.avoid,
+            corrected: favourites.has_corrections(),
+        }
+    }
+
+    /// Whether edge `id` (`e`) counts as unpaved for yes-or-no rules.
+    #[inline(always)]
+    fn unpaved_at(&self, id: u32, e: &Edge) -> bool {
+        if self.corrected {
+            self.favourites.is_unpaved_at(id, e)
+        } else {
+            is_unpaved(e)
         }
     }
 
@@ -148,7 +169,7 @@ impl<'a> Fun<'a> {
     /// nor on gravel while gravel is avoided (the map hides those sections
     /// then too).
     fn favourite_counts(&self, id: u32, e: &Edge) -> bool {
-        !self.shun && !(self.no_gravel && self.favourites.is_unpaved_at(id, e))
+        !self.shun && !(self.no_gravel && self.unpaved_at(id, e))
     }
 
     /// The rider's overlay this search goes by.
@@ -232,6 +253,13 @@ impl<'a> Fun<'a> {
         if !self.gravel {
             return 0.0;
         }
+        if !self.corrected {
+            return if is_unpaved(e) {
+                PARAMS.gravel_weight
+            } else {
+                0.0
+            };
+        }
         let share = self.favourites.unpaved_share(id, e);
         if share >= 1.0 {
             PARAMS.gravel_weight
@@ -253,9 +281,7 @@ impl<'a> Fun<'a> {
             PARAMS.fast_penalty
         } else if e.speed_kmh >= PARAMS.brisk_kmh {
             PARAMS.brisk_penalty
-        } else if e.speed_kmh <= PARAMS.slow_kmh
-            && !(self.gravel && self.favourites.is_unpaved_at(id, e))
-        {
+        } else if e.speed_kmh <= PARAMS.slow_kmh && !(self.gravel && self.unpaved_at(id, e)) {
             PARAMS.slow_penalty
         } else {
             1.0
