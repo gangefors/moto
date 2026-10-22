@@ -56,11 +56,32 @@ class SurfaceLogicTest {
     }
 
     @Test
+    fun changingAFavouritesEndsStartsFromItsOwnLine() {
+        assertEquals(ways to line, reshapeStart(section()))
+        assertNull(reshapeStart(section(SectionStatus.UNMATCHED)))
+        assertNull(reshapeStart(section(SectionStatus.NEEDS_REMATCH)))
+        val choice = SectionChoice(Rating.EPIC, true, "x")
+        assertEquals(section() to choice, reshapeBack(Reshape(section(), choice)))
+    }
+
+    @Test
     fun thePlanSheetStepsAsideWhileMarking() {
         assertTrue(planSheetShown(planning = true, marking = false))
         assertFalse(planSheetShown(planning = true, marking = true))
         assertFalse(planSheetShown(planning = false, marking = false))
         assertFalse(planSheetShown(planning = false, marking = true))
+    }
+
+    @Test
+    fun backWhileChangingAFavouritesEndsGoesBackToItsSheet() {
+        val none = BooleanArray(10)
+        fun step(marking: Boolean, reshaping: Boolean) = backStep(
+            marking, none[0], none[1], none[2], none[3], none[4], none[5], none[6], none[7], none[8], none[9],
+            reshaping = reshaping,
+        )
+        assertEquals(BackStep.RESHAPE, step(marking = true, reshaping = true))
+        assertEquals(BackStep.MARK, step(marking = true, reshaping = false))
+        assertNull(step(marking = false, reshaping = true))
     }
 
     @Test
@@ -103,7 +124,7 @@ class SurfaceLogicTest {
 
     @Test
     fun theNewStringsSayFavouriteSectionsNotSectionAlone() {
-        for (name in listOf("surface_proposed", "surface_saved", "surface_corrected", "section_proposed", "backup_text")) {
+        for (name in listOf("surface_proposed", "surface_saved", "surface_corrected", "section_reshape", "section_proposed", "backup_text")) {
             val text = string(name).lowercase()
             val alone = Regex("""\bsections?\b""").findAll(text).count()
             val favourite = Regex("""favourite sections?\b""").findAll(text).count()

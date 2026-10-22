@@ -334,9 +334,11 @@ fun MapScreen() {
                 fun currentBackStep() = backStep(
                     marking, addingVia, selectedVia != null, roadInfo != null, favouriteInfoId != null, routeEnds != null,
                     loopStart != null, startPicked != null, shownSaved != null, shownSectionId != null, shownRide != null,
+                    reshaping = reshaping != null,
                 )
                 BackHandler(enabled = currentBackStep() != null) {
                     when (currentBackStep()) {
+                        BackStep.RESHAPE -> reshapeCancel()
                         BackStep.MARK -> markBack()
                         BackStep.VIA_PICK -> {
                             addingVia = false

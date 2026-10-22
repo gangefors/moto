@@ -284,9 +284,13 @@ internal fun MapScreenScope.saveRoute(r: Route, isLoop: Boolean, name: String) {
 internal fun MapScreenScope.cancelTask() {
     with(state) {
         when {
-            marking -> if (reviewTag != null) endReview(null) else {
-                stopMarking()
-                message = null
+            marking -> when {
+                reviewTag != null -> endReview(null)
+                reshaping != null -> reshapeCancel()
+                else -> {
+                    stopMarking()
+                    message = null
+                }
             }
             addingVia -> {
                 addingVia = false

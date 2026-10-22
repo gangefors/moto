@@ -10,6 +10,7 @@ import org.maplibre.android.geometry.LatLng
 import se.gangefors.moto.core.FavouriteSurface
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.NewSurfaceCorrection
+import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.SectionUpdate
 import se.gangefors.moto.core.SurfaceCorrection
@@ -48,6 +49,7 @@ internal fun MapScreenScope.stopMarking() {
         surfaceChoice = null
         replacingCorrection = null
         dragging = null
+        reshaping = null
         // The marking steps ("10 km. Tap near an end…") end with it.
         message = null
         showDraft()
@@ -372,12 +374,79 @@ internal fun MapScreenScope.clearFavouriteSurface(sectionId: Long) {
     changeSections(null) { st -> st.update(sectionId, SectionUpdate(name = null, rating = null, direction = null, reverse = false, surface = FavouriteSurface.MAP)) }
 }
 
+/**
+ * "Change start and end" in a favourite's edit sheet: the sheet closes,
+ * keeping its choices, and the favourite's line (the one already moved
+ * to, if any; marked afresh between its ends when it no longer fits)
+ * is proposed with its pins, to drag or tap.
+ */
+internal fun MapScreenScope.startReshape(section: Section, choice: SectionChoice) {
+    with(state) {
+        val ready = region as? RegionState.Ready
+        if (ready == null) {
+            notify(regionStatus(resources, region), long = true)
+            return
+        }
+        editing = null
+        stopMarking()
+        reshaping = Reshape(section, choice)
+        marking = true
+        markKind = MarkKind.FAVOURITE
+        markSession++
+        val pending = reshapedLine
+        val line = pending?.let { it.ways to it.geometry } ?: reshapeStart(section)
+        if (line != null) {
+            proposeDraft(SectionDraft(line.first, line.second, lengthM(line.second)))
+        } else {
+            val first = section.geometry.first()
+            val last = section.geometry.last()
+            val start = LatLng(first.lat, first.lon)
+            val end = LatLng(last.lat, last.lon)
+            marker.propose(start, end)
+            showOnMap(listOf(section.geometry), always = true, minSpanM = TAG_REVIEW_SPAN_M)
+            proposeBetween(ready, start, end)
+        }
+    }
+}
+
+/** Save… while changing a favourite's start and end: back to its edit
+ * sheet, with the new line pending and the choices kept. */
+internal fun MapScreenScope.finishReshape() {
+    with(state) {
+        val r = reshaping ?: return
+        val d = draft ?: return
+        reshapedLine = d
+        reshaping = null
+        stopMarking()
+        val (section, choice) = reshapeBack(r)
+        editChoice = choice
+        editing = section
+    }
+}
+
+/** X or Back while changing a favourite's start and end: back to its
+ * edit sheet as it was, the choices kept. */
+internal fun MapScreenScope.reshapeCancel() {
+    with(state) {
+        val r = reshaping ?: return
+        reshaping = null
+        stopMarking()
+        val (section, choice) = reshapeBack(r)
+        editChoice = choice
+        editing = section
+    }
+}
+
 /** Back while marking: the last point placed goes, or marking (or the
  * tag review) stops when nothing is placed. */
 internal fun MapScreenScope.markBack() {
     with(state) {
         if (reviewTag != null) {
             endReview(null)
+            return
+        }
+        if (reshaping != null) {
+            reshapeCancel()
             return
         }
         // A surface correction: Back cancels it, as in tag review.

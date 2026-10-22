@@ -405,46 +405,72 @@ internal fun MapScreenScope.MapDialogs() {
             delay(EDIT_FIT_SETTLE_MS)
             showOnMap(listOf(section.geometry), always = true)
         }
+        // The edit sheet's pending new line (Change start and end): the
+        // shown favourite's own line is replaced by it (MapShown); one
+        // edited from elsewhere has it drawn as a draft.
+        LaunchedEffect(editing?.id, reshapedLine, shownSectionId, favouriteInfoId) {
+            val line = reshapedLine
+            val shown = editing?.id != null && editing?.id == (shownSectionId ?: favouriteInfoId)
+            if (editing != null && line != null && !shown) overlays?.draft?.show(null, null, line.geometry)
+            else if (!marking) overlays?.draft?.show(null, null, null)
+        }
         editing?.let { section ->
-            SectionSheet(
-                title = stringResource(R.string.section_edit_title, sectionKm(lengthM(section.geometry))),
-                initial = SectionChoice(section.rating, isOneWay(section.direction), riderName(section.name) ?: ""),
-                suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
-                onDismiss = {
-                    editing = null
-                    editPreview = null
-                },
-                canReverse = true,
-                onPreview = { oneWay, turn -> editPreview = oneWay to turn },
-                onTop = { editTop = it },
-                onSave = { choice ->
-                    editing = null
-                    changeSections(resources.getString(R.string.section_updated)) { st ->
-                        st.update(
-                            section.id,
-                            SectionUpdate(
-                                name = nameUpdate(section.name, choice.name),
-                                rating = choice.rating,
-                                direction = directionOf(choice.oneWay),
-                                reverse = choice.reverse,
-                            ),
-                        )
-                    }
-                },
-                onDelete = {
-                    editing = null
-                    if (shownSectionId == section.id) hideSection()
-                    changeSections(null) { st ->
-                        st.delete(section.id)
-                    }
-                    // Shown from the Sections page: back to it, as it was.
-                    pageAfterDelete(shownFromPage, section.id)?.let {
-                        sectionFilter = it
-                        dataPage = DataPage.SECTIONS
-                    }
-                    shownFromPage = null
-                },
-            )
+            val newLine = reshapedLine
+            // Its key: a sheet reopened after Change start and end starts
+            // on the choices kept, not the saved ones.
+            androidx.compose.runtime.key(section.id, editChoice) {
+                SectionSheet(
+                    title = stringResource(R.string.section_edit_title, sectionKm(newLine?.distanceM ?: lengthM(section.geometry))),
+                    initial = editChoice ?: SectionChoice(
+                        section.rating,
+                        isOneWay(section.direction),
+                        riderName(section.name) ?: "",
+                    ),
+                    suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
+                    onDismiss = {
+                        editing = null
+                        editPreview = null
+                        editChoice = null
+                        reshapedLine = null
+                    },
+                    canReverse = true,
+                    onPreview = { oneWay, turn -> editPreview = oneWay to turn },
+                    onTop = { editTop = it },
+                    onReshape = { choice -> startReshape(section, choice) },
+                    onSave = { choice ->
+                        editing = null
+                        editChoice = null
+                        reshapedLine = null
+                        changeSections(resources.getString(R.string.section_updated)) { st ->
+                            st.update(
+                                section.id,
+                                SectionUpdate(
+                                    name = nameUpdate(section.name, choice.name),
+                                    rating = choice.rating,
+                                    direction = directionOf(choice.oneWay),
+                                    reverse = choice.reverse,
+                                    line = newLine,
+                                ),
+                            )
+                        }
+                    },
+                    onDelete = {
+                        editing = null
+                        editChoice = null
+                        reshapedLine = null
+                        if (shownSectionId == section.id) hideSection()
+                        changeSections(null) { st ->
+                            st.delete(section.id)
+                        }
+                        // Shown from the Sections page: back to it, as it was.
+                        pageAfterDelete(shownFromPage, section.id)?.let {
+                            sectionFilter = it
+                            dataPage = DataPage.SECTIONS
+                        }
+                        shownFromPage = null
+                    },
+                )
+            }
         }
     }
 }

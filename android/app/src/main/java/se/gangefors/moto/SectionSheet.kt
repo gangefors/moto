@@ -20,6 +20,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldLabelPosition
@@ -53,7 +54,12 @@ import androidx.compose.runtime.LaunchedEffect
 import se.gangefors.moto.core.Rating
 
 /** What the rider chose in the section sheet. */
-data class SectionChoice(val rating: Rating, val oneWay: Boolean, val name: String = "", val reverse: Boolean = false)
+data class SectionChoice(
+    val rating: Rating,
+    val oneWay: Boolean,
+    val name: String = "",
+    val reverse: Boolean = false,
+)
 
 /**
  * A bottom sheet to rate a section and set its direction: for a new one
@@ -80,6 +86,7 @@ fun SectionSheet(
     canReverse: Boolean = false,
     onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit = { _, _ -> },
     onTop: (Int) -> Unit = {},
+    onReshape: ((SectionChoice) -> Unit)? = null,
 ) {
     // A text field state (kept over rotation), for the field's label on
     // the border; the name is what it holds.
@@ -87,7 +94,8 @@ fun SectionSheet(
     val name = nameState.text.toString()
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
-    var reverse by remember { mutableStateOf(false) }
+    var reverse by remember { mutableStateOf(initial.reverse) }
+    fun choice() = SectionChoice(rating, oneWay, name, reverse = oneWay && reverse)
     LaunchedEffect(oneWay, reverse) { onPreview(oneWay, oneWay && reverse) }
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
@@ -186,6 +194,12 @@ fun SectionSheet(
                         }
                         Switch(checked = oneWay, onCheckedChange = null)
                     }
+                    // A saved favourite: its start and end (ADR-0018).
+                    if (onReshape != null) {
+                        OutlinedButton(onClick = { onReshape(choice()) }, modifier = Modifier.padding(top = 12.dp)) {
+                            OneLine(stringResource(R.string.section_reshape))
+                        }
+                    }
                 }
                 // The bin (a saved section) on the left, Save on the right.
                 Row(
@@ -200,7 +214,7 @@ fun SectionSheet(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    Button(onClick = { onSave(SectionChoice(rating, oneWay, name, reverse = oneWay && reverse)) }) {
+                    Button(onClick = { onSave(choice()) }) {
                         OneLine(stringResource(R.string.section_save))
                     }
                 }

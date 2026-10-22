@@ -292,7 +292,7 @@ fun compassUnderRideCard(rideMode: Boolean, landscape: Boolean): Boolean = rideM
 fun planSheetShown(planning: Boolean, marking: Boolean): Boolean = planning && !marking
 
 /** What Back closes on the map screen, in the order it closes them. */
-enum class BackStep { MARK, VIA_PICK, VIA_SELECTED, ROAD, FAVOURITE, ROUTE, LOOP, START, SAVED_ROUTE, SECTION, RIDE }
+enum class BackStep { RESHAPE, MARK, VIA_PICK, VIA_SELECTED, ROAD, FAVOURITE, ROUTE, LOOP, START, SAVED_ROUTE, SECTION, RIDE }
 
 /**
  * What Back closes first: a marking step, a via pick, a selected via, a
@@ -312,7 +312,10 @@ fun backStep(
     savedRoute: Boolean,
     section: Boolean,
     ride: Boolean,
+    reshaping: Boolean = false,
 ): BackStep? = when {
+    // Changing a favourite's start and end: back to its edit sheet.
+    marking && reshaping -> BackStep.RESHAPE
     marking -> BackStep.MARK
     addingVia -> BackStep.VIA_PICK
     viaSelected -> BackStep.VIA_SELECTED

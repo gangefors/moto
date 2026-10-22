@@ -401,6 +401,7 @@
     <string name="section_pick_end">Start set. Tap where the favourite ends.</string>
     <string name="section_proposing">Finding the road…</string>
     <string name="section_proposed">%1$.1f km. Drag an end, or tap near it, to move it.</string>
+    <string name="section_reshape">Change start and end</string>
     <string name="surface_correct">Correct surface</string>
     <string name="surface_proposed">%1$.1f km. Drag the ends to where the surface changes.</string>
     <string name="surface_choice">Surface</string>

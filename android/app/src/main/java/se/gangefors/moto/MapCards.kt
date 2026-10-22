@@ -302,7 +302,9 @@ internal fun MapScreenScope.TaskCard(taskCard: Boolean, offerLoop: Boolean, via:
                                 }
                             }
                             Button(
-                                onClick = { savingDraft = true },
+                                // Changing a favourite's start and end: back to
+                                // its edit sheet, whose Save stores it.
+                                onClick = { if (reshaping != null) finishReshape() else savingDraft = true },
                                 enabled = draft != null && !proposing,
                             ) { OneLine(stringResource(R.string.section_save_ellipsis)) }
                         }

@@ -4,8 +4,12 @@
 package se.gangefors.moto
 
 import se.gangefors.moto.core.CorrectionAt
+import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionStatus
 import se.gangefors.moto.core.Surface
 import se.gangefors.moto.core.SurfaceCorrection
+import se.gangefors.moto.core.WaySpan
 
 /**
  * Surface corrections (ADR-0018), the app's side: pure logic, so it can
@@ -54,3 +58,16 @@ fun surfaceRow(correction: CorrectionAt?): SurfaceRow {
 /** The name of a correction's surface. */
 fun surfaceChoiceName(surface: Surface): Int = if (surface == Surface.GRAVEL) R.string.surface_gravel else R.string.surface_paved
 
+/** The line a favourite's "Change start and end" starts from: its own
+ * ways and line when it fits the map, else none (it is marked afresh
+ * between its ends). */
+fun reshapeStart(section: Section): Pair<List<WaySpan>, List<LatLon>>? =
+    if (section.status == SectionStatus.OK && section.geometry.size >= 2) section.ways to section.geometry else null
+
+/** A favourite's start and end being changed: the favourite, and the
+ * choices made in its edit sheet so far, kept for when it reopens. */
+data class Reshape(val section: Section, val choice: SectionChoice)
+
+/** X or Back while changing a favourite's start and end: the edit sheet
+ * again, with the old line and the choices kept. */
+fun reshapeBack(r: Reshape): Pair<Section, SectionChoice> = r.section to r.choice

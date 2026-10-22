@@ -177,13 +177,19 @@ internal fun MapScreenScope.ShownEffects() {
         // The shown section, or else the favourite whose facts are open, is
         // drawn standing out, so the rider sees which one the card is about.
         val shownForEdit = (shownSectionId ?: favouriteInfoId)?.let { id -> sections.firstOrNull { it.id == id } }
-        LaunchedEffect(overlays, shownForEdit, editPreview, darkMap) {
+        // While its start and end are changed, and back in its edit sheet
+        // until Save, the new line stands in for the saved one, with the
+        // direction preview on it.
+        val pendingLine = reshapedLine?.geometry?.takeIf { editing?.id == shownForEdit?.id }
+        val reshapingIt = reshaping?.section?.id?.let { it == shownForEdit?.id } == true
+        LaunchedEffect(overlays, shownForEdit, editPreview, darkMap, pendingLine, reshapingIt) {
             val s = shownForEdit
-            if (s == null) {
+            // While its ends are dragged, the marking draws it.
+            if (s == null || reshapingIt) {
                 overlays?.sections?.showSelected(null, null)
                 return@LaunchedEffect
             }
-            val (line, arrows) = shownSectionLine(s.geometry, isOneWay(s.direction), editPreview)
+            val (line, arrows) = shownSectionLine(pendingLine ?: s.geometry, isOneWay(s.direction), editPreview)
             val look = shownSectionLook(s.rating, fitsTheMap(s.status), darkMap)
             overlays?.sections?.showSelected(line, look, arrows)
         }

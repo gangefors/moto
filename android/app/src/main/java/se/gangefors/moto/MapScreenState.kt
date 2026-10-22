@@ -135,6 +135,12 @@ internal class MapScreenState(
     var roadCorrection by mutableStateOf<se.gangefors.moto.core.CorrectionAt?>(null)
     // The road [roadCorrection] was looked up for (the row waits for it).
     var roadCorrectionFor by mutableStateOf<RoadInfo?>(null)
+    // A favourite's start and end being changed from its edit sheet: the
+    // sheet's choices kept meanwhile, and the new line once marked (the
+    // sheet's Save stores it).
+    var reshaping by mutableStateOf<Reshape?>(null)
+    var reshapedLine by mutableStateOf<SectionDraft?>(null)
+    var editChoice by mutableStateOf<SectionChoice?>(null)
     // An end pin being dragged: which, and the point it would land on.
     var dragging by mutableStateOf<SectionMarker.End?>(null)
     // The menu, and the page it opened.
