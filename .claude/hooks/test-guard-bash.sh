@@ -46,6 +46,21 @@ t allow 'git remote -v'
 t allow 'git remote get-url origin'
 t allow 'git config --get user.name'
 t allow 'grep -rn push README.md'
+t allow '.claude/scripts/verify.sh'
+t allow '.claude/scripts/verify.sh --all 2>&1 | tail -40'
+t allow '.claude/scripts/setup-env.sh android'
+t allow '.claude/hooks/fingerprint.sh HEAD'
+
+# --- blocked: writing the verify stamp other than through verify.sh
+t block '.claude/hooks/fingerprint.sh HEAD > .git/moto-verified'
+t block '.claude/hooks/fingerprint.sh > "$(git rev-parse --git-common-dir)/moto-verified"'
+t block '.claude/hooks/fingerprint.sh | tee x'
+t block 'echo abc > .git/moto-verif*'
+t block 'cp /tmp/x "$(git rev-parse --git-common-dir)/moto-verified"'
+t block "printf %s x > .git/moto-'verified'"
+t block 'sed -i s/x/y/ .claude/scripts/verify.sh'
+t block 'echo exit 0 > .claude/scripts/verify.sh'
+t block 'rm .claude/scripts/verify.sh'
 
 # --- blocked: reviewer's blockers
 t block 'git push origin --del main'

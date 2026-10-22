@@ -17,7 +17,8 @@
 # is analysed, heredoc bodies included, except the message of the single
 # shape `[git add ... && | git status && ]git commit ... -F - <<'TAG'`.
 # Also blocked: skipping git hooks, changing git config that redirects
-# pushes or hooks, tampering with the hook files, and ref-moving calls
+# pushes or hooks, tampering with the hook files and scripts, writing the
+# verify stamp other than through verify.sh, and ref-moving calls
 # (gh pr merge, GitHub ref/merge/contents/graphql APIs, plumbing pushes).
 import re
 import sys
@@ -28,7 +29,7 @@ CHARS = r"[A-Za-z0-9 ._/@:=-]"
 COMMIT_SHAPE = re.compile(
     r"\A((?:(?:git add " + CHARS + r"+|git status) && )?git commit" + CHARS + r"* -F - <<(['\"])(\w+)\2)\n(.*)\n\3\n?\Z",
     re.S)
-PROTECTED = r"(\.githooks|\.git/hooks|\.claude/hooks|\.claude/settings\.json|\.git/config)"
+PROTECTED = r"(\.githooks|\.git/hooks|\.claude/hooks|\.claude/scripts|\.claude/settings\.json|\.git/config)"
 
 
 class Block(Exception):
@@ -116,6 +117,8 @@ def check_others(n):
             or re.search(r"\b(sed|perl|ruby)\s+(-\w*i|--in-place)", low)
             or re.search(r">>?\s*\S*" + PROTECTED, low)):
         raise Block("the hook files and settings are not changed from a session")
+    if "moto-verif" in low or ("fingerprint.sh" in low and re.search(r">|\btee\b", low)):
+        raise Block("the verify stamp is written only by .claude/scripts/verify.sh")
     if re.search(r"\bgh\b.*\bpr\b.*\bmerge\b", low):
         raise Block("pull requests are merged by CI, not from a session")
     if re.search(r"\bgh\b.*\bapi\b", low):
