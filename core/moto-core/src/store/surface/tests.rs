@@ -450,3 +450,32 @@ fn a_favourites_own_surface_is_found_before_a_standalone_one() {
         Some(CorrectionAt::Standalone(_))
     ));
 }
+
+#[test]
+fn deleting_a_favourite_leaves_no_trace_of_its_surface() {
+    use crate::section::{SectionUpdate, SurfaceSetting};
+    let mut s = store();
+    let id = s.add_section(&favourite_at(55.0), T0).unwrap().id;
+    let up = SectionUpdate {
+        surface: Some(SurfaceSetting::Gravel),
+        ..Default::default()
+    };
+    s.update_section(id, &up, T0 + 1).unwrap();
+    let at = ll(55.0001, 13.405);
+    assert!(s.surface_correction_at(at, 25.0).unwrap().is_some());
+    assert!(s.delete_section(id).unwrap());
+    // Not found at its road, not stored anywhere, and no standalone
+    // correction was made of it.
+    assert_eq!(s.surface_correction_at(at, 25.0).unwrap(), None);
+    let with_surface: i64 = s
+        .conn
+        .query_row(
+            "SELECT count(*) FROM sections WHERE surface IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(with_surface, 0);
+    assert!(s.surface_corrections().unwrap().is_empty());
+    assert!(s.list_sections(None).unwrap().is_empty());
+}
