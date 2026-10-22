@@ -1,6 +1,6 @@
 # ADR-0018: Surface corrections — the rider's own road surface for stretches, applied at query time
 
-**Status:** Proposed · **Date:** 2026-10-21 · **Deciders:** the owner · **Repo path:** `docs/adr/0018-surface-corrections.md`
+**Status:** Accepted · **Date:** 2026-10-21 · **Deciders:** the owner · **Repo path:** `docs/adr/0018-surface-corrections.md`
 
 Extends [ADR-0006](0006-section-and-track-storage.md) (schema 10: two new tables and a favourite's own surface; a favourite's line can be changed) and [ADR-0010](0010-unridden-roads.md) (the rider's overlay also carries surface). Amends [ADR-0012](0012-backup-and-restore.md) and [ADR-0016](0016-backup-region-switches.md) (backup format 4 adds the corrections). The region file ([ADR-0005](0005-region-file-format.md)) does not change.
 
@@ -118,14 +118,14 @@ A costs more than C in the cost function, but C's mismatch between what was mark
 
 ## Action Items
 
-- [ ] Store: schema 10, save (with replace and covered-older removal), list, look-up near a point, delete; validation; migration and corruption tests.
-- [ ] Store, exchange and FFI: a favourite's own surface (`sections.surface`, `SectionUpdate`, the optional `surface` property in `favourites.geojson`); the overlay and the look-up take it; tests including malformed values.
-- [ ] Core: the stretch under a tap (the OSM way, at most 10 km each side).
-- [ ] Core: surface in the overlay; share-aware cost, route figures, `SectionGravel`, loop waypoints, the search bound; unit tests.
-- [ ] Core: corrections re-matched with sections on a region change; those that no longer fit deleted.
-- [ ] Core: backup format 4 (entry, manifest count, caps, dedupe on restore); format 2 and 3 tests; corruption tests.
-- [ ] Golden: corrections in the runner; a case each way (made-up corrections); every other case unchanged.
-- [ ] FFI: the stretch, save, list, look-up, delete; report fields.
-- [ ] Store and FFI: a new line in `update_section` / `SectionUpdate`; tests including malformed lines.
-- [ ] App: drag handles on the marking ends; "Change start and end" and the Map | Paved | Gravel row in a favourite's edit sheet; Correct surface on the road's card; the marking mode with Paved | Gravel; the notice after an update that removed any; the plan sheet stepping aside; backup counts; the how-to line.
+- [x] Store: schema 10, save (with replace and covered-older removal), list, look-up near a point, delete; validation; migration and corruption tests.
+- [x] Store, exchange and FFI: a favourite's own surface (`sections.surface`, `SectionUpdate`, the optional `surface` property in `favourites.geojson`); the overlay and the look-up take it; tests including malformed values.
+- [x] Core: the stretch under a tap (the OSM way, at most 10 km each side).
+- [x] Core: surface in the overlay; share-aware cost, route figures, `SectionGravel`, loop waypoints, the search bound; unit tests.
+- [x] Core: corrections re-matched with sections on a region change; those that no longer fit deleted.
+- [x] Core: backup format 4 (entry, manifest count, caps, dedupe on restore); format 2 and 3 tests; corruption tests.
+- [x] Golden: corrections in the runner; a case each way (made-up corrections); every other case unchanged.
+- [x] FFI: the stretch, save, list, look-up, delete; report fields.
+- [x] Store and FFI: a new line in `update_section` / `SectionUpdate`; tests including malformed lines.
+- [x] App: drag handles on the marking ends; "Change start and end" and the Map | Paved | Gravel row in a favourite's edit sheet; Correct surface on the road's card; the marking mode with Paved | Gravel; the notice after an update that removed any; the plan sheet stepping aside; backup counts; the how-to line.
 - [ ] Phone test: correct an untagged road to gravel and see a gravel-avoiding route leave it; drag an end; edit and remove; move a favourite's ends and check its rating and direction stay; back up and restore.

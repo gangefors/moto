@@ -21,4 +21,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0015](0015-tags-kept-until-reviewed.md) | Quick-tags — kept only until reviewed; backups hold the unreviewed ones | Accepted | 2026-10-05 |
 | [0016](0016-backup-region-switches.md) | Backup format 3 — a backup records which map regions were switched off | Accepted | 2026-10-10 |
 | [0017](0017-region-downloads-in-background.md) | Region downloads in the background — a user-initiated data transfer job, one notification, Wi-Fi unless allowed | Accepted | 2026-10-11 |
-| [0018](0018-surface-corrections.md) | Surface corrections — the rider's own road surface for stretches, applied at query time | Proposed | 2026-10-21 |
+| [0018](0018-surface-corrections.md) | Surface corrections — the rider's own road surface for stretches, applied at query time | Accepted | 2026-10-21 |
