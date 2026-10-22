@@ -28,6 +28,13 @@ ignore = [
     # calls those functions, and neither do we (the core uses memmap2
     # 0.9.11, which has the fix). Drop this when osmpbf moves to 0.9.
     { id = "RUSTSEC-2026-0186", reason = "memmap2 0.5 via osmpbf; affected functions never called" },
+    # basic-toml 0.1.10: unmaintained, no vulnerability and no fixed
+    # release. Only askama_derive (askama's `config` feature, which
+    # uniffi_bindgen 0.32.2, the newest, still turns on) pulls it in,
+    # inside a proc macro at build time, to read uniffi's own template
+    # config; it never parses our input and is not in the app. Drop this
+    # when uniffi or askama moves off basic-toml.
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml via uniffi's askama; build time only, unmaintained" },
 ]
 
 [licenses]
