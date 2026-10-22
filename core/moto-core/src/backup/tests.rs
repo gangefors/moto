@@ -668,6 +668,22 @@ fn files_must_match_the_manifest_exactly() {
     let mut sneaky = files.clone();
     sneaky.push(("../rides/00001.gpx".into(), b"x".to_vec()));
     try_files(sneaky);
+    // An extra file whose name isn't UTF-8 (one byte swapped to 0x82, as
+    // older tools write CP437) in both headers.
+    let mut odd = files.clone();
+    odd.push(("notesX.txt".into(), b"hi".to_vec()));
+    zip_of(&g.0, &odd);
+    let mut bytes = std::fs::read(&g.0).unwrap();
+    let mut swapped = 0;
+    for i in 0..bytes.len() - 10 {
+        if &bytes[i..i + 10] == b"notesX.txt" {
+            bytes[i + 5] = 0x82;
+            swapped += 1;
+        }
+    }
+    assert_eq!(swapped, 2);
+    std::fs::write(&g.0, &bytes).unwrap();
+    assert!(refused(&g.0).contains("don't match the manifest"));
     try_files(files.iter().filter(|(n, _)| n != TAGS).cloned().collect());
     try_files(
         files
