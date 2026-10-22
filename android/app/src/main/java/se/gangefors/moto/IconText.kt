@@ -57,6 +57,7 @@ internal val BUTTON_ICONS = mapOf(
     "flag" to ButtonIcon(R.drawable.ic_flag, R.string.say_flag),
     "settings" to ButtonIcon(R.drawable.ic_settings, R.string.say_settings),
     "bin" to ButtonIcon(R.drawable.ic_delete, R.string.say_bin),
+    "edit" to ButtonIcon(R.drawable.ic_edit, R.string.say_edit),
     "ride" to ButtonIcon(R.drawable.ic_ride, R.string.say_ride),
     "motorway" to ButtonIcon(R.drawable.ic_motorway, R.string.say_motorway),
     "ferry" to ButtonIcon(R.drawable.ic_ferry, R.string.say_ferry),

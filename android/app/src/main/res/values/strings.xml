@@ -263,6 +263,7 @@
     <string name="say_unridden">the road with a sparkle</string>
     <string name="say_settings">the settings button</string>
     <string name="say_bin">the bin</string>
+    <string name="say_edit">the pencil</string>
     <string name="say_ride">the ride mark</string>
     <string name="about_title">About moto</string>
     <string name="about_version">Version %1$s</string>
@@ -272,7 +273,7 @@
     <string name="help_plan_title">Plan a ride</string>
     <string name="help_plan">Long-press a place to start there, then long-press where you want to go. Pull a route’s or loop’s card up for its choices, like avoiding your favourites to find new roads. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
     <string name="help_sections_title">Favourite sections</string>
-    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your favourite sections. Pick one in Favourite sections to see it, then loop through it or route through it from where you are.</string>
+    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your favourite sections. Pick one in Favourite sections to see it, then loop through it or route through it from where you are. Its [edit] pencil also moves its start and end, and sets its surface: Map, Paved or Gravel.</string>
     <string name="help_ride_title">On a ride</string>
     <string name="help_library_title">Routes and rides</string>
     <string name="help_ride">Record your ride, and tag roads you like as you pass them. After the ride, review each tagged spot: it may be a road you want to save as a favourite section.</string>
@@ -407,6 +408,8 @@
     <string name="surface_choice">Surface</string>
     <string name="surface_saved">Surface correction saved</string>
     <string name="surface_corrected">Your correction: %1$s</string>
+    <string name="surface_map">Map</string>
+    <string name="surface_on_map">On the map: %1$s</string>
     <string name="surface_edit">Change the surface correction</string>
     <plurals name="surface_removed_notice">
         <item quantity="one">%d surface correction no longer matched the map and was removed</item>

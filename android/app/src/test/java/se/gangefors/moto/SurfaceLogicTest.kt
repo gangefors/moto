@@ -11,7 +11,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import se.gangefors.moto.core.CorrectionAt
 import se.gangefors.moto.core.Direction
+import se.gangefors.moto.core.FavouriteSurface
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.MapSurface
 import se.gangefors.moto.core.Rating
 import se.gangefors.moto.core.RestoreReport
 import se.gangefors.moto.core.Section
@@ -56,11 +58,25 @@ class SurfaceLogicTest {
     }
 
     @Test
+    fun theFavouriteSheetsSurfaceRow() {
+        assertEquals(listOf(FavouriteSurface.MAP, FavouriteSurface.PAVED, FavouriteSurface.GRAVEL), FAVOURITE_SURFACES)
+        assertEquals(FavouriteSurface.MAP, favouriteSurfaceOf(section()))
+        assertEquals(FavouriteSurface.GRAVEL, favouriteSurfaceOf(section(surface = Surface.GRAVEL)))
+        assertEquals(FavouriteSurface.PAVED, favouriteSurfaceOf(section(surface = Surface.PAVED)))
+        assertEquals(R.string.surface_map, favouriteSurfaceName(FavouriteSurface.MAP))
+        assertEquals(R.string.surface_paved, mapSurfaceText(MapSurface.PAVED))
+        assertEquals(R.string.surface_gravel, mapSurfaceText(MapSurface.GRAVEL))
+        assertEquals(R.string.surface_unknown, mapSurfaceText(MapSurface.UNTAGGED))
+        // The sheet's choice starts on Map.
+        assertEquals(FavouriteSurface.MAP, SectionChoice(Rating.GOOD, false).surface)
+    }
+
+    @Test
     fun changingAFavouritesEndsStartsFromItsOwnLine() {
         assertEquals(ways to line, reshapeStart(section()))
         assertNull(reshapeStart(section(SectionStatus.UNMATCHED)))
         assertNull(reshapeStart(section(SectionStatus.NEEDS_REMATCH)))
-        val choice = SectionChoice(Rating.EPIC, true, "x")
+        val choice = SectionChoice(Rating.EPIC, true, "x", surface = FavouriteSurface.GRAVEL)
         assertEquals(section() to choice, reshapeBack(Reshape(section(), choice)))
     }
 
@@ -120,6 +136,9 @@ class SurfaceLogicTest {
     fun theHowToShowsTheGravelIconInline() {
         val parts = helpParts(string("help_map"), BUTTON_ICONS.keys)
         assertTrue(parts.toString(), HelpPart.Icon("gravel") in parts)
+        assertTrue(string("help_sections").contains("Map, Paved or Gravel"))
+        val sections = helpParts(string("help_sections"), BUTTON_ICONS.keys)
+        assertTrue(sections.toString(), HelpPart.Icon("edit") in sections)
     }
 
     @Test

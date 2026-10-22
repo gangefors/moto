@@ -4,7 +4,9 @@
 package se.gangefors.moto
 
 import se.gangefors.moto.core.CorrectionAt
+import se.gangefors.moto.core.FavouriteSurface
 import se.gangefors.moto.core.LatLon
+import se.gangefors.moto.core.MapSurface
 import se.gangefors.moto.core.Section
 import se.gangefors.moto.core.SectionStatus
 import se.gangefors.moto.core.Surface
@@ -22,6 +24,9 @@ enum class MarkKind { FAVOURITE, SURFACE }
 
 /** The surfaces a correction offers, in their order: Paved | Gravel. */
 val SURFACE_CHOICES: List<Surface> = listOf(Surface.PAVED, Surface.GRAVEL)
+
+/** The surfaces a favourite's edit sheet offers: Map | Paved | Gravel. */
+val FAVOURITE_SURFACES: List<FavouriteSurface> = listOf(FavouriteSurface.MAP, FavouriteSurface.PAVED, FavouriteSurface.GRAVEL)
 
 /** The choice a correction's marking starts on: an existing correction's
  * own surface when it is edited, else none, so the rider always picks. */
@@ -57,6 +62,27 @@ fun surfaceRow(correction: CorrectionAt?): SurfaceRow {
 
 /** The name of a correction's surface. */
 fun surfaceChoiceName(surface: Surface): Int = if (surface == Surface.GRAVEL) R.string.surface_gravel else R.string.surface_paved
+
+/** The name of a choice in a favourite's Surface row. */
+fun favouriteSurfaceName(s: FavouriteSurface): Int = when (s) {
+    FavouriteSurface.MAP -> R.string.surface_map
+    FavouriteSurface.PAVED -> R.string.surface_paved
+    FavouriteSurface.GRAVEL -> R.string.surface_gravel
+}
+
+/** A favourite's Surface row starts on its own surface, or on Map. */
+fun favouriteSurfaceOf(section: Section): FavouriteSurface = when (section.surface) {
+    Surface.PAVED -> FavouriteSurface.PAVED
+    Surface.GRAVEL -> FavouriteSurface.GRAVEL
+    else -> FavouriteSurface.MAP
+}
+
+/** What the map has along a favourite, for "On the map: …". */
+fun mapSurfaceText(s: MapSurface): Int = when (s) {
+    MapSurface.PAVED -> R.string.surface_paved
+    MapSurface.GRAVEL -> R.string.surface_gravel
+    MapSurface.UNTAGGED -> R.string.surface_unknown
+}
 
 /** The line a favourite's "Change start and end" starts from: its own
  * ways and line when it fits the map, else none (it is marked afresh

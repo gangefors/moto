@@ -51,6 +51,8 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.LaunchedEffect
+import se.gangefors.moto.core.FavouriteSurface
+import se.gangefors.moto.core.MapSurface
 import se.gangefors.moto.core.Rating
 
 /** What the rider chose in the section sheet. */
@@ -59,6 +61,8 @@ data class SectionChoice(
     val oneWay: Boolean,
     val name: String = "",
     val reverse: Boolean = false,
+    /** A saved favourite's own surface (its edit sheet only). */
+    val surface: FavouriteSurface = FavouriteSurface.MAP,
 )
 
 /**
@@ -87,6 +91,7 @@ fun SectionSheet(
     onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit = { _, _ -> },
     onTop: (Int) -> Unit = {},
     onReshape: ((SectionChoice) -> Unit)? = null,
+    mapSurface: MapSurface? = null,
 ) {
     // A text field state (kept over rotation), for the field's label on
     // the border; the name is what it holds.
@@ -95,7 +100,8 @@ fun SectionSheet(
     var rating by remember { mutableStateOf(initial.rating) }
     var oneWay by remember { mutableStateOf(initial.oneWay) }
     var reverse by remember { mutableStateOf(initial.reverse) }
-    fun choice() = SectionChoice(rating, oneWay, name, reverse = oneWay && reverse)
+    var surface by remember { mutableStateOf(initial.surface) }
+    fun choice() = SectionChoice(rating, oneWay, name, reverse = oneWay && reverse, surface = surface)
     LaunchedEffect(oneWay, reverse) { onPreview(oneWay, oneWay && reverse) }
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
@@ -194,8 +200,24 @@ fun SectionSheet(
                         }
                         Switch(checked = oneWay, onCheckedChange = null)
                     }
-                    // A saved favourite: its start and end (ADR-0018).
+                    // A saved favourite: its own surface (ADR-0018), and its
+                    // start and end.
                     if (onReshape != null) {
+                        OptionHeading(stringResource(R.string.surface_choice))
+                        SingleChoice(
+                            options = FAVOURITE_SURFACES,
+                            selected = surface,
+                            label = { stringResource(favouriteSurfaceName(it)) },
+                            onSelect = { surface = it },
+                        )
+                        mapSurface?.let {
+                            Text(
+                                stringResource(R.string.surface_on_map, stringResource(mapSurfaceText(it))),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                         OutlinedButton(onClick = { onReshape(choice()) }, modifier = Modifier.padding(top = 12.dp)) {
                             OneLine(stringResource(R.string.section_reshape))
                         }

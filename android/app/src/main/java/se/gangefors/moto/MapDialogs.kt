@@ -425,6 +425,7 @@ internal fun MapScreenScope.MapDialogs() {
                         section.rating,
                         isOneWay(section.direction),
                         riderName(section.name) ?: "",
+                        surface = favouriteSurfaceOf(section),
                     ),
                     suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
                     onDismiss = {
@@ -437,6 +438,7 @@ internal fun MapScreenScope.MapDialogs() {
                     onPreview = { oneWay, turn -> editPreview = oneWay to turn },
                     onTop = { editTop = it },
                     onReshape = { choice -> startReshape(section, choice) },
+                    mapSurface = runCatching { favourites?.mapSurface(section.id) }.getOrNull(),
                     onSave = { choice ->
                         editing = null
                         editChoice = null
@@ -450,6 +452,7 @@ internal fun MapScreenScope.MapDialogs() {
                                     direction = directionOf(choice.oneWay),
                                     reverse = choice.reverse,
                                     line = newLine,
+                                    surface = choice.surface,
                                 ),
                             )
                         }
