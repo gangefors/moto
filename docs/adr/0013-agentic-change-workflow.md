@@ -1,6 +1,6 @@
 # ADR-0013: Change workflow — a pipeline of agents with two rider gates, routed by risk
 
-**Status:** Accepted · **Date:** 2026-10-05 · **Deciders:** the owner · **Repo path:** `docs/adr/0013-agentic-change-workflow.md`
+**Status:** Accepted, partly superseded by [ADR-0019](0019-leaner-change-workflow.md) (stages, verify and QA agents, loop limits, tiering per slice) · **Date:** 2026-10-05 · **Deciders:** the owner · **Repo path:** `docs/adr/0013-agentic-change-workflow.md`
 
 ## Context
 

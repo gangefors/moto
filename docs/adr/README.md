@@ -16,9 +16,10 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0010](0010-unridden-roads.md) | Unridden roads — rides as a query-time overlay that makes ridden curvy roads pull less | Accepted | 2026-10-01 |
 | [0011](0011-ride-a-route.md) | Ride a route — follow a route in the app with progress and an off-route alert, no turn-by-turn | Accepted | 2026-10-02 |
 | [0012](0012-backup-and-restore.md) | Backup and restore — one zip of standard files (GPX, GeoJSON, JSON), merged back in by the core | Accepted | 2026-10-03 |
-| [0013](0013-agentic-change-workflow.md) | Change workflow — a pipeline of agents with two rider gates, routed by risk | Accepted | 2026-10-05 |
+| [0013](0013-agentic-change-workflow.md) | Change workflow — a pipeline of agents with two rider gates, routed by risk | Partly superseded by 0019 | 2026-10-05 |
 | [0014](0014-map-screen-structure.md) | Map screen structure — one state holder, a per-composition scope, pieces by concern | Accepted | 2026-10-05 |
 | [0015](0015-tags-kept-until-reviewed.md) | Quick-tags — kept only until reviewed; backups hold the unreviewed ones | Accepted | 2026-10-05 |
 | [0016](0016-backup-region-switches.md) | Backup format 3 — a backup records which map regions were switched off | Accepted | 2026-10-10 |
 | [0017](0017-region-downloads-in-background.md) | Region downloads in the background — a user-initiated data transfer job, one notification, Wi-Fi unless allowed | Accepted | 2026-10-11 |
 | [0018](0018-surface-corrections.md) | Surface corrections — the rider's own road surface for stretches, applied at query time | Accepted | 2026-10-21 |
+| [0019](0019-leaner-change-workflow.md) | Leaner change workflow — checks as a script, review takes QA, risk routed per slice | Accepted | 2026-10-22 |
