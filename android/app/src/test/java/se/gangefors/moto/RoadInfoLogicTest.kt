@@ -84,4 +84,21 @@ class RoadInfoLogicTest {
         assertEquals(0.0, f.lengthKm, 0.0)
         assertEquals(100, roadFacts(info(curviness = 7.0)).curvyPercent)
     }
+
+    @Test
+    fun theNotesAreTheMapsWithOrWithoutACorrection() {
+        // The rider's correction shows in its own last row (surfaceRow);
+        // the facts and notes stay what the map says (ADR-0018).
+        val line = listOf(LatLon(55.7, 13.2), LatLon(55.71, 13.2))
+        val gravel = se.gangefors.moto.core.SurfaceCorrection(
+            7, Surface.GRAVEL, se.gangefors.moto.core.SectionStatus.OK, 0, 0, emptyList(), line,
+        )
+        val paved = gravel.copy(surface = Surface.PAVED)
+        for ((mapPaved, correction) in listOf(true to gravel, false to paved)) {
+            val road = info(paved = mapPaved)
+            val at = se.gangefors.moto.core.CorrectionAt(correction.surface, correction, null)
+            assertEquals(SurfaceRow.Corrected(correction.surface, SurfaceEdit.Standalone(correction)), surfaceRow(at))
+            assertEquals(if (mapPaved) emptyList() else listOf(RoadNote.UNPAVED), roadFacts(road).notes)
+        }
+    }
 }
