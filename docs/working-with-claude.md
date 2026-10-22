@@ -33,10 +33,13 @@ nothing.
 Pick the session's model when you start it (`/model`, or in the app).
 Within a session Claude hands work to subagents that pin a model
 (`.claude/agents/`): Notion, CI logs and searches on Haiku; design on Opus;
-implementation, mockups, checks and review on Sonnet; QA and docs on Haiku.
-With the change workflow (`/feature`, `/bugfix`, `/refactor`, ADR-0013) you
-talk to the main session and approve only the design and the result; it
-picks the models per change from the spec's risk tag.
+implementation, mockups and review on Sonnet; docs on Haiku. The local
+checks are a script (`.claude/scripts/verify.sh`), not a model.
+With the change workflow (`/feature`, `/bugfix`, `/refactor`, ADR-0013 and
+ADR-0019) you talk to the main session and approve only the design and
+the result; it picks the models per slice from the spec's risk tags, so a
+feature with risky core work and a plain UI on top gets Opus only for the
+core.
 
 | Task (examples from this project) | Model | Effort |
 |---|---|---|
@@ -54,3 +57,8 @@ orchestrating; it only routes short reports.
 
 **Use `/feature`, `/bugfix` or `/refactor`** to start a change; say "just
 discussing" for ideas, which stay a discussion until you say go.
+
+**At Gate 1, batch your comments and say which kind they are.** Wording,
+strings, layout and colours go to the mockup agent on Sonnet; only a
+change of approach sends the design back to the Opus architect. Each
+architect round costs several times a mockup round.
