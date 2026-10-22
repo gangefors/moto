@@ -148,7 +148,11 @@ impl Restore<'_> {
             .tx
             .query_row("SELECT count(*) FROM surface_corrections", [], |r| r.get(0))
             .map_err(db_err)?;
-        if usize::try_from(have).unwrap_or(usize::MAX) + add.len() > MAX_SURFACE_CORRECTIONS {
+        if usize::try_from(have)
+            .unwrap_or(usize::MAX)
+            .saturating_add(add.len())
+            > MAX_SURFACE_CORRECTIONS
+        {
             return Err(bad(format!(
                 "at most {MAX_SURFACE_CORRECTIONS} surface corrections"
             )));
