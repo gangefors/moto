@@ -8,6 +8,7 @@ import se.gangefors.moto.core.FavouriteSurface
 import se.gangefors.moto.core.LatLon
 import se.gangefors.moto.core.MapSurface
 import se.gangefors.moto.core.Section
+import se.gangefors.moto.core.SectionDraft
 import se.gangefors.moto.core.SectionStatus
 import se.gangefors.moto.core.Surface
 import se.gangefors.moto.core.SurfaceCorrection
@@ -93,6 +94,21 @@ fun reshapeStart(section: Section): Pair<List<WaySpan>, List<LatLon>>? =
 /** A favourite's start and end being changed: the favourite, and the
  * choices made in its edit sheet so far, kept for when it reopens. */
 data class Reshape(val section: Section, val choice: SectionChoice)
+
+/** What a favourite's edit sheet reopens with after Change start and
+ * end: the choices kept and the new line marked, if any, for favourite
+ * [sectionId] only. */
+data class PendingEdit(val sectionId: Long, val choice: SectionChoice, val line: SectionDraft?)
+
+/** [pending] when it is for favourite [sectionId], else none. */
+fun pendingFor(pending: PendingEdit?, sectionId: Long?): PendingEdit? =
+    pending?.takeIf { sectionId != null && it.sectionId == sectionId }
+
+/** The favourites the map leaves out of its layer while their ends are
+ * changed ([reshapingId]) or while the sheet of [editingId] holds a new
+ * line for it: the new line is drawn in their place. */
+fun favouritesDrawnElsewhere(reshapingId: Long?, editingId: Long?, pending: PendingEdit?): Set<Long> =
+    setOfNotNull(reshapingId, editingId?.takeIf { pendingFor(pending, it)?.line != null })
 
 /** X or Back while changing a favourite's start and end: the edit sheet
  * again, with the old line and the choices kept. */

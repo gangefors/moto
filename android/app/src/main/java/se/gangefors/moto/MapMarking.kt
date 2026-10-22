@@ -49,6 +49,8 @@ internal fun MapScreenScope.stopMarking() {
         surfaceChoice = null
         replacingCorrection = null
         dragging = null
+        // A favourite's ends left any other way: what its sheet held goes.
+        if (reshaping != null) pendingEdit = null
         reshaping = null
         // The marking steps ("10 km. Tap near an end…") end with it.
         message = null
@@ -393,7 +395,7 @@ internal fun MapScreenScope.startReshape(section: Section, choice: SectionChoice
         marking = true
         markKind = MarkKind.FAVOURITE
         markSession++
-        val pending = reshapedLine
+        val pending = pendingFor(pendingEdit, section.id)?.line
         val line = pending?.let { it.ways to it.geometry } ?: reshapeStart(section)
         if (line != null) {
             proposeDraft(SectionDraft(line.first, line.second, lengthM(line.second)))
@@ -415,11 +417,10 @@ internal fun MapScreenScope.finishReshape() {
     with(state) {
         val r = reshaping ?: return
         val d = draft ?: return
-        reshapedLine = d
         reshaping = null
         stopMarking()
         val (section, choice) = reshapeBack(r)
-        editChoice = choice
+        pendingEdit = PendingEdit(section.id, choice, d)
         editing = section
     }
 }
@@ -432,7 +433,8 @@ internal fun MapScreenScope.reshapeCancel() {
         reshaping = null
         stopMarking()
         val (section, choice) = reshapeBack(r)
-        editChoice = choice
+        // The line marked before, if any, stays pending.
+        pendingEdit = PendingEdit(section.id, choice, pendingFor(pendingEdit, section.id)?.line)
         editing = section
     }
 }

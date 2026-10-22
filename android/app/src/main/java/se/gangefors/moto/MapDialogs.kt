@@ -408,20 +408,21 @@ internal fun MapScreenScope.MapDialogs() {
         // The edit sheet's pending new line (Change start and end): the
         // shown favourite's own line is replaced by it (MapShown); one
         // edited from elsewhere has it drawn as a draft.
-        LaunchedEffect(editing?.id, reshapedLine, shownSectionId, favouriteInfoId) {
-            val line = reshapedLine
+        LaunchedEffect(editing?.id, pendingEdit, shownSectionId, favouriteInfoId) {
+            val line = pendingFor(pendingEdit, editing?.id)?.line
             val shown = editing?.id != null && editing?.id == (shownSectionId ?: favouriteInfoId)
             if (editing != null && line != null && !shown) overlays?.draft?.show(null, null, line.geometry)
             else if (!marking) overlays?.draft?.show(null, null, null)
         }
         editing?.let { section ->
-            val newLine = reshapedLine
+            val pending = pendingFor(pendingEdit, section.id)
+            val newLine = pending?.line
             // Its key: a sheet reopened after Change start and end starts
             // on the choices kept, not the saved ones.
-            androidx.compose.runtime.key(section.id, editChoice) {
+            androidx.compose.runtime.key(section.id, pending) {
                 SectionSheet(
                     title = stringResource(R.string.section_edit_title, sectionKm(newLine?.distanceM ?: lengthM(section.geometry))),
-                    initial = editChoice ?: SectionChoice(
+                    initial = pending?.choice ?: SectionChoice(
                         section.rating,
                         isOneWay(section.direction),
                         riderName(section.name) ?: "",
@@ -431,8 +432,7 @@ internal fun MapScreenScope.MapDialogs() {
                     onDismiss = {
                         editing = null
                         editPreview = null
-                        editChoice = null
-                        reshapedLine = null
+                        pendingEdit = null
                     },
                     canReverse = true,
                     onPreview = { oneWay, turn -> editPreview = oneWay to turn },
@@ -441,8 +441,7 @@ internal fun MapScreenScope.MapDialogs() {
                     mapSurface = runCatching { favourites?.mapSurface(section.id) }.getOrNull(),
                     onSave = { choice ->
                         editing = null
-                        editChoice = null
-                        reshapedLine = null
+                        pendingEdit = null
                         changeSections(resources.getString(R.string.section_updated)) { st ->
                             st.update(
                                 section.id,
@@ -459,8 +458,7 @@ internal fun MapScreenScope.MapDialogs() {
                     },
                     onDelete = {
                         editing = null
-                        editChoice = null
-                        reshapedLine = null
+                        pendingEdit = null
                         if (shownSectionId == section.id) hideSection()
                         changeSections(null) { st ->
                             st.delete(section.id)

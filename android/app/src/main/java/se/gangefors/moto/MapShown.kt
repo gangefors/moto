@@ -180,7 +180,7 @@ internal fun MapScreenScope.ShownEffects() {
         // While its start and end are changed, and back in its edit sheet
         // until Save, the new line stands in for the saved one, with the
         // direction preview on it.
-        val pendingLine = reshapedLine?.geometry?.takeIf { editing?.id == shownForEdit?.id }
+        val pendingLine = pendingFor(pendingEdit, editing?.id)?.line?.geometry?.takeIf { editing?.id == shownForEdit?.id }
         val reshapingIt = reshaping?.section?.id?.let { it == shownForEdit?.id } == true
         LaunchedEffect(overlays, shownForEdit, editPreview, darkMap, pendingLine, reshapingIt) {
             val s = shownForEdit

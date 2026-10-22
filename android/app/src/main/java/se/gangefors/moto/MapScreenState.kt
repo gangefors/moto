@@ -139,8 +139,7 @@ internal class MapScreenState(
     // sheet's choices kept meanwhile, and the new line once marked (the
     // sheet's Save stores it).
     var reshaping by mutableStateOf<Reshape?>(null)
-    var reshapedLine by mutableStateOf<SectionDraft?>(null)
-    var editChoice by mutableStateOf<SectionChoice?>(null)
+    var pendingEdit by mutableStateOf<PendingEdit?>(null)
     // An end pin being dragged: which, and the point it would land on.
     var dragging by mutableStateOf<SectionMarker.End?>(null)
     // The menu, and the page it opened.

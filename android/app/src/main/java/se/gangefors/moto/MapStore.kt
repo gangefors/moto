@@ -221,8 +221,11 @@ internal fun MapScreenScope.StoreAndRegionEffects() {
 @Composable
 internal fun MapScreenScope.FavouriteLayerEffects() {
     with(state) {
-        LaunchedEffect(overlays, sections, sectionGravel, gravel) {
-            val hidden = hiddenForGravel(sectionGravel, gravel)
+        // A favourite whose ends are being changed, or whose sheet holds a
+        // new line, is drawn by that line instead (MapShown, MapDialogs).
+        val elsewhere = favouritesDrawnElsewhere(reshaping?.section?.id, editing?.id, pendingEdit)
+        LaunchedEffect(overlays, sections, sectionGravel, gravel, elsewhere) {
+            val hidden = hiddenForGravel(sectionGravel, gravel) + elsewhere
             val shown = visibleSections(sections, showUnmatched = false).filterNot { it.id in hidden }
             overlays?.sections?.show(shown)
             overlays?.sections?.showGravel(gravelParts(sectionGravel, shown))

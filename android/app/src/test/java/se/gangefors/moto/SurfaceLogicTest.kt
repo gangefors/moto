@@ -81,6 +81,22 @@ class SurfaceLogicTest {
     }
 
     @Test
+    fun aPendingEditBelongsToItsFavouriteOnly() {
+        val draft = se.gangefors.moto.core.SectionDraft(ways, line, 1000.0)
+        val p = PendingEdit(3, SectionChoice(Rating.EPIC, true), draft)
+        assertEquals(p, pendingFor(p, 3))
+        assertNull(pendingFor(p, 4))
+        assertNull(pendingFor(p, null))
+        assertNull(pendingFor(null, 3))
+        // Left out of the layer: the one being reshaped, and the one whose
+        // sheet holds a new line.
+        assertEquals(setOf(5L), favouritesDrawnElsewhere(5, null, p))
+        assertEquals(setOf(3L), favouritesDrawnElsewhere(null, 3, p))
+        assertEquals(emptySet<Long>(), favouritesDrawnElsewhere(null, 4, p))
+        assertEquals(emptySet<Long>(), favouritesDrawnElsewhere(null, 3, p.copy(line = null)))
+    }
+
+    @Test
     fun thePlanSheetStepsAsideWhileMarking() {
         assertTrue(planSheetShown(planning = true, marking = false))
         assertFalse(planSheetShown(planning = true, marking = true))
