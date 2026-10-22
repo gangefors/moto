@@ -369,4 +369,23 @@ class CardLayoutTest {
         assertEquals(none, favouriteCardsShown(null, 7L, reshaping = true))
         assertEquals(none, favouriteCardsShown(7L, 9L, reshaping = true))
     }
+
+    @Test
+    fun favouriteCardsComeBackAfterReshape() {
+        assertEquals(FavouriteCards(7L, null), favouriteCardsShown(7L, null, reshaping = false))
+        assertEquals(FavouriteCards(null, 9L), favouriteCardsShown(null, 9L, reshaping = false))
+        assertEquals(FavouriteCards(null, null), favouriteCardsShown(null, null, reshaping = false))
+    }
+
+    @Test
+    fun hiddenFavouriteCardsCountAsClosedWhileMarking() {
+        val hidden = favouriteCardsShown(7L, 9L, reshaping = true)
+        val open = cardsOpen(
+            message = false, marking = true, offerLoop = false, viaSelected = false, ride = false,
+            savedRoute = false, section = hidden.sectionId != null, road = false,
+            favourite = hidden.favouriteId != null, rideMode = false, infoAtRight = false,
+        )
+        assertTrue(open.task)
+        assertFalse(open.info)
+    }
 }

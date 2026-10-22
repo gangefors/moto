@@ -333,9 +333,13 @@ fun backStep(
 /** The favourite section and tapped favourite whose cards are shown. */
 data class FavouriteCards(val sectionId: Long?, val favouriteId: Long?)
 
-/** Stub: returns the ids unchanged. */
+/**
+ * The favourite cards to show. While a favourite's start and end are
+ * changed ([reshaping]) the task card is the only card; the favourite
+ * cards are hidden, not closed, so the same ones come back when it ends.
+ */
 fun favouriteCardsShown(shownSectionId: Long?, favouriteInfoId: Long?, reshaping: Boolean): FavouriteCards =
-    FavouriteCards(shownSectionId, favouriteInfoId)
+    if (reshaping) FavouriteCards(null, null) else FavouriteCards(shownSectionId, favouriteInfoId)
 
 /** Which cards are open on the map screen: a [task] card, an [info] card,
  * [any] card, and whether the [left] column (with the sheet's) has one. */

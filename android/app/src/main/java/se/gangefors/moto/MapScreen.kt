@@ -176,8 +176,9 @@ fun MapScreen() {
         // The map's own controls (compass, logo, attribution) stay clear of
         // the system bars, the buttons and the sheet.
         val riddenButton = riddenButtonShown(planning, hasRidden)
-        val shownSection = shownSectionId?.let { id -> sections.firstOrNull { it.id == id } }
-        val favouriteInfo = favouriteInfoId?.let { id -> sections.firstOrNull { it.id == id } }
+        val favouriteCards = favouriteCardsShown(shownSectionId, favouriteInfoId, reshaping != null)
+        val shownSection = favouriteCards.sectionId?.let { id -> sections.firstOrNull { it.id == id } }
+        val favouriteInfo = favouriteCards.favouriteId?.let { id -> sections.firstOrNull { it.id == id } }
         val screen = MapScreenScope(
             state = state,
             context = context,
