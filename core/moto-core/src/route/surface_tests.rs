@@ -65,6 +65,24 @@ fn overlay(engine: &Engine, corrections: &[crate::surface::SurfaceCorrection]) -
     Favourites::build_all(engine, &[], &[], corrections)
 }
 
+/// An epic favourite section, both ways, over `draft`.
+fn epic_section(draft: &crate::SectionDraft) -> crate::section::Section {
+    crate::section::Section {
+        surface: None,
+        id: 1,
+        rider_id: crate::section::LOCAL_RIDER.into(),
+        name: String::new(),
+        rating: crate::section::Rating::Epic,
+        direction: crate::section::Direction::Both,
+        source: crate::section::Source::Map,
+        status: crate::section::Status::Ok,
+        created_at: 0,
+        updated_at: 0,
+        ways: draft.ways.clone(),
+        geometry: draft.geometry.clone(),
+    }
+}
+
 #[test]
 fn routes_without_corrections_keep_their_figures() {
     // Pinned on the code before surface corrections: every figure to the
@@ -309,20 +327,7 @@ fn the_fastest_route_goes_by_the_corrected_surface_alone() {
             },
         )
         .unwrap();
-    let section = crate::section::Section {
-        surface: None,
-        id: 1,
-        rider_id: crate::section::LOCAL_RIDER.into(),
-        name: String::new(),
-        rating: crate::section::Rating::Epic,
-        direction: crate::section::Direction::Both,
-        source: crate::section::Source::Map,
-        status: crate::section::Status::Ok,
-        created_at: 0,
-        updated_at: 0,
-        ways: whole.ways.clone(),
-        geometry: whole.geometry.clone(),
-    };
+    let section = epic_section(&whole);
     let fav = Favourites::build_all(
         &e,
         std::slice::from_ref(&section),
@@ -344,13 +349,25 @@ fn the_fastest_route_goes_by_the_corrected_surface_alone() {
 #[test]
 fn without_corrections_the_edge_cost_takes_the_map_path() {
     // The fast path: no corrected edge, the old cost; with corrections,
-    // edges they don't touch cost exactly the same.
+    // edges they don't touch cost exactly the same. An epic favourite
+    // lies on the whole gravel north road in every overlay, so the
+    // favourite check on the fast path decides something.
     let e = engine(shaped_ladder(Surface::Gravel, 30));
-    let none = Favourites::none();
-    let same = overlay(&e, &[correction(1, Surface::Gravel, &north_draft(0, 8), 1)]);
-    let some = overlay(&e, &[correction(1, Surface::Paved, &north_draft(0, 4), 1)]);
+    let sections = [epic_section(&north_draft(0, 8))];
+    let build = |corrections: &[crate::surface::SurfaceCorrection]| {
+        Favourites::build_all(&e, &sections, &[], corrections)
+    };
+    let none = build(&[]);
+    let same = build(&[correction(1, Surface::Gravel, &north_draft(0, 8), 1)]);
+    let some = build(&[correction(1, Surface::Paved, &north_draft(0, 4), 1)]);
+    // (way 1 nodes lo..=hi) of an edge, when it is on the north road.
+    let north = |id: u32| {
+        let w = e.net().way_ref(id);
+        (w.way_id == 1).then(|| (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx)))
+    };
     for (g, curvy) in [
         (Gravel::Avoid, false),
+        (Gravel::Avoid, true),
         (Gravel::Prefer, true),
         (Gravel::Allow, true),
     ] {
@@ -358,23 +375,40 @@ fn without_corrections_the_edge_cost_takes_the_map_path() {
         let off = Off::of(&o);
         let plain = Fun::new(e.net(), &none, &o);
         assert!(!plain.corrected);
-        assert!(
-            !Fun::new(e.net(), &same, &o).corrected,
-            "a correction that changes nothing"
-        );
+        let unchanged = Fun::new(e.net(), &same, &o);
+        assert!(!unchanged.corrected, "a correction that changes nothing");
         let fun = Fun::new(e.net(), &some, &o);
         assert!(fun.corrected);
+        let (mut untouched_fav, mut corrected_fav) = (0, 0);
         for id in 0..e.net().edge_count() as u32 {
             let edge = e.net().edge(id);
-            let untouched = !(e.net().way_ref(id).way_id == 1
-                && e.net().way_ref(id).from_idx.max(e.net().way_ref(id).to_idx) <= 4);
+            let range = north(id);
+            let corrected = range.is_some_and(|(_, hi)| hi <= 4);
+            if range.is_some_and(|(lo, _)| lo >= 4) {
+                // Untouched favourite edges: a favourite on both paths,
+                // except that gravel avoided shuns it on gravel.
+                untouched_fav += 1;
+                let want = g != Gravel::Avoid;
+                assert_eq!(plain.is_favourite(id), want, "edge {id} {g:?}");
+                assert_eq!(fun.is_favourite(id), want, "edge {id} {g:?}");
+                assert_eq!(unchanged.is_favourite(id), want, "edge {id} {g:?}");
+            }
+            if corrected {
+                // Paved now: it counts on the overlay path only.
+                corrected_fav += 1;
+                assert!(fun.is_favourite(id), "edge {id} {g:?}");
+                assert_eq!(plain.is_favourite(id), g != Gravel::Avoid, "edge {id}");
+            }
             for pull in [0.0, 0.5, 1.0] {
                 let a = Cost::Favoured(off, plain, pull).edge(id, &edge);
-                let b = Cost::Favoured(off, fun, pull).edge(id, &edge);
-                if untouched {
+                let c = Cost::Favoured(off, unchanged, pull).edge(id, &edge);
+                assert_eq!(a.to_bits(), c.to_bits(), "edge {id} {g:?} {pull}");
+                if !corrected {
+                    let b = Cost::Favoured(off, fun, pull).edge(id, &edge);
                     assert_eq!(a.to_bits(), b.to_bits(), "edge {id} {g:?} {pull}");
                 }
             }
         }
+        assert!(untouched_fav > 0 && corrected_fav > 0);
     }
 }
