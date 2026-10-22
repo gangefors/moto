@@ -21,6 +21,7 @@
 //! the ones imports already use. Everything a restore adds goes into one
 //! transaction. Nothing from the zip is ever used as a path.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -705,7 +706,11 @@ fn open(path: &Path) -> Result<Opened, CoreError> {
         serde_json::from_slice(&manifest_bytes).map_err(|e| bad(format!("manifest.json: {e}")))?;
     manifest.check()?;
     // Exactly the files the manifest lists, and the manifest.
-    let names: HashSet<&str> = zip.file_names().collect();
+    // A name that can't be decoded can't be one the manifest lists.
+    let names: HashSet<Cow<'_, str>> = zip
+        .file_names()
+        .collect::<Result<_, _>>()
+        .map_err(|_| bad("the files don't match the manifest"))?;
     if names.len() != manifest.files.len() + 1
         || !names.contains(MANIFEST)
         || !manifest

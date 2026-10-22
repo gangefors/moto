@@ -27,7 +27,7 @@ rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"
 thiserror = "2"
 uniffi = "0.32"
 # Read and write .zip exports: deflate only (no encryption, bzip2, lzma, ...).
-zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }
 
 [profile.release]
 lto = true

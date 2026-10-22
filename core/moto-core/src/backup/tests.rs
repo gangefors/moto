@@ -467,7 +467,7 @@ fn entries(path: &Path) -> Vec<(String, Vec<u8>)> {
             let mut e = zip.by_index(i).unwrap();
             let mut b = Vec::new();
             e.read_to_end(&mut b).unwrap();
-            (e.name().to_string(), b)
+            (e.name().unwrap().into_owned(), b)
         })
         .collect()
 }

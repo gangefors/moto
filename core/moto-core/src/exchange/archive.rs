@@ -133,7 +133,8 @@ fn from_zip(bytes: &[u8]) -> Result<Vec<u8>, CoreError> {
         let entry = archive
             .by_index(i)
             .map_err(|e| bad(format!("not a readable zip file: {e}")))?;
-        if !entry.is_file() || !is_json_name(entry.name()) {
+        // A name that can't be decoded is not ours: skip it.
+        if !entry.is_file() || !entry.name().is_ok_and(|n| is_json_name(&n)) {
             continue;
         }
         if entry.size() > MAX_JSON_BYTES as u64 {
@@ -167,6 +168,26 @@ mod tests {
         z.write_all(b"hello").unwrap();
         let bytes = z.finish().unwrap().into_inner();
         assert!(matches!(unpack(&bytes), Err(CoreError::InvalidArgument(_))));
+    }
+
+    #[test]
+    fn non_utf8_entry_names_are_read_safely() {
+        // Older tools write names in CP437, not UTF-8. Write an ASCII name
+        // and swap one byte for a non-UTF-8 one in both headers.
+        let mut z = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        z.start_file("cafX.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        z.write_all(JSON).unwrap();
+        let mut bytes = z.finish().unwrap().into_inner();
+        let mut swapped = 0;
+        for i in 0..bytes.len() - 9 {
+            if &bytes[i..i + 9] == b"cafX.json" {
+                bytes[i + 3] = 0x82;
+                swapped += 1;
+            }
+        }
+        assert_eq!(swapped, 2);
+        assert_eq!(unpack(&bytes).unwrap(), JSON);
     }
 
     #[test]
