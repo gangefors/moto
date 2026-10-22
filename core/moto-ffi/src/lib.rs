@@ -16,6 +16,7 @@ mod regions;
 mod road;
 mod routes;
 mod sections;
+mod surface;
 mod tags;
 mod tracks;
 pub use exchange::*;

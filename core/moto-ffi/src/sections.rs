@@ -9,6 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use moto_core::section as core;
 
+use crate::road::Surface;
+use crate::surface::{FavouriteSurface, core_surface};
 use crate::{Engine, LatLon, MotoError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -66,6 +68,9 @@ pub struct NewSection {
     pub source: SectionSource,
     pub ways: Vec<WaySpan>,
     pub geometry: Vec<LatLon>,
+    /// Its own surface: `Paved`, `Gravel`, or none for the map's.
+    #[uniffi(default = None)]
+    pub surface: Option<Surface>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -82,6 +87,9 @@ pub struct Section {
     pub updated_at: i64,
     pub ways: Vec<WaySpan>,
     pub geometry: Vec<LatLon>,
+    /// Its own surface (`Paved` or `Gravel`), or none for the map's.
+    #[uniffi(default = None)]
+    pub surface: Option<Surface>,
 }
 
 /// Changes to a saved section; `None` leaves a field as it is.
@@ -90,8 +98,16 @@ pub struct SectionUpdate {
     pub name: Option<String>,
     pub rating: Option<Rating>,
     pub direction: Option<Direction>,
-    /// Turns the section round, so a one-way section runs the other way.
+    /// Turns the section round, so a one-way section runs the other way
+    /// (after a new `line`).
     pub reverse: bool,
+    /// A new line (its start and end moved): its ways and geometry; the
+    /// distance is ignored.
+    #[uniffi(default = None)]
+    pub line: Option<SectionDraft>,
+    /// Its own surface: Map clears it; none leaves it.
+    #[uniffi(default = None)]
+    pub surface: Option<FavouriteSurface>,
 }
 
 /// A map area, e.g. what is on screen.
@@ -149,7 +165,7 @@ impl SectionStore {
     /// makes redundant.
     pub fn add(&self, section: NewSection) -> Result<AddResult, MotoError> {
         let new = core::NewSection {
-            surface: None,
+            surface: section.surface.map(core_surface),
             rider_id: core::LOCAL_RIDER.into(),
             name: section.name,
             rating: section.rating.into(),
@@ -185,16 +201,20 @@ impl SectionStore {
         Ok(sections.into_iter().map(Into::into).collect())
     }
 
-    /// Changes name, rating or direction, and turns the section round if
-    /// asked; `None` if there is no such section.
+    /// Changes name, rating, direction, its own surface and its line,
+    /// and turns the section round if asked, all at once; `None` if there
+    /// is no such section.
     pub fn update(&self, id: i64, update: SectionUpdate) -> Result<Option<Section>, MotoError> {
         let update = core::SectionUpdate {
-            surface: None,
+            surface: update.surface.map(Into::into),
             name: update.name,
             rating: update.rating.map(Into::into),
             direction: update.direction.map(Into::into),
             reverse: update.reverse,
-            line: None,
+            line: update.line.map(|d| core::SectionLine {
+                ways: d.ways.into_iter().map(Into::into).collect(),
+                geometry: d.geometry.into_iter().map(Into::into).collect(),
+            }),
         };
         Ok(self
             .store()
@@ -218,6 +238,10 @@ impl SectionStore {
             matched: r.matched,
             unmatched: r.unmatched,
             off_map: r.off_map,
+            surface_checked: r.surface_checked,
+            surface_matched: r.surface_matched,
+            surface_removed: r.surface_removed,
+            surface_off_map: r.surface_off_map,
         })
     }
 }
@@ -343,8 +367,9 @@ impl SectionStore {
         let store = self.store();
         let sections = store.list_sections(None)?;
         let rides = store.ride_ways(&moto_core::rematch::region_key(&engine.inner))?;
+        let corrections = store.surface_corrections()?;
         Ok(Arc::new(Favourites {
-            inner: moto_core::Favourites::build_with_rides(&engine.inner, &sections, &rides),
+            inner: moto_core::Favourites::build_all(&engine.inner, &sections, &rides, &corrections),
         }))
     }
 
@@ -380,6 +405,16 @@ pub struct RematchReport {
     /// waiting, and matched again once their region is open.
     #[uniffi(default = 0)]
     pub off_map: u64,
+    /// Surface corrections looked at, that still fit, that no longer fit
+    /// (deleted) and that wait off the open map.
+    #[uniffi(default = 0)]
+    pub surface_checked: u64,
+    #[uniffi(default = 0)]
+    pub surface_matched: u64,
+    #[uniffi(default = 0)]
+    pub surface_removed: u64,
+    #[uniffi(default = 0)]
+    pub surface_off_map: u64,
 }
 
 // --- conversions ---
@@ -498,6 +533,7 @@ impl From<core::Section> for Section {
             updated_at: s.updated_at,
             ways: s.ways.into_iter().map(Into::into).collect(),
             geometry: s.geometry.into_iter().map(Into::into).collect(),
+            surface: s.surface.map(|v| Some(v).into()),
         }
     }
 }
@@ -562,6 +598,7 @@ mod tests {
         let store = SectionStore::open(db.path()).unwrap();
         let saved = store
             .add(NewSection {
+                surface: None,
                 name: "Lund test".into(),
                 rating: Rating::Great,
                 direction: Direction::Forward,
@@ -585,10 +622,137 @@ mod tests {
     }
 
     #[test]
+    fn an_update_moves_a_favourites_ends_and_sets_its_surface() {
+        let (engine, region) = engine("reshape");
+        let db = TempDb::new("reshape");
+        let store = SectionStore::open(db.path()).unwrap();
+        let first = engine
+            .section_between(ll(55.7001, 13.202), ll(55.7001, 13.208))
+            .unwrap();
+        let saved = store
+            .add(NewSection {
+                surface: None,
+                name: "Ends".into(),
+                rating: Rating::Great,
+                direction: Direction::Forward,
+                source: SectionSource::Map,
+                ways: first.ways.clone(),
+                geometry: first.geometry.clone(),
+            })
+            .unwrap()
+            .section
+            .unwrap();
+        // Without a line: the line stays.
+        let kept = store
+            .update(
+                saved.id,
+                SectionUpdate {
+                    name: Some("Renamed".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (kept.ways.clone(), kept.surface),
+            (saved.ways.clone(), None)
+        );
+        // With a line and a surface, in one call.
+        let longer = engine
+            .section_between(ll(55.7001, 13.202), ll(55.7001, 13.219))
+            .unwrap();
+        let moved = store
+            .update(
+                saved.id,
+                SectionUpdate {
+                    line: Some(longer.clone()),
+                    surface: Some(FavouriteSurface::Gravel),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(moved.id, saved.id);
+        assert_eq!(moved.ways, longer.ways);
+        assert_eq!(moved.surface, Some(Surface::Gravel));
+        assert_eq!(
+            (moved.rating, moved.direction, moved.name.as_str()),
+            (Rating::Great, Direction::Forward, "Renamed")
+        );
+        // The favourite's surface is found at a point on it.
+        let at = store
+            .surface_correction_at(ll(55.7001, 13.215))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (at.favourite_id, at.surface),
+            (Some(saved.id), Surface::Gravel)
+        );
+        // Map clears it; a bad line is a typed error.
+        let cleared = store
+            .update(
+                saved.id,
+                SectionUpdate {
+                    surface: Some(FavouriteSurface::Map),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(cleared.surface, None);
+        let mut bad = longer.clone();
+        bad.geometry.truncate(1);
+        assert!(matches!(
+            store.update(
+                saved.id,
+                SectionUpdate {
+                    line: Some(bad),
+                    ..Default::default()
+                }
+            ),
+            Err(MotoError::InvalidInput { .. })
+        ));
+        // A new favourite with a surface; not Dirt.
+        let mut with = NewSection {
+            surface: Some(Surface::Paved),
+            name: String::new(),
+            rating: Rating::Good,
+            direction: Direction::Both,
+            source: SectionSource::Map,
+            ways: vec![],
+            geometry: vec![ll(55.8, 13.0), ll(55.81, 13.0)],
+        };
+        let added = store.add(with.clone()).unwrap().section.unwrap();
+        assert_eq!(added.surface, Some(Surface::Paved));
+        with.surface = Some(Surface::Dirt);
+        with.geometry = vec![ll(55.9, 13.0), ll(55.91, 13.0)];
+        assert!(store.add(with).is_err());
+        // The overlay reads the map surface of a matched favourite.
+        let fav = store.favourites(engine).unwrap();
+        assert!(fav.map_surface(saved.id).is_some());
+        assert_eq!(fav.map_surface(added.id), None, "off the map");
+        std::fs::remove_file(region).unwrap();
+    }
+
+    #[test]
+    fn the_stretch_under_a_tap_crosses_the_ffi() {
+        let (engine, region) = engine("stretch");
+        let d = engine.surface_stretch_at(ll(55.7001, 13.205)).unwrap();
+        assert_eq!(d.ways.len(), 1);
+        assert!(d.distance_m > 500.0);
+        assert!(matches!(
+            engine.surface_stretch_at(ll(0.0, 0.0)),
+            Err(MotoError::OutsideRegion { .. } | MotoError::NoRoadNearby { .. })
+        ));
+        std::fs::remove_file(region).unwrap();
+    }
+
+    #[test]
     fn lists_updates_and_deletes() {
         let db = TempDb::new("crud");
         let store = SectionStore::open(db.path()).unwrap();
         let new = |lat: f64| NewSection {
+            surface: None,
             name: String::new(),
             rating: Rating::Good,
             direction: Direction::Both,
@@ -641,6 +805,7 @@ mod tests {
         let db = TempDb::new("errors");
         let store = SectionStore::open(db.path()).unwrap();
         let bad = NewSection {
+            surface: None,
             name: "x".into(),
             rating: Rating::Good,
             direction: Direction::Both,
@@ -750,6 +915,7 @@ mod tests {
         let store = SectionStore::open(db.path()).unwrap();
         let s = store
             .add(NewSection {
+                surface: None,
                 name: String::new(),
                 rating: Rating::Good,
                 direction: Direction::Both,
@@ -769,6 +935,10 @@ mod tests {
                 matched: 1,
                 unmatched: 0,
                 off_map: 0,
+                surface_checked: 0,
+                surface_matched: 0,
+                surface_removed: 0,
+                surface_off_map: 0,
             }
         );
         assert_eq!(store.get(s.id).unwrap().unwrap().status, SectionStatus::Ok);
@@ -781,6 +951,10 @@ mod tests {
                 matched: 0,
                 unmatched: 0,
                 off_map: 0,
+                surface_checked: 0,
+                surface_matched: 0,
+                surface_removed: 0,
+                surface_off_map: 0,
             }
         );
     }
@@ -791,6 +965,7 @@ mod tests {
         let store = SectionStore::open(db.path()).unwrap();
         let s = store
             .add(NewSection {
+                surface: None,
                 name: String::new(),
                 rating: Rating::Good,
                 direction: Direction::Both,
@@ -849,6 +1024,7 @@ mod tests {
         assert_eq!(store.favourites(engine.clone()).unwrap().edge_count(), 0);
         store
             .add(NewSection {
+                surface: None,
                 name: String::new(),
                 rating: Rating::Epic,
                 direction: Direction::Both,
@@ -912,6 +1088,7 @@ mod tests {
         let db = TempDb::new("overlap");
         let store = SectionStore::open(db.path()).unwrap();
         let new = |d: &SectionDraft, rating, direction| NewSection {
+            surface: None,
             name: String::new(),
             rating,
             direction,

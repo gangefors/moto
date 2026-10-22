@@ -151,6 +151,7 @@ mod tests {
             )
             .unwrap();
         from.add(NewSection {
+            surface: None,
             name: String::new(),
             rating: Rating::Epic,
             direction: Direction::Both,

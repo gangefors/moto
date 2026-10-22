@@ -70,6 +70,9 @@ pub struct BackupSummary {
     /// Tags waiting for review.
     pub tags: u64,
     pub has_settings: bool,
+    /// Surface corrections (0 before format 4).
+    #[uniffi(default = 0)]
+    pub surface_corrections: u64,
     /// The map regions installed when it was made.
     pub regions: Vec<String>,
     /// Those of `regions` that were switched off; empty for a format-2
@@ -88,6 +91,7 @@ impl From<core::BackupSummary> for BackupSummary {
             routes: s.routes,
             tags: s.tags,
             has_settings: s.has_settings,
+            surface_corrections: s.surface_corrections,
             regions: s.regions,
             regions_disabled: s.regions_disabled,
         }
@@ -110,6 +114,11 @@ pub struct RestoreReport {
     /// Tags left out because they lie on a favourite the phone already had
     /// (taken as reviewed since the backup was made).
     pub tags_on_favourites: u64,
+    /// Surface corrections added, and those already on the phone.
+    #[uniffi(default = 0)]
+    pub surface_added: u64,
+    #[uniffi(default = 0)]
+    pub surface_skipped: u64,
     /// The backup's settings, for the app to check (which keys it knows)
     /// and apply; `None` if it has none.
     pub settings: Option<Vec<BackupSetting>>,
@@ -133,6 +142,8 @@ impl From<core::RestoreReport> for RestoreReport {
             tags_added: r.tags_added,
             tags_skipped: r.tags_skipped,
             tags_on_favourites: r.tags_on_favourites,
+            surface_added: r.surface_added,
+            surface_skipped: r.surface_skipped,
             settings: r.settings.map(|v| v.into_iter().map(Into::into).collect()),
             regions: r.regions,
             regions_disabled: r.regions_disabled,
