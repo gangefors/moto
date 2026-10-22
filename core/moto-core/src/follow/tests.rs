@@ -641,6 +641,81 @@ mod rejoin {
         assert!((back.route.distance_m - 2_000.0).abs() < 100.0);
     }
 
+    /// The middle of column 1 between rows 3 and 4.
+    fn column_1_middle() -> LatLon {
+        LatLon {
+            lat: 55.70 + 3.5 * 0.009,
+            lon: 13.40 + 0.016,
+        }
+    }
+
+    fn passes(r: &crate::Route, p: LatLon) -> bool {
+        crate::geo::distance_to_line(p, &r.geometry) < 30.0
+    }
+
+    /// Joining from row 4, column 1: the way back is south along column
+    /// 1 unless that road is gravel (avoided by default).
+    fn joining(e: &Engine) -> (RouteFollower, LatLon) {
+        let route = e
+            .route(at(2, 1), at(2, 11), &RouteOptions::default())
+            .unwrap();
+        let mut f = RouteFollower::new(route.geometry.clone(), &[], &[], route.duration_s).unwrap();
+        // On row 4 just east of column 1, so column 1 is a road the way
+        // back chooses, not the one the rider is on.
+        let home = LatLon {
+            lat: at(4, 1).lat,
+            lon: at(4, 1).lon + 0.002,
+        };
+        f.update(fix(home, 0)).unwrap();
+        (f, home)
+    }
+
+    /// Column 1 from row 4 to row 2, as a surface correction (ADR-0018).
+    fn column_1(e: &Engine, surface: crate::region::format::Surface) -> crate::Favourites {
+        let d = e.section_between(at(4, 1), at(2, 1)).unwrap();
+        crate::Favourites::build_all(
+            e,
+            &[],
+            &[],
+            &[crate::surface::tests::correction(1, surface, &d, 1)],
+        )
+    }
+
+    #[test]
+    fn the_way_back_keeps_off_a_road_corrected_to_gravel() {
+        use crate::region::format::Surface;
+        let e = engine();
+        let (f, home) = joining(&e);
+        let opts = RouteOptions::default();
+        assert_eq!(opts.gravel, crate::Gravel::Avoid);
+        let plain = e.rejoin(home, None, &f, &opts).unwrap();
+        assert!(passes(&plain.route, column_1_middle()), "{plain:?}");
+        let gravel = column_1(&e, Surface::Gravel);
+        let back = e.rejoin_with(home, None, &f, &opts, &gravel).unwrap();
+        assert!(!passes(&back.route, column_1_middle()), "{back:?}");
+    }
+
+    #[test]
+    fn the_way_back_rides_mapped_gravel_corrected_to_paved() {
+        use crate::region::format::Surface;
+        let mut data = fixture::grid(13);
+        // Column 1 between rows 2 and 4 (nodes 27, 40, 53) is gravel.
+        let column = [27u32, 40, 53];
+        for edge in &mut data.edges {
+            if column.contains(&edge.tail) && column.contains(&edge.head) {
+                edge.surface = Surface::Gravel as u8;
+            }
+        }
+        let e = Engine::from_region(Region::from_bytes(&data.to_bytes().unwrap()).unwrap());
+        let (f, home) = joining(&e);
+        let opts = RouteOptions::default();
+        let plain = e.rejoin(home, None, &f, &opts).unwrap();
+        assert!(!passes(&plain.route, column_1_middle()), "{plain:?}");
+        let paved = column_1(&e, Surface::Paved);
+        let back = e.rejoin_with(home, None, &f, &opts, &paved).unwrap();
+        assert!(passes(&back.route, column_1_middle()), "{back:?}");
+    }
+
     #[test]
     fn bad_input_is_refused() {
         let e = engine();

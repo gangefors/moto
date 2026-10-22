@@ -186,18 +186,23 @@ impl Engine {
     /// follows, meeting it as early as it can without riding the route
     /// backwards (when joining, within its first kilometre); fastest roads
     /// under `opts.avoid`. `bearing_deg` (where the rider is heading)
-    /// tells whether it starts behind them.
+    /// tells whether it starts behind them. With `favourites` (from
+    /// `SectionStore.favourites`), on the surfaces the rider corrected.
+    #[uniffi::method(default(favourites = None))]
     pub fn rejoin(
         &self,
         position: LatLon,
         bearing_deg: Option<f64>,
         follower: Arc<RouteFollower>,
         opts: RouteOptions,
+        favourites: Option<Arc<crate::sections::Favourites>>,
     ) -> Result<Rejoin, MotoError> {
         let f = follower.get();
+        let none = moto_core::Favourites::none();
+        let overlay = favourites.as_ref().map_or(&none, |v| &v.inner);
         let r = self
             .inner
-            .rejoin(position.into(), bearing_deg, &f, &opts.into())?;
+            .rejoin_with(position.into(), bearing_deg, &f, &opts.into(), overlay)?;
         Ok(Rejoin {
             route: r.route.into(),
             to_along_m: r.to_along_m,

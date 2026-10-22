@@ -708,6 +708,26 @@ impl Engine {
         follower: &RouteFollower,
         opts: &RouteOptions,
     ) -> Result<Rejoin, CoreError> {
+        self.rejoin_with(
+            position,
+            bearing_deg,
+            follower,
+            opts,
+            &crate::Favourites::none(),
+        )
+    }
+
+    /// As [`Self::rejoin`], on the road surfaces the rider's corrections
+    /// in `overlay` give (ADR-0018): avoided gravel is the corrected
+    /// gravel too. Its favourites and rides don't count.
+    pub fn rejoin_with(
+        &self,
+        position: LatLon,
+        bearing_deg: Option<f64>,
+        follower: &RouteFollower,
+        opts: &RouteOptions,
+        overlay: &crate::Favourites,
+    ) -> Result<Rejoin, CoreError> {
         position.validate()?;
         if bearing_deg.is_some_and(|b| !b.is_finite()) {
             return Err(CoreError::InvalidArgument("invalid bearing".into()));
@@ -726,7 +746,7 @@ impl Engine {
             0.0
         };
         let ways = crate::par::map(&targets, |&m| {
-            self.route(position, follower.point_at(m), opts)
+            self.fastest_route(position, follower.point_at(m), opts, overlay)
                 .map(|r| (m, r))
         });
         let cost = |m: f64, r: &Route| r.duration_s + (m - base) * per_m;

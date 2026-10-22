@@ -60,6 +60,8 @@ pub fn route_points(
     }
     let last = line.len() - 1;
     let follows = |a: usize, b: usize| -> bool {
+        // The nav app only knows the map's surfaces, so legs are tested on
+        // the map's surfaces on purpose (no surface corrections).
         let Ok(r) = engine.route(line[a], line[b], opts) else {
             return false;
         };
