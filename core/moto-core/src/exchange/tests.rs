@@ -28,6 +28,7 @@ fn along(
         .section_between(ll(55.7001, from_lon), ll(55.7001, to_lon))
         .unwrap();
     NewSection {
+        surface: None,
         rider_id: LOCAL_RIDER.into(),
         name: format!("{from_lon}-{to_lon}"),
         rating,
@@ -400,4 +401,94 @@ fn random_json_never_panics() {
         }
         let _ = from_geojson(&b);
     }
+}
+
+// --- A favourite's own surface (ADR-0018) ---
+
+/// `geojson`'s first feature with its `surface` property set to `v`.
+fn with_surface(geojson: &[u8], v: serde_json::Value) -> Vec<u8> {
+    let mut d: serde_json::Value = serde_json::from_slice(geojson).unwrap();
+    d["features"][0]["properties"]["surface"] = v;
+    serde_json::to_vec(&d).unwrap()
+}
+
+#[test]
+fn the_export_carries_a_favourites_own_surface_only_when_set() {
+    let e = engine();
+    let mut gravel = along(&e, 13.201, 13.209, Rating::Epic, Direction::Both);
+    gravel.surface = Some(Surface::Gravel);
+    let map = along(&e, 13.211, 13.219, Rating::Good, Direction::Both);
+    let store = store_with(&[gravel, map]);
+    let json = to_geojson(&store.list_sections(None).unwrap()).unwrap();
+    let d: serde_json::Value = serde_json::from_slice(&json).unwrap();
+    assert_eq!(d["features"][0]["properties"]["surface"], "gravel");
+    assert!(d["features"][1]["properties"].get("surface").is_none());
+    // Read back: the same surfaces.
+    let read = from_geojson(&json).unwrap();
+    assert_eq!(
+        read.iter().map(|s| s.surface).collect::<Vec<_>>(),
+        [Some(Surface::Gravel), None]
+    );
+}
+
+#[test]
+fn an_imported_surface_is_read_strictly() {
+    let e = engine();
+    let store = store_with(&[along(&e, 13.201, 13.209, Rating::Epic, Direction::Both)]);
+    let json = to_geojson(&store.list_sections(None).unwrap()).unwrap();
+    for (v, want) in [
+        (serde_json::json!("paved"), Some(Surface::Paved)),
+        (serde_json::json!("gravel"), Some(Surface::Gravel)),
+        (serde_json::Value::Null, None),
+    ] {
+        let read = from_geojson(&with_surface(&json, v.clone())).unwrap();
+        assert_eq!(read[0].surface, want, "{v}");
+    }
+    // A file from before has no surface: Map.
+    assert_eq!(from_geojson(&json).unwrap()[0].surface, None);
+    for bad in [
+        serde_json::json!("dirt"),
+        serde_json::json!(""),
+        serde_json::json!(3),
+        serde_json::json!(true),
+        serde_json::json!(["gravel"]),
+    ] {
+        let mut s = Store::open_in_memory().unwrap();
+        assert!(
+            import_sections(&mut s, None, &with_surface(&json, bad.clone()), T0).is_err(),
+            "{bad}"
+        );
+        assert!(s.list_sections(None).unwrap().is_empty(), "{bad}");
+    }
+}
+
+#[test]
+fn an_import_keeps_each_favourites_own_surface() {
+    let e = engine();
+    // Saved: a short gravel favourite. The file: a longer one over it,
+    // with no surface. The longer one replaces it, as itself.
+    let mut short = along(&e, 13.203, 13.207, Rating::Good, Direction::Both);
+    short.surface = Some(Surface::Gravel);
+    let mut store = store_with(&[short.clone()]);
+    let long = along(&e, 13.201, 13.209, Rating::Epic, Direction::Both);
+    let file = store_with(&[long]);
+    let json = to_geojson(&file.list_sections(None).unwrap()).unwrap();
+    let r = import_sections(&mut store, Some(&e), &json, T0).unwrap();
+    assert_eq!((r.added, r.replaced), (1, 1));
+    let kept = store.list_sections(None).unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].surface, None, "the kept favourite keeps its own");
+    // The other way round: the saved one covers the import and stays
+    // with its own surface.
+    let mut long = along(&e, 13.201, 13.209, Rating::Epic, Direction::Both);
+    long.surface = Some(Surface::Paved);
+    let mut store = store_with(&[long]);
+    let short_file = store_with(&[along(&e, 13.203, 13.207, Rating::Good, Direction::Both)]);
+    let json = to_geojson(&short_file.list_sections(None).unwrap()).unwrap();
+    let r = import_sections(&mut store, Some(&e), &json, T0).unwrap();
+    assert_eq!(r.skipped, 1);
+    assert_eq!(
+        store.list_sections(None).unwrap()[0].surface,
+        Some(Surface::Paved)
+    );
 }

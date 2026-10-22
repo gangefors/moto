@@ -164,6 +164,7 @@ fn a_favourite_on_a_corrected_road_shows_its_gravel() {
     let e = engine(shaped_ladder(Surface::Asphalt, 30));
     let d = north_draft(0, 8);
     let section = Section {
+        surface: None,
         id: 7,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),
@@ -209,4 +210,111 @@ fn a_favourite_on_a_corrected_road_shows_its_gravel() {
     );
     let [g] = f.gravel() else { panic!() };
     assert!((g.unpaved_m - g.length_m).abs() < 2.0);
+}
+
+/// A matched favourite on the shaped ladder's north road, nodes `from`
+/// to `to`, with its own `surface`.
+fn own(id: i64, from: u32, to: u32, surface: Option<Surface>, direction: Direction) -> Section {
+    let d = north_draft(from, to);
+    Section {
+        id,
+        rider_id: LOCAL_RIDER.into(),
+        name: String::new(),
+        rating: Rating::Good,
+        direction,
+        source: Source::Map,
+        status: Status::Ok,
+        created_at: 0,
+        updated_at: id,
+        ways: d.ways,
+        geometry: d.geometry,
+        surface,
+    }
+}
+
+#[test]
+fn a_favourites_own_surface_covers_its_spans_both_ways() {
+    let e = engine(shaped_ladder(Surface::Asphalt, 30));
+    let (fwd, back) = (edge_from(&e, 0, 4), edge_from(&e, 4, 0));
+    // One-way, nodes 1–2: gravel both ways all the same.
+    let s = own(1, 1, 2, Some(Surface::Gravel), Direction::Forward);
+    let f = Favourites::build_all(&e, std::slice::from_ref(&s), &[], &[]);
+    assert!(close(&stretches(&f, &e, fwd), &[(0.25, 0.5)]));
+    assert!(close(&stretches(&f, &e, back), &[(0.5, 0.75)]));
+    // Map: nothing.
+    let s = own(1, 1, 2, None, Direction::Both);
+    let f = Favourites::build_all(&e, std::slice::from_ref(&s), &[], &[]);
+    assert!(f.surface_marked.is_empty());
+}
+
+#[test]
+fn a_favourites_own_surface_wins_over_a_standalone_one() {
+    let e = engine(shaped_ladder(Surface::Asphalt, 30));
+    let fwd = edge_from(&e, 0, 4);
+    // A newer standalone Gravel correction over all of the first road;
+    // the favourite on nodes 1–3 says Paved.
+    let gravel = correction(9, Surface::Gravel, &north_draft(0, 4), 1_000);
+    let paved = own(1, 1, 3, Some(Surface::Paved), Direction::Both);
+    let f = Favourites::build_all(
+        &e,
+        std::slice::from_ref(&paved),
+        &[],
+        std::slice::from_ref(&gravel),
+    );
+    assert!(close(&stretches(&f, &e, fwd), &[(0.0, 0.25), (0.75, 1.0)]));
+    // Set to Map: the standalone one counts there.
+    let map = own(1, 1, 3, None, Direction::Both);
+    let f = Favourites::build_all(&e, std::slice::from_ref(&map), &[], &[gravel]);
+    assert!(close(&stretches(&f, &e, fwd), &[(0.0, 1.0)]));
+}
+
+#[test]
+fn a_favourites_own_surface_waits_while_it_does_not_fit() {
+    let e = engine(shaped_ladder(Surface::Asphalt, 30));
+    let fwd = edge_from(&e, 0, 4);
+    for status in [Status::NeedsRematch, Status::Unmatched] {
+        let mut s = own(1, 0, 4, Some(Surface::Gravel), Direction::Both);
+        s.status = status;
+        let f = Favourites::build_all(&e, std::slice::from_ref(&s), &[], &[]);
+        assert!(f.surface_marked.is_empty(), "{status:?}");
+    }
+    // Matched again, or given a new line: it applies, on the new spans.
+    let moved = own(1, 4, 8, Some(Surface::Gravel), Direction::Both);
+    let f = Favourites::build_all(&e, std::slice::from_ref(&moved), &[], &[]);
+    assert!(stretches(&f, &e, fwd).is_empty());
+    let next = edge_from(&e, 4, 8);
+    assert!(close(&stretches(&f, &e, next), &[(0.0, 1.0)]));
+    // Deleted: nothing left.
+    let f = Favourites::build_all(&e, &[], &[], &[]);
+    assert!(f.surface_marked.is_empty());
+}
+
+#[test]
+fn the_map_surface_of_a_favourite_is_the_longest_share() {
+    use crate::favourites::MapSurface;
+    for (surface, want) in [
+        (Surface::Asphalt, MapSurface::Paved),
+        (Surface::Gravel, MapSurface::Gravel),
+        (Surface::Unknown, MapSurface::Untagged),
+    ] {
+        let e = engine(shaped_ladder(surface, 30));
+        // Its own surface and corrections don't count: the map's alone.
+        let s = own(3, 0, 8, Some(Surface::Paved), Direction::Both);
+        let f = Favourites::build_all(
+            &e,
+            std::slice::from_ref(&s),
+            &[],
+            &[correction(1, Surface::Gravel, &north_draft(0, 8), 1)],
+        );
+        assert_eq!(f.map_surface(3), Some(want), "{surface:?}");
+        assert_eq!(f.map_surface(4), None);
+    }
+    // Not matched: none.
+    let e = engine(shaped_ladder(Surface::Asphalt, 30));
+    let mut s = own(3, 0, 8, None, Direction::Both);
+    s.status = Status::NeedsRematch;
+    assert_eq!(
+        Favourites::build_all(&e, &[s], &[], &[]).map_surface(3),
+        None
+    );
 }

@@ -337,3 +337,116 @@ fn reach_box_is_safe_near_the_poles_and_the_date_line() {
     let (sw, ne) = reach_box(ll(-89.9999, -180.0), 1e9);
     assert!(sw.0 >= -900_000_000 && ne.0 <= 900_000_000 && sw.1 >= -1_800_000_000);
 }
+
+// --- A favourite's own surface ---
+
+fn favourite_at(lat: f64) -> crate::section::NewSection {
+    crate::section::NewSection {
+        geometry: vec![ll(lat, 13.40), ll(lat, 13.41)],
+        ..crate::section::tests::sample()
+    }
+}
+
+#[test]
+fn an_update_sets_or_clears_a_favourites_own_surface() {
+    use crate::section::{SectionUpdate, SurfaceSetting};
+    let mut s = store();
+    let id = s.add_section(&favourite_at(55.0), T0).unwrap().id;
+    assert_eq!(s.get_section(id).unwrap().unwrap().surface, None);
+    for (setting, want) in [
+        (Some(SurfaceSetting::Gravel), Some(Surface::Gravel)),
+        (None, Some(Surface::Gravel)),
+        (Some(SurfaceSetting::Paved), Some(Surface::Paved)),
+        (Some(SurfaceSetting::Map), None),
+        (None, None),
+    ] {
+        let up = SectionUpdate {
+            surface: setting,
+            rating: Some(crate::section::Rating::Good),
+            direction: Some(crate::section::Direction::Forward),
+            ..Default::default()
+        };
+        let got = s.update_section(id, &up, T0 + 1).unwrap().unwrap();
+        assert_eq!(got.surface, want, "{setting:?}");
+        assert_eq!(got.rating, crate::section::Rating::Good);
+    }
+    // A new favourite can carry one; not Unknown or Dirt.
+    let mut with = favourite_at(55.1);
+    with.surface = Some(Surface::Paved);
+    assert_eq!(
+        s.add_section(&with, T0).unwrap().surface,
+        Some(Surface::Paved)
+    );
+    for bad in [Surface::Unknown, Surface::Dirt] {
+        let mut b = favourite_at(55.2);
+        b.surface = Some(bad);
+        assert!(s.add_section(&b, T0).is_err(), "{bad:?}");
+    }
+}
+
+#[test]
+fn a_tampered_favourite_surface_is_a_storage_error() {
+    for code in [0, 1, 7, 99] {
+        let mut s = store();
+        let id = s.add_section(&favourite_at(55.0), T0).unwrap().id;
+        s.conn
+            .execute_batch("PRAGMA ignore_check_constraints = ON")
+            .unwrap();
+        s.conn
+            .execute("UPDATE sections SET surface = ?1", [code])
+            .unwrap();
+        assert!(
+            matches!(s.get_section(id), Err(CoreError::Storage(_))),
+            "{code}"
+        );
+        assert!(s.list_sections(None).is_err(), "{code}");
+        assert!(
+            s.surface_correction_at(ll(55.0, 13.405), 25.0).is_err(),
+            "{code}"
+        );
+    }
+}
+
+#[test]
+fn a_favourites_own_surface_is_found_before_a_standalone_one() {
+    use crate::section::{SectionUpdate, SurfaceSetting};
+    let mut s = store();
+    s.add_surface_correction(&on(vec![span(5, 0, 3)], 55.0), None, T0 + 50)
+        .unwrap();
+    let at = ll(55.0001, 13.405);
+    assert!(matches!(
+        s.surface_correction_at(at, 25.0).unwrap(),
+        Some(CorrectionAt::Standalone(_))
+    ));
+    let id = s.add_section(&favourite_at(55.0), T0).unwrap().id;
+    // Map: not a correction.
+    assert!(matches!(
+        s.surface_correction_at(at, 25.0).unwrap(),
+        Some(CorrectionAt::Standalone(_))
+    ));
+    let up = SectionUpdate {
+        surface: Some(SurfaceSetting::Paved),
+        ..Default::default()
+    };
+    s.update_section(id, &up, T0 + 1).unwrap();
+    assert_eq!(
+        s.surface_correction_at(at, 25.0).unwrap(),
+        Some(CorrectionAt::Favourite {
+            section_id: id,
+            surface: Surface::Paved
+        })
+    );
+    // Waiting for a re-match: not applied, so not found.
+    s.set_status(id, Status::NeedsRematch).unwrap();
+    assert!(matches!(
+        s.surface_correction_at(at, 25.0).unwrap(),
+        Some(CorrectionAt::Standalone(_))
+    ));
+    // Deleted with the favourite.
+    s.set_status(id, Status::Ok).unwrap();
+    s.delete_section(id).unwrap();
+    assert!(matches!(
+        s.surface_correction_at(at, 25.0).unwrap(),
+        Some(CorrectionAt::Standalone(_))
+    ));
+}

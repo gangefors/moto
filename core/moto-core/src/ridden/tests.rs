@@ -11,6 +11,7 @@ fn ll(lat: f64, lon: f64) -> LatLon {
 /// A section along lat `lat` from lon 13.20 to 13.22 (about 1.26 km).
 fn section(id: i64, lat: f64) -> Section {
     Section {
+        surface: None,
         id,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),

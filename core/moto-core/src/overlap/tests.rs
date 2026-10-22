@@ -25,6 +25,7 @@ fn along(
     let p = |lon| LatLon { lat: 55.7001, lon };
     let d = e.section_between(p(from_lon), p(to_lon)).unwrap();
     NewSection {
+        surface: None,
         rider_id: LOCAL_RIDER.into(),
         name: format!("{from_lon}-{to_lon} {rating:?} {direction:?}"),
         rating,

@@ -286,6 +286,7 @@ pub fn run(path: &Path) -> Result<Report, String> {
             };
             let d = engine.section_between(p, north).ok()?;
             Some(Section {
+                surface: None,
                 id: i as i64 + 1,
                 rider_id: LOCAL_RIDER.into(),
                 name: String::new(),

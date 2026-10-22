@@ -76,6 +76,8 @@ fn filled() -> Store {
         },
     ];
     other.ways[0].way_id = 77;
+    // A favourite's own surface travels with it (ADR-0018).
+    other.surface = Some(crate::region::format::Surface::Gravel);
     s.add_section(&other, 1_781_000_000).unwrap();
 
     // A recorded ride with a gap, named.
@@ -194,8 +196,15 @@ fn contents(s: &Store) -> String {
     let mut out = String::new();
     for x in s.list_sections(None).unwrap() {
         out += &format!(
-            "S {} {:?} {:?} {:?} {} {} {:?}\n",
-            x.name, x.rating, x.direction, x.source, x.created_at, x.updated_at, x.geometry
+            "S {} {:?} {:?} {:?} {} {} {:?} {:?}\n",
+            x.name,
+            x.rating,
+            x.direction,
+            x.source,
+            x.created_at,
+            x.updated_at,
+            x.geometry,
+            x.surface
         );
     }
     let mut ride_of = HashMap::new();

@@ -149,6 +149,7 @@ impl SectionStore {
     /// makes redundant.
     pub fn add(&self, section: NewSection) -> Result<AddResult, MotoError> {
         let new = core::NewSection {
+            surface: None,
             rider_id: core::LOCAL_RIDER.into(),
             name: section.name,
             rating: section.rating.into(),
@@ -188,6 +189,7 @@ impl SectionStore {
     /// asked; `None` if there is no such section.
     pub fn update(&self, id: i64, update: SectionUpdate) -> Result<Option<Section>, MotoError> {
         let update = core::SectionUpdate {
+            surface: None,
             name: update.name,
             rating: update.rating.map(Into::into),
             direction: update.direction.map(Into::into),

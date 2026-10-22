@@ -56,7 +56,7 @@ impl Store {
             .conn
             .prepare(
                 "SELECT id, rider_id, name, rating, direction, source, status, created_at,
-                    updated_at, geometry FROM sections WHERE status = ?1 ORDER BY id",
+                    updated_at, geometry, surface FROM sections WHERE status = ?1 ORDER BY id",
             )
             .map_err(db_err)?;
         let rows = stmt

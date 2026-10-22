@@ -349,9 +349,41 @@ impl Store {
     /// recently changed) whose line passes within `reach_m` of `point`.
     fn favourite_surface_at(
         &self,
-        _point: LatLon,
-        _reach_m: f64,
+        point: LatLon,
+        reach_m: f64,
     ) -> Result<Option<CorrectionAt>, CoreError> {
+        let (sw, ne) = reach_box(point, reach_m);
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, surface, geometry FROM sections
+                 WHERE status = ?5 AND surface IS NOT NULL
+                    AND max_lat >= ?1 AND min_lat <= ?3 AND max_lon >= ?2 AND min_lon <= ?4
+                 ORDER BY updated_at DESC, id DESC",
+            )
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map(params![sw.0, sw.1, ne.0, ne.1, Status::Ok as i64], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Vec<u8>>(2)?,
+                ))
+            })
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        for (id, code, blob) in rows {
+            let corrupt = |what: &str| CoreError::Storage(format!("section {id}: invalid {what}"));
+            let surface = correction_surface(code).ok_or_else(|| corrupt("surface"))?;
+            let line = decode_geometry(&blob).ok_or_else(|| corrupt("geometry"))?;
+            if distance_to_line(point, &line) <= reach_m {
+                return Ok(Some(CorrectionAt::Favourite {
+                    section_id: id,
+                    surface,
+                }));
+            }
+        }
         Ok(None)
     }
 

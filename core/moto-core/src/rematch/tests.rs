@@ -67,6 +67,7 @@ fn store_without_key() -> (Store, i64) {
     let s = store
         .add_section(
             &NewSection {
+                surface: None,
                 rider_id: LOCAL_RIDER.into(),
                 name: "A to D".into(),
                 rating: Rating::Epic,
@@ -228,6 +229,7 @@ fn deletes_only_unmatched_sections() {
     let keep = store
         .add_section(
             &NewSection {
+                surface: None,
                 rider_id: LOCAL_RIDER.into(),
                 name: "B to C".into(),
                 rating: Rating::Good,

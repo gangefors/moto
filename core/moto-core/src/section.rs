@@ -8,6 +8,7 @@
 //! plus its own geometry (so it can be drawn, and re-matched, even when the
 //! ways have changed).
 
+use crate::region::format::Surface;
 use crate::{CoreError, LatLon};
 
 /// The rider every section belongs to in v1; community ratings later add
@@ -127,6 +128,9 @@ pub struct NewSection {
     pub ways: Vec<WaySpan>,
     /// The section's own polyline, at least two points.
     pub geometry: Vec<LatLon>,
+    /// Its own surface (ADR-0018): Paved or Gravel, or `None` to go by
+    /// the map.
+    pub surface: Option<Surface>,
 }
 
 /// A saved section.
@@ -144,6 +148,29 @@ pub struct Section {
     pub updated_at: i64,
     pub ways: Vec<WaySpan>,
     pub geometry: Vec<LatLon>,
+    /// Its own surface (ADR-0018): Paved or Gravel over all of it, both
+    /// ways, or `None` to go by the map.
+    pub surface: Option<Surface>,
+}
+
+/// What an update does with a section's own surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceSetting {
+    /// The map's surface counts: its own is cleared.
+    Map,
+    Paved,
+    Gravel,
+}
+
+impl SurfaceSetting {
+    /// The section's own surface it sets (`None` for the map's).
+    pub fn surface(self) -> Option<Surface> {
+        match self {
+            Self::Map => None,
+            Self::Paved => Some(Surface::Paved),
+            Self::Gravel => Some(Surface::Gravel),
+        }
+    }
 }
 
 /// A new line for a saved section (its start and end moved, ADR-0018):
@@ -174,6 +201,8 @@ pub struct SectionUpdate {
     /// A new line: its way spans, geometry and bounds are replaced and it
     /// fits the map again (`ok`); id, rider, source and created time stay.
     pub line: Option<SectionLine>,
+    /// Its own surface; `None` leaves it as it is.
+    pub surface: Option<SurfaceSetting>,
 }
 
 /// `ways` ridden the other way: last first, each span flipped.
@@ -228,6 +257,12 @@ impl NewSection {
         if self.ways.iter().any(|w| w.way_id <= 0) {
             return Err(invalid("OSM way ids are positive"));
         }
+        if self
+            .surface
+            .is_some_and(|s| !crate::surface::is_correction_surface(s))
+        {
+            return Err(invalid("a favourite's own surface is Paved or Gravel"));
+        }
         Ok(())
     }
 }
@@ -258,6 +293,7 @@ pub(crate) mod tests {
                     lon: 12.46,
                 },
             ],
+            surface: None,
         }
     }
 
@@ -309,6 +345,12 @@ pub(crate) mod tests {
                 Box::new(|s| s.ways = vec![s.ways[0]; MAX_SECTION_WAYS + 1]),
             ),
             ("bad way id", Box::new(|s| s.ways[0].way_id = 0)),
+            (
+                "unknown surface",
+                Box::new(|s| s.surface = Some(Surface::Unknown)),
+            ),
+            ("dirt", Box::new(|s| s.surface = Some(Surface::Dirt))),
+            ("asphalt", Box::new(|s| s.surface = Some(Surface::Asphalt))),
         ];
         for (why, break_it) in cases {
             let mut s = sample();
@@ -319,5 +361,9 @@ pub(crate) mod tests {
         ok.name = "é".repeat(200);
         ok.ways.clear();
         ok.validate().unwrap();
+        for s in [Surface::Paved, Surface::Gravel] {
+            ok.surface = Some(s);
+            ok.validate().unwrap();
+        }
     }
 }

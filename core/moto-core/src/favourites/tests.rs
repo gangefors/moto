@@ -35,6 +35,7 @@ const TO: LatLon = LatLon {
 
 fn section(ways: &[(i64, u32, u32)], rating: Rating, direction: Direction) -> Section {
     Section {
+        surface: None,
         id: 1,
         rider_id: crate::section::LOCAL_RIDER.into(),
         name: String::new(),

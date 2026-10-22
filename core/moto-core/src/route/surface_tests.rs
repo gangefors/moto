@@ -310,6 +310,7 @@ fn the_fastest_route_goes_by_the_corrected_surface_alone() {
         )
         .unwrap();
     let section = crate::section::Section {
+        surface: None,
         id: 1,
         rider_id: crate::section::LOCAL_RIDER.into(),
         name: String::new(),

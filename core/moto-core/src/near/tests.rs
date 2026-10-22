@@ -6,6 +6,7 @@ use crate::section::{LOCAL_RIDER, Source, Status};
 
 fn section(id: i64, geometry: Vec<LatLon>, rating: Rating, direction: Direction) -> Section {
     Section {
+        surface: None,
         id,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),

@@ -623,6 +623,7 @@ impl Case {
                     .section_between(ll(f.from)?, ll(f.to)?)
                     .map_err(|e| format!("favourite {}: {e}", i + 1))?;
                 Ok(Section {
+                    surface: None,
                     id: i as i64 + 1,
                     rider_id: LOCAL_RIDER.into(),
                     name: String::new(),

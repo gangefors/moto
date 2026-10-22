@@ -1742,6 +1742,7 @@ mod tests {
 
         // A favourite on the middle of it: the dashes stop there.
         let section = Section {
+            surface: None,
             id: 7,
             rider_id: crate::section::LOCAL_RIDER.into(),
             name: String::new(),
@@ -1892,6 +1893,7 @@ mod tests {
             .section_between(ll(55.7201, 13.401), ll(55.7201, 13.439))
             .unwrap();
         let s = Section {
+            surface: None,
             id: 1,
             rider_id: LOCAL_RIDER.into(),
             name: String::new(),
@@ -1932,6 +1934,7 @@ mod tests {
             .section_between(ll(55.7001, 13.201), ll(55.7001, 13.209))
             .unwrap();
         let s = Section {
+            surface: None,
             id: 1,
             rider_id: LOCAL_RIDER.into(),
             name: String::new(),
@@ -2276,6 +2279,7 @@ mod tests {
             .section_between(ll(55.7201, 13.401), ll(55.7201, 13.439))
             .unwrap();
         let s = Section {
+            surface: None,
             id: 1,
             rider_id: LOCAL_RIDER.into(),
             name: String::new(),

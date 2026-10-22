@@ -27,6 +27,7 @@ fn path(from: LatLon, legs: &[(f64, f64)]) -> Vec<LatLon> {
 
 fn section(geometry: Vec<LatLon>, rating: Rating, direction: Direction) -> Section {
     Section {
+        surface: None,
         id: 1,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),

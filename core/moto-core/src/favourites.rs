@@ -10,9 +10,9 @@
 use std::collections::HashMap;
 
 use crate::geo::haversine_m;
-use crate::region::format::Edge;
 use crate::region::format::WayRef;
 use crate::region::format::edge_flags::REVERSED;
+use crate::region::format::{Edge, Surface};
 use crate::route::{edge_line, is_unpaved};
 use crate::scoring::PARAMS;
 use crate::section::{Direction, Rating, Section, Status, WaySpan};
@@ -75,6 +75,18 @@ pub struct Favourites {
     /// The highest speed of an edge a correction makes at least partly
     /// unpaved, km/h (0 with none): see the route search's estimate.
     max_unpaved_kmh: f64,
+    /// What the map alone has along each matched section, by length.
+    map_surface: HashMap<i64, MapSurface>,
+}
+
+/// What the map has along a favourite section, whichever covers the most
+/// of it (ADR-0018): for its edit sheet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapSurface {
+    Paved,
+    Gravel,
+    /// No surface in OSM (routed as paved).
+    Untagged,
 }
 
 /// A stretch of one OSM way a correction paints, as the build looks it up.
@@ -134,7 +146,10 @@ impl Favourites {
     /// As [`Self::build_with_rides`], with the rider's surface
     /// `corrections` (ADR-0018): those that are `ok` set the surface of
     /// the stretches they cover, both ways; where they overlap the newest
-    /// (`updated_at`, then id) wins. Elsewhere the map's surface counts.
+    /// (`updated_at`, then id) wins. Then the matched sections with their
+    /// own surface set theirs over all their way spans, both ways
+    /// whatever their direction, so on its stretch a favourite's own
+    /// surface wins. Elsewhere the map's surface counts.
     pub fn build_all(
         engine: &Engine,
         sections: &[Section],
@@ -147,9 +162,18 @@ impl Favourites {
             .filter(|c| c.status == Status::Ok)
             .collect();
         ordered.sort_by_key(|c| (c.updated_at, c.id));
-        for c in ordered {
-            let unpaved = !c.surface.is_paved();
-            for w in &c.ways {
+        let mut own: Vec<&Section> = sections
+            .iter()
+            .filter(|s| s.status == Status::Ok && s.surface.is_some())
+            .collect();
+        own.sort_by_key(|s| (s.updated_at, s.id));
+        let painters = ordered
+            .into_iter()
+            .map(|c| (c.surface, &c.ways))
+            .chain(own.into_iter().filter_map(|s| Some((s.surface?, &s.ways))));
+        for (surface, ways) in painters {
+            let unpaved = !surface.is_paved();
+            for w in ways {
                 let (lo, hi) = (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx));
                 if lo < hi {
                     paints_by_way
@@ -211,6 +235,11 @@ impl Favourites {
         let mut ridden = vec![0u64; region.edge_count().div_ceil(64)];
         let mut any_ridden = false;
         let mut surface: HashMap<u32, (f32, Vec<(f32, f32)>)> = HashMap::new();
+        // Metres of each section on mapped paved, unpaved and untagged
+        // road, each road counted once.
+        let mut on_map: HashMap<usize, [f64; 3]> = HashMap::new();
+        let mut measured: std::collections::HashSet<(usize, i64, u32, u32)> =
+            std::collections::HashSet::new();
         for id in 0..region.edge_count() as u32 {
             let r = &region.way_ref(id);
             let rides = ridden_by_way.get(&r.way_id);
@@ -268,6 +297,16 @@ impl Favourites {
                     covered(engine, id, r, from, to)
                 };
                 on_any = on_any.max(stretch.1 - stretch.0);
+                if stretch.1 > stretch.0 && measured.insert((s.section, r.way_id, lo, hi)) {
+                    let e = region.edge(id);
+                    let kind = match Surface::from_u8(e.surface) {
+                        None | Some(Surface::Unknown) => 2,
+                        Some(m) if m.is_paved() => 0,
+                        Some(_) => 1,
+                    };
+                    on_map.entry(s.section).or_default()[kind] +=
+                        (stretch.1 - stretch.0) * f64::from(e.length_dm) / 10.0;
+                }
                 if stretch.1 > stretch.0 {
                     favourites.drawn.entry(id).or_default().push((
                         sections[s.section].id,
@@ -347,6 +386,20 @@ impl Favourites {
         let mut gravel: Vec<SectionGravel> = gravel.into_values().collect();
         gravel.sort_by_key(|g| g.section_id);
         favourites.gravel = gravel;
+        favourites.map_surface = on_map
+            .into_iter()
+            .map(|(i, m)| {
+                // The most metres; paved first, then gravel, on a tie.
+                let kind = if m[0] >= m[1] && m[0] >= m[2] {
+                    MapSurface::Paved
+                } else if m[1] >= m[2] {
+                    MapSurface::Gravel
+                } else {
+                    MapSurface::Untagged
+                };
+                (sections[i].id, kind)
+            })
+            .collect();
         if any_ridden {
             favourites.ridden = ridden;
         }
@@ -556,6 +609,12 @@ impl Favourites {
     #[inline]
     pub(crate) fn max_unpaved_kmh(&self) -> f64 {
         self.max_unpaved_kmh
+    }
+
+    /// What the map alone has along matched section `section_id`, by
+    /// length (ADR-0018); `None` for a section not matched to this region.
+    pub fn map_surface(&self, section_id: i64) -> Option<MapSurface> {
+        self.map_surface.get(&section_id).copied()
     }
 
     /// Only the rider's surface corrections of this overlay: no

@@ -144,6 +144,7 @@ fn favourites_near_a_waypoint_are_ridden() {
         .section_between(ll(55.790, 13.536), ll(55.790, 13.568))
         .unwrap();
     let s = Section {
+        surface: None,
         id: 1,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),
@@ -175,6 +176,7 @@ fn loops_keep_off_avoided_favourites() {
         .section_between(ll(55.790, 13.536), ll(55.790, 13.568))
         .unwrap();
     let s = Section {
+        surface: None,
         id: 1,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),
@@ -731,6 +733,7 @@ fn side_loops_are_cut_unless_short_of_reach_or_a_favourite() {
         .section_between(ll(55.7005, 13.2101), ll(55.7095, 13.2101))
         .unwrap();
     let s = Section {
+        surface: None,
         id: 1,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),
@@ -859,6 +862,7 @@ fn a_loop_through_an_epic_section_rides_it_once() {
     let (a, b) = (ll(55.772, 13.496), ll(55.799, 13.496));
     let d = e.section_between(a, b).unwrap();
     let s = Section {
+        surface: None,
         id: 1,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),
@@ -900,6 +904,7 @@ fn a_loop_through_a_section_carries_on_past_its_far_end() {
     let fav = Favourites::build(
         &e,
         &[Section {
+            surface: None,
             id: 1,
             rider_id: LOCAL_RIDER.into(),
             name: String::new(),
@@ -950,6 +955,7 @@ fn a_loop_through_a_one_way_section_rides_it_its_way() {
         let fav = Favourites::build(
             &e,
             &[Section {
+                surface: None,
                 id: 1,
                 rider_id: LOCAL_RIDER.into(),
                 name: String::new(),

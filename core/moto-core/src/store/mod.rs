@@ -258,6 +258,7 @@ impl Store {
             ways: s.ways.clone(),
             // As stored: 1e-7° fixed point, so a reload gives the same values.
             geometry: decode_geometry(&encode_geometry(&s.geometry)).unwrap_or_default(),
+            surface: s.surface,
         })
     }
 
@@ -266,7 +267,7 @@ impl Store {
             .conn
             .query_row(
                 "SELECT id, rider_id, name, rating, direction, source, status, created_at,
-                    updated_at, geometry FROM sections WHERE id = ?1",
+                    updated_at, geometry, surface FROM sections WHERE id = ?1",
                 [id],
                 read_row,
             )
@@ -290,7 +291,7 @@ impl Store {
             .conn
             .prepare(
                 "SELECT id, rider_id, name, rating, direction, source, status, created_at,
-                    updated_at, geometry FROM sections
+                    updated_at, geometry, surface FROM sections
                  WHERE max_lat >= ?1 AND min_lat <= ?3 AND max_lon >= ?2 AND min_lon <= ?4
                  ORDER BY id",
             )
@@ -303,7 +304,8 @@ impl Store {
         rows.into_iter().map(|r| self.finish(r)).collect()
     }
 
-    /// Changes name, rating or direction, gives the section a new line,
+    /// Changes name, rating, direction or its own surface, gives the
+    /// section a new line,
     /// and turns it round if asked (after the new line), all in one
     /// transaction; returns the updated section, or `None` (with nothing
     /// written) if there is no section with that id. No overlap rules
@@ -327,6 +329,7 @@ impl Store {
                     name = coalesce(?2, name),
                     rating = coalesce(?3, rating),
                     direction = coalesce(?4, direction),
+                    surface = CASE WHEN ?6 THEN ?7 ELSE surface END,
                     updated_at = ?5
                  WHERE id = ?1",
                 params![
@@ -334,7 +337,9 @@ impl Store {
                     update.name,
                     update.rating.map(|r| r as i64),
                     update.direction.map(|d| d as i64),
-                    now
+                    now,
+                    update.surface.is_some(),
+                    update.surface.and_then(|s| s.surface()).map(|s| s as i64)
                 ],
             )
             .map_err(db_err)?;
@@ -426,6 +431,12 @@ impl Store {
             updated_at: r.updated_at,
             ways,
             geometry: decode_geometry(&r.geometry).ok_or_else(|| corrupt("geometry"))?,
+            surface: match r.surface {
+                None => None,
+                Some(code) => Some(
+                    crate::surface::correction_surface(code).ok_or_else(|| corrupt("surface"))?,
+                ),
+            },
         })
     }
 }
@@ -442,6 +453,7 @@ struct RawSection {
     created_at: i64,
     updated_at: i64,
     geometry: Vec<u8>,
+    surface: Option<i64>,
 }
 
 fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawSection> {
@@ -456,6 +468,7 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawSection> {
         created_at: row.get(7)?,
         updated_at: row.get(8)?,
         geometry: row.get(9)?,
+        surface: row.get(10)?,
     })
 }
 
@@ -480,8 +493,8 @@ fn insert_section_at(
     let (min, max) = bounds(&s.geometry);
     tx.execute(
         "INSERT INTO sections (rider_id, name, rating, direction, source, status,
-            created_at, updated_at, min_lat, min_lon, max_lat, max_lon, geometry)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?13, ?8, ?9, ?10, ?11, ?12)",
+            created_at, updated_at, min_lat, min_lon, max_lat, max_lon, geometry, surface)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?13, ?8, ?9, ?10, ?11, ?12, ?14)",
         params![
             s.rider_id,
             s.name,
@@ -496,6 +509,7 @@ fn insert_section_at(
             max.1,
             encode_geometry(&s.geometry),
             updated_at,
+            s.surface.map(|v| v as i64),
         ],
     )
     .map_err(db_err)?;

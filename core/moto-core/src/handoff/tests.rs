@@ -27,6 +27,7 @@ const TO: LatLon = LatLon {
 /// The route over the north loop, marked epic.
 fn north_route(e: &Engine) -> crate::Route {
     let s = Section {
+        surface: None,
         id: 1,
         rider_id: LOCAL_RIDER.into(),
         name: String::new(),

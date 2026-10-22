@@ -20,6 +20,7 @@ pub mod archive;
 use serde::{Deserialize, Serialize};
 
 use crate::overlap::Shape;
+use crate::region::format::Surface;
 use crate::rematch::rematch_store;
 use crate::section::{
     Direction, LOCAL_RIDER, MAX_NAME_CHARS, NewSection, Rating, Section, Source, Status, WaySpan,
@@ -75,6 +76,10 @@ struct PropsOut<'a> {
     updated_at: i64,
     /// OSM way spans: [way id, from node index, to node index].
     ways: Vec<[i64; 3]>,
+    /// The favourite's own surface (ADR-0018): `paved` or `gravel`; left
+    /// out where the map's counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    surface: Option<&'static str>,
 }
 
 // --- GeoJSON as read: strict types, unknown fields ignored ---
@@ -119,6 +124,10 @@ struct PropsIn {
     created_at: Option<i64>,
     #[serde(default)]
     updated_at: Option<i64>,
+    /// `paved` or `gravel`; absent or null for the map's surface. Any
+    /// other value (another string, a number) refuses the file.
+    #[serde(default)]
+    surface: Option<String>,
 }
 
 fn rating_name(r: Rating) -> &'static str {
@@ -167,6 +176,7 @@ pub fn to_geojson(sections: &[Section]) -> Result<Vec<u8>, CoreError> {
                     .iter()
                     .map(|w| [w.way_id, i64::from(w.from_idx), i64::from(w.to_idx)])
                     .collect(),
+                surface: s.surface.and_then(surface_name),
             },
         })
         .collect();
@@ -179,6 +189,16 @@ pub fn to_geojson(sections: &[Section]) -> Result<Vec<u8>, CoreError> {
         features,
     })
     .map_err(|e| CoreError::Storage(format!("could not write the export: {e}")))
+}
+
+/// A favourite's own surface as the file names it; `None` for one that
+/// can't be a favourite's (never stored).
+fn surface_name(s: Surface) -> Option<&'static str> {
+    match s {
+        Surface::Paved => Some("paved"),
+        Surface::Gravel => Some("gravel"),
+        _ => None,
+    }
 }
 
 fn bad(msg: impl Into<String>) -> CoreError {
@@ -257,6 +277,12 @@ fn feature(f: FeatureIn) -> Result<ReadSection, String> {
         Some("forward") => Direction::Forward,
         Some(other) => return Err(format!("unknown direction {other:?}")),
     };
+    let surface = match props.surface.as_deref() {
+        None => None,
+        Some("paved") => Some(Surface::Paved),
+        Some("gravel") => Some(Surface::Gravel),
+        Some(other) => return Err(format!("unknown surface {other:?}")),
+    };
     let name: String = props
         .name
         .unwrap_or_default()
@@ -284,6 +310,7 @@ fn feature(f: FeatureIn) -> Result<ReadSection, String> {
         source: Source::Import,
         ways,
         geometry,
+        surface,
     };
     s.validate().map_err(|e| e.to_string())?;
     Ok(ReadSection {
