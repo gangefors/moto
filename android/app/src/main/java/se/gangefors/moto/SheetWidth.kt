@@ -28,4 +28,4 @@ fun sheetMaxWidthDp(landscape: Boolean, atSide: Boolean, screenWidthDp: Float): 
  * the sheet is not at the side or fills the container.
  */
 fun sideSheetShift(atSide: Boolean, containerWidth: Float, sheetWidth: Float): Float =
-    if (atSide) -((containerWidth - sheetWidth) / 2).coerceAtLeast(0f) else 0f
+    if (atSide && containerWidth > sheetWidth) (sheetWidth - containerWidth) / 2 else 0f
