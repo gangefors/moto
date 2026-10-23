@@ -8,10 +8,11 @@
 #
 # Pushes are a strict whitelist: a command line that involves `push` must
 # be exactly one of
-#   git push [-u|--set-upstream] origin claude/NAME[:claude/NAME]
+#   git push [-u|--set-upstream] origin BRANCH[:BRANCH]
 #   git push [-u|--set-upstream] origin HEAD
-#   git push [-u|--set-upstream] [--force-with-lease[=claude/NAME[:SHA]]]
-#            [--force-if-includes] origin claude/NAME[:claude/NAME]
+#   git push [-u|--set-upstream] [--force-with-lease[=BRANCH[:SHA]]]
+#            [--force-if-includes] origin BRANCH[:BRANCH]
+# where BRANCH is claude/NAME or ccr-NAME
 # (options in any order, each once, exact spellings, plain characters
 # only, never sharing a line with another command). The whole command text
 # is analysed, heredoc bodies included, except the message of the single
@@ -37,7 +38,7 @@ class Block(Exception):
 
 
 def name_ok(n):
-    if not n.startswith("claude/") or not re.fullmatch(r"[A-Za-z0-9._/-]+", n):
+    if not (n.startswith("claude/") or re.match(r"ccr-[A-Za-z0-9]", n)) or not re.fullmatch(r"[A-Za-z0-9._/-]+", n):
         return False
     return all(p and not p.startswith(("-", ".")) and ".." not in p and not p.endswith((".", ".lock"))
                for p in n.split("/"))
@@ -67,7 +68,7 @@ def check_push(line):
             key, lease = "--force-with-lease", True
             ref, colon, sha = a.split("=", 1)[1].partition(":")
             if not name_ok(ref) or (colon and not SHA.match(sha)):
-                raise Block("--force-with-lease=<ref>[:<sha>] must name a claude/* branch")
+                raise Block("--force-with-lease=<ref>[:<sha>] must name a claude/* or ccr-* branch")
         elif a == "--force-with-lease":
             lease = True
         elif a in ("-u", "--set-upstream", "--force-if-includes"):
@@ -87,7 +88,7 @@ def check_push(line):
         return
     parts = spec.split(":")
     if len(parts) > 2 or not all(name_ok(p) for p in parts):
-        raise Block("refspec must be claude/NAME or claude/NAME:claude/NAME (a lease push needs an explicit branch)")
+        raise Block("refspec must be claude/NAME or ccr-NAME, or BRANCH:BRANCH of those (a lease push needs an explicit branch)")
 
 
 def check_hooks_not_skipped(n):
