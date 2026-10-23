@@ -8,21 +8,32 @@ import org.junit.Test
 
 class SheetWidthTest {
     @Test fun portraitKeepsTheDefault() {
-        assertEquals(SheetPlacement(360f), sheetPlacement(false, 360f))
-        assertEquals(SheetPlacement(640f), sheetPlacement(false, 800f))
+        assertEquals(360f, sheetMaxWidthDp(false, true, 360f))
+        assertEquals(640f, sheetMaxWidthDp(false, true, 800f))
     }
 
-    @Test fun landscapeIsHalfAndAtTheLeft() {
-        assertEquals(SheetPlacement(500f), sheetPlacement(true, 1000f))
-        assertEquals(SheetPlacement(450f), sheetPlacement(true, 900f))
+    @Test fun otherSheetsKeepTheDefaultInLandscape() {
+        assertEquals(640f, sheetMaxWidthDp(true, false, 1000f))
+    }
+
+    @Test fun landscapeSideSheetIsHalf() {
+        assertEquals(500f, sheetMaxWidthDp(true, true, 1000f))
+        assertEquals(450f, sheetMaxWidthDp(true, true, 900f))
     }
 
     @Test fun landscapeNeverNarrowerThanTheMinimum() {
-        assertEquals(SheetPlacement(360f), sheetPlacement(true, 640f))
+        assertEquals(360f, sheetMaxWidthDp(true, true, 640f))
     }
 
     @Test fun narrowScreenNeverGetsAWiderSheet() {
-        assertEquals(SheetPlacement(300f), sheetPlacement(true, 300f))
-        assertEquals(SheetPlacement(0f), sheetPlacement(true, -5f))
+        assertEquals(300f, sheetMaxWidthDp(true, true, 300f))
+        assertEquals(0f, sheetMaxWidthDp(true, true, -5f))
+    }
+
+    @Test fun shiftMovesTheCentredSheetToTheLeft() {
+        assertEquals(-250f, sideSheetShift(true, 1000f, 500f))
+        assertEquals(0f, sideSheetShift(true, 500f, 500f))
+        assertEquals(0f, sideSheetShift(true, 400f, 500f))
+        assertEquals(0f, sideSheetShift(false, 1000f, 500f))
     }
 }

@@ -8,7 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -34,7 +39,6 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
-import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontStyle
@@ -80,7 +84,8 @@ data class SectionChoice(
  * the map can show the direction Save would give; [onTop] the sheet's
  * top edge (px from the top of the screen), so the map can fit the
  * section above it, and [onRight] its right edge (px from the left), for
- * fitting it beside the sheet in landscape.
+ * fitting it beside the sheet in landscape. Only the edit sheet is [atSide]
+ * (left-aligned and half the width in landscape).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,6 +98,7 @@ fun SectionSheet(
     suggestion: String? = null,
     canReverse: Boolean = false,
     onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit = { _, _ -> },
+    atSide: Boolean = false,
     onTop: (Int) -> Unit = {},
     onRight: (Int) -> Unit = {},
     onReshape: ((SectionChoice) -> Unit)? = null,
@@ -111,17 +117,21 @@ fun SectionSheet(
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
 
-    // Landscape: left-aligned and half the width, so the map shows at the
-    // right. The sheet is centred by Material, so it is moved left by the
-    // gap (leftDp is its centred left edge, zero when placed at the left).
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val screenDp = LocalConfiguration.current.screenWidthDp.toFloat()
-    val placement = sheetPlacement(landscape, screenDp)
-    val shiftDp = if (landscape) -(screenDp - placement.widthDp) / 2 else 0f
+    // At the side (the edit sheet) in landscape: left-aligned and half the
+    // width, so the map shows at the right. Material centres the sheet, so
+    // it is moved left by half the free width, measured in the container.
+    val config = LocalConfiguration.current
+    val landscape = isLandscape(config.screenWidthDp, config.screenHeightDp)
+    val sideSheet = atSide && landscape
+    val maxWidthDp = sheetMaxWidthDp(landscape, atSide, config.screenWidthDp.toFloat())
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.offset(x = shiftDp.dp),
-        sheetMaxWidth = placement.widthDp.dp,
+        modifier = Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val shift = sideSheetShift(sideSheet, constraints.maxWidth.toFloat(), placeable.width.toFloat())
+            layout(placeable.width, placeable.height) { placeable.place(shift.roundToInt(), 0) }
+        },
+        sheetMaxWidth = maxWidthDp.dp,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Box(
@@ -131,7 +141,13 @@ fun SectionSheet(
                 onRight((at.x + it.size.width).roundToInt())
             },
         ) {
-            Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 16.dp)) {
+            Column(
+                Modifier
+                    // At the left edge, keep clear of a cutout or side bar.
+                    .then(if (sideSheet) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Left)) else Modifier)
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, end = 12.dp, bottom = 16.dp),
+            ) {
                 // The title, and X to leave without saving (as do Back and a
                 // swipe down).
                 Row(verticalAlignment = Alignment.CenterVertically) {

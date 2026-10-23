@@ -395,7 +395,7 @@ internal fun MapScreenScope.MapDialogs() {
         // the saved sections have reloaded after Save (so a turned section
         // doesn't flip back and forth).
         LaunchedEffect(sections, shownSectionId) { if (editing == null) editPreview = null }
-        LaunchedEffect(editing?.id, editTop) {
+        LaunchedEffect(editing?.id, if (landscape) editRight else editTop) {
             val section = editing
             if (section == null) {
                 editTop = Int.MAX_VALUE
@@ -437,6 +437,7 @@ internal fun MapScreenScope.MapDialogs() {
                     },
                     canReverse = true,
                     onPreview = { oneWay, turn -> editPreview = oneWay to turn },
+                    atSide = true,
                     onTop = { editTop = it },
                     onRight = { editRight = it },
                     onReshape = { choice -> startReshape(section, choice) },
