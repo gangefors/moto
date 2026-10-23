@@ -55,7 +55,7 @@ echo "export PATH=\"$HOME/.cargo/bin:\$PATH\""
 command -v java >/dev/null 2>&1 || { say "Java 21 is missing; install a JDK 21 first"; exit 1; }
 props="$root/android/local.properties"
 sdk=${ANDROID_HOME:-}
-[ -n "$sdk" ] || sdk=$(sed -n 's/^sdk\.dir=//p' "$props" 2>/dev/null | head -1)
+[ -n "$sdk" ] || sdk=$(sed -n 's/^sdk\.dir=//p' "$props" 2>/dev/null | head -1 || true)
 [ -n "$sdk" ] || sdk="$HOME/android-sdk"
 mgr="$sdk/cmdline-tools/latest/bin/sdkmanager"
 if [ ! -x "$mgr" ]; then
