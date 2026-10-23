@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -33,6 +34,8 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -106,8 +109,17 @@ fun SectionSheet(
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
 
+    // Landscape: left-aligned and half the width, so the map shows at the
+    // right. The sheet is centred by Material, so it is moved left by the
+    // gap (leftDp is its centred left edge, zero when placed at the left).
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val screenDp = LocalConfiguration.current.screenWidthDp.toFloat()
+    val placement = sheetPlacement(landscape, screenDp)
+    val shiftDp = if (landscape) -(screenDp - placement.widthDp) / 2 else 0f
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.offset(x = shiftDp.dp),
+        sheetMaxWidth = placement.widthDp.dp,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Box(Modifier.onGloballyPositioned { onTop(it.positionInWindow().y.roundToInt()) }) {
