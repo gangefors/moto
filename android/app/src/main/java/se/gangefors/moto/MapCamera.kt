@@ -159,6 +159,7 @@ internal fun MapScreenScope.fitPaddingNow(): FitPadding {
             buttonsTop = planButtonsTop,
             tagTop = tagTop,
             editTop = editTop,
+            editRight = editRight,
             sheetTop = sheetTop,
             cardsTop = cardsTop,
             rightCardsTop = infoRightTop,

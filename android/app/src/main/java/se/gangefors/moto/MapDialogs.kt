@@ -399,6 +399,7 @@ internal fun MapScreenScope.MapDialogs() {
             val section = editing
             if (section == null) {
                 editTop = Int.MAX_VALUE
+                editRight = 0
                 return@LaunchedEffect
             }
             if (editTop >= mapSize.height) return@LaunchedEffect
@@ -437,6 +438,7 @@ internal fun MapScreenScope.MapDialogs() {
                     canReverse = true,
                     onPreview = { oneWay, turn -> editPreview = oneWay to turn },
                     onTop = { editTop = it },
+                    onRight = { editRight = it },
                     onReshape = { choice -> startReshape(section, choice) },
                     mapSurface = runCatching { favourites?.mapSurface(section.id) }.getOrNull(),
                     onSave = { choice ->

@@ -127,7 +127,8 @@ fun leftClearance(landscape: Boolean, insetLeft: Int, columnRight: Int): Int =
  * column at the left in landscape ([columnRight]), the buttons at the right
  * ([buttonsLeft]) or above the sheet while planning ([buttonsTop]), the tag
  * and edit panels, and at the bottom the sheet and cards upright or the
- * info cards at the right in landscape ([rightCardsTop]).
+ * info cards at the right in landscape ([rightCardsTop]). The edit sheet
+ * ([editTop], [editRight]) covers the bottom upright, the left in landscape.
  */
 fun fitPanels(
     landscape: Boolean,
@@ -143,18 +144,21 @@ fun fitPanels(
     buttonsTop: Int = Int.MAX_VALUE,
     tagTop: Int = Int.MAX_VALUE,
     editTop: Int = Int.MAX_VALUE,
+    editRight: Int = 0,
     sheetTop: Int = Int.MAX_VALUE,
     cardsTop: Int = Int.MAX_VALUE,
     rightCardsTop: Int = Int.MAX_VALUE,
 ): Panels = Panels(
     width = width,
     height = height,
-    left = leftClearance(landscape, insetLeft, columnRight),
+    left = maxOf(leftClearance(landscape, insetLeft, columnRight), if (landscape) editRight else 0),
     top = maxOf(topPanelBottom, insetTop),
     right = maxOf(width - buttonsLeft, insetRight),
     bottom = maxOf(
         height - tagTop,
-        height - editTop,
+        // The edit sheet: upright it covers the bottom; in landscape it is
+        // at the left (editRight) and the map is fitted beside it.
+        if (landscape) 0 else height - editTop,
         height - buttonsTop,
         insetBottom,
         // Upright the sheet and the cards span the width; in landscape the

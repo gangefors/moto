@@ -88,6 +88,7 @@ internal class MapScreenState(
 
     // The section edit sheet's top edge while it is open.
     var editTop by mutableIntStateOf(Int.MAX_VALUE)
+    var editRight by mutableIntStateOf(0)
 
     // The rider's saved sections (ADR-0006), opened off the main thread.
     var store by mutableStateOf<StoreState>(StoreState.Loading)

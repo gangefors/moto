@@ -232,6 +232,20 @@ class CardLayoutTest {
         )
 
     @Test
+    fun editSheetCoversTheBottomUprightAndTheLeftInLandscape() {
+        fun fit(landscape: Boolean) = fitPanels(
+            landscape, 1000, 2000, insetLeft = 10, insetTop = 80, insetRight = 20, insetBottom = 50,
+            columnRight = 0, editTop = 1200, editRight = 640,
+        )
+        val upright = fit(false)
+        assertEquals(800, upright.bottom)
+        assertEquals(10, upright.left)
+        val land = fit(true)
+        assertEquals(50, land.bottom)
+        assertEquals(640, land.left)
+    }
+
+    @Test
     fun portraitFitKeepsClearOfTheSheetAndButtons() {
         val none = panels(false)
         assertEquals(Panels(1000, 2000, left = 10, top = 80, right = 20, bottom = 50), none)

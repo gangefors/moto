@@ -79,7 +79,8 @@ data class SectionChoice(
  * [onPreview] hears the one-way switch and the toggle as they change, so
  * the map can show the direction Save would give; [onTop] the sheet's
  * top edge (px from the top of the screen), so the map can fit the
- * section above it.
+ * section above it, and [onRight] its right edge (px from the left), for
+ * fitting it beside the sheet in landscape.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,6 +94,7 @@ fun SectionSheet(
     canReverse: Boolean = false,
     onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit = { _, _ -> },
     onTop: (Int) -> Unit = {},
+    onRight: (Int) -> Unit = {},
     onReshape: ((SectionChoice) -> Unit)? = null,
     mapSurface: MapSurface? = null,
 ) {
@@ -122,7 +124,13 @@ fun SectionSheet(
         sheetMaxWidth = placement.widthDp.dp,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Box(Modifier.onGloballyPositioned { onTop(it.positionInWindow().y.roundToInt()) }) {
+        Box(
+            Modifier.onGloballyPositioned {
+                val at = it.positionInWindow()
+                onTop(at.y.roundToInt())
+                onRight((at.x + it.size.width).roundToInt())
+            },
+        ) {
             Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 16.dp)) {
                 // The title, and X to leave without saving (as do Back and a
                 // swipe down).
