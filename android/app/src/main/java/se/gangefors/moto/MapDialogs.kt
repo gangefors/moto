@@ -75,6 +75,10 @@ internal fun MapScreenScope.MapDialogs() {
                 initial = SectionChoice(rating = Rating.GOOD, oneWay = false),
                 suggestion = sectionSuggestedName(draftWords),
                 onDismiss = { savingDraft = false },
+                atSide = true,
+                // Landscape only: the map fits the draft line beside the
+                // sheet. Upright nothing is reported, so nothing moves.
+                onRight = { if (landscape) editRight = it },
                 onSave = { choice ->
                     if (tag == null) stopMarking() else savingDraft = false
                     val name = sectionNameToStore(choice.name).ifEmpty {
@@ -395,16 +399,27 @@ internal fun MapScreenScope.MapDialogs() {
         // the saved sections have reloaded after Save (so a turned section
         // doesn't flip back and forth).
         LaunchedEffect(sections, shownSectionId) { if (editing == null) editPreview = null }
-        LaunchedEffect(editing?.id, if (landscape) editRight else editTop) {
+        LaunchedEffect(editing?.id, savingDraft, if (landscape) editRight else editTop) {
             val section = editing
             if (section == null) {
-                editTop = Int.MAX_VALUE
-                editRight = 0
+                // The save sheet reports its own edge in editRight.
+                if (!savingDraft) {
+                    editTop = Int.MAX_VALUE
+                    editRight = 0
+                }
                 return@LaunchedEffect
             }
             if (editTop >= mapSize.height) return@LaunchedEffect
             delay(EDIT_FIT_SETTLE_MS)
             showOnMap(listOf(section.geometry), always = true)
+        }
+        // The save sheet in landscape: once it has come up (its right edge
+        // settles), the map fits the draft line in the free area beside it.
+        LaunchedEffect(savingDraft, draft?.geometry, if (landscape) editRight else 0) {
+            val line = draft?.geometry
+            if (!savingDraft || line == null || !landscape || editRight <= 0 || editing != null) return@LaunchedEffect
+            delay(EDIT_FIT_SETTLE_MS)
+            showOnMap(listOf(line), always = true)
         }
         // The edit sheet's pending new line (Change start and end): the
         // shown favourite's own line is replaced by it (MapShown); one

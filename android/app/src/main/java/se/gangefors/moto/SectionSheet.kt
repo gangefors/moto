@@ -84,8 +84,8 @@ data class SectionChoice(
  * the map can show the direction Save would give; [onTop] the sheet's
  * top edge (px from the top of the screen), so the map can fit the
  * section above it, and [onRight] its right edge (px from the left), for
- * fitting it beside the sheet in landscape. Only the edit sheet is [atSide]
- * (left-aligned and half the width in landscape).
+ * fitting it beside the sheet in landscape. The edit sheet and the save
+ * sheet are [atSide] (left-aligned and half the width in landscape).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
