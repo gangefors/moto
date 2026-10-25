@@ -3,7 +3,8 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "git config core.hooksPath .githooks" }
+          { "type": "command", "command": "git config core.hooksPath .githooks" },
+          { "type": "command", "command": "if [ \"$(git rev-parse --is-shallow-repository 2>/dev/null)\" = true ]; then git fetch --unshallow --quiet >/dev/null 2>&1 || true; fi; exit 0" }
         ]
       }
     ],
