@@ -146,8 +146,6 @@ def analyze(cmd):
     code = code_of(cmd)
     n = re.sub(r"[\\'\"]", "", code)
     check_hooks_not_skipped(n)
-    if re.search(r"\bgit\b.*\bconfig\b.*(--edit\b|\s-\w*e\b|--get(\s|$))", n):
-        raise Block("git config --get takes one plain key; no editing")
     check_others(n)
     if re.search(r"\bgit\b\s+\S*[$`]", n):
         raise Block("can't tell which git command runs")
