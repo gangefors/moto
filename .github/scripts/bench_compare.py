@@ -17,7 +17,7 @@ with favourites and curvy), map matching, following a route (also at
 least 1 µs per fix) and the way back to it, and more
 than 50 % and 5 ms slower for the short verify and open timings, which
 depend on memory and disk and vary more between CI machines. See
-"Testing and performance" in CLAUDE.md.
+"Benchmark" under "When CI is red" in .claude/skills/ci-and-merge/SKILL.md.
 """
 
 import argparse
