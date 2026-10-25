@@ -327,7 +327,24 @@ t block 'git ls-files | xargs git push origin'
 # kept on purpose: false positives that need a shell parser to tell apart
 t block 'git log --oneline | grep push'
 t block 'cat .githooks/pre-push; echo $HOME; git status'
-t block 'git config --get push.default'
+t allow 'git config --get push.default'
+# reading one config key is allowed only as the whole command
+t allow 'git config --get remote.origin.url'
+t allow 'git config --get branch.claude/work.remote'
+t block "git config --get push.default \\${NL}&& git push --force origin main"
+t block "git config --get push.default${NL}git push --force origin main"
+t block "git config --get push.default${NL}git config alias.p push"
+t block "git config --get push.default"$'\r'"${NL}git config remote.origin.url x"
+t block 'git config --get push.default; git config push.default matching'
+t block 'git config --get-regexp remote; git config alias.x y'
+t block 'git config push.default matching --get'
+t block 'GIT_CONFIG_COUNT=1 git config --get push.default'
+# hook skips after options that take a separate value
+t block 'git --work-tree . commit -n'
+t block 'git --work-tree . commit -nm x'
+t block 'git --git-dir .git commit --no-verify -m x'
+t block 'git --git-dir .git --work-tree . merge -n x'
+t allow 'git --work-tree . commit -m x'
 
 # --- blocked: guard can't read its input (fails closed)
 raw block ''

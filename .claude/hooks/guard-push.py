@@ -20,8 +20,9 @@
 # only, never sharing a line with another command). The whole command text
 # is analysed, heredoc bodies included, except the message of the single
 # shape `[git add ... && | git status && ]git commit ... -F - <<'TAG'`.
-# Also blocked: skipping git hooks, changing git config that redirects
-# pushes or hooks, tampering with the hook files and scripts, writing the
+# Also blocked: skipping git hooks (after any -C, -c, --work-tree or
+# --git-dir), git config that touches pushes or hooks (except a plain
+# `git config --get KEY` as the whole command), tampering with the hook files and scripts, writing the
 # verify stamp other than through verify.sh, and ref-moving calls
 # (gh pr merge, GitHub ref/merge/contents/graphql APIs, plumbing pushes).
 import re
@@ -33,6 +34,7 @@ CHARS = r"[A-Za-z0-9 ._/@:=-]"
 COMMIT_SHAPE = re.compile(
     r"\A((?:(?:git add " + CHARS + r"+|git status) && )?git commit" + CHARS + r"* -F - <<(['\"])(\w+)\2)\n(.*)\n\3\n?\Z",
     re.S)
+CONFIG_GET = re.compile(r"\A[ \t]*git config --get [A-Za-z0-9._/-]+[ \t]*\Z")
 PROTECTED = r"(\.githooks|\.git/hooks|\.claude/hooks|\.claude/scripts|\.claude/settings\.json|\.git/config)"
 
 
@@ -95,7 +97,7 @@ def check_push(line):
 
 
 def check_hooks_not_skipped(n):
-    sub = r"\bgit\s+(?:(?:-C\s*\S+|-c\s*\S+|--[a-z-]+(?:=\S+)?)\s+)*(commit|merge|rebase|push|am|cherry-pick)\b([^;&|\n]*)"
+    sub = r"\bgit\s+(?:(?:-C\s*\S+|-c\s*\S+|--(?:work-tree|git-dir)\s+\S+|--[a-z-]+(?:=\S+)?)\s+)*(commit|merge|rebase|push|am|cherry-pick)\b([^;&|\n]*)"
     for m in re.finditer(sub, n):
         rest = m.group(2)
         if re.search(r"(^|\s)--no-v", rest) or re.search(r"(^|\s)-[A-Za-z]*n[A-Za-z]*(\s|$)", rest):
@@ -135,6 +137,10 @@ def check_others(n):
 
 
 def analyze(cmd):
+    # Reading one config key is fine. Matched on the raw text, before the
+    # backslash-newline join, so nothing can follow on another line.
+    if CONFIG_GET.match(cmd):
+        return
     cmd = cmd.replace("\\\r\n", "").replace("\\\n", "")
     code = code_of(cmd)
     n = re.sub(r"[\\'\"]", "", code)
