@@ -393,7 +393,7 @@ internal fun MapScreenScope.MapDialogs() {
             // on the choices kept, not the first ones.
             androidx.compose.runtime.key(
                 when (sheet) {
-                    is SheetSubject.New -> sheet.draft
+                    is SheetSubject.New -> sheet.tag?.id
                     is SheetSubject.Saved -> sheet.section.id to pendingFor(pendingEdit, sheet.section.id)
                 },
             ) {
