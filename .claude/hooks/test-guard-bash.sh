@@ -324,6 +324,23 @@ t block 'tr . '"' '"' <<< git.push.origin.main | source /dev/stdin'
 t block 'echo git.push.origin.main | sed '"'"'s/\./ /g;e'"'"
 t allow 'cat .githooks/pre-push .claude/scripts/ship-status.sh | head'
 t allow 'git log -- .githooks/pre-push docs/sh.md; ls ./sh-notes'
+# only read-only programs get the narrow match; any other keeps it broad
+t block 'tr . '"' '"' <<< git.push.origin.main | rbash'
+t block 'tr . '"' '"' <<< git.push.origin.main | script -q /dev/null'
+t block 'tr . '"' '"' <<< git.push.origin.main | su'
+t block 'tr . '"' '"' <<< git.push.origin.main | sudo -s'
+t block 'printf '"'"'a:\n\tgit.push.origin.main\n'"'"' | tr . '"' '"' | make -f -'
+t block 'tr / '"' '"' <<< '"'"'shell git/push/origin/main'"'"' | gdb -batch -x /dev/stdin'
+t block 'view -c '"'"'!git.push.origin.main'"'"
+t block 'tr / '"' '"' <<< '"'"'run-shell "git/push/origin/main"'"'"' | tmux source-file -'
+t block 'tr . '"' '"' <<< git.push.origin.main > /tmp/x.sh && chmod +x /tmp/x.sh && /tmp/x.sh'
+t block 'tr . '"' '"' <<< git.push.origin.main | crontab -'
+t block 'tr . '"' '"' <<< git.push.origin.main | at now'
+t block 'echo git.push.origin.main > /tmp/x.sh; cat .githooks/pre-push'
+t block 'find . -name x.push.sh -exec sh {} ;'
+t block 'find . -name x -delete; git log .githooks/pre-push'
+t allow 'find .githooks -name pre-push; git status'
+t allow 'test -f .githooks/pre-push && cat .githooks/pre-push; git status'
 # kept on purpose: false positives that need a shell parser to tell apart
 t block 'git log --oneline | grep push'
 t block 'cat .githooks/pre-push; echo $HOME; git status'
