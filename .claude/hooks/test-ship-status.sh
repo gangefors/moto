@@ -53,6 +53,24 @@ g checkout -q -b claude/local main
 out=$(cd "$tmp/repo" && bash "$script")
 expect "never pushed" '^unpushed: unknown \(' "$out"
 
+g checkout -q main
+g commit -q --allow-empty -m "main moves on"
+g push -q origin main
+g checkout -q claude/work
+g fetch -q origin
+out=$(cd "$tmp/repo" && bash "$script")
+expect "behind main" '^behind main: 1$' "$out"
+expect "ahead still" '^ahead of main: 2$' "$out"
+expect "main note" '^main: as last fetched' "$out"
+expect "no trailing space" '\)$' "$(printf '%s\n' "$out" | grep '^other branches')"
+
+git clone -q --depth 1 --branch claude/work "file://$tmp/remote.git" "$tmp/shallow" 2>/dev/null
+out=$(cd "$tmp/shallow" && bash "$script"); rc=$?
+expect "shallow exit" '^0$' "$rc"
+expect "shallow ahead" '^ahead of main: unknown \(shallow clone\)$' "$out"
+expect "shallow behind" '^behind main: unknown \(shallow clone\)$' "$out"
+expect "shallow others" '^other branches ahead of main: unknown \(shallow clone\)$' "$out"
+
 g remote remove origin
 out=$(cd "$tmp/repo" && bash "$script" claude/work); rc=$?
 expect "no remote exit" '^0$' "$rc"

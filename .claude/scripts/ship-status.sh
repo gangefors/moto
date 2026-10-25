@@ -28,15 +28,21 @@ if git rev-parse --verify -q "refs/remotes/origin/$branch" >/dev/null 2>&1; then
 else
   echo "unpushed: unknown (origin/$branch not fetched or not pushed)"
 fi
-if git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then
+  echo "main: as last fetched (origin/main)"
+  echo "ahead of main: unknown (shallow clone)"
+  echo "behind main: unknown (shallow clone)"
+  echo "other branches ahead of main: unknown (shallow clone)"
+elif git rev-parse --verify -q refs/remotes/origin/main >/dev/null 2>&1; then
+  echo "main: as last fetched (origin/main)"
   echo "ahead of main: $(count "origin/main..$branch")"
   echo "behind main: $(count "$branch..origin/main")"
   others=$(git for-each-ref --format='%(refname:strip=3)' 'refs/remotes/origin/claude/*' 'refs/remotes/origin/ccr-*' 2>/dev/null |
     while read -r b; do
       [ "$b" = "$branch" ] && continue
       n=$(git rev-list --count "origin/main..origin/$b" 2>/dev/null || echo 0)
-      [ "$n" -gt 0 ] && printf '%s(+%s) ' "$b" "$n"
-    done)
+      [ "$n" -gt 0 ] && printf '%s(+%s)\n' "$b" "$n"
+    done | paste -sd' ' -)
   echo "other branches ahead of main: ${others:-none}"
 else
   echo "ahead of main: unknown (origin/main not fetched)"
@@ -52,10 +58,12 @@ fi
 
 full=$(git rev-parse "refs/heads/$branch")
 ci="unknown (no gh and no curl)"
+s=
 if command -v gh >/dev/null 2>&1; then
   s=$(gh api "repos/$repo/commits/$full/check-runs" --jq '[.check_runs[] | "\(.name)=\(.conclusion // .status)"] | join(" ")' 2>/dev/null)
   if [ -n "$s" ]; then ci=$s; else ci="unknown (gh could not read check runs)"; fi
-elif command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+fi
+if [ -z "$s" ] && command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
   s=$(curl -fsS --proto '=https' -L --max-time 15 -H 'Accept: application/vnd.github+json' \
     "https://api.github.com/repos/$repo/commits/$full/check-runs" 2>/dev/null |
     python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(" ".join("%s=%s"%(r["name"],r.get("conclusion") or r["status"]) for r in d["check_runs"]))' 2>/dev/null)
@@ -70,7 +78,9 @@ if command -v curl >/dev/null 2>&1; then
   code=$(curl -sI -L --proto '=https' --proto-redir '=https' --max-time 20 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null)
   case $code in
     ''|000) echo "apk: unknown (no answer from $url)" ;;
-    *) echo "apk: HTTP $code $url" ;;
+    200) echo "apk: ok $url" ;;
+    404) echo "apk: not published $url" ;;
+    *) echo "apk: unknown (HTTP $code) $url" ;;
   esac
 else
   echo "apk: unknown (curl missing)"
