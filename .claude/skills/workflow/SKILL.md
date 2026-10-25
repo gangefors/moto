@@ -148,7 +148,8 @@ SUMMARY / FINDINGS / ...: short, structured, with path:line
 - Brief each agent fully: it starts with no context (request, tier,
   slice, spec URL, ADR path, commit range, decisions the rider made,
   what to return). CLAUDE.md is loaded into every agent already: don't
-  tell agents to read it, and don't paste rules from it.
+  tell agents to read it, and don't paste rules from it. Fill-in
+  templates for each stage: `brief-template.md` beside this file.
 
 ## Pushing
 
