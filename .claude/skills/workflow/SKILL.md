@@ -100,7 +100,7 @@ His comments are routed by what they change:
 After he approves a design with UI, ask the `mockup` agent to move the
 page's new components into the kit (one commit).
 
-**Gate 2, result.** After documenter and push, wait for the build with the
+**Gate 2, result.** Before reporting a build run `bash .claude/scripts/ship-status.sh` (unpushed, ahead/behind main, other branches, CI, APK link). After documenter and push, wait for the build with the
 `ci` agent only when needed, then tell the rider: the commit id, the
 direct APK link once published and working (see CLAUDE.md), what changed
 in a few lines, the reviewer's phone test list (added to the Checklist
