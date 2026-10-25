@@ -74,13 +74,14 @@ cd ../android
 
 The Bash guard (`.claude/hooks/guard-bash.sh` with the policy in
 `guard-push.py`, tested by `test-guard-bash.sh`) reads the whole command
-text, heredoc bodies included. A seat belt, not a sandbox. If it blocks,
-use the accepted form.
+text, heredoc bodies included. A seat belt against unintended pushes,
+not a sandbox: deliberate obfuscation is out of scope (CLAUDE.md). If it
+blocks, use the accepted form.
 
 | Rejected | Accepted form |
 |---|---|
 | `git push` joined to anything: `&&`, `;`, pipes, redirects, `$()`, backticks, quotes, variables, `xargs`, `bash -c`, `env`/`sudo` prefixes, `git -C` | `git push -u origin claude/<name>` as its own command, plain characters only |
-| The word `push` on its own in a command that also mentions git (e.g. `git log \| grep push`), or a name containing push (`pre-push`, `push.default`) when the command also has `$`, backticks, `xargs` or a `>` redirect, or runs any program not on the read-only list | names that only contain push, like `.githooks/pre-push`, `push.default` or `origin/push-x`, in a command without those whose every program is one of `git`, `cat`, `head`, `tail`, `less`, `ls`, `grep`, `rg`, `wc`, `sort`, `uniq`, `diff`, `stat`, `file`, `echo`, `printf`, `test`, `[`, `cd`, `true`, or `find` without `-exec`/`-execdir`/`-ok`/`-okdir`/`-delete`; or a separate command |
+| The word `push` on its own in a command that also mentions git (e.g. `git log \| grep push`), or a name containing push (`pre-push`, `push.default`) when the command also has `$`, backticks or `xargs` | names that only contain push, like `.githooks/pre-push`, `push.default` or `origin/push-x`, in a command without `$`, backticks or `xargs`; or a separate command |
 | Push to `main`, any other branch, another remote or a URL, `refs/...`, `+ref`, `:ref` (delete), `HEAD:other`, several refspecs | `origin claude/NAME`, `origin ccr-NAME`, `origin HEAD` (not with `--force-with-lease` or `--force-if-includes`), `origin A:B` with both of those names |
 | `--force`, `-f`, `--delete`, `-d`, `--mirror`, `--all`, `--tags`, `--prune`, `--atomic`, `-o`, `--receive-pack`, an option twice | `-u`/`--set-upstream`, `--force-with-lease[=BRANCH[:SHA]]`, `--force-if-includes`, each once, with an explicit branch for a lease |
 | `--no-verify`, `-n` or an abbreviation (`--no-ver`) on commit, merge, rebase, push, am, cherry-pick | no flag: fix what the hook reports |

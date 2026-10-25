@@ -3,16 +3,14 @@
 # Copyright (C) 2026 Stefan Gangefors
 #
 # Policy for guard-bash.sh: reads the Bash command on stdin. Exit 0 = allow,
-# 2 = block (reason on stderr). A seat belt against mistakes, not a sandbox;
-# the real control over main is server-side branch protection.
+# 2 = block (reason on stderr). A seat belt against unintended pushes, not a
+# sandbox: deliberate obfuscation is out of scope (the CLAUDE.md rule against
+# working around a guard); server-side branch protection guards main.
 #
 # Pushes are a strict whitelist: a command line that involves `push` (the
 # word push or git-push on its own; names that only contain it, such as
 # pre-push, push.default or origin/push-x, count only when the command has
-# $, backticks, xargs or a `>` redirect, or runs any program not on the
-# read-only list git, cat, head, tail, less, ls, grep, rg, wc, sort, uniq,
-# diff, stat, file, echo, printf, test, [, cd, true and find without
-# -exec/-ok/-delete) must be exactly one of
+# $, backticks or xargs) must be exactly one of
 #   git push [-u|--set-upstream] origin BRANCH[:BRANCH]
 #   git push [-u|--set-upstream] origin HEAD
 #   git push [-u|--set-upstream] [--force-with-lease[=BRANCH[:SHA]]]
@@ -148,44 +146,13 @@ def analyze(cmd):
         check_push(code.strip())
 
 
-# Programs that only read and print (or run git, whose own push is caught
-# by the narrow match). Any other program might rewrite text and run it.
-READ_ONLY = {"git", "cat", "head", "tail", "less", "ls", "grep", "rg", "wc", "sort", "uniq",
-             "diff", "stat", "file", "echo", "printf", "test", "[", "cd", "true", "find"}
-FIND_RUNS = re.compile(r"(?<!\S)-(exec|execdir|ok|okdir|delete)(?!\S)")
-
-
-def only_read_only(n):
-    """True if every simple command starts with a READ_ONLY program (path
-    stripped; a leading `!`, then, do or else is skipped), find has no
-    -exec/-execdir/-ok/-okdir/-delete, and nothing is redirected to a file
-    (writing a script and running it later)."""
-    if ">" in n:
-        return False
-    for seg in re.split(r"[;&|(){}\n]", n):
-        words = seg.split()
-        while words and words[0] in ("!", "then", "do", "else"):
-            words = words[1:]
-        if not words:
-            continue
-        prog = words[0].rsplit("/", 1)[-1]
-        if prog not in READ_ONLY or (prog == "find" and FIND_RUNS.search(seg)):
-            return False
-    return True
-
-
 def mentions_push(n):
-    """Whether the (unquoted) command may run a push. When there is no $,
-    backtick or xargs and every program is on the READ_ONLY list with no
-    redirect to a file, literal text is split only on whitespace and shell
-    operators and nothing rewrites it into a command, so a name such as
-    pre-push or push.default can never become the word push: only push
-    between non-name characters (anything but \\w . / -) or git-push
-    counts. Otherwise expansions (${x:-push}, IFS tricks, $(...)), xargs
-    -d or any other program (`tr . ' ' | sh`, perl -e, make -f -, a
-    script written and then run) could turn those names into push, so any
-    \\bpush\\b counts, as before."""
-    if re.search(r"[$`]|\bxargs\b", n) or not only_read_only(n):
+    """Whether the (unquoted) command may run a push. With $, a backtick
+    or xargs the shell or xargs can split a name such as pre-push or
+    push.default into the word push, so any \\bpush\\b counts. Otherwise
+    only push between non-name characters (anything but \\w . / -) or
+    git-push counts, so reading .githooks/pre-push is fine."""
+    if re.search(r"[$`]|\bxargs\b", n):
         return re.search(r"\bpush\b", n) is not None
     return re.search(r"(?<![\w./-])push(?![\w./-])|\bgit-push\b", n) is not None
 
