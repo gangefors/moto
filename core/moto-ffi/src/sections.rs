@@ -71,6 +71,11 @@ pub struct NewSection {
     /// Its own surface: `Paved`, `Gravel`, or none for the map's.
     #[uniffi(default = None)]
     pub surface: Option<Surface>,
+    /// Saves it turned round: from the end of `geometry` to its start, so
+    /// a one-way favourite runs the other way. Applied before the overlap
+    /// rules, so they see the direction that is stored.
+    #[uniffi(default = false)]
+    pub reverse: bool,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -164,7 +169,7 @@ impl SectionStore {
     /// least as high); otherwise saved, removing the saved sections it
     /// makes redundant.
     pub fn add(&self, section: NewSection) -> Result<AddResult, MotoError> {
-        let new = core::NewSection {
+        let mut new = core::NewSection {
             surface: section.surface.map(core_surface),
             rider_id: core::LOCAL_RIDER.into(),
             name: section.name,
@@ -174,6 +179,9 @@ impl SectionStore {
             ways: section.ways.into_iter().map(Into::into).collect(),
             geometry: section.geometry.into_iter().map(Into::into).collect(),
         };
+        if section.reverse {
+            new.turn_round();
+        }
         Ok(
             match moto_core::overlap::add_section(&mut self.store(), &new, now())? {
                 moto_core::overlap::Added::Saved { section, replaced } => AddResult {
@@ -598,6 +606,7 @@ mod tests {
         let store = SectionStore::open(db.path()).unwrap();
         let saved = store
             .add(NewSection {
+                reverse: false,
                 surface: None,
                 name: "Lund test".into(),
                 rating: Rating::Great,
@@ -631,6 +640,7 @@ mod tests {
             .unwrap();
         let saved = store
             .add(NewSection {
+                reverse: false,
                 surface: None,
                 name: "Ends".into(),
                 rating: Rating::Great,
@@ -714,6 +724,7 @@ mod tests {
         ));
         // A new favourite with a surface; not Dirt.
         let mut with = NewSection {
+            reverse: false,
             surface: Some(Surface::Paved),
             name: String::new(),
             rating: Rating::Good,
@@ -752,6 +763,7 @@ mod tests {
         let db = TempDb::new("crud");
         let store = SectionStore::open(db.path()).unwrap();
         let new = |lat: f64| NewSection {
+            reverse: false,
             surface: None,
             name: String::new(),
             rating: Rating::Good,
@@ -805,6 +817,7 @@ mod tests {
         let db = TempDb::new("errors");
         let store = SectionStore::open(db.path()).unwrap();
         let bad = NewSection {
+            reverse: false,
             surface: None,
             name: "x".into(),
             rating: Rating::Good,
@@ -915,6 +928,7 @@ mod tests {
         let store = SectionStore::open(db.path()).unwrap();
         let s = store
             .add(NewSection {
+                reverse: false,
                 surface: None,
                 name: String::new(),
                 rating: Rating::Good,
@@ -965,6 +979,7 @@ mod tests {
         let store = SectionStore::open(db.path()).unwrap();
         let s = store
             .add(NewSection {
+                reverse: false,
                 surface: None,
                 name: String::new(),
                 rating: Rating::Good,
@@ -1024,6 +1039,7 @@ mod tests {
         assert_eq!(store.favourites(engine.clone()).unwrap().edge_count(), 0);
         store
             .add(NewSection {
+                reverse: false,
                 surface: None,
                 name: String::new(),
                 rating: Rating::Epic,
@@ -1088,6 +1104,7 @@ mod tests {
         let db = TempDb::new("overlap");
         let store = SectionStore::open(db.path()).unwrap();
         let new = |d: &SectionDraft, rating, direction| NewSection {
+            reverse: false,
             surface: None,
             name: String::new(),
             rating,
@@ -1118,5 +1135,98 @@ mod tests {
             .unwrap();
         assert_eq!(r.replaced.len(), 2, "{r:?}");
         assert_eq!(store.list(None).unwrap().len(), 1);
+    }
+
+    /// `ways` the other way round: last first, each span flipped.
+    fn turned_ways(ways: &[WaySpan]) -> Vec<WaySpan> {
+        ways.iter()
+            .rev()
+            .map(|w| WaySpan {
+                way_id: w.way_id,
+                from_idx: w.to_idx,
+                to_idx: w.from_idx,
+            })
+            .collect()
+    }
+
+    /// A one-way favourite of `d` rated `rating`, turned round or not.
+    fn one_way(d: &SectionDraft, rating: Rating, reverse: bool) -> NewSection {
+        NewSection {
+            reverse,
+            surface: None,
+            name: String::new(),
+            rating,
+            direction: Direction::Forward,
+            source: SectionSource::Map,
+            ways: d.ways.clone(),
+            geometry: d.geometry.clone(),
+        }
+    }
+
+    #[test]
+    fn a_new_favourite_is_saved_turned_round_when_asked() {
+        let (engine, region) = engine("reverse");
+        let draft = engine
+            .section_between(ll(55.7001, 13.202), ll(55.7001, 13.219))
+            .unwrap();
+        std::fs::remove_file(region).unwrap();
+        assert!(draft.ways.len() >= 2 && draft.geometry.len() >= 2);
+        let db = TempDb::new("reverse");
+        let store = SectionStore::open(db.path()).unwrap();
+        // Not turned round: as marked.
+        let kept = store
+            .add(one_way(&draft, Rating::Good, false))
+            .unwrap()
+            .section
+            .unwrap();
+        assert_eq!((&kept.ways, &kept.geometry), (&draft.ways, &draft.geometry));
+        assert!(store.delete(kept.id).unwrap());
+        // Turned round: last point first, spans last first and flipped.
+        let turned = store
+            .add(one_way(&draft, Rating::Good, true))
+            .unwrap()
+            .section
+            .unwrap();
+        let mut geometry = draft.geometry.clone();
+        geometry.reverse();
+        assert_eq!(turned.geometry, geometry);
+        let ways = turned_ways(&draft.ways);
+        assert_eq!(turned.ways, ways);
+        assert_eq!(store.get(turned.id).unwrap().unwrap().ways, ways);
+    }
+
+    #[test]
+    fn the_overlap_rules_see_the_turned_round_direction() {
+        let (engine, region) = engine("reverse-overlap");
+        let a_to_b = engine
+            .section_between(ll(55.7001, 13.202), ll(55.7001, 13.219))
+            .unwrap();
+        std::fs::remove_file(region).unwrap();
+        // The same road marked from B to A (the fixture road is one-way,
+        // so the draft is turned round by hand).
+        let b_to_a = SectionDraft {
+            ways: turned_ways(&a_to_b.ways),
+            geometry: a_to_b.geometry.iter().rev().copied().collect(),
+            distance_m: a_to_b.distance_m,
+        };
+        for rating in [Rating::Good, Rating::Great] {
+            let db = TempDb::new(&format!("reverse-overlap-{rating:?}"));
+            let store = SectionStore::open(db.path()).unwrap();
+            let existing = store
+                .add(one_way(&a_to_b, Rating::Great, false))
+                .unwrap()
+                .section
+                .unwrap();
+            // Marked B to A, turned round: runs A to B, already covered by
+            // an equal or higher rating.
+            let r = store.add(one_way(&b_to_a, rating, true)).unwrap();
+            assert!(r.section.is_none(), "{rating:?}: {r:?}");
+            assert_eq!(r.covered_by, Some(existing.id));
+            // Not turned round: the other way, saved alongside.
+            let r = store.add(one_way(&b_to_a, rating, false)).unwrap();
+            assert!(r.section.is_some(), "{rating:?}: {r:?}");
+            assert!(r.replaced.is_empty(), "{r:?}");
+            assert_eq!(store.list(None).unwrap().len(), 2);
+        }
     }
 }

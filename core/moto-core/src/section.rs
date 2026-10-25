@@ -265,6 +265,15 @@ impl NewSection {
         }
         Ok(())
     }
+
+    /// Turns the line round before it is saved: its geometry and way spans
+    /// run the other way, so a one-way section is good in the other
+    /// direction (as [`SectionUpdate::reverse`] does for a saved one).
+    /// Done before the overlap rules see it (ADR-0020).
+    pub fn turn_round(&mut self) {
+        self.geometry.reverse();
+        self.ways = reversed_ways(&self.ways);
+    }
 }
 
 #[cfg(test)]
@@ -324,6 +333,47 @@ pub(crate) mod tests {
     #[test]
     fn accepts_a_normal_section() {
         sample().validate().unwrap();
+    }
+
+    #[test]
+    fn a_new_section_turned_round_runs_the_other_way() {
+        let mut s = sample();
+        s.ways.push(WaySpan {
+            way_id: 43,
+            from_idx: 7,
+            to_idx: 2,
+        });
+        s.geometry.push(LatLon {
+            lat: 56.32,
+            lon: 12.47,
+        });
+        let before = s.clone();
+        s.turn_round();
+        let mut geometry = before.geometry.clone();
+        geometry.reverse();
+        assert_eq!(s.geometry, geometry);
+        assert_eq!(s.ways, reversed_ways(&before.ways));
+        assert_eq!(
+            s.ways[0],
+            WaySpan {
+                way_id: 43,
+                from_idx: 2,
+                to_idx: 7,
+            }
+        );
+        // Everything else stays; twice is the original.
+        assert_eq!(
+            (s.name.as_str(), s.direction),
+            ("Kullaberg loop", before.direction)
+        );
+        s.turn_round();
+        assert_eq!(s, before);
+        // Nothing to turn: no panic.
+        let mut empty = sample();
+        empty.ways.clear();
+        empty.geometry.clear();
+        empty.turn_round();
+        assert!(empty.ways.is_empty() && empty.geometry.is_empty());
     }
 
     #[test]
