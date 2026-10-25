@@ -330,6 +330,12 @@ internal class MapScreenState(
     // switch and turn-round toggle would give it (null: as saved).
     var editPreview by mutableStateOf<Pair<Boolean, Boolean>?>(null)
 
+    // A new favourite's sheet (ADR-0020): the choices kept while its start
+    // and end are changed (cleared by stopMarking), and the direction its
+    // one-way switch and toggle would give the draft line (null: none).
+    var keptDraftChoice by mutableStateOf<SectionChoice?>(null)
+    var draftPreview by mutableStateOf<Pair<Boolean, Boolean>?>(null)
+
     // The location button (LocateLogic): whether the overview of the plan
     // is on the map, untouched, and the zoom the map had on the rider
     // before it.

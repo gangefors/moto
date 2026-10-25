@@ -33,6 +33,9 @@ import se.gangefors.moto.core.Section
  * and finds the section under a tap. The map only draws
  * and hit-tests; the sections come from the core's store.
  */
+/** The chevron image the section lines' arrows use (added by [SectionOverlay]). */
+internal const val SECTION_ARROW_IMAGE = "moto-section-arrow"
+
 class SectionOverlay(private val style: Style, private val density: Float, private val darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
     private val gravelSource = style.getSourceAs(GRAVEL_SOURCE) ?: GeoJsonSource(GRAVEL_SOURCE).also(style::addSource)
@@ -40,7 +43,7 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
 
     init {
         if (style.getLayer(LINE_LAYER) == null) {
-            style.addImage(ARROW_IMAGE, arrowBitmap(density))
+            style.addImage(SECTION_ARROW_IMAGE, arrowBitmap(density))
             style.addLayer(
                 LineLayer(CASING_LAYER, SOURCE).withProperties(
                     PropertyFactory.lineSortKey(Expression.get(ORDER)),
@@ -96,7 +99,7 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
                     .withProperties(
                         PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
                         PropertyFactory.symbolSpacing(80f),
-                        PropertyFactory.iconImage(ARROW_IMAGE),
+                        PropertyFactory.iconImage(SECTION_ARROW_IMAGE),
                         PropertyFactory.iconAllowOverlap(true),
                         PropertyFactory.iconIgnorePlacement(true),
                         PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
@@ -123,7 +126,7 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
                     .withProperties(
                         PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
                         PropertyFactory.symbolSpacing(80f),
-                        PropertyFactory.iconImage(ARROW_IMAGE),
+                        PropertyFactory.iconImage(SECTION_ARROW_IMAGE),
                         PropertyFactory.iconAllowOverlap(true),
                         PropertyFactory.iconIgnorePlacement(true),
                         PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
@@ -228,7 +231,6 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
         const val SHOWN_LINE_LAYER = "moto-section-shown-line"
         const val SHOWN_ARROW_LAYER = "moto-section-shown-arrows"
         // The dashes' width as a share of the section line's (2 of 5 px).
-        const val ARROW_IMAGE = "moto-section-arrow"
         const val ID = "id"
         const val ORDER = "order"
         const val COLOR = "color"
@@ -258,6 +260,20 @@ class SectionDraftOverlay(style: Style) {
                         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     ),
             )
+            // One-way arrows along the line while a new favourite's sheet
+            // is open (the image comes with SectionOverlay).
+            style.addLayer(
+                SymbolLayer(ARROW_LAYER, SOURCE)
+                    .withFilter(Expression.eq(Expression.get(ONE_WAY), true))
+                    .withProperties(
+                        PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
+                        PropertyFactory.symbolSpacing(80f),
+                        PropertyFactory.iconImage(SECTION_ARROW_IMAGE),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true),
+                        PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                    ),
+            )
             style.addLayer(
                 CircleLayer(PIN_LAYER, SOURCE)
                     .withFilter(Expression.neq(Expression.get(KIND), LINE))
@@ -277,11 +293,15 @@ class SectionDraftOverlay(style: Style) {
         }
     }
 
-    /** Shows the pins that are set and the proposed road, if any; all null clears it. */
-    fun show(start: LatLng?, end: LatLng?, road: List<LatLon>?) {
+    /** Shows the pins that are set and the proposed road, if any, with
+     * one-way arrows along it when [arrows]; all null clears it. */
+    fun show(start: LatLng?, end: LatLng?, road: List<LatLon>?, arrows: Boolean = false) {
         val features = mutableListOf<Feature>()
         if (road != null && road.size >= 2) {
-            features += Feature.fromGeometry(road.toLineString()).apply { addStringProperty(KIND, LINE) }
+            features += Feature.fromGeometry(road.toLineString()).apply {
+                addStringProperty(KIND, LINE)
+                addBooleanProperty(ONE_WAY, arrows)
+            }
         }
         start?.let { features += pin(it, START) }
         end?.let { features += pin(it, END) }
@@ -295,6 +315,8 @@ class SectionDraftOverlay(style: Style) {
         const val SOURCE = "moto-section-draft"
         const val LINE_LAYER = "moto-section-draft-line"
         const val PIN_LAYER = "moto-section-draft-pins"
+        const val ARROW_LAYER = "moto-section-draft-arrows"
+        const val ONE_WAY = "oneWay"
         const val KIND = "kind"
         const val LINE = "line"
         const val START = "start"

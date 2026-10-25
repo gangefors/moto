@@ -20,11 +20,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
-import se.gangefors.moto.core.NewSection
-import se.gangefors.moto.core.Rating
-import se.gangefors.moto.core.SectionSource
-import se.gangefors.moto.core.SectionUpdate
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import se.gangefors.moto.core.MapSurface
 
 @Composable
 internal fun MapScreenScope.MapDialogs() {
@@ -57,8 +55,8 @@ internal fun MapScreenScope.MapDialogs() {
         )
         if (showDebug) DebugTools.Page(onDismiss = { showDebug = false })
 
-        // Rate and save the proposed section, and name it if the rider likes
-        // (else it goes by where it runs, suggested in the empty name field).
+        // The words for where the draft runs, for the name suggested in the
+        // empty name field of its sheet.
         val proposed = draft
         LaunchedEffect(savingDraft, proposed) {
             draftWords = null
@@ -68,63 +66,10 @@ internal fun MapScreenScope.MapDialogs() {
                 DebugTools.query("draft name", ::descriptionSummary) { engine.describe(line) }
             }.getOrNull() }
         }
-        if (savingDraft && proposed != null) {
-            val tag = reviewTag
-            SectionSheet(
-                title = stringResource(R.string.section_new_title, sectionKm(proposed.distanceM)),
-                initial = SectionChoice(rating = Rating.GOOD, oneWay = false),
-                suggestion = sectionSuggestedName(draftWords),
-                onDismiss = { savingDraft = false },
-                atSide = true,
-                // Landscape only: the map fits the draft line beside the
-                // sheet. Upright nothing is reported, so nothing moves.
-                onRight = { if (landscape) editRight = it },
-                onSave = { choice ->
-                    if (tag == null) stopMarking() else savingDraft = false
-                    val name = sectionNameToStore(choice.name).ifEmpty {
-                        autoSectionName(
-                            fromTag = tag != null,
-                            savedAtSec = System.currentTimeMillis() / 1000,
-                            distanceM = proposed.distanceM,
-                            zone = ZoneId.systemDefault(),
-                        )
-                    }
-                    // Whether the tag was deleted; set off the main thread
-                    // before `after` runs.
-                    var removed = false
-                    changeSectionsThen(
-                        action = { st ->
-                            val result = st.add(
-                                NewSection(
-                                    name = name,
-                                    rating = choice.rating,
-                                    direction = directionOf(choice.oneWay),
-                                    source = if (tag != null) SectionSource.TAG else SectionSource.MAP,
-                                    ways = proposed.ways,
-                                    geometry = proposed.geometry,
-                                ),
-                            )
-                            val text = when (val outcome = addOutcome(result)) {
-                                AddOutcome.Covered -> resources.getString(R.string.section_covered)
-                                is AddOutcome.Saved -> if (outcome.replaced == 0) {
-                                    resources.getString(R.string.section_saved)
-                                } else {
-                                    resources.getQuantityString(R.plurals.section_saved_replacing, outcome.replaced, outcome.replaced)
-                                }
-                            }
-                            // Saved, or a favourite covers it already: the tag
-                            // is reviewed, so it goes (false if already gone).
-                            // A failed delete doesn't fail the save: the
-                            // favourite is kept and shown, and the tag stays.
-                            removed = tag != null && runCatching { st.deleteTag(tag.id) }.isSuccess
-                            text
-                        },
-                        // A failed save or delete keeps the tag, counted as
-                        // skipped.
-                        after = { ok -> if (tag != null) tagHandled(tag, removed = ok && removed) },
-                    )
-                },
-            )
+        // The new favourite's sheet shows its direction on the draft line,
+        // and takes it off again when it closes (ADR-0020).
+        LaunchedEffect(savingDraft, draftPreview) {
+            if (marking && marker.state is SectionMarker.State.Proposed) showDraft()
         }
 
         // The name offered for a route or loop being saved: from where it runs
@@ -393,33 +338,24 @@ internal fun MapScreenScope.MapDialogs() {
             )
         }
 
-        // Change or delete a saved section: the map fits it above the sheet
-        // once the sheet has come up (its top edge settles). The direction
-        // shown goes back to the saved one when the sheet is left, or once
-        // the saved sections have reloaded after Save (so a turned section
-        // doesn't flip back and forth).
+        // The favourite sheet, for a new favourite or a saved one (ADR-0020):
+        // the map fits its line (the moved one, if any) above the sheet once
+        // the sheet has come up (its top edge settles), or beside it in
+        // landscape. The direction shown goes back to the saved one when the
+        // sheet is left, or once the saved sections have reloaded after Save
+        // (so a turned section doesn't flip back and forth).
+        val subject = sheetSubject(savingDraft, draft, reviewTag, editing, pendingEdit)
         LaunchedEffect(sections, shownSectionId) { if (editing == null) editPreview = null }
-        LaunchedEffect(editing?.id, savingDraft, if (landscape) editRight else editTop) {
-            val section = editing
-            if (section == null) {
-                // The save sheet reports its own edge in editRight.
-                if (!savingDraft) {
-                    editTop = Int.MAX_VALUE
-                    editRight = 0
-                }
+        val fitLine = subject?.let(::sheetLine)
+        LaunchedEffect(fitLine, if (landscape) editRight else editTop) {
+            if (fitLine == null) {
+                editTop = Int.MAX_VALUE
+                editRight = 0
                 return@LaunchedEffect
             }
-            if (editTop >= mapSize.height) return@LaunchedEffect
+            if (editTop >= mapSize.height || (landscape && editRight <= 0)) return@LaunchedEffect
             delay(EDIT_FIT_SETTLE_MS)
-            showOnMap(listOf(section.geometry), always = true)
-        }
-        // The save sheet in landscape: once it has come up (its right edge
-        // settles), the map fits the draft line in the free area beside it.
-        LaunchedEffect(savingDraft, draft?.geometry, if (landscape) editRight else 0) {
-            val line = draft?.geometry
-            if (!savingDraft || line == null || !landscape || editRight <= 0 || editing != null) return@LaunchedEffect
-            delay(EDIT_FIT_SETTLE_MS)
-            showOnMap(listOf(line), always = true)
+            showOnMap(listOf(fitLine), always = true)
         }
         // The edit sheet's pending new line (Change start and end): the
         // shown favourite's own line is replaced by it (MapShown); one
@@ -430,67 +366,126 @@ internal fun MapScreenScope.MapDialogs() {
             if (editing != null && line != null && !shown) overlays?.draft?.show(null, null, line.geometry)
             else if (!marking) overlays?.draft?.show(null, null, null)
         }
-        editing?.let { section ->
-            val pending = pendingFor(pendingEdit, section.id)
-            val newLine = pending?.line
-            // Its key: a sheet reopened after Change start and end starts
-            // on the choices kept, not the saved ones.
-            // What the map has along the saved line, measured off the main
-            // thread (one pass over the map's roads).
-            val mapSurface by androidx.compose.runtime.produceState<se.gangefors.moto.core.MapSurface?>(null, section, region) {
+        subject?.let { sheet ->
+            val ways = sheetMapWays(sheet)
+            // What the map has along the line Save would store, measured off
+            // the main thread (one pass over the map's roads).
+            val mapSurface by produceState<MapSurface?>(null, ways, region) {
+                value = null
                 val engine = (region as? RegionState.Ready)?.engine
-                value = if (engine == null || !fitsTheMap(section.status)) null else withContext(Dispatchers.Default) {
-                    runCatching { engine.mapSurfaceAlong(section.ways) }.getOrNull()
+                if (engine != null && ways != null) {
+                    value = withContext(Dispatchers.Default) {
+                        runCatching { engine.mapSurfaceAlong(ways) }.getOrNull()
+                    }
                 }
             }
-            androidx.compose.runtime.key(section.id, pending) {
+            val section = (sheet as? SheetSubject.Saved)?.section
+            val words = if (section != null) {
+                SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)
+            } else {
+                draftWords
+            }
+            val kept = when (sheet) {
+                is SheetSubject.New -> keptDraftChoice
+                is SheetSubject.Saved -> pendingFor(pendingEdit, sheet.section.id)?.choice
+            }
+            // Its key: a sheet reopened after Change start and end starts
+            // on the choices kept, not the first ones.
+            androidx.compose.runtime.key(
+                when (sheet) {
+                    is SheetSubject.New -> sheet.draft
+                    is SheetSubject.Saved -> sheet.section.id to pendingFor(pendingEdit, sheet.section.id)
+                },
+            ) {
                 SectionSheet(
-                    title = stringResource(R.string.section_edit_title, sectionKm(newLine?.distanceM ?: lengthM(section.geometry))),
-                    initial = pending?.choice ?: SectionChoice(
-                        section.rating,
-                        isOneWay(section.direction),
-                        riderName(section.name) ?: "",
-                        surface = favouriteSurfaceOf(section),
-                    ),
-                    suggestion = sectionSuggestedName(SectionDescriptions.cached((region as? RegionState.Ready)?.engine, section)),
+                    title = stringResource(sheetTitleRes(sheet), sectionKm(sheetLengthM(sheet))),
+                    initial = sheetFirstChoice(sheet, kept),
+                    suggestion = sectionSuggestedName(words),
                     onDismiss = {
+                        savingDraft = false
+                        keptDraftChoice = null
+                        draftPreview = null
                         editing = null
                         editPreview = null
                         pendingEdit = null
                     },
-                    canReverse = true,
-                    onPreview = { oneWay, turn -> editPreview = oneWay to turn },
-                    atSide = true,
+                    onPreview = { oneWay, turn ->
+                        if (sheet is SheetSubject.New) draftPreview = oneWay to turn else editPreview = oneWay to turn
+                    },
                     onTop = { editTop = it },
                     onRight = { editRight = it },
-                    onReshape = { choice -> startReshape(section, choice) },
-                    mapSurface = mapSurface,
-                    onSave = { choice ->
-                        editing = null
-                        pendingEdit = null
-                        changeSections(resources.getString(R.string.section_updated)) { st ->
-                            st.update(
-                                section.id,
-                                SectionUpdate(
-                                    name = nameUpdate(section.name, choice.name),
-                                    rating = choice.rating,
-                                    direction = directionOf(choice.oneWay),
-                                    reverse = choice.reverse,
-                                    line = newLine,
-                                    surface = choice.surface,
-                                ),
-                            )
+                    onReshape = { choice ->
+                        when (sheet) {
+                            is SheetSubject.Saved -> startReshape(sheet.section, choice)
+                            // Back to marking with the draft and its pins;
+                            // Save… opens the sheet with these choices.
+                            is SheetSubject.New -> {
+                                keptDraftChoice = choice
+                                savingDraft = false
+                            }
                         }
                     },
+                    mapSurface = mapSurface,
+                    onSave = { choice ->
+                        val autoName = (sheet as? SheetSubject.New)?.let {
+                            autoSectionName(
+                                fromTag = it.tag != null,
+                                savedAtSec = System.currentTimeMillis() / 1000,
+                                distanceM = it.draft.distanceM,
+                                zone = ZoneId.systemDefault(),
+                            )
+                        } ?: ""
+                        when (val write = sheetWrite(sheet, choice, autoName)) {
+                            is SheetWrite.Add -> {
+                                val tag = (sheet as SheetSubject.New).tag
+                                if (tag == null) stopMarking() else savingDraft = false
+                                keptDraftChoice = null
+                                // Whether the tag was deleted; set off the main
+                                // thread before `after` runs.
+                                var removed = false
+                                changeSectionsThen(
+                                    action = { st ->
+                                        val result = st.add(write.section)
+                                        val text = when (val outcome = addOutcome(result)) {
+                                            AddOutcome.Covered -> resources.getString(R.string.section_covered)
+                                            is AddOutcome.Saved -> if (outcome.replaced == 0) {
+                                                resources.getString(R.string.section_saved)
+                                            } else {
+                                                resources.getQuantityString(R.plurals.section_saved_replacing, outcome.replaced, outcome.replaced)
+                                            }
+                                        }
+                                        // Saved, or a favourite covers it already: the tag
+                                        // is reviewed, so it goes (false if already gone).
+                                        // A failed delete doesn't fail the save: the
+                                        // favourite is kept and shown, and the tag stays.
+                                        removed = tag != null && runCatching { st.deleteTag(tag.id) }.isSuccess
+                                        text
+                                    },
+                                    // A failed save or delete keeps the tag, counted as
+                                    // skipped.
+                                    after = { ok -> if (tag != null) tagHandled(tag, removed = ok && removed) },
+                                )
+                            }
+                            is SheetWrite.Update -> {
+                                editing = null
+                                pendingEdit = null
+                                changeSections(resources.getString(R.string.section_updated)) { st ->
+                                    st.update(write.id, write.update)
+                                }
+                            }
+                        }
+                    },
+                    canDelete = canDelete(sheet),
                     onDelete = {
+                        val saved = section ?: return@SectionSheet
                         editing = null
                         pendingEdit = null
-                        if (shownSectionId == section.id) hideSection()
+                        if (shownSectionId == saved.id) hideSection()
                         changeSections(null) { st ->
-                            st.delete(section.id)
+                            st.delete(saved.id)
                         }
                         // Shown from the Sections page: back to it, as it was.
-                        pageAfterDelete(shownFromPage, section.id)?.let {
+                        pageAfterDelete(shownFromPage, saved.id)?.let {
                             sectionFilter = it
                             dataPage = DataPage.SECTIONS
                         }

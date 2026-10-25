@@ -68,24 +68,24 @@ data class SectionChoice(
     val oneWay: Boolean,
     val name: String = "",
     val reverse: Boolean = false,
-    /** A saved favourite's own surface (its edit sheet only). */
+    /** The favourite's own surface (ADR-0018); Map is the map's. */
     val surface: FavouriteSurface = FavouriteSurface.MAP,
 )
 
 /**
- * A bottom sheet to rate a section and set its direction: for a new one
- * before it is saved, or a saved one (then [onDelete] is set, shown as a
- * bin on the left that asks for a second tap). X, Back or a swipe down
- * leave it without saving. The name is the rider's own and may stay
- * empty: the section then goes by where it runs ([suggestion], shown in
- * the empty field). A saved one-way section can be turned round
- * ([canReverse]): the swap toggle beside the switch, applied on Save.
- * [onPreview] hears the one-way switch and the toggle as they change, so
- * the map can show the direction Save would give; [onTop] the sheet's
- * top edge (px from the top of the screen), so the map can fit the
- * section above it, and [onRight] its right edge (px from the left), for
- * fitting it beside the sheet in landscape. The edit sheet and the save
- * sheet are [atSide] (left-aligned and half the width in landscape).
+ * The favourite sheet (ADR-0020), the same for a new favourite before it
+ * is saved and a saved one: name, rating, one-way with the turn-round
+ * toggle, the surface with what the map has ([mapSurface]) and "Change
+ * start and end" ([onReshape]) always show. Only a saved one has the bin
+ * ([canDelete]), on the left, asking for a second tap. X, Back or a swipe
+ * down leave it without saving. The name is the rider's own and may stay
+ * empty: the favourite then goes by where it runs ([suggestion], shown in
+ * the empty field). [onPreview] hears the one-way switch and the toggle
+ * as they change, so the map can show the direction Save would give;
+ * [onTop] the sheet's top edge (px from the top of the screen), so the
+ * map can fit the line above it, and [onRight] its right edge (px from
+ * the left), for fitting it beside the sheet in landscape, where the
+ * sheet is left-aligned and half the width.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,15 +94,14 @@ fun SectionSheet(
     initial: SectionChoice,
     onSave: (SectionChoice) -> Unit,
     onDismiss: () -> Unit,
-    onDelete: (() -> Unit)? = null,
-    suggestion: String? = null,
-    canReverse: Boolean = false,
-    onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit = { _, _ -> },
-    atSide: Boolean = false,
-    onTop: (Int) -> Unit = {},
-    onRight: (Int) -> Unit = {},
-    onReshape: ((SectionChoice) -> Unit)? = null,
-    mapSurface: MapSurface? = null,
+    onDelete: () -> Unit,
+    canDelete: Boolean,
+    onReshape: (SectionChoice) -> Unit,
+    onPreview: (oneWay: Boolean, reverse: Boolean) -> Unit,
+    onTop: (Int) -> Unit,
+    onRight: (Int) -> Unit,
+    suggestion: String?,
+    mapSurface: MapSurface?,
 ) {
     // A text field state (kept over rotation), for the field's label on
     // the border; the name is what it holds.
@@ -117,13 +116,13 @@ fun SectionSheet(
     var confirmDelete by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
 
-    // At the side (the edit sheet) in landscape: left-aligned and half the
-    // width, so the map shows at the right. Material centres the sheet, so
-    // it is moved left by half the free width, measured in the container.
+    // At the side in landscape: left-aligned and half the width, so the
+    // map shows at the right. Material centres the sheet, so it is moved
+    // left by half the free width, measured in the container.
     val config = LocalConfiguration.current
     val landscape = isLandscape(config.screenWidthDp, config.screenHeightDp)
-    val sideSheet = atSide && landscape
-    val maxWidthDp = sheetMaxWidthDp(landscape, atSide, config.screenWidthDp.toFloat())
+    val sideSheet = landscape
+    val maxWidthDp = sheetMaxWidthDp(landscape, true, config.screenWidthDp.toFloat())
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.layout { measurable, constraints ->
@@ -222,9 +221,9 @@ fun SectionSheet(
                             Text(stringResource(R.string.section_one_way), modifier = Modifier.weight(1f, fill = false))
                             InfoButton(stringResource(R.string.section_one_way), stringResource(R.string.section_one_way_hint))
                         }
-                        // Turn a one-way section round (on Save), for one
+                        // Turn a one-way favourite round (on Save), for one
                         // marked from the wrong end.
-                        if (canReverse && oneWay) {
+                        if (oneWay) {
                             IconToggleButton(
                                 checked = reverse,
                                 onCheckedChange = { reverse = it },
@@ -236,35 +235,32 @@ fun SectionSheet(
                         }
                         Switch(checked = oneWay, onCheckedChange = null)
                     }
-                    // A saved favourite: its own surface (ADR-0018), and its
-                    // start and end.
-                    if (onReshape != null) {
-                        OptionHeading(stringResource(R.string.surface_choice))
-                        SingleChoice(
-                            options = FAVOURITE_SURFACES,
-                            selected = surface,
-                            label = { stringResource(favouriteSurfaceName(it)) },
-                            onSelect = { surface = it },
+                    // Its own surface (ADR-0018), and its start and end.
+                    OptionHeading(stringResource(R.string.surface_choice))
+                    SingleChoice(
+                        options = FAVOURITE_SURFACES,
+                        selected = surface,
+                        label = { stringResource(favouriteSurfaceName(it)) },
+                        onSelect = { surface = it },
+                    )
+                    mapSurface?.let {
+                        Text(
+                            stringResource(R.string.surface_on_map, stringResource(mapSurfaceText(it))),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
                         )
-                        mapSurface?.let {
-                            Text(
-                                stringResource(R.string.surface_on_map, stringResource(mapSurfaceText(it))),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        OutlinedButton(onClick = { onReshape(choice()) }, modifier = Modifier.padding(top = 12.dp)) {
-                            OneLine(stringResource(R.string.section_reshape))
-                        }
+                    }
+                    OutlinedButton(onClick = { onReshape(choice()) }, modifier = Modifier.padding(top = 12.dp)) {
+                        OneLine(stringResource(R.string.section_reshape))
                     }
                 }
-                // The bin (a saved section) on the left, Save on the right.
+                // The bin (a saved favourite) on the left, Save on the right.
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (onDelete != null) {
+                    if (canDelete) {
                         DeleteButton(
                             confirming = confirmDelete,
                             onArm = { confirmDelete = true },

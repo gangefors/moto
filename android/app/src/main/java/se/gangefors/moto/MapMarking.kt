@@ -30,11 +30,17 @@ internal fun MapScreenScope.showDraft() {
             is SectionMarker.State.PickEnd -> o.draft.show(st.start, null, null)
             // A pin being dragged leaves the overlay: the one under the
             // finger stands for it (MarkHandles).
-            is SectionMarker.State.Proposed -> o.draft.show(
-                st.start.takeIf { dragging != SectionMarker.End.START },
-                st.end.takeIf { dragging != SectionMarker.End.END },
-                draft?.geometry,
-            )
+            is SectionMarker.State.Proposed -> {
+                // A new favourite's sheet open: the line shows the
+                // direction Save would give, with arrows.
+                val (line, arrows) = draftPreviewLine(draft?.geometry.orEmpty(), savingDraft, draftPreview)
+                o.draft.show(
+                    st.start.takeIf { dragging != SectionMarker.End.START },
+                    st.end.takeIf { dragging != SectionMarker.End.END },
+                    line.takeIf { draft != null },
+                    arrows,
+                )
+            }
         }
     }
 }
@@ -45,6 +51,8 @@ internal fun MapScreenScope.stopMarking() {
         marking = false
         draft = null
         savingDraft = false
+        keptDraftChoice = null
+        draftPreview = null
         markKind = MarkKind.FAVOURITE
         surfaceChoice = null
         replacingCorrection = null

@@ -273,7 +273,7 @@
     <string name="help_plan_title">Plan a ride</string>
     <string name="help_plan">Long-press a place to start there, then long-press where you want to go. Pull a route’s or loop’s card up for its choices, like avoiding your favourites to find new roads. The place’s card can also route or loop from where you are, and a route or loop can be shared or saved:</string>
     <string name="help_sections_title">Favourite sections</string>
-    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your favourite sections. Pick one in Favourite sections to see it, then loop through it or route through it from where you are. Its [edit] pencil also moves its start and end, and sets its surface: Map, Paved or Gravel.</string>
+    <string name="help_sections">Tap where a road you like starts and where it ends, then rate it good, great or epic: routes and loops lean towards your favourite sections. The same sheet sets its direction and its surface (Map, Paved or Gravel) and can move its start and end, when you save it and later from its [edit] pencil. Pick one in Favourite sections to see it, then loop through it or route through it from where you are.</string>
     <string name="help_ride_title">On a ride</string>
     <string name="help_library_title">Routes and rides</string>
     <string name="help_ride">Record your ride, and tag roads you like as you pass them. After the ride, review each tagged spot: it may be a road you want to save as a favourite section.</string>
