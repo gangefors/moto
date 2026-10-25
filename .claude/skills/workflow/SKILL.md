@@ -32,6 +32,11 @@ request ─▶ architect ◀─▶ mockup (UI only) ─▶ [Gate 1: rider approv
 
 Helpers any stage may use: `search` (Haiku), `ci` (Haiku), `notion` (Haiku).
 
+The orchestrator reads an agent's diff only through the reviewer's report,
+unless the report is unclear or the risk is `high`. The main session's
+model is the rider's choice: when a session's work clearly fits another
+one, say so once (`docs/working-with-claude.md` has the table).
+
 The local checks are not an agent: `.claude/scripts/verify.sh` runs the
 checks the change needs (fmt, clippy, tests, deny, the Android build,
 script and guard tests) with CI's versions and prints one line per check.
@@ -100,12 +105,24 @@ His comments are routed by what they change:
 After he approves a design with UI, ask the `mockup` agent to move the
 page's new components into the kit (one commit).
 
-**Gate 2, result.** Before reporting a build run `bash .claude/scripts/ship-status.sh` (unpushed, ahead/behind main, other branches, CI, APK link). After documenter and push, wait for the build with the
-`ci` agent only when needed, then tell the rider: the commit id, the
-direct APK link once published and working (see CLAUDE.md), what changed
-in a few lines, the reviewer's phone test list (added to the Checklist
-artifact) and anything left open. He tests; his feedback starts a new
+**Gate 2, result.** Before reporting a build, run
+`bash .claude/scripts/ship-status.sh` (unpushed commits, ahead/behind
+main, other branches, CI, APK link). After documenter and push, wait for
+the build with the `ci` agent only when needed, then tell the rider: the
+commit id, the direct APK link once published and working (the script
+prints the pattern), what changed in a few lines, the reviewer's phone
+test list (added to the Checklist) and anything left open. Say as soon as
+a build is testable; don't wait longer than needed on new features. The
+report is short: no recap of agents' reports, no list of every commit,
+file or check, one line per finding that matters, and a repeated ping
+gets one short line or nothing. He tests; his feedback starts a new
 change.
+
+**The Checklist** is the rider's on-phone checks: the artifact at
+https://claude.ai/artifact/PRbfyH5ytv6rzAMbQWHyfX, his answers in its
+`phonechecks` collection. After each build, add the new phone test steps
+and remove the checks he has passed. Never publish a different page to
+that artifact's URL.
 
 Between the gates nothing waits for the rider, except a `BLOCKED` report
 that needs his decision.
@@ -155,13 +172,15 @@ SUMMARY / FINDINGS / ...: short, structured, with path:line
 
 The orchestrator runs `.claude/scripts/verify.sh 2>&1 | tail -40` (it
 returns at once when the implementer's run already stamped this code),
-then pushes (`git push -u origin claude/<name>`, or the session's `ccr-*` branch) after every slice's
-review passed and the documenter's commits exist. Hooks enforce the
-rules in `.githooks/` and `.claude/hooks/`: pushes only to `claude/*` and `ccr-*`; no
-code push without a verify.sh stamp for exactly that code (only the
-script writes it); commit title at most 50 characters and body wrapped
-at 72; no session link; rule changes (`CLAUDE.md`, ADRs) never in a
-commit with `android/`, `core/` or `.github/` files; SPDX headers; no
-skipping hooks; no force push except `--force-with-lease` to `claude/*` or `ccr-*`. If a hook blocks, fix the cause.
+then pushes (`git push -u origin claude/<name>`, or the session's `ccr-*`
+branch) after every slice's review passed and the documenter's commits
+exist. Hooks enforce the rules in `.githooks/` and `.claude/hooks/`:
+pushes only to `claude/*` and `ccr-*`; no code push without a verify.sh
+stamp for exactly that code (only the script writes it); commit title at
+most 50 characters and body wrapped at 72; no session link; rule changes
+(`CLAUDE.md`, ADRs) never in a commit with `android/`, `core/` or
+`.github/` files; SPDX headers; no skipping hooks; no force push except
+`--force-with-lease` to `claude/*` or `ccr-*`. If a hook blocks, fix the
+cause.
 CI's merge job merges to `main`; don't wait for it unless the rider needs
 the build.

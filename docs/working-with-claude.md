@@ -7,7 +7,7 @@ Claude Code plans have usage limits. Every turn re-sends the whole
 conversation (CLAUDE.md, earlier diffs, build output), and Opus uses the
 limits several times faster than Sonnet for the same work, Haiku least.
 This page is for the rider; Claude follows the matching rules in CLAUDE.md
-(Models and subagents). It is not loaded into sessions, so it costs
+and the `workflow` skill. It is not loaded into sessions, so it costs
 nothing.
 
 ## Session habits (the biggest savings)

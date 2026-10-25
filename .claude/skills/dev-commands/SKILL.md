@@ -18,7 +18,7 @@ everything else, and for running one check by hand while fixing it.
 Run cargo with the Rust version CI uses (`RUST_VERSION` in
 `.github/workflows/android.yml`); newer clippy versions add lints. Pipe
 long output through `tail`/`grep` so only the result lands in the
-conversation.
+conversation, and don't re-read a file you just wrote.
 
 ```sh
 cd core

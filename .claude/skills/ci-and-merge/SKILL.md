@@ -48,9 +48,15 @@ build. If the branch range changes code it leaves the merge to the code's
 own CI run (a notice, "left to the build run"). It shares the `merge-main`
 concurrency group with the `merge` job, so they never race.
 
+A build is reported to the rider only once its change is in `main`:
+when the merge is blocked, rebase, re-run the checks and push again until
+it merges. A build that was not merged replaces the `debug-branch`
+download without `main`'s newer changes.
+
 Merge by hand (fast-forward, then push `main`) only where the jobs can't:
 
-- **Main moved on**: order of preference is fast-forward, rebase, merge.
+- **Main moved on**: order of preference is fast-forward, rebase, merge
+  (merge commits are the last resort).
   Rebase the branch (`git fetch origin main && git rebase origin/main`),
   re-run `.claude/scripts/verify.sh` if code changed, then
   `git push --force-with-lease origin <branch>`; CI then fast-forwards
@@ -71,8 +77,12 @@ blocks its merge; fix it next.
 
 - **Benchmark**: compares this build's binary with the last `main` build's
   on the same machine; the job summary shows the table
-  (`.github/scripts/bench_compare.py`). Thresholds are in CLAUDE.md,
-  Testing and performance.
+  (`.github/scripts/bench_compare.py`). A significant regression is more
+  than 25 % slower for snapping and routing, or more than 50 % and 5 ms
+  slower for the short, memory- and disk-bound region verify and open
+  timings (each binary runs twice; each metric keeps its faster result).
+  Improvements of more than 10 % are reported too, in the commit message
+  (`CLAUDE.md`, Testing and performance, has the rule for accepting one).
 - **Golden routes**: a before/after table against the last `main` build;
   a route that breaks its expectations fails the Core job. See
   `core/moto-core/tests/golden/README.md` and the route-scoring skill.

@@ -60,7 +60,7 @@ A license binds people who receive the code, not the copyright holder. With sole
 
 Copyright (C) 2026 Stefan Gangefors.
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License, version 3 only (AGPL-3.0-only). See [LICENSE](LICENSE).
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License, version 3 only (AGPL-3.0-only). See [LICENSE](../../LICENSE).
 
 If you distribute a modified version, or let others use it over a network, you must make your source code available under the same license.
 
@@ -70,5 +70,5 @@ The app name and logo are trademarks and are not covered by the code license. Fo
 
 Map data © OpenStreetMap contributors, available under the Open Database License (ODbL).
 
-moto doesn't accept code from others; bug reports and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
+moto doesn't accept code from others; bug reports and ideas are welcome as issues. See [CONTRIBUTING.md](../../CONTRIBUTING.md).
 ```
