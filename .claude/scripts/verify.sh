@@ -92,7 +92,7 @@ for c in "${checks[@]}"; do
         echo "NOT RUN android  (setup failed: $logs/setup-android.log)"; tail -5 "$logs/setup-android.log" | sed 's/^/    /'; notrun=1
       fi ;;
     scripts) run scripts . python3 -m unittest discover -s .github/scripts -p 'test_*.py' ;;
-    guards)  run guards . bash .claude/hooks/test-guard-bash.sh ;;
+    guards)  run guards . bash -c 'bash .claude/hooks/test-guard-bash.sh && bash .claude/hooks/test-ship-status.sh' ;;
   esac
 done
 
