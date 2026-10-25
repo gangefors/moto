@@ -16,8 +16,8 @@ touch product code.
 **Repo** (docs only):
 
 - Tick the action items of the ADR the change belongs to
-  (`docs/adr/*.md`), and nothing else in it; this is its own commit
-  (`git add docs/adr` only), per the commit rules.
+  (`docs/adr/*.md`), and nothing else in it; commit it apart from
+  application code (`git add docs/adr` only), per the commit rules.
 - Update `docs/prd.md` only if a requirement's status or wording changed
   because of this change.
 - Update other docs that now say something untrue (grep for the feature

@@ -160,8 +160,8 @@ review passed and the documenter's commits exist. Hooks enforce the
 rules in `.githooks/` and `.claude/hooks/`: pushes only to `claude/*` and `ccr-*`; no
 code push without a verify.sh stamp for exactly that code (only the
 script writes it); commit title at most 50 characters and body wrapped
-at 72; no session link; rule files (`CLAUDE.md`, ADRs) in their own
-commits; SPDX headers; no skipping hooks; no force push except
-`--force-with-lease` to `claude/*` or `ccr-*`. If a hook blocks, fix the cause.
+at 72; no session link; rule changes (`CLAUDE.md`, ADRs) never in a
+commit with `android/`, `core/` or `.github/` files; SPDX headers; no
+skipping hooks; no force push except `--force-with-lease` to `claude/*` or `ccr-*`. If a hook blocks, fix the cause.
 CI's merge job merges to `main`; don't wait for it unless the rider needs
 the build.

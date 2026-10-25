@@ -298,5 +298,7 @@ pp block --delete origin claude/work
 pp block origin :main
 pp allow origin HEAD:claude/other
 
+bash "$(dirname "$0")/test-pre-commit.sh" || fails=$((fails + 1))
+
 echo "$n cases, $fails failed"
 [ "$fails" -eq 0 ]

@@ -40,7 +40,8 @@ needs running to check a criterion. Check, in this order:
 5. **Rules:** licence headers, British English user text and "favourite
    sections" wording, the UI rules, debug code only under `src/debug/`,
    rider's personal data nowhere in the repo, commit format and one fix
-   per commit, rule files in their own commits.
+   per commit, rule changes (`CLAUDE.md`, ADRs) never in a commit with
+   application code (`android/`, `core/`, `.github/`).
 6. **Simplicity:** duplicated code that already exists, needless
    abstraction, dead code.
 

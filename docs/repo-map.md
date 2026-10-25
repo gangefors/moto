@@ -64,7 +64,9 @@ relative to the repo root; Kotlin files are in
   from Bash; use the Edit/Write tools for those files.
 - Only `verify.sh` writes the verify stamp; pushing code needs a pass for
   exactly that code.
-- `CLAUDE.md` and ADRs go in their own commits.
+- Rule changes (`CLAUDE.md`, ADRs) and application code (`android/`,
+  `core/`, `.github/`) go in separate commits; docs and `.claude/` may
+  share a commit with rule changes.
 - Notion pages are large: read them through the `notion` agent.
 - Geofabrik refuses the sessions; the Skåne region comes from the
   `skane-region` release (see the `dev-commands` skill).
