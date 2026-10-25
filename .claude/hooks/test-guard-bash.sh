@@ -265,6 +265,9 @@ t block 'git rebase --no-verify main'
 t block 'git am --no-v x.patch'
 t block 'git cherry-pick -n x'
 
+# --- names that only contain push (pre-push, push.default) don't trigger
+t allow 'cat .claude/skills/ui-rules/SKILL.md | head -30; echo ----; cat .githooks/commit-msg .githooks/pre-commit .githooks/pre-push .claude/settings.json; echo ----; head -15 .claude/scripts/ship-status.sh'
+
 # --- blocked: guard can't read its input (fails closed)
 raw block ''
 raw block 'not json'
