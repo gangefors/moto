@@ -22,9 +22,10 @@
 # shape `[git add ... && | git status && ]git commit ... -F - <<'TAG'`.
 # Also blocked: skipping git hooks (after any -C, -c, --work-tree or
 # --git-dir), git config that touches pushes or hooks (except a plain
-# `git config --get KEY` as the whole command), tampering with the hook files and scripts, writing the
-# verify stamp other than through verify.sh, and ref-moving calls
-# (gh pr merge, GitHub ref/merge/contents/graphql APIs, plumbing pushes).
+# `git config --get KEY` as the whole command), tampering with the hook
+# files and scripts, writing the verify stamp other than through
+# verify.sh, and ref-moving calls (gh pr merge, GitHub ref/merge/contents/
+# graphql APIs, plumbing pushes).
 import re
 import sys
 
@@ -34,7 +35,7 @@ CHARS = r"[A-Za-z0-9 ._/@:=-]"
 COMMIT_SHAPE = re.compile(
     r"\A((?:(?:git add " + CHARS + r"+|git status) && )?git commit" + CHARS + r"* -F - <<(['\"])(\w+)\2)\n(.*)\n\3\n?\Z",
     re.S)
-CONFIG_GET = re.compile(r"\A[ \t]*git config --get [A-Za-z0-9._/-]+[ \t]*\Z")
+CONFIG_GET = re.compile(r"\A[ \t]*git config --get [A-Za-z0-9][A-Za-z0-9._/-]*[ \t]*\Z")
 PROTECTED = r"(\.githooks|\.git/hooks|\.claude/hooks|\.claude/scripts|\.claude/settings\.json|\.git/config)"
 
 
@@ -145,6 +146,8 @@ def analyze(cmd):
     code = code_of(cmd)
     n = re.sub(r"[\\'\"]", "", code)
     check_hooks_not_skipped(n)
+    if re.search(r"\bgit\b.*\bconfig\b.*(--edit\b|\s-\w*e\b|--get(\s|$))", n):
+        raise Block("git config --get takes one plain key; no editing")
     check_others(n)
     if re.search(r"\bgit\b\s+\S*[$`]", n):
         raise Block("can't tell which git command runs")

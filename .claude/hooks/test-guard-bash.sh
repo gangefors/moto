@@ -336,6 +336,9 @@ t block "git config --get push.default${NL}git push --force origin main"
 t block "git config --get push.default${NL}git config alias.p push"
 t block "git config --get push.default"$'\r'"${NL}git config remote.origin.url x"
 t block 'git config --get push.default; git config push.default matching'
+t block 'git config --get --edit'
+t block 'git config --get -e'
+t block 'git config --get .push.default'
 t block 'git config --get-regexp remote; git config alias.x y'
 t block 'git config push.default matching --get'
 t block 'GIT_CONFIG_COUNT=1 git config --get push.default'
