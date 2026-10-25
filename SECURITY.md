@@ -19,4 +19,4 @@ In scope: the Android app, the Rust core (including how it reads region files an
 - **Workflows:** zizmor lints the GitHub Actions workflows; actions are pinned by commit SHA and every job gets the least permissions it needs.
 - **Secrets:** GitHub secret scanning with push protection.
 
-A dependency release that fixes a published vulnerability is taken in once it is a day old, reviewed and green in CI; other dependency updates wait until the release is at least a week old.
+A dependency release that fixes a critical published vulnerability is taken in at once, once reviewed and green in CI; one that fixes any other published vulnerability once it is a day old, reviewed and green in CI; other dependency updates wait until the release is at least a week old.
