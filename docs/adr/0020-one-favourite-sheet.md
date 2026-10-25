@@ -76,6 +76,6 @@ B is cheapest but keeps the mechanism that caused the drift. C avoids the core s
 
 ## Action Items
 
-- [ ] Core and FFI: `NewSection.reverse` applied before `add_section`; `Engine::map_surface_along` (one shared measure); `Favourites::map_surface` and the overlay's per-favourite measure removed; tests including unknown ways and out-of-range spans.
-- [ ] App: the sheet subject and its pure functions, one `SectionSheet` call without option flags, kept choices for a draft's "Change start and end", draft direction preview, one fit effect, the how-to line; Kotlin unit tests.
+- [x] Core and FFI: `NewSection.reverse` applied before `add_section`; `Engine::map_surface_along` (one shared measure); `Favourites::map_surface` and the overlay's per-favourite measure removed; tests including unknown ways and out-of-range spans.
+- [x] App: the sheet subject and its pure functions, one `SectionSheet` call without option flags, kept choices for a draft's "Change start and end", draft direction preview, one fit effect, the how-to line; Kotlin unit tests.
 - [ ] Phone test: mark a new favourite, set it one-way, turn it round, set Gravel, change its ends from the sheet and save; check it on the map and in its edit sheet.
