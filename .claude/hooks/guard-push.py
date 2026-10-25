@@ -6,8 +6,10 @@
 # 2 = block (reason on stderr). A seat belt against mistakes, not a sandbox;
 # the real control over main is server-side branch protection.
 #
-# Pushes are a strict whitelist: a command line that involves `push` must
-# be exactly one of
+# Pushes are a strict whitelist: a command line that involves `push` (the
+# word push or git-push on its own; names that only contain it, such as
+# pre-push, push.default or origin/push-x, count only when the command has
+# $, backticks or xargs) must be exactly one of
 #   git push [-u|--set-upstream] origin BRANCH[:BRANCH]
 #   git push [-u|--set-upstream] origin HEAD
 #   git push [-u|--set-upstream] [--force-with-lease[=BRANCH[:SHA]]]
@@ -139,8 +141,21 @@ def analyze(cmd):
     check_others(n)
     if re.search(r"\bgit\b\s+\S*[$`]", n):
         raise Block("can't tell which git command runs")
-    if re.search(r"\bpush\b", n) and ("git" in n or re.search(r"[?*\[$`{]", n)):
+    if mentions_push(n) and ("git" in n or re.search(r"[?*\[$`{]", n)):
         check_push(code.strip())
+
+
+def mentions_push(n):
+    """Whether the (unquoted) command may run a push. Without $, backticks
+    or xargs the shell splits literal text only on whitespace and
+    operators, so a name such as pre-push or push.default can never become
+    the word push: only push between non-name characters (anything but
+    \\w . / -) or git-push counts. Expansions (${x:-push}, IFS tricks,
+    $(...)) and xargs -d can turn those names into push, so then any
+    \\bpush\\b counts, as before."""
+    if re.search(r"[$`]|\bxargs\b", n):
+        return re.search(r"\bpush\b", n) is not None
+    return re.search(r"(?<![\w./-])push(?![\w./-])|\bgit-push\b", n) is not None
 
 
 def main():
