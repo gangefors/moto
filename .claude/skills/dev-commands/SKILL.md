@@ -69,3 +69,29 @@ cargo ndk -t arm64-v8a -t x86_64 -o ../android/app/src/main/jniLibs build --rele
 cd ../android
 ./gradlew assembleDebug lintDebug testDebugUnitTest compileReleaseKotlin
 ```
+
+## Guard rules
+
+The Bash guard (`.claude/hooks/guard-bash.sh` with the policy in
+`guard-push.py`, tested by `test-guard-bash.sh`) reads the whole command
+text, heredoc bodies included. A seat belt, not a sandbox. If it blocks,
+use the accepted form.
+
+| Rejected | Accepted form |
+|---|---|
+| `git push` joined to anything: `&&`, `;`, pipes, redirects, `$()`, backticks, quotes, variables, `xargs`, `bash -c`, `env`/`sudo` prefixes, `git -C` | `git push -u origin claude/<name>` as its own command, plain characters only |
+| Push to `main`, any other branch, another remote or a URL, `refs/...`, `+ref`, `:ref` (delete), `HEAD:other`, several refspecs | `origin claude/NAME`, `origin ccr-NAME`, `origin HEAD` (not with a lease), `origin A:B` with both of those names |
+| `--force`, `-f`, `--delete`, `-d`, `--mirror`, `--all`, `--tags`, `--prune`, `--atomic`, `-o`, `--receive-pack`, an option twice | `-u`/`--set-upstream`, `--force-with-lease[=BRANCH[:SHA]]`, `--force-if-includes`, each once, with an explicit branch for a lease |
+| `--no-verify`, `-n` or an abbreviation (`--no-ver`) on commit, merge, rebase, push, am, cherry-pick | no flag: fix what the hook reports |
+| A commit message with a push or hook-skipping line in an odd shape, or any command after the heredoc | `git [add <paths> && ]git commit [opts] -F - <<'EOF'` with the message as the whole rest of the command (nothing after the closing `EOF`, so run `git log` as a separate call) |
+| Any command whose text mentions the git hooks path setting, git config for includes, aliases, remotes, urls or push settings, `git -c`/`--config-env` for these, `GIT_DIR`, `GIT_CONFIG*`, `GIT_SSH*` and other `GIT_*` overrides | none: the session-start hook sets the hooks path; read a key with `git config --get <key>` |
+| `git remote add/set-url/rename/remove`; `git send-pack`, `receive-pack`, `http-push`, `update-ref` | `git remote -v`, `git remote get-url origin` |
+| `rm`, `mv`, `cp`, `ln`, `chmod`, `tee`, `sed -i`, `>` and similar naming `.githooks`, `.git/hooks`, `.claude/hooks`, `.claude/scripts`, `.claude/settings.json`, `.git/config` (also in a heredoc body or message) | edit these with the Edit/Write tools; the exec bit cannot be set from a session |
+| Writing the verify stamp (`moto-verified`, `fingerprint.sh` with `>` or `tee`) | `.claude/scripts/verify.sh` is the only writer |
+| `gh pr merge`; `gh api` or `curl`/`wget` to `api.github.com` with git/refs, merges, contents writes or graphql | read-only `gh api` GETs; CI's merge job merges |
+| Empty, non-JSON or unreadable hook input; missing `jq` or `python3` | fails closed: install the tool |
+
+`guard-text.sh` guards the GitHub PR and comment tools (create and update
+pull request, add issue comment): a body or title with a session link
+(`claude.ai/code/session`) or a `Claude-Session:` line is rejected;
+remove it. Never put one in commits either.
