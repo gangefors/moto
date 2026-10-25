@@ -33,9 +33,6 @@ import se.gangefors.moto.core.Section
  * and finds the section under a tap. The map only draws
  * and hit-tests; the sections come from the core's store.
  */
-/** The chevron image the section lines' arrows use (added by [SectionOverlay]). */
-internal const val SECTION_ARROW_IMAGE = "moto-section-arrow"
-
 class SectionOverlay(private val style: Style, private val density: Float, private val darkMap: Boolean = false) {
     private val source = style.getSourceAs(SOURCE) ?: GeoJsonSource(SOURCE).also(style::addSource)
     private val gravelSource = style.getSourceAs(GRAVEL_SOURCE) ?: GeoJsonSource(GRAVEL_SOURCE).also(style::addSource)
@@ -230,7 +227,6 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
         const val SHOWN_EDGE_LAYER = "moto-section-shown-edge"
         const val SHOWN_LINE_LAYER = "moto-section-shown-line"
         const val SHOWN_ARROW_LAYER = "moto-section-shown-arrows"
-        // The dashes' width as a share of the section line's (2 of 5 px).
         const val ID = "id"
         const val ORDER = "order"
         const val COLOR = "color"
@@ -240,6 +236,9 @@ class SectionOverlay(private val style: Style, private val density: Float, priva
         const val HIT_RADIUS_DP = 12f
     }
 }
+
+/** The chevron image the section lines' arrows use (added by [SectionOverlay]). */
+internal const val SECTION_ARROW_IMAGE = "moto-section-arrow"
 
 /**
  * Draws a section proposed in "mark section" mode: the picked start and end
