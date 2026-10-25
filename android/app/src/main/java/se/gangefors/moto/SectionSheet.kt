@@ -122,7 +122,7 @@ fun SectionSheet(
     val config = LocalConfiguration.current
     val landscape = isLandscape(config.screenWidthDp, config.screenHeightDp)
     val sideSheet = landscape
-    val maxWidthDp = sheetMaxWidthDp(landscape, true, config.screenWidthDp.toFloat())
+    val maxWidthDp = sheetMaxWidthDp(landscape, config.screenWidthDp.toFloat())
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.layout { measurable, constraints ->
