@@ -64,7 +64,7 @@ Where everything lives: [`docs/repo-map.md`](docs/repo-map.md).
 
 ## Workflow
 
-Every change (feature, bug fix, refactor) goes through `/feature`, `/bugfix` or `/refactor` and the `workflow` skill ([ADR-0013](docs/adr/0013-agentic-change-workflow.md), [ADR-0019](docs/adr/0019-leaner-change-workflow.md)). The main session is the **orchestrator**: it designs, builds and reviews nothing itself. The rider gates only the design and the result. Agents commit; only the orchestrator pushes. When a hook blocks, fix the cause.
+Every change (feature, bug fix, refactor) goes through `/feature`, `/bugfix` or `/refactor` and the `workflow` skill ([ADR-0013](docs/adr/0013-agentic-change-workflow.md), [ADR-0019](docs/adr/0019-leaner-change-workflow.md)). The main session is the **orchestrator**: it designs, builds and reviews nothing itself. The rider gates only the design and the result. Agents commit; only the orchestrator pushes. When a hook blocks, fix the cause. Never work around a guard: write commands plainly, with no eval, encoded, escaped or assembled command words, brace or glob tricks, text piped into a shell, or a script, file or interpreter string (`python3 -c`, `awk system()`) built to run what the guard blocks.
 
 - Read only what is needed: Grep first, never whole large files, logs or build output. Suggest a fresh session after a summary or a task change.
 
