@@ -288,33 +288,3 @@ fn a_favourites_own_surface_waits_while_it_does_not_fit() {
     let f = Favourites::build_all(&e, &[], &[], &[]);
     assert!(f.surface_marked.is_empty());
 }
-
-#[test]
-fn the_map_surface_of_a_favourite_is_the_longest_share() {
-    use crate::favourites::MapSurface;
-    for (surface, want) in [
-        (Surface::Asphalt, MapSurface::Paved),
-        (Surface::Gravel, MapSurface::Gravel),
-        (Surface::Unknown, MapSurface::Untagged),
-    ] {
-        let e = engine(shaped_ladder(surface, 30));
-        // Its own surface and corrections don't count: the map's alone.
-        let s = own(3, 0, 8, Some(Surface::Paved), Direction::Both);
-        let f = Favourites::build_all(
-            &e,
-            std::slice::from_ref(&s),
-            &[],
-            &[correction(1, Surface::Gravel, &north_draft(0, 8), 1)],
-        );
-        assert_eq!(f.map_surface(3), Some(want), "{surface:?}");
-        assert_eq!(f.map_surface(4), None);
-    }
-    // Not matched: none.
-    let e = engine(shaped_ladder(Surface::Asphalt, 30));
-    let mut s = own(3, 0, 8, None, Direction::Both);
-    s.status = Status::NeedsRematch;
-    assert_eq!(
-        Favourites::build_all(&e, &[s], &[], &[]).map_surface(3),
-        None
-    );
-}

@@ -9,7 +9,7 @@
 //! time through the rider's overlay ([`crate::Favourites`]); the region
 //! graph never changes.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::draft::{SectionDraft, from_path};
 use crate::region::format::Surface;
@@ -253,6 +253,99 @@ pub(crate) fn stretch_at(engine: &Engine, point: LatLon) -> Result<SectionDraft,
     parts.extend(ahead);
     from_path(region, &parts)
 }
+
+/// What the map alone has along a line, whichever kind covers the most
+/// of it (ADR-0018, ADR-0020): for a favourite's sheet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapSurface {
+    Paved,
+    Gravel,
+    /// No surface in OSM (routed as paved).
+    Untagged,
+}
+
+impl Engine {
+    /// What the map alone has along `ways` (a line's OSM way spans), by
+    /// length: the kind with the most metres, paved first and then gravel
+    /// on a tie; no surface in OSM counts as its own kind. The rider's
+    /// corrections and favourites' own surfaces don't count. Each road is
+    /// counted once, whichever way and however often the spans cover it.
+    /// `None` when no span lies on this region's roads (unknown ways, or
+    /// indexes that cover no road). Spans are untrusted: indexes past a
+    /// way's nodes are clipped, equal ones cover nothing. Empty input, or
+    /// more spans than a section may have, is an error.
+    pub fn map_surface_along(&self, ways: &[WaySpan]) -> Result<Option<MapSurface>, CoreError> {
+        if ways.is_empty() {
+            return Err(CoreError::InvalidArgument("no way spans to measure".into()));
+        }
+        if ways.len() > MAX_SECTION_WAYS {
+            return Err(CoreError::InvalidArgument(format!(
+                "more than {MAX_SECTION_WAYS} way spans to measure"
+            )));
+        }
+        let mut by_way: HashMap<i64, Vec<(u32, u32)>> = HashMap::new();
+        for w in ways {
+            let (lo, hi) = (w.from_idx.min(w.to_idx), w.from_idx.max(w.to_idx));
+            if lo < hi {
+                by_way.entry(w.way_id).or_default().push((lo, hi));
+            }
+        }
+        if by_way.is_empty() {
+            return Ok(None);
+        }
+        let region = self.net();
+        // Metres on mapped paved, unpaved and untagged road.
+        let mut metres = [0.0f64; 3];
+        let mut any = false;
+        let mut measured: HashSet<(i64, u32, u32)> = HashSet::new();
+        for id in 0..region.edge_count() as u32 {
+            let r = &region.way_ref(id);
+            let Some(spans) = by_way.get(&r.way_id) else {
+                continue;
+            };
+            let (lo, hi) = (r.from_idx.min(r.to_idx), r.from_idx.max(r.to_idx));
+            if lo == hi {
+                continue;
+            }
+            for &(a, b) in spans {
+                let (from, to) = (lo.max(a), hi.min(b));
+                if from >= to {
+                    continue; // apart, or touching at one node
+                }
+                let stretch = if from == lo && to == hi {
+                    (0.0, 1.0)
+                } else {
+                    crate::favourites::covered(self, id, r, from, to)
+                };
+                // Each road once: both its directions share `lo`–`hi`.
+                if stretch.1 > stretch.0 && measured.insert((r.way_id, lo, hi)) {
+                    let e = region.edge(id);
+                    let kind = match Surface::from_u8(e.surface) {
+                        None | Some(Surface::Unknown) => 2,
+                        Some(m) if m.is_paved() => 0,
+                        Some(_) => 1,
+                    };
+                    metres[kind] += (stretch.1 - stretch.0) * f64::from(e.length_dm) / 10.0;
+                    any = true;
+                }
+            }
+        }
+        if !any {
+            return Ok(None);
+        }
+        let m = metres;
+        Ok(Some(if m[0] >= m[1] && m[0] >= m[2] {
+            MapSurface::Paved
+        } else if m[1] >= m[2] {
+            MapSurface::Gravel
+        } else {
+            MapSurface::Untagged
+        }))
+    }
+}
+
+#[cfg(test)]
+mod map_tests;
 
 #[cfg(test)]
 pub(crate) mod tests {

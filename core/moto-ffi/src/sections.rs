@@ -738,10 +738,29 @@ mod tests {
         with.surface = Some(Surface::Dirt);
         with.geometry = vec![ll(55.9, 13.0), ll(55.91, 13.0)];
         assert!(store.add(with).is_err());
-        // The overlay reads the map surface of a matched favourite.
-        let fav = store.favourites(engine).unwrap();
-        assert!(fav.map_surface(saved.id).is_some());
-        assert_eq!(fav.map_surface(added.id), None, "off the map");
+        // The map's surface along a line: the moved one, or the draft
+        // before it is saved.
+        assert!(
+            engine
+                .map_surface_along(moved.ways.clone())
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            engine.map_surface_along(longer.ways.clone()).unwrap(),
+            engine.map_surface_along(moved.ways).unwrap()
+        );
+        let off = vec![WaySpan {
+            way_id: 999_999_999,
+            from_idx: 0,
+            to_idx: u32::MAX,
+        }];
+        assert_eq!(engine.map_surface_along(off).unwrap(), None, "off the map");
+        assert!(added.ways.is_empty());
+        assert!(matches!(
+            engine.map_surface_along(added.ways),
+            Err(MotoError::InvalidInput { .. })
+        ));
         std::fs::remove_file(region).unwrap();
     }
 

@@ -10,7 +10,7 @@ use moto_core::region::format::Surface as CoreSurface;
 use moto_core::surface as core;
 
 use crate::road::Surface;
-use crate::sections::{Favourites, SectionDraft, SectionStatus, SectionStore, WaySpan, now};
+use crate::sections::{SectionDraft, SectionStatus, SectionStore, WaySpan, now};
 use crate::{Engine, LatLon, MotoError};
 
 /// What the edit sheet sets for a favourite's own surface.
@@ -95,9 +95,9 @@ impl From<FavouriteSurface> for moto_core::section::SurfaceSetting {
     }
 }
 
-impl From<moto_core::favourites::MapSurface> for MapSurface {
-    fn from(s: moto_core::favourites::MapSurface) -> Self {
-        use moto_core::favourites::MapSurface as M;
+impl From<moto_core::surface::MapSurface> for MapSurface {
+    fn from(s: moto_core::surface::MapSurface) -> Self {
+        use moto_core::surface::MapSurface as M;
         match s {
             M::Paved => Self::Paved,
             M::Gravel => Self::Gravel,
@@ -147,6 +147,15 @@ impl Engine {
     pub fn surface_stretch_at(&self, point: LatLon) -> Result<SectionDraft, MotoError> {
         Ok(self.inner.surface_stretch_at(point.into())?.into())
     }
+
+    /// What the map alone has along a line's way spans, by length: for a
+    /// favourite's sheet, new or saved. None when no span is on this map;
+    /// no spans is an error. Costs one pass over the map's roads: call it
+    /// off the main thread.
+    pub fn map_surface_along(&self, ways: Vec<WaySpan>) -> Result<Option<MapSurface>, MotoError> {
+        let ways: Vec<moto_core::section::WaySpan> = ways.into_iter().map(Into::into).collect();
+        Ok(self.inner.map_surface_along(&ways)?.map(Into::into))
+    }
 }
 
 #[uniffi::export]
@@ -195,15 +204,6 @@ impl SectionStore {
     /// Deletes a correction; `false` if there was none.
     pub fn delete_surface_correction(&self, id: i64) -> Result<bool, MotoError> {
         Ok(self.store().delete_surface_correction(id)?)
-    }
-}
-
-#[uniffi::export]
-impl Favourites {
-    /// What the map alone has along favourite `section_id`, by length;
-    /// none for one not matched to this map.
-    pub fn map_surface(&self, section_id: i64) -> Option<MapSurface> {
-        self.inner.map_surface(section_id).map(Into::into)
     }
 }
 
@@ -318,7 +318,7 @@ mod tests {
             SurfaceSetting::Gravel
         );
         assert_eq!(
-            MapSurface::from(moto_core::favourites::MapSurface::Untagged),
+            MapSurface::from(moto_core::surface::MapSurface::Untagged),
             MapSurface::Untagged
         );
         let fav: CorrectionAt = core::CorrectionAt::Favourite {

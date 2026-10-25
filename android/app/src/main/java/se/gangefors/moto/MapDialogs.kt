@@ -435,6 +435,14 @@ internal fun MapScreenScope.MapDialogs() {
             val newLine = pending?.line
             // Its key: a sheet reopened after Change start and end starts
             // on the choices kept, not the saved ones.
+            // What the map has along the saved line, measured off the main
+            // thread (one pass over the map's roads).
+            val mapSurface by androidx.compose.runtime.produceState<se.gangefors.moto.core.MapSurface?>(null, section, region) {
+                val engine = (region as? RegionState.Ready)?.engine
+                value = if (engine == null || !fitsTheMap(section.status)) null else withContext(Dispatchers.Default) {
+                    runCatching { engine.mapSurfaceAlong(section.ways) }.getOrNull()
+                }
+            }
             androidx.compose.runtime.key(section.id, pending) {
                 SectionSheet(
                     title = stringResource(R.string.section_edit_title, sectionKm(newLine?.distanceM ?: lengthM(section.geometry))),
@@ -456,7 +464,7 @@ internal fun MapScreenScope.MapDialogs() {
                     onTop = { editTop = it },
                     onRight = { editRight = it },
                     onReshape = { choice -> startReshape(section, choice) },
-                    mapSurface = runCatching { favourites?.mapSurface(section.id) }.getOrNull(),
+                    mapSurface = mapSurface,
                     onSave = { choice ->
                         editing = null
                         pendingEdit = null
