@@ -6,7 +6,7 @@ agp = "9.4.1"
 kotlin = "2.4.21"
 activity-compose = "1.13.0"
 compose-bom = "2026.09.00"
-maplibre = "13.6.1"
+maplibre = "13.7.1"
 jna = "5.19.1"
 junit = "4.13.2"
 
