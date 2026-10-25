@@ -33,6 +33,7 @@ core/                   cargo workspace
   moto-regionbuild/     CLI: OSM extract → region file (never runs on the phone)
 android/                Gradle project (AGP 9, Compose); app/ builds the core via cargo-ndk
 docs/prd.md             product requirements (v1)
+docs/repo-map.md        where things live (UI, FFI, tests, CI scripts, gotchas)
 docs/adr/               architecture decision records (index in README.md)
 docs/mockups/           shared mockup kit (CSS, map backgrounds, template)
 docs/working-with-claude.md   models and session habits that save usage
