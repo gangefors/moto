@@ -309,6 +309,21 @@ t block 'git http-push origin main'
 t block 'git-http-push origin main'
 t block 'git commit -nm x; cat .githooks/pre-push'
 t block 'rm .githooks/pre-push'
+# programs that re-split text and run it keep the broad match
+t block 'echo git.push.origin.main | tr . '"' '"' | sh'
+t block 'tr . '"' '"' <<< git.push.origin.main | bash'
+t block 'printf git.push.origin.main | tr . '"' '"' | sh'
+t block 'echo git/push/origin/main | sed s,/,\ ,g | sh'
+t block 'python3 -c '"'"'import subprocess; subprocess.run("git.push.origin.main".split("."))'"'"
+t block 'perl -e '"'"'system split /\./, "git.push.origin.main"'"'"
+t block 'ruby -e '"'"'system(*"git.push.origin.main".split("."))'"'"
+t block 'awk '"'"'BEGIN{split("git.push.origin.main",a,".");system(a[1]" "a[2]" "a[3]" "a[4])}'"'"
+t block 'tr . '"' '"' <<< git.push.origin.main | /bin/sh'
+t block 'tr . '"' '"' <<< git.push.origin.main | . /dev/stdin'
+t block 'tr . '"' '"' <<< git.push.origin.main | source /dev/stdin'
+t block 'echo git.push.origin.main | sed '"'"'s/\./ /g;e'"'"
+t allow 'cat .githooks/pre-push .claude/scripts/ship-status.sh | head'
+t allow 'git log -- .githooks/pre-push docs/sh.md; ls ./sh-notes'
 # kept on purpose: false positives that need a shell parser to tell apart
 t block 'git log --oneline | grep push'
 t block 'cat .githooks/pre-push; echo $HOME; git status'

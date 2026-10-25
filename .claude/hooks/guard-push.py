@@ -9,7 +9,8 @@
 # Pushes are a strict whitelist: a command line that involves `push` (the
 # word push or git-push on its own; names that only contain it, such as
 # pre-push, push.default or origin/push-x, count only when the command has
-# $, backticks or xargs) must be exactly one of
+# $, backticks, xargs, or names a shell, eval, source, interpreter or sed
+# that could re-split text) must be exactly one of
 #   git push [-u|--set-upstream] origin BRANCH[:BRANCH]
 #   git push [-u|--set-upstream] origin HEAD
 #   git push [-u|--set-upstream] [--force-with-lease[=BRANCH[:SHA]]]
@@ -145,15 +146,31 @@ def analyze(cmd):
         check_push(code.strip())
 
 
+# Programs that can re-split text and run it: shells, eval-likes, exec
+# wrappers, interpreters, sed (its e command) and editors with ! or e.
+# Matched as a command word, optionally with a path (/bin/sh), but not
+# inside a name (ship-status.sh, .githooks/pre-push).
+RESPLITTERS = re.compile(
+    r"(?:^|(?<=[\s;&|()<>{}!=]))(?:\S*/)?"
+    r"(?:sh|bash|dash|zsh|ksh|mksh|fish|busybox|eval|source|exec|env|parallel"
+    r"|python[\w.]*|perl[\w.]*|ruby[\w.]*|node|nodejs|deno|bun|php[\w.]*|lua[\w.]*|tclsh[\w.]*"
+    r"|awk|gawk|mawk|nawk|sed|ed|ex|vi|vim|nvim|m4|expect|julia|Rscript)"
+    r"(?=[\s;&|()<>]|$)"
+    # `.` (source) in command position, e.g. `| . /dev/stdin`
+    r"|(?:^|[;&|(){}!]|\b(?:then|do|else)\b)\s*\.(?=\s)")
+
+
 def mentions_push(n):
-    """Whether the (unquoted) command may run a push. Without $, backticks
-    or xargs the shell splits literal text only on whitespace and
-    operators, so a name such as pre-push or push.default can never become
-    the word push: only push between non-name characters (anything but
-    \\w . / -) or git-push counts. Expansions (${x:-push}, IFS tricks,
-    $(...)) and xargs -d can turn those names into push, so then any
-    \\bpush\\b counts, as before."""
-    if re.search(r"[$`]|\bxargs\b", n):
+    """Whether the (unquoted) command may run a push. Without $, backticks,
+    xargs or a program that re-splits text (RESPLITTERS: shells, eval,
+    source or `.`, interpreters, sed), literal text is split only on
+    whitespace and shell operators, so a name such as pre-push or
+    push.default can never become the word push: only push between
+    non-name characters (anything but \\w . / -) or git-push counts.
+    Expansions (${x:-push}, IFS tricks, $(...)), xargs -d and programs
+    like `tr . ' ' | sh` or `perl -e 'system split ...'` can turn those
+    names into push, so then any \\bpush\\b counts, as before."""
+    if re.search(r"[$`]|\bxargs\b", n) or RESPLITTERS.search(n):
         return re.search(r"\bpush\b", n) is not None
     return re.search(r"(?<![\w./-])push(?![\w./-])|\bgit-push\b", n) is not None
 
