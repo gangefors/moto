@@ -468,6 +468,8 @@ internal fun MapScreenScope.markBack() {
         markSession++
         proposing = false
         draft = null
+        // A pin taken away: the choices kept were for another line.
+        keptDraftChoice = null
         when (marker.back()) {
             SectionMarker.State.Off -> {
                 stopMarking()
