@@ -3,7 +3,8 @@
 # Copyright (C) 2026 Stefan Gangefors
 #
 # Usage: ship-status.sh [branch]   (default: the current branch)
-# Read-only. One short line per fact CLAUDE.md asks for before a build is
+# Read-only. One short line per fact the workflow skill's Gate 2
+# (.claude/skills/workflow/SKILL.md) asks for before a build is
 # reported: unpushed commits, how far the branch and main are apart, other
 # session branches ahead of main, CI state and the debug APK link.
 # What can't be determined prints "unknown (<reason>)"; the script never

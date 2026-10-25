@@ -18,8 +18,6 @@ ADRs live only in `docs/adr/`; Notion links to them, never copies. Every new rul
 
 | Area | Decision | ADR |
 | --- | --- | --- |
-| Area | Decision | ADR |
-| --- | --- | --- |
 | App | Native Android in Kotlin; iOS deferred | [PRD](docs/prd.md) |
 | Shared core | Rust via UniFFI; free of Android types for iOS | [0001](docs/adr/0001-routing-engine-custom-rust-on-device.md) |
 | Routing | Custom, on-device, offline; the cost function is the product | [0001](docs/adr/0001-routing-engine-custom-rust-on-device.md) |
