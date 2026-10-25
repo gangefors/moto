@@ -23,3 +23,4 @@ Each ADR uses the same template: Context, Decision, Options Considered (one `Dim
 | [0017](0017-region-downloads-in-background.md) | Region downloads in the background — a user-initiated data transfer job, one notification, Wi-Fi unless allowed | Accepted | 2026-10-11 |
 | [0018](0018-surface-corrections.md) | Surface corrections — the rider's own road surface for stretches, applied at query time | Accepted | 2026-10-21 |
 | [0019](0019-leaner-change-workflow.md) | Leaner change workflow — checks as a script, review takes QA, risk routed per slice | Accepted | 2026-10-22 |
+| [0020](0020-one-favourite-sheet.md) | One favourite sheet — a new favourite and a saved one offer the same choices | Accepted | 2026-10-25 |
